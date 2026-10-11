@@ -1,0 +1,152 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+type Tool = { name: string; en: string; zh: string };
+const tools: Tool[] = [
+  { name: "list_workspaces", en: "Workspaces and projects this connection can use, with their ids.", zh: "当前连接可用的工作区和项目及其 id。" },
+  { name: "create_workspace", en: "Create a workspace with a first project. Only with access to all workspaces.", zh: "创建工作区（含第一个项目）。仅限已授权所有工作区的连接。" },
+  { name: "create_project", en: "Create a project. Only where the connection has all projects of that workspace.", zh: "创建项目。仅限已授权该工作区全部项目的连接。" },
+  { name: "list_monitors", en: "Monitors with status, uptime and latency.", zh: "监控项及其状态、可用率和延迟。" },
+  { name: "get_monitor", en: "One monitor with recent checks and uptime.", zh: "单个监控项及最近的检测和可用率。" },
+  { name: "create_monitor", en: "Create an http, tcp, dns, heartbeat, postgres, mysql or redis monitor.", zh: "创建 http、tcp、dns、heartbeat、postgres、mysql 或 redis 监控。" },
+  { name: "update_monitor", en: "Change fields of a monitor.", zh: "修改监控项字段。" },
+  { name: "pause_monitor / resume_monitor", en: "Stop or restart checks and alerts.", zh: "暂停或恢复检测与告警。" },
+  { name: "run_check", en: "Run a check right now and record the result.", zh: "立即执行一次检测并记录结果。" },
+  { name: "delete_monitor", en: "Permanently delete a monitor and its history.", zh: "永久删除监控项及其历史。" },
+  { name: "list_incidents / get_incident", en: "Incidents, open ones first, with their timeline.", zh: "事件列表（未结束的在前）及时间线。" },
+  { name: "create_incident", en: "Open a manual incident, optionally tied to a monitor.", zh: "创建手动事件，可关联监控项。" },
+  { name: "post_incident_update", en: "Add an update or resolve an incident.", zh: "发布事件更新或标记为已解决。" },
+  { name: "acknowledge_incident", en: "Acknowledge an incident.", zh: "确认事件。" },
+  { name: "list_channels", en: "Alert channels.", zh: "告警渠道。" },
+  { name: "list_status_pages", en: "Status pages.", zh: "状态页。" },
+  { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
+];
+---
+<Doc title="MCP" updated="2026-10-11" toc>
+  <div lang="en">
+    <h1>MCP server</h1>
+    <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>
+    <h2 id="connect">Connect</h2>
+    <p>OpenUptime speaks the Model Context Protocol over Streamable HTTP at <code>https://openuptime.app/api/mcp</code> (use your own domain if you self-host). Every tool calls the REST API with the caller's own credentials, so scopes and project limits apply unchanged. Any client that supports remote MCP servers works; the common ones are below. Each client opens your browser once to authorize with OAuth.</p>
+    <h3>Claude Code</h3>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp</code></pre>
+    <p>Then run <code>/mcp</code> inside Claude Code, pick <strong>openuptime</strong> and choose <strong>Authenticate</strong>.</p>
+    <h3>Claude Desktop and claude.ai</h3>
+    <p>Open <strong>Settings → Connectors → Add custom connector</strong>, name it OpenUptime and paste <code>https://openuptime.app/api/mcp</code>. Then click <strong>Connect</strong> to authorize.</p>
+    <h3>Codex</h3>
+    <p>Add the server to <code>~/.codex/config.toml</code>:</p>
+    <pre><code is:raw>[mcp_servers.openuptime]
+url = "https://openuptime.app/api/mcp"</code></pre>
+    <p>Then sign in with <code>codex mcp login openuptime</code>.</p>
+    <h3>Cursor</h3>
+    <p>Add this to <code>~/.cursor/mcp.json</code> (or <code>.cursor/mcp.json</code> in a project), then open <strong>Settings → MCP</strong> and click <strong>Connect</strong> next to openuptime:</p>
+    <pre><code is:raw>{
+  "mcpServers": {
+    "openuptime": { "url": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>VS Code (GitHub Copilot)</h3>
+    <p>Add this to <code>.vscode/mcp.json</code> and start the server from the editor:</p>
+    <pre><code is:raw>{
+  "servers": {
+    "openuptime": { "type": "http", "url": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>Gemini CLI</h3>
+    <p>Add this to <code>~/.gemini/settings.json</code>, then run <code>/mcp auth openuptime</code>:</p>
+    <pre><code is:raw>{
+  "mcpServers": {
+    "openuptime": { "httpUrl": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>Any other client</h3>
+    <p>Use the URL above as a remote (Streamable HTTP) server. A client that only speaks stdio can go through <code>mcp-remote</code>:</p>
+    <pre><code>npx mcp-remote https://openuptime.app/api/mcp</code></pre>
+    <h3>With an API key instead of OAuth</h3>
+    <p>For unattended agents or clients without OAuth, create an API key and send it as a bearer token. A key is bound to one workspace and can be limited to some projects. In Claude Code:</p>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp \
+  --header "Authorization: Bearer ou_..."</code></pre>
+    <p>In Cursor, VS Code and Gemini CLI put the same value in the server's <code>headers</code> (<code>"Authorization": "Bearer ou_..."</code>). In Codex use <code>bearer_token_env_var = "OPENUPTIME_API_KEY"</code> in the server's table.</p>
+    <h2 id="oauth">Authorization</h2>
+    <p>Clients discover the authorization server from <code>/.well-known/oauth-protected-resource</code>, register themselves dynamically (OAuth 2.1, PKCE, RFC 8707 <code>resource</code>) and send you to a consent screen. There you choose what the agent may reach:</p>
+    <ul>
+      <li><strong>All workspaces</strong>: every project, including workspaces you join and projects you create later.</li>
+      <li><strong>Selected workspaces</strong>: every project in the workspaces you tick; projects created later are included.</li>
+      <li><strong>Selected projects</strong>: only the projects you tick.</li>
+    </ul>
+    <p>Scopes are <code>mcp:read</code> (look) and <code>mcp:write</code> (change). Access is checked live on every call: if you lose access to a workspace, the agent loses it too. Revoke an agent any time under <strong>API keys → Authorized agents</strong>.</p>
+    <h2 id="revoke">Revoking access</h2>
+    <p>Open the app and go to <strong>API keys → Authorized agents</strong>. Each connected client is listed there; click <strong>Revoke</strong> and it is cut off on its very next call, even if it still holds a token that has not expired. Removing the server from the client's own settings only forgets it locally, so revoke it here as well.</p>
+    <p>An API key is revoked the same way: delete it under <strong>API keys</strong>. To narrow an agent instead of removing it, revoke it and authorize again with fewer workspaces or projects.</p>
+    <h2 id="where">Choosing where to act</h2>
+    <p>Every tool takes optional <code>workspace</code> and <code>project</code> ids (from <code>list_workspaces</code>); omit them to use the default. Over REST these are the <code>x-workspace-id</code> and <code>x-project-id</code> headers.</p>
+    <h2 id="tools">Tools</h2>
+    <ul>
+      {tools.map((t) => <li><code>{t.name}</code>: {t.en}</li>)}
+    </ul>
+    <p>Creating projects and workspaces is limited as described above; <code>create_workspace</code> is capped at 10 owned workspaces per account.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>MCP 服务</h1>
+    <p class="lede">让 Claude、Cursor 等任意 MCP 客户端中的 AI Agent 管理你的监控、事件和状态页。</p>
+    <h2 id="connect-zh">接入</h2>
+    <p>OpenUptime 通过 Streamable HTTP 提供 Model Context Protocol 服务，地址 <code>https://openuptime.app/api/mcp</code>（自托管请换成你自己的域名）。每个工具都以调用者自己的凭证调用 REST API，因此权限与项目范围保持不变。任何支持远程 MCP 服务的客户端都可以接入，常见的写在下面。每个客户端第一次会打开浏览器，用 OAuth 完成授权。</p>
+    <h3>Claude Code</h3>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp</code></pre>
+    <p>然后在 Claude Code 里运行 <code>/mcp</code>，选择 <strong>openuptime</strong>，点 <strong>Authenticate</strong>。</p>
+    <h3>Claude Desktop 和 claude.ai</h3>
+    <p>打开 <strong>Settings → Connectors → Add custom connector</strong>，名称填 OpenUptime，地址填 <code>https://openuptime.app/api/mcp</code>，然后点 <strong>Connect</strong> 授权。</p>
+    <h3>Codex</h3>
+    <p>在 <code>~/.codex/config.toml</code> 里添加：</p>
+    <pre><code is:raw>[mcp_servers.openuptime]
+url = "https://openuptime.app/api/mcp"</code></pre>
+    <p>然后运行 <code>codex mcp login openuptime</code> 登录。</p>
+    <h3>Cursor</h3>
+    <p>把下面内容加到 <code>~/.cursor/mcp.json</code>（或项目里的 <code>.cursor/mcp.json</code>），然后打开 <strong>Settings → MCP</strong>，点 openuptime 旁的 <strong>Connect</strong>：</p>
+    <pre><code is:raw>{
+  "mcpServers": {
+    "openuptime": { "url": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>VS Code（GitHub Copilot）</h3>
+    <p>把下面内容加到 <code>.vscode/mcp.json</code>，然后在编辑器里启动该服务：</p>
+    <pre><code is:raw>{
+  "servers": {
+    "openuptime": { "type": "http", "url": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>Gemini CLI</h3>
+    <p>把下面内容加到 <code>~/.gemini/settings.json</code>，然后运行 <code>/mcp auth openuptime</code>：</p>
+    <pre><code is:raw>{
+  "mcpServers": {
+    "openuptime": { "httpUrl": "https://openuptime.app/api/mcp" }
+  }
+}</code></pre>
+    <h3>其他客户端</h3>
+    <p>把上面的地址作为远程（Streamable HTTP）服务填入。只支持 stdio 的客户端可以通过 <code>mcp-remote</code> 中转：</p>
+    <pre><code>npx mcp-remote https://openuptime.app/api/mcp</code></pre>
+    <h3>用 API 密钥代替 OAuth</h3>
+    <p>无人值守的 Agent，或不支持 OAuth 的客户端，可以创建 API 密钥并作为 Bearer 令牌发送。密钥绑定一个工作区，也可以限定为部分项目。以 Claude Code 为例：</p>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp \
+  --header "Authorization: Bearer ou_..."</code></pre>
+    <p>Cursor、VS Code、Gemini CLI 把同样的值放进服务配置的 <code>headers</code>（<code>"Authorization": "Bearer ou_..."</code>）；Codex 在服务配置里用 <code>bearer_token_env_var = "OPENUPTIME_API_KEY"</code>。</p>
+    <h2 id="oauth-zh">授权</h2>
+    <p>客户端会从 <code>/.well-known/oauth-protected-resource</code> 发现授权服务器，自动注册（OAuth 2.1、PKCE、RFC 8707 <code>resource</code>），并把你带到授权页。在那里选择 Agent 可以访问的范围：</p>
+    <ul>
+      <li><strong>所有工作区</strong>：全部项目，包括之后加入的工作区和新建的项目。</li>
+      <li><strong>选定的工作区</strong>：所勾选工作区内的全部项目，之后新建的项目也包含在内。</li>
+      <li><strong>选定的项目</strong>：只有你勾选的项目。</li>
+    </ul>
+    <p>权限范围为 <code>mcp:read</code>（只读）和 <code>mcp:write</code>（可修改）。每次调用都会实时校验访问权限：你失去某个工作区的权限，Agent 也随之失去。可随时在 <strong>API 密钥 → 已授权的 Agent</strong> 撤销。</p>
+    <h2 id="revoke-zh">撤销授权</h2>
+    <p>打开应用，进入 <strong>API 密钥 → 已授权的 Agent</strong>。每个已连接的客户端都列在这里，点 <strong>吊销</strong> 后它的下一次调用就会被拒绝，即使它手里的令牌还没过期。只在客户端自己的设置里删除该服务，只是让客户端本地忘掉，所以还需要在这里撤销。</p>
+    <p>API 密钥同理：在 <strong>API 密钥</strong> 页面删除即可。想收窄 Agent 的范围而不是彻底移除，可以先撤销，再用更少的工作区或项目重新授权。</p>
+    <h2 id="where-zh">指定操作位置</h2>
+    <p>每个工具都可带可选的 <code>workspace</code> 和 <code>project</code> id（从 <code>list_workspaces</code> 获得），不填则用默认值。通过 REST 调用时对应 <code>x-workspace-id</code> 和 <code>x-project-id</code> 请求头。</p>
+    <h2 id="tools-zh">工具</h2>
+    <ul>
+      {tools.map((t) => <li><code>{t.name}</code>：{t.zh}</li>)}
+    </ul>
+    <p>创建项目和工作区受上述授权范围限制；<code>create_workspace</code> 每个账号最多拥有 10 个工作区。</p>
+  </div>
+</Doc>

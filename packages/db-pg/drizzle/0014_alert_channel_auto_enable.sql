@@ -1,0 +1,1 @@
+ALTER TABLE "alert_channel" ADD COLUMN "auto_enable" boolean DEFAULT false NOT NULL;

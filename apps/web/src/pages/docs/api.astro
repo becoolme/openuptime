@@ -1,0 +1,236 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+type Ep = { m: "GET" | "POST" | "PATCH" | "DELETE"; p: string; en: string; zh: string; req?: string; res?: string };
+type Group = { id: string; en: string; zh: string; noteEn?: string; noteZh?: string; eps: Ep[] };
+
+const monitorFields = `name           string, 1-120 chars (required)
+type           "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis"   (default "http"; cannot be changed later)
+target         string, max 2048   (URL for http, host:port for tcp/postgres/mysql/redis, hostname for dns)
+method         "GET" | "HEAD" | "POST"                       (default "GET")
+expectedStatus integer 100-599                               (default 200)
+intervalSec    integer 60-86400                              (default 60)
+timeoutMs      integer 1000-30000                            (default 10000)
+failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
+regions        string[]                                      (default ["auto"])
+keyword        string | null, max 500                        (default null)
+keywordMode    "contains" | "absent"                         (default "contains")
+headers        { [name: string]: string }                    (default {})
+graceSec       integer 0-86400, heartbeat grace period       (default 0)
+channelIds     uuid[], max 50                                (default [])
+tags           string[], max 20 items of up to 32 chars      (default [])
+slowThresholdMs integer 100-60000, latency above this marks the monitor "degraded" (default 1500)
+slowAlertAfter integer 0-20, open a latency incident after this many consecutive slow checks; 0 = never (default 0)`;
+
+const groups: Group[] = [
+  {
+    id: "monitors", en: "Monitors", zh: "监控项",
+    eps: [
+      { m: "GET", p: "/monitors", en: "List the project's monitors, with 24-hour uptime, average latency and a latency sparkline.", zh: "列出当前项目的监控项，附带 24 小时可用率、平均延迟和延迟走势。",
+        res: `[{ id, name, type, target, method, expectedStatus, intervalSec, timeoutMs, failureThreshold, regions,\n   status, consecutiveFailures, lastCheckedAt, nextCheckAt, paused, heartbeatToken, keyword, keywordMode,\n   headers, graceSec, ..., uptime24h, avgLatency24h, spark }]` },
+      { m: "POST", p: "/monitors", en: "Create a monitor. Omitted fields take their defaults. Returns 201 with the monitor; heartbeat monitors get a heartbeatToken.", zh: "创建监控项，省略的字段使用默认值。返回 201 和监控项；心跳类型会生成 heartbeatToken。", req: monitorFields },
+      { m: "GET", p: "/monitors/export", en: "Download the project's monitors as JSON ({ version, exportedAt, monitors }). Request headers are included, so treat the file as sensitive.", zh: "以 JSON 导出当前项目的监控项（{ version, exportedAt, monitors }）。文件包含请求头，请当作敏感文件保管。" },
+      { m: "POST", p: "/monitors/import", en: "Create monitors from a JSON array (or an object with a monitors array), up to 500 per call. Accepts our export plus common aliases from other tools (name/friendly_name, target/url/hostname, interval in seconds, type https/keyword/port). Invalid items are skipped and reported; returns 201 { created, skipped: [{ index, name, error }] }, or 400 when nothing was created.", zh: "从 JSON 数组（或含 monitors 数组的对象）批量创建监控项，单次最多 500 个。支持本产品的导出格式，以及其他工具常见的字段别名（name/friendly_name、target/url/hostname、interval 秒、type https/keyword/port）。无效项会被跳过并返回；成功时 201 { created, skipped: [{ index, name, error }] }，一个都没创建时 400。", req: `{ "monitors": [ { "name": "API", "type": "http", "target": "https://api.example.com", "tags": ["prod"] } ] }`, res: `{ created: 1, skipped: [] }` },
+      { m: "GET", p: "/monitors/:id", en: "One monitor with its last 120 check results, last 5 incidents and stats.", zh: "获取单个监控项，含最近 120 条检测结果、最近 5 个事件和统计数据。",
+        res: `{ ...monitor, results: [{ id, region, ok, statusCode, latencyMs, error, checkedAt }],\n  incidents: [...], stats: { uptime24h, uptime7d, avg24h, p95 } }` },
+      { m: "PATCH", p: "/monitors/:id", en: "Update the named fields only (same fields as create, except type). Also accepts paused (boolean) to pause or resume. At least one field is required.", zh: "仅更新传入的字段（与创建相同，但不含 type），另可传 paused（布尔）暂停或恢复。至少需要一个字段。", req: `any of the create fields except "type", plus:\npaused  boolean` },
+      { m: "DELETE", p: "/monitors/:id", en: "Delete a monitor and its results. Returns 204.", zh: "删除监控项及其检测结果。返回 204。" },
+      { m: "POST", p: "/monitors/:id/check", en: "Run a check immediately. Returns { ok: true }.", zh: "立即执行一次检测。返回 { ok: true }。" },
+    ],
+  },
+  {
+    id: "incidents", en: "Incidents", zh: "事件",
+    eps: [
+      { m: "GET", p: "/incidents", en: "The latest 100 incidents of the project (plus workspace-level incidents not tied to a monitor), newest first.", zh: "当前项目最新的 100 个事件（含未关联监控项的工作区级事件），按时间倒序。",
+        res: `[{ id, monitorId, title, status, severity, auto, assigneeId, startedAt, acknowledgedAt, resolvedAt, monitorName }]` },
+      { m: "POST", p: "/incidents", en: "Open an incident manually. Returns 201.", zh: "手动创建事件。返回 201。", req: `title      string, 1-200 (required)\nbody       string, max 4000   first update, optional\nseverity   "minor" | "major"   (default "major")\nmonitorId  uuid | null        optional` },
+      { m: "GET", p: "/incidents/:id", en: "An incident with its updates, monitor, assignee and up to 8 failing checks.", zh: "获取事件详情，含更新记录、监控项、负责人和最多 8 条失败检测。",
+        res: `{ ...incident, updates: [{ id, status, body, authorId, createdAt }], monitor, assignee, checks }` },
+      { m: "POST", p: "/incidents/:id/updates", en: "Post an update and set the incident status. Subscribers and alert channels are notified. Status \"resolved\" closes the incident. Returns 201.", zh: "发布更新并设置事件状态，并通知订阅者和告警渠道。状态为 \"resolved\" 时事件关闭。返回 201。", req: `status  "investigating" | "identified" | "monitoring" | "resolved"\nbody    string, 1-4000` },
+      { m: "POST", p: "/incidents/:id/ack", en: "Acknowledge an incident and assign it to the caller. Returns the incident.", zh: "确认事件并指派给调用者。返回该事件。" },
+    ],
+  },
+  {
+    id: "channels", en: "Channels", zh: "告警渠道",
+    noteEn: "config depends on type: email { to }, slack { url }, lark { url, secret? }, webhook { url }, telegram { botToken, chatId }, pagerduty { routingKey }. Channel configs contain secrets and are returned as stored. A channel with autoEnable is added to the channelIds of every monitor created afterwards (in its project, or in any project for a workspace-wide channel), on top of any ids given; a monitor whose channelIds is empty alerts every enabled channel.",
+    noteZh: "config 取决于 type：email { to }、slack { url }、lark { url, secret? }、webhook { url }、telegram { botToken, chatId }、pagerduty { routingKey }。渠道配置含敏感信息，按存储内容原样返回。",
+    eps: [
+      { m: "GET", p: "/channels", en: "List the alert channels available in the project: workspace-wide ones (projectId null) and the project's own.", zh: "列出当前项目可用的告警渠道：工作区级渠道（projectId 为 null）和项目自己的渠道。", res: `[{ id, type, name, config, enabled, autoEnable, createdAt, projectId }]` },
+      { m: "POST", p: "/channels", en: "Create a channel. Returns 201.", zh: "创建渠道。返回 201。", req: `type     "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark"\nname     string, 1-80\nconfig   object   (default {})\nenabled  boolean  (default true)\nautoEnable  boolean  (default false)  new monitors start out alerting this channel\nscope    "workspace" | "project"  (default "workspace"; a project-limited key always creates a project channel)` },
+      { m: "PATCH", p: "/channels/:id", en: "Update name, enabled, autoEnable or config.", zh: "更新名称、启用状态、autoEnable 或配置。", req: `name     string, 1-80\nenabled  boolean\nautoEnable  boolean\nconfig   object` },
+      { m: "POST", p: "/channels/:id/test", en: "Send a test message. Returns { ok: true }, or 502 with the delivery error.", zh: "发送测试消息。成功返回 { ok: true }，失败返回 502 及错误信息。" },
+      { m: "DELETE", p: "/channels/:id", en: "Delete a channel. Returns 204, or 409 (code \"channel_in_use\", with the monitors) while a monitor still lists it in channelIds.", zh: "删除渠道。返回 204；仍有监控在 channelIds 中选用它时返回 409（code 为 \"channel_in_use\"，并附监控列表）。" },
+    ],
+  },
+  {
+    id: "status-pages", en: "Status pages", zh: "状态页",
+    eps: [
+      { m: "GET", p: "/status-pages", en: "List the project's status pages.", zh: "列出当前项目的状态页。", res: `[{ id, slug, title, theme, showLatency, customDomain, externalUrl, createdAt, projectId }]` },
+      { m: "POST", p: "/status-pages", en: "Create a status page. The slug must be unused (409 otherwise). Returns 201.", zh: "创建状态页。slug 不能被占用（否则 409）。返回 201。", req: `slug         string, /^[a-z0-9-]{3,40}$/ (required)\ntitle        string, 1-120 (required)\nexternalUrl  string | null, http(s) URL up to 2048 (a link shown beside the title, rel=nofollow)\ntheme        "light" | "dark" | "auto"\nshowLatency  boolean\nmonitorIds   uuid[]\ncomponents   [{ monitorId: uuid, groupName?: string 1-60 }], max 200 (takes precedence over monitorIds)` },
+      { m: "GET", p: "/status-pages/:id", en: "A status page with its ordered components.", zh: "获取状态页及其有序组件。", res: `{ ...page, monitorIds: uuid[], components: [{ monitorId, groupName }] }` },
+      { m: "PATCH", p: "/status-pages/:id", en: "Update title, theme, showLatency or replace the components. Slug cannot be changed. Returns { ok: true }.", zh: "更新标题、主题、延迟显示，或替换组件。slug 不可修改。返回 { ok: true }。", req: `title, theme, showLatency, externalUrl, monitorIds, components   (all optional, as in create)` },
+      { m: "DELETE", p: "/status-pages/:id", en: "Delete a status page. Returns 204.", zh: "删除状态页。返回 204。" },
+      { m: "GET", p: "/status-pages/:id/subscribers", en: "Up to 1000 subscribers, newest first.", zh: "最多 1000 位订阅者，按时间倒序。", res: `[{ id, email, confirmedAt, createdAt }]` },
+      { m: "DELETE", p: "/status-pages/:id/subscribers/:sid", en: "Remove a subscriber. Returns 204.", zh: "移除订阅者。返回 204。" },
+    ],
+  },
+  {
+    id: "maintenance", en: "Maintenance", zh: "维护窗口",
+    noteEn: "While a window is active, the monitors it covers keep being checked but open no incidents and send no alerts. An empty monitorIds list covers every monitor in the workspace.",
+    noteZh: "维护窗口生效期间，所覆盖的监控项仍会被检测，但不会创建事件或发送告警。monitorIds 为空表示覆盖工作区内所有监控项。",
+    eps: [
+      { m: "GET", p: "/maintenance", en: "The project's latest 200 windows, by start time descending.", zh: "当前项目最新的 200 个维护窗口，按开始时间倒序。", res: `[{ id, name, startsAt, endsAt, monitorIds, createdAt, projectId }]` },
+      { m: "POST", p: "/maintenance", en: "Schedule a window. Returns 201.", zh: "创建维护窗口。返回 201。", req: `name        string, 1-120\nstartsAt    ISO 8601 date-time\nendsAt      ISO 8601 date-time, after startsAt\nmonitorIds  uuid[], max 500   (default [])` },
+      { m: "DELETE", p: "/maintenance/:id", en: "Delete a window. Returns 204.", zh: "删除维护窗口。返回 204。" },
+    ],
+  },
+  {
+    id: "projects", en: "Projects", zh: "项目",
+    noteEn: "Creating, renaming and deleting projects is not available to API keys that are limited to specific projects (403).",
+    noteZh: "限定了特定项目的 API 密钥不能创建、重命名或删除项目（403）。",
+    eps: [
+      { m: "GET", p: "/projects", en: "The workspace's projects (only the permitted ones for a limited key).", zh: "列出工作区的项目（受限密钥只能看到被授权的项目）。", res: `[{ id, name, createdAt }]` },
+      { m: "POST", p: "/projects", en: "Create a project. Returns 201.", zh: "创建项目。返回 201。", req: `name  string, 1-60` },
+      { m: "PATCH", p: "/projects/:id", en: "Rename a project.", zh: "重命名项目。", req: `name  string, 1-60` },
+      { m: "DELETE", p: "/projects/:id", en: "Delete a project and everything in it. A workspace must keep at least one project (400). Returns 204.", zh: "删除项目及其全部内容。工作区至少保留一个项目（否则 400）。返回 204。" },
+    ],
+  },
+  {
+    id: "settings", en: "Settings", zh: "设置",
+    eps: [
+      { m: "GET", p: "/settings", en: "Workspace preferences.", zh: "工作区偏好设置。", res: `{ alertLogRetentionDays: 30, checkRetentionDays: 90 }` },
+      { m: "PATCH", p: "/settings", en: "Update preferences. Not available to project-limited keys (403).", zh: "更新偏好设置。受限于项目的密钥不可用（403）。", req: `alertLogRetentionDays  integer 1-365\ncheckRetentionDays     integer 1-365   (raw check results; hourly rollups are kept for a year)` },
+    ],
+  },
+  {
+    id: "alert-log", en: "Alert log", zh: "告警日志",
+    eps: [
+      { m: "GET", p: "/alert-log", en: "Alert delivery history, newest first. Query: limit (1-200, default 50) and before (ISO 8601 date-time cursor, the createdAt of the last row of the previous page).", zh: "告警投递历史，按时间倒序。查询参数：limit（1-200，默认 50）和 before（ISO 8601 时间游标，取上一页最后一条的 createdAt）。",
+        res: `[{ id, channelId, channelName, channelType, kind, incidentId, monitorName, ok, error, createdAt }]\nkind: "incident.opened" | "incident.resolved" | "test" | "subscribers"` },
+    ],
+  },
+  {
+    id: "me", en: "Me and counts", zh: "当前用户与计数",
+    eps: [
+      { m: "GET", p: "/me", en: "The caller, the workspace and the active project.", zh: "当前调用者、工作区和当前项目。", res: `{ userId, user: { name, email, locale }, organization, projectId }` },
+      { m: "GET", p: "/me/export", en: "Download everything held about the caller as JSON: profile, sessions and the workspaces they own or administer.", zh: "以 JSON 下载与调用者相关的全部数据：资料、会话，以及其拥有或管理的工作区内容。" },
+      { m: "PATCH", p: "/me/locale", en: "Set the language used for emails to this user.", zh: "设置发给该用户的邮件所使用的语言。", req: `locale  "en" | "zh-CN"`, res: `{ locale }` },
+      { m: "GET", p: "/counts", en: "Sidebar counts for the active project.", zh: "当前项目的侧边栏计数。", res: `{ monitors, incidents, "status-pages", alerting }` },
+    ],
+  },
+];
+---
+<Doc title="API Reference" updated="2026-10-10" toc>
+  <div lang="en">
+    <h1>API reference</h1>
+    <p class="lede">Manage monitors, incidents, alert channels and status pages programmatically. The API is JSON over HTTPS.</p>
+    <h2 id="start">Getting started</h2>
+    <p>Base URL: <code>https://openuptime.app/api</code></p>
+    <p>Create an API key in the app under <strong>API keys</strong>, then send it with every request, either as an <code>x-api-key</code> header or as <code>Authorization: Bearer &lt;key&gt;</code>. A key belongs to one workspace and can optionally be limited to specific projects.</p>
+    <pre><code>curl https://openuptime.app/api/monitors \
+  -H "x-api-key: ou_..."</code></pre>
+    <p>Connecting an AI agent? See the <a href="/docs/mcp">MCP guide</a>.</p>
+    <h2 id="projects-scoping">Project scoping</h2>
+    <p>Most resources live in a project. Choose the project with the <code>x-project-id</code> header (a project id from <code>GET /projects</code>). If it is missing or unknown, the key's first permitted project, or else the workspace's oldest project, is used. A key limited to some projects gets <code>403</code> for others.</p>
+    <h2 id="errors">Errors</h2>
+    <p>Errors return a JSON body <code is:raw>{ "error": "message" }</code> with a matching status: <code>400</code> invalid request, <code>401</code> missing or invalid credentials, <code>403</code> not permitted, <code>404</code> not found or not in your project, <code>409</code> conflict, <code>429</code> too many requests, <code>5xx</code> server error. Request bodies that fail validation return <code>400</code> with a JSON description of the invalid fields. Deletes return <code>204</code> with no body. Timestamps are ISO 8601 UTC; ids are UUIDs.</p>
+    <h2 id="limits">Rate limiting</h2>
+    <p>Authenticated endpoints have no fixed per-key quota at the application level, but please be considerate and avoid tight polling; use the monitor's interval and alert channels instead. Public subscription requests are limited (see below).</p>
+    <h2 id="examples">Examples</h2>
+    <h3>Create a monitor</h3>
+    <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
+  -H "x-api-key: ou_..." \
+  -H "x-project-id: &lt;project id&gt;" \
+  -H "content-type: application/json" \
+  -d '{"name":"Homepage","type":"http","target":"https://example.com","intervalSec":60}'</code></pre>
+    <h3>List monitors</h3>
+    <pre><code>curl https://openuptime.app/api/monitors \
+  -H "Authorization: Bearer ou_..."</code></pre>
+    <h3>Send a heartbeat ping</h3>
+    <p>Create a monitor with <code>"type":"heartbeat"</code> and call its URL from your job. No API key is needed; the token is the secret. Use <code>GET</code> or <code>POST</code>.</p>
+    <pre><code>curl https://openuptime.app/api/heartbeat/&lt;heartbeatToken&gt;</code></pre>
+    <p>Returns <code is:raw>{"ok":true}</code>, or <code>404</code> for an unknown token. A ping resolves an open incident for that monitor.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>API 参考</h1>
+    <p class="lede">通过程序管理监控项、事件、告警渠道和状态页。API 基于 HTTPS 与 JSON。</p>
+    <h2 id="start-zh">快速开始</h2>
+    <p>基础地址：<code>https://openuptime.app/api</code></p>
+    <p>在应用的 <strong>API 密钥</strong> 页面创建密钥，并在每个请求中携带：使用 <code>x-api-key</code> 请求头，或 <code>Authorization: Bearer &lt;key&gt;</code>。密钥属于某个工作区，并可限定到特定项目。</p>
+    <pre><code>curl https://openuptime.app/api/monitors \
+  -H "x-api-key: ou_..."</code></pre>
+    <p>要接入 AI Agent？请看 <a href="/docs/mcp">MCP 文档</a>。</p>
+    <h2 id="projects-scoping-zh">项目范围</h2>
+    <p>大多数资源属于某个项目。通过 <code>x-project-id</code> 请求头指定项目（取自 <code>GET /projects</code> 的项目 id）。缺失或无效时，使用该密钥被授权的第一个项目，否则使用工作区最早创建的项目。受限密钥访问其他项目将返回 <code>403</code>。</p>
+    <h2 id="errors-zh">错误</h2>
+    <p>错误响应为 JSON <code is:raw>{ "error": "message" }</code>，并带有对应状态码：<code>400</code> 请求无效，<code>401</code> 缺少或无效的凭证，<code>403</code> 无权限，<code>404</code> 不存在或不在你的项目内，<code>409</code> 冲突，<code>429</code> 请求过多，<code>5xx</code> 服务器错误。请求体校验失败返回 <code>400</code> 及无效字段的 JSON 描述。删除成功返回 <code>204</code>，无响应体。时间为 ISO 8601 UTC，id 为 UUID。</p>
+    <h2 id="limits-zh">限流</h2>
+    <p>需认证的接口在应用层没有固定的按密钥配额，但请合理使用，避免高频轮询；建议依靠监控项的检测间隔和告警渠道。公开的订阅接口有限流（见下文）。</p>
+    <h2 id="examples-zh">示例</h2>
+    <h3>创建监控项</h3>
+    <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
+  -H "x-api-key: ou_..." \
+  -H "x-project-id: &lt;project id&gt;" \
+  -H "content-type: application/json" \
+  -d '{"name":"Homepage","type":"http","target":"https://example.com","intervalSec":60}'</code></pre>
+    <h3>列出监控项</h3>
+    <pre><code>curl https://openuptime.app/api/monitors \
+  -H "Authorization: Bearer ou_..."</code></pre>
+    <h3>发送心跳</h3>
+    <p>创建 <code>"type":"heartbeat"</code> 的监控项，并在你的任务中请求其地址。无需 API 密钥，令牌本身即是凭证。可使用 <code>GET</code> 或 <code>POST</code>。</p>
+    <pre><code>curl https://openuptime.app/api/heartbeat/&lt;heartbeatToken&gt;</code></pre>
+    <p>成功返回 <code is:raw>{"ok":true}</code>，令牌无效返回 <code>404</code>。收到心跳会关闭该监控项未结束的事件。</p>
+  </div>
+
+  <div class="toc">
+    {groups.map((g) => <a href={"#" + g.id}><span lang="en">{g.en}</span><span lang="zh-CN">{g.zh}</span></a>)}
+    <a href="#public"><span lang="en">Public status</span><span lang="zh-CN">公开状态接口</span></a>
+  </div>
+
+  {groups.map((g) => (
+    <section>
+      <h2 id={g.id}><span lang="en">{g.en}</span><span lang="zh-CN">{g.zh}</span></h2>
+      {g.noteEn && <p class="note"><span lang="en">{g.noteEn}</span><span lang="zh-CN">{g.noteZh}</span></p>}
+      {g.eps.map((e) => (
+        <div>
+          <div class="ep"><span class={"m " + e.m.toLowerCase()}>{e.m}</span><code>{e.p}</code></div>
+          <p><span lang="en">{e.en}</span><span lang="zh-CN">{e.zh}</span></p>
+          {e.req && <pre><code>{e.req}</code></pre>}
+          {e.res && <pre><code>{e.res}</code></pre>}
+        </div>
+      ))}
+    </section>
+  ))}
+
+  <section id="public">
+    <h2><span lang="en">Public status endpoints</span><span lang="zh-CN">公开状态接口</span></h2>
+    <p class="note">
+      <span lang="en">These endpoints need no authentication and are what powers public status pages. Paths are under <code>/api/public/status</code>; <code>&lt;slug&gt;</code> is the status page address. Unknown slugs return 404.</span>
+      <span lang="zh-CN">这些接口无需认证，用于驱动公开状态页。路径位于 <code>/api/public/status</code> 之下，<code>&lt;slug&gt;</code> 为状态页地址。slug 不存在时返回 404。</span>
+    </p>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;</code></div>
+    <p><span lang="en">Current status, 90 buckets of uptime history per component (daily, or hourly while history is under four days) and open incidents.</span><span lang="zh-CN">当前状态、每个组件 90 个时间桶的可用率历史（按天，历史不足四天时按小时）以及未结束的事件。</span></p>
+    <pre><code is:raw>{ page: { slug, title, theme, showLatency },
+  overall: "operational" | "degraded" | "outage",
+  bucket: "day" | "hour",
+  components: [{ id, name, group, status, uptime90d, days: [{ day, uptime }] }],
+  incidents: [{ id, title, status, severity, startedAt, resolvedAt,
+                updates: [{ id, body, status, createdAt }] }] }</code></pre>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/incidents?before=&lt;ISO date&gt;</code></div>
+    <p><span lang="en">Incident history, newest first, 15 per page. Pass the returned <code>next</code> as <code>before</code> to continue; <code>next</code> is null on the last page.</span><span lang="zh-CN">事件历史，按时间倒序，每页 15 条。将返回的 <code>next</code> 作为 <code>before</code> 传入即可翻页；最后一页 <code>next</code> 为 null。</span></p>
+    <pre><code is:raw>{ items: [{ id, title, status, severity, startedAt, resolvedAt, updates: [...] }], next }</code></pre>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/rss</code></div>
+    <p><span lang="en">RSS 2.0 feed of the latest 30 incidents (<code>application/rss+xml</code>).</span><span lang="zh-CN">最新 30 个事件的 RSS 2.0 订阅源（<code>application/rss+xml</code>）。</span></p>
+
+    <div class="ep"><span class="m post">POST</span><code>/api/public/status/&lt;slug&gt;/subscribe</code></div>
+    <p><span lang="en">Subscribe an email address to incident updates. A confirmation email is sent; the response is <code is:raw>{ "ok": true }</code> either way, so it does not reveal who is subscribed. Limited to 10 requests per hour per client IP, 3 per address per page per hour and 200 per page per hour (429), and 5000 subscribers per page (409).</span><span lang="zh-CN">订阅事件通知邮件。系统会发送确认邮件；无论是否已订阅，响应都是 <code is:raw>{ "ok": true }</code>，不会泄露订阅情况。限流：每个客户端 IP 每小时 10 次、每个邮箱每个状态页每小时 3 次、每个状态页每小时 200 次（429），每个状态页最多 5000 位订阅者（409）。</span></p>
+    <pre><code is:raw>{ "email": "you@example.com" }</code></pre>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/_/confirm?token=&lt;token&gt;</code></div>
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/_/unsubscribe?token=&lt;token&gt;</code></div>
+    <p><span lang="en">Links used in subscription emails. Both redirect to the status page.</span><span lang="zh-CN">订阅邮件中使用的链接，均会重定向到状态页。</span></p>
+  </section>
+</Doc>

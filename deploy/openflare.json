@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "name": "OpenUptime",
+  "slug": "openuptime",
+  "description": "Open-source uptime monitoring and status pages on Cloudflare Workers + Postgres. Works on the Free plan (small scale) or Paid (Queues).",
+  "license": "MIT",
+  "inputs": [
+    {
+      "key": "PLAN",
+      "label": "Cloudflare plan",
+      "type": "select",
+      "options": [
+        "paid",
+        "free"
+      ],
+      "default": "paid",
+      "required": true,
+      "help": "Free: no Queue, checks run inside the 1-minute cron (about 40 monitors max, see README). Paid: Queues fan checks out and scale."
+    },
+    {
+      "key": "BETTER_AUTH_SECRET",
+      "label": "Session signing secret (generated)",
+      "type": "secret",
+      "generate": "hex32"
+    },
+    {
+      "key": "CRON_SECRET",
+      "label": "Internal cron / migrate secret (generated)",
+      "type": "secret",
+      "generate": "hex32"
+    },
+    {
+      "key": "EMAIL_FROM",
+      "label": "Alert email sender (optional)",
+      "type": "text",
+      "help": "e.g. alerts@yourdomain.com. Leave empty to skip email: the domain must be onboarded to Cloudflare Email Sending first. Slack/webhook alerts work without it."
+    },
+    {
+      "key": "GITHUB_CLIENT_ID",
+      "label": "GitHub OAuth client ID (optional)",
+      "type": "text"
+    },
+    {
+      "key": "GITHUB_CLIENT_SECRET",
+      "label": "GitHub OAuth client secret (optional)",
+      "type": "secret"
+    }
+  ],
+  "resources": [
+    {
+      "id": "pg",
+      "type": "postgres"
+    },
+    {
+      "id": "hd",
+      "type": "hyperdrive",
+      "from": "pg"
+    },
+    {
+      "id": "checks",
+      "type": "queue",
+      "if": "${inputs.PLAN}==paid"
+    },
+    {
+      "id": "session",
+      "type": "kv"
+    }
+  ],
+  "workers": [
+    {
+      "id": "api",
+      "bundle": "api.mjs",
+      "compatibilityDate": "2026-09-01",
+      "compatibilityFlags": [
+        "nodejs_compat"
+      ],
+      "crons": [
+        "* * * * *"
+      ],
+      "consumers": [
+        {
+          "resource": "checks",
+          "batchSize": 1,
+          "maxWaitMs": 1000,
+          "maxRetries": 2,
+          "maxConcurrency": 20,
+          "if": "${inputs.PLAN}==paid"
+        }
+      ],
+      "bindings": [
+        {
+          "type": "hyperdrive",
+          "name": "HYPERDRIVE",
+          "resource": "hd"
+        },
+        {
+          "type": "queue",
+          "name": "CHECK_QUEUE",
+          "resource": "checks",
+          "if": "${inputs.PLAN}==paid"
+        },
+        {
+          "type": "send_email",
+          "name": "EMAIL",
+          "if": "${inputs.EMAIL_FROM}"
+        },
+        {
+          "type": "var",
+          "name": "EMAIL_FROM",
+          "value": "${inputs.EMAIL_FROM}",
+          "if": "${inputs.EMAIL_FROM}"
+        },
+        {
+          "type": "var",
+          "name": "INVITE_TTL_DAYS",
+          "value": "7"
+        },
+        {
+          "type": "var",
+          "name": "BETTER_AUTH_URL",
+          "value": "${workers.web.url}"
+        },
+        {
+          "type": "var",
+          "name": "WEB_ORIGIN",
+          "value": "${workers.web.url}"
+        },
+        {
+          "type": "secret",
+          "name": "BETTER_AUTH_SECRET",
+          "value": "${inputs.BETTER_AUTH_SECRET}"
+        },
+        {
+          "type": "secret",
+          "name": "CRON_SECRET",
+          "value": "${inputs.CRON_SECRET}"
+        },
+        {
+          "type": "var",
+          "name": "GITHUB_CLIENT_ID",
+          "value": "${inputs.GITHUB_CLIENT_ID}",
+          "if": "${inputs.GITHUB_CLIENT_ID}"
+        },
+        {
+          "type": "secret",
+          "name": "GITHUB_CLIENT_SECRET",
+          "value": "${inputs.GITHUB_CLIENT_SECRET}",
+          "if": "${inputs.GITHUB_CLIENT_ID}"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "bundle": "web.mjs",
+      "assets": {
+        "archive": "web-assets.zip",
+        "notFound": "none"
+      },
+      "compatibilityDate": "2026-09-01",
+      "bindings": [
+        {
+          "type": "service",
+          "name": "API",
+          "worker": "api"
+        },
+        {
+          "type": "kv",
+          "name": "SESSION",
+          "resource": "session"
+        },
+        {
+          "type": "images",
+          "name": "IMAGES"
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "method": "POST",
+      "url": "${workers.api.url}/internal/migrate",
+      "headers": {
+        "x-cron-secret": "${inputs.CRON_SECRET}"
+      }
+    }
+  ]
+}

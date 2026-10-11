@@ -1,0 +1,181 @@
+---
+export const prerender = false;
+import Base from "../../layouts/Base.astro";
+import { apiFetch, PRODUCT_URL } from "../../lib/server";
+import { translate } from "../../lib/i18n";
+
+type Status = {
+  page: { title: string; slug: string; externalUrl?: string | null };
+  bucket?: "hour" | "day";
+  overall: "operational" | "degraded" | "outage";
+  components: { id: string; name: string; group?: string | null; status: string; uptime90d: number | null; days: { day: string; uptime: number }[] }[];
+  incidents: { id: string; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
+};
+const { slug } = Astro.params;
+const { status, data } = await apiFetch<Status>(`/api/public/status/${slug}`);
+if (status === 404 || !data) return new Response("Not found", { status: 404 });
+
+type History = { items: { id: string; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
+const before = Astro.url.searchParams.get("before");
+const hist = await apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`);
+const history = hist.data ?? { items: [], next: null };
+const activeIds = new Set(data.incidents.map((i) => i.id));
+history.items = history.items.filter((i) => !activeIds.has(i.id));
+// always 90 slots (oldest → now); buckets without checks render as grey "no data"
+function slots(days: { day: string; uptime: number }[]) {
+  const hourly = data?.bucket === "hour";
+  const by = new Map(days.map((d) => [d.day, d.uptime]));
+  return Array.from({ length: 90 }, (_, i) => {
+    const at = new Date(Date.now() - (89 - i) * (hourly ? 36e5 : 864e5)).toISOString();
+    const day = hourly ? at.slice(0, 13) : at.slice(0, 10);
+    return { day: hourly ? day.replace("T", " ") + ":00" : day, uptime: by.get(day) ?? null };
+  });
+}
+const notice = Astro.url.searchParams.get("subscribed") ? "You’re subscribed. We’ll email you about incidents." : Astro.url.searchParams.get("unsubscribed") ? "You’ve been unsubscribed." : "";
+
+const zhPage = Astro.request.headers.get("x-ou-lang") === "zh-CN";
+const base = `${Astro.url.origin}`;
+const canon = `${base}${zhPage ? "/zh-Hans" : ""}/status/${slug}`;
+
+const t = (x: string) => translate((Astro.locals.lang ?? "en"), x);
+const headline = t({ operational: "Everything is running smoothly.", degraded: "Some systems are degraded.", outage: "We’re experiencing an outage." }[data.overall]);
+const overallText = (o: string) => (o === "operational" ? t("All systems operational") : o === "outage" ? t("Major outage") : t("Partial degradation"));
+const groupNames = [...new Set(data.components.map((c) => c.group || "Services"))];
+const withUp = data.components.filter((c) => c.uptime90d != null);
+const avgUp = withUp.length ? withUp.reduce((a, c) => a + (c.uptime90d as number), 0) / withUp.length : null;
+const opCount = data.components.filter((c) => c.status === "up" || c.status === "operational").length;
+const fmtDay = (d: string) => new Date(d).toLocaleDateString((Astro.locals.lang ?? "en") === "zh-CN" ? "zh-CN" : "en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const stageCls = (st: string) => (st === "resolved" ? "ok" : st === "monitoring" ? "mon" : "");
+const dayClass = (u: number) => (u >= 0.999 ? "" : u >= 0.98 ? "w" : "d");
+Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
+---
+<Base title={`${data.page.title} · Status`}>
+  <Fragment slot="head">
+    <link rel="canonical" href={canon} />
+    <link rel="alternate" hreflang="en" href={`${base}/status/${slug}`} />
+    <link rel="alternate" hreflang="zh-Hans" href={`${base}/zh-Hans/status/${slug}`} />
+    <link rel="alternate" hreflang="x-default" href={`${base}/status/${slug}`} />
+  </Fragment>
+  <div class="pub">
+    <header class="pub-top"><div class="pub-wrap pub-top-in">
+      <span class="pub-brand"><span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>{data.page.title}{data.page.externalUrl && (
+        <a class="pub-ext" href={data.page.externalUrl} target="_blank" rel="nofollow noopener noreferrer" aria-label={t("Visit website")} title={t("Visit website")}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a>
+      )}</span>
+      <a class="btn sm primary" href="#subscribe">{t("Subscribe")}</a>
+    </div></header>
+
+    <main class="pub-wrap">
+      <section class="pub-hd">
+        <div>
+          <span class={`pill ${data.overall === "outage" ? "down" : data.overall === "degraded" ? "degraded" : "up"}`}>{overallText(data.overall)}</span>
+          <h1>{headline}</h1>
+        </div>
+        {avgUp != null && (
+          <div class="pub-ring" role="img" aria-label={`${avgUp.toFixed(2)}%`}>
+            <b>{avgUp.toFixed(2)}%</b><span>{t("90-day uptime")}</span>
+          </div>
+        )}
+      </section>
+
+      <div class="pub-kpis">
+        <div><b>{opCount}/{data.components.length}</b><span>{t("Components operational")}</span></div>
+        <div><b>{data.incidents.length}</b><span>{t("Active incidents")}</span></div>
+        <div><b>{history.items.length}{history.next ? "+" : ""}</b><span>{t("Past incidents")}</span></div>
+      </div>
+
+      {notice && <p class="pill up" style="margin-bottom:16px">{t(notice)}</p>}
+
+      <div class="pub-grid">
+        <div class="pub-col">
+          {data.incidents.map((i) => (
+            <article class="card pub-inc live">
+              <div class="pub-inc-h"><h3>{i.title}</h3><span class={`pill ${i.status}`}>{t(i.status)}</span></div>
+              <div class="pub-ups">
+                {i.updates.map((u) => <div class={`up ${stageCls(u.status)}`}><div class="up-h"><b>{t(u.status)}</b><span>{new Date(u.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC</span></div><p>{u.body}</p></div>)}
+              </div>
+            </article>
+          ))}
+
+          <div class="pub-st"><h2>{t("Components")}</h2>
+            <div class="pub-legend"><span><i></i>{t("Operational")}</span><span><i class="w"></i>{t("Degraded")}</span><span><i class="d"></i>{t("Outage")}</span></div>
+          </div>
+          <div class="card pub-comps">
+            {groupNames.map((g) => (
+              <>
+                {(groupNames.length > 1 || g !== "Services") && <div class="pub-grp">{g}</div>}
+                {data.components.filter((c) => (c.group || "Services") === g).map((c) => (
+                  <div class="pub-row">
+                    <div class="pub-row-h">
+                      <span class="pub-row-n"><i class={`sd ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : "d"}`}></i>{c.name}</span>
+                      <span class="pub-row-v"><span class={`pub-s ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : "d"}`}>{t(c.status)}</span><b>{c.uptime90d ?? "—"}%</b></span>
+                    </div>
+                    <div class="bars">
+                      {slots(c.days).map((d) => <i class={d.uptime == null ? "n" : dayClass(d.uptime)} title={d.uptime == null ? `${d.day} · ${t("No data")}` : `${d.day} · ${(d.uptime * 100).toFixed(2)}%`} />)}
+                    </div>
+                  </div>
+                ))}
+              </>
+            ))}
+            {data.components.length === 0 && <p class="muted" style="padding:22px">{t("Nothing to show yet.")}</p>}
+            <div class="pub-axis"><span>{data?.bucket === "hour" ? t("90 hours ago") : t("90 days ago")}</span><span>{t("Today")}</span></div>
+          </div>
+
+          <div class="pub-st gap"><h2>{t("Past incidents")}</h2></div>
+          <div class="card pub-incs">
+            {history.items.length === 0 && <p class="muted" style="padding:6px 0">{t("No incidents reported.")}</p>}
+            {history.items.map((i) => (
+              <article class="pub-pi">
+                <div class="pub-pi-d"><b>{fmtDay(i.startedAt)}</b><span>{new Date(i.startedAt).getUTCFullYear()}</span></div>
+                <div class="pub-pi-c">
+                  <div class="pub-inc-h"><h3>{i.title}</h3>{!i.resolvedAt && <span class="pill down">{t("ongoing")}</span>}</div>
+                  <div class="pub-ups">
+                    {i.updates.map((u) => <div class={`up ${stageCls(u.status)}`}><div class="up-h"><b>{t(u.status)}</b><span>{new Date(u.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC</span></div><p>{u.body}</p></div>)}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div class="pub-pager">
+            {before && <a href={`/status/${slug}`}>{t("Newest")}</a>}
+            {history.next && <a href={`/status/${slug}?before=${encodeURIComponent(history.next)}`}>{t("Older incidents")}</a>}
+          </div>
+        </div>
+
+        <aside class="pub-side">
+          <section class="card pub-sub" id="subscribe">
+            <h3>{t("Get updates")}</h3>
+            <p class="muted">{t("We’ll email you when something breaks and when it’s fixed.")}</p>
+            <form id="sub">
+              <input class="in" type="email" name="email" required placeholder="you@example.com" aria-label="Email" />
+              <button class="btn primary" type="submit">{t("Subscribe")}</button>
+            </form>
+            <p id="sub-msg" class="muted" role="status"></p>
+            <a href={`/api/public/status/${slug}/rss`} class="pub-rss">RSS</a>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="pub-wrap pub-foot">
+      <span>{t("Powered by")} <a href={PRODUCT_URL}>OpenUptime</a></span>
+    </footer>
+    <script is:inline data-astro-rerun define:vars={{ slug, sending: t("Subscribing…"), ok: t("Check your inbox to confirm your subscription."), bad: t("Could not subscribe. Try again."), slow: t("Too many attempts. Please try again later.") }}>
+      document.getElementById("sub").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("sub-msg");
+        const btn = e.target.querySelector("button");
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = sending;
+        msg.textContent = "";
+        try {
+          const r = await fetch(`/api/public/status/${slug}/subscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: e.target.email.value }) });
+          msg.textContent = r.ok ? ok : r.status === 429 ? slow : bad;
+          if (r.ok) e.target.reset();
+        } catch { msg.textContent = bad; }
+        btn.disabled = false;
+        btn.textContent = label;
+      });
+    </script>
+  </div>
+</Base>

@@ -1,0 +1,45 @@
+---
+import { env } from "cloudflare:workers";
+
+// /zh-Hans/..., /ja, /es: the same pages under a language prefix. The static pages are fetched from the asset store
+// (they localise themselves from the URL); deep links and status pages are rewritten to their own server routes.
+export const prerender = false;
+
+const { locale, rest } = Astro.params;
+const known = ["zh-Hans", "ja", "es"];
+const tail = rest ? `/${rest}` : "/";
+if (!locale || !known.includes(locale)) return new Response("Not found", { status: 404 });
+
+// ja / es exist for the landing page only
+if (locale !== "zh-Hans" && tail !== "/") return Astro.redirect(tail, 302);
+if (Astro.url.pathname.length > 1 && Astro.url.pathname.endsWith("/")) {
+  return Astro.redirect(Astro.url.pathname.replace(/\/+$/, "") + Astro.url.search, 301);
+}
+
+const assets = import.meta.env.PROD ? (env as { ASSETS?: { fetch: typeof fetch } }).ASSETS : undefined;
+// Docker: the public origin is not reachable from inside the container, the same process answers on loopback
+const loopback = typeof process !== "undefined" ? process.env.API_ORIGIN : undefined;
+const get = (path: string) => (assets ? assets.fetch(new URL(path, Astro.url)) : fetch(new URL(path, loopback && !import.meta.env.DEV ? loopback : Astro.url)));
+
+// the landing page of each language is its own pre-rendered file
+const file = tail === "/" ? `/${locale}.html` : tail;
+const res = await get(file);
+const type = res.headers.get("content-type") ?? "";
+if (res.ok && type.includes("text/html") && !res.redirected) {
+  const html = (await res.text()).replace(/<html lang="[^"]*"/, `<html lang="${locale === "zh-Hans" ? "zh-CN" : locale}"`);
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", vary: "Cookie" } });
+}
+if (res.ok && !type.includes("text/html")) return res;
+// the rewritten request no longer carries the /zh-Hans prefix, so the language travels in a header the middleware reads
+const forward = new Request(new URL(tail + Astro.url.search, Astro.url), Astro.request);
+if (locale === "zh-Hans") forward.headers.set("x-ou-lang", "zh-CN");
+const inner = await Astro.rewrite(forward);
+if (locale === "zh-Hans" && (inner.headers.get("content-type") ?? "").includes("text/html")) {
+  const html = (await inner.text()).replace(/<html lang="[^"]*"/, '<html lang="zh-CN"');
+  const headers = new Headers(inner.headers);
+  headers.delete("content-length");
+  headers.set("vary", "Cookie");
+  return new Response(html, { status: inner.status, headers });
+}
+return inner;
+---

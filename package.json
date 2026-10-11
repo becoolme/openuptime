@@ -1,0 +1,13 @@
+{
+  "name": "openuptime",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @openuptime/api dev",
+    "dev:web": "pnpm --filter @openuptime/web dev",
+    "db:generate": "pnpm --filter @openuptime/db-pg generate",
+    "db:migrate": "pnpm --filter @openuptime/db-pg migrate",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://openuptime.app/</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans</loc></url>
+  <url><loc>https://openuptime.app/ja</loc></url>
+  <url><loc>https://openuptime.app/es</loc></url>
+  <url><loc>https://openuptime.app/docs/api</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans/docs/api</loc></url>
+  <url><loc>https://openuptime.app/docs/embed</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans/docs/embed</loc></url>
+  <url><loc>https://openuptime.app/docs/self-host</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans/docs/self-host</loc></url>
+  <url><loc>https://openuptime.app/privacy</loc></url>
+  <url><loc>https://openuptime.app/terms</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans/privacy</loc></url>
+  <url><loc>https://openuptime.app/zh-Hans/terms</loc></url>
+</urlset>

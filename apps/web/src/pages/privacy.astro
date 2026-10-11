@@ -1,0 +1,134 @@
+---
+import Doc from "../layouts/Doc.astro";
+---
+<Doc title="Privacy Policy" updated="2026-10-10">
+  <div lang="en">
+    <h1>Privacy Policy</h1>
+    <p class="lede">OpenUptime is open-source uptime monitoring and status pages. This policy explains what the hosted service at openuptime.app collects, why, and what control you have. It is written by the OpenUptime contributors and describes how the software actually behaves; the source is public so you can check.</p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li><strong>Account data:</strong> your email address and name, and a hash of your password (we never store the password itself). If you sign in with GitHub, we receive your GitHub profile name, email and account identifier.</li>
+      <li><strong>Session data:</strong> when you sign in, a session record is created with a random token, expiry, and the IP address and user agent of the device.</li>
+      <li><strong>Workspace content you enter:</strong> workspaces, projects, monitors (names, target URLs and hosts, headers, keywords), check results (status, latency, status code, error text), incidents and updates, maintenance windows, status pages, and team membership.</li>
+      <li><strong>Alert channel configuration:</strong> the destinations you configure for alerts, such as email addresses, Slack or generic webhook URLs, Telegram bot tokens and chat IDs, and PagerDuty routing keys. Treat these as secrets and use dedicated webhooks and bots.</li>
+      <li><strong>Alert delivery log:</strong> a record of which alerts were sent to which channel and whether delivery succeeded.</li>
+      <li><strong>API keys:</strong> keys you create to call the API, with the workspace and projects they are limited to.</li>
+      <li><strong>Status page subscribers:</strong> if you subscribe to someone's public status page, we store your email address, preferred language and a confirmation token so we can email you about incidents.</li>
+      <li><strong>Rate-limit counters:</strong> short-lived counters keyed by client IP address, used to stop abuse of public endpoints such as status page subscriptions. They are removed within about a day.</li>
+    </ul>
+
+    <h2>Cookies and local storage</h2>
+    <p>We use only functional cookies, and no tracking or advertising cookies.</p>
+    <ul>
+      <li>A signed session cookie that keeps you signed in.</li>
+      <li><code>ou_lang</code>: your language choice.</li>
+      <li><code>ou_project</code>: the project you last selected in the app.</li>
+      <li>Your light/dark theme preference is kept in your browser's local storage and never sent to us.</li>
+    </ul>
+
+    <h2>What we do not do</h2>
+    <ul>
+      <li>No advertising and no selling or renting of personal data.</li>
+      <li>No advertising or cross-site tracking scripts. The hosted site uses Plausible-style, cookie-free analytics (script served from click.pageview.click) that counts page views in aggregate and does not build profiles of individuals. The pages load fonts from Google Fonts, which means your browser contacts Google to fetch them.</li>
+    </ul>
+
+    <h2>How we use data</h2>
+    <p>We use your data to run the service: authenticating you, running your checks, opening and resolving incidents, sending alerts and notification emails, showing your status pages, and preventing abuse. We do not use your monitoring data for any other purpose.</p>
+
+    <h2>Who processes data</h2>
+    <ul>
+      <li><strong>Cloudflare</strong> runs the application on Cloudflare Workers, connects to the database through Hyperdrive, and sends transactional email (sign-in, password reset, invitations, alerts, subscription confirmations) through Cloudflare Email Service.</li>
+      <li><strong>The database provider</strong> hosts the Postgres database that stores the data described above.</li>
+      <li><strong>Destinations you configure:</strong> when an alert fires, we send its content (monitor name, target, incident title) to the Slack, Telegram, PagerDuty, webhook or email destination you set up. Those services have their own policies.</li>
+    </ul>
+
+    <h2>Retention</h2>
+    <ul>
+      <li>Check results are kept for 90 days, then deleted. A per-workspace setting for this is planned.</li>
+      <li>The alert delivery log is kept for 30 days by default; workspace owners can change this from 1 to 365 days in settings.</li>
+      <li>Account, workspace, monitor, incident and status page data is kept until you delete it or delete your account.</li>
+      <li>Subscribers remain until they unsubscribe (every email contains an unsubscribe link) or the status page owner removes them.</li>
+    </ul>
+
+    <h2>Your rights</h2>
+    <p>You can access, correct, export and delete your data. Export and account deletion are available from account settings in the app (<a href="/app/account">/app/account</a>), which are still being finished; until they are live, email us and we will handle your request. Workspace owners can also remove monitors, status pages and subscribers at any time. If you are in a region with data protection law such as the EU or UK, you also have the rights to object to or restrict processing and to complain to your data protection authority.</p>
+
+    <h2>Security</h2>
+    <p>Traffic is encrypted in transit. Passwords are stored only as hashes. No system is perfectly secure; if you find a vulnerability or suspect a breach, please contact us at <a href="mailto:privacy@openuptime.app">privacy@openuptime.app</a>.</p>
+
+    <h2>Children</h2>
+    <p>OpenUptime is not intended for people under 16 and we do not knowingly collect their data.</p>
+
+    <h2>Changes</h2>
+    <p>If we change this policy in a material way we will update the date below and, where practical, notify account holders by email.</p>
+
+    <h2>Contact</h2>
+    <p>OpenUptime contributors &middot; <a href="mailto:privacy@openuptime.app">privacy@openuptime.app</a></p>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>隐私政策</h1>
+    <p class="lede">OpenUptime 是开源的可用性监控与状态页服务。本政策说明 openuptime.app 托管服务收集哪些数据、为什么收集，以及你可以如何控制。本政策由 OpenUptime 贡献者撰写，并如实描述软件的实际行为；源代码公开，欢迎核对。</p>
+
+    <h2>我们收集的数据</h2>
+    <ul>
+      <li><strong>账户数据：</strong>你的邮箱、姓名和密码哈希（我们不会保存密码明文）。如果使用 GitHub 登录，我们会获得你的 GitHub 名称、邮箱和账号标识。</li>
+      <li><strong>会话数据：</strong>登录时会创建会话记录，包含随机令牌、有效期，以及设备的 IP 地址和 User Agent。</li>
+      <li><strong>你录入的工作区内容：</strong>工作区、项目、监控项（名称、目标地址、请求头、关键字）、检测结果（状态、延迟、状态码、错误信息）、事件及更新、维护窗口、状态页和团队成员。</li>
+      <li><strong>告警渠道配置：</strong>你设置的告警目的地，例如邮箱地址、Slack 或自定义 Webhook 地址、Telegram 机器人令牌与聊天 ID、PagerDuty 路由密钥。请将它们视为机密，并使用专用的 Webhook 和机器人。</li>
+      <li><strong>告警投递日志：</strong>记录哪些告警发送到了哪个渠道，以及是否发送成功。</li>
+      <li><strong>API 密钥：</strong>你为调用 API 创建的密钥，以及其限定的工作区和项目。</li>
+      <li><strong>状态页订阅者：</strong>如果你订阅了某个公开状态页，我们会保存你的邮箱、语言偏好和确认令牌，以便就事件向你发送邮件。</li>
+      <li><strong>限流计数：</strong>以客户端 IP 地址为键的短期计数器，用于防止滥用公开接口（例如状态页订阅），约一天内清除。</li>
+    </ul>
+
+    <h2>Cookie 与本地存储</h2>
+    <p>我们只使用功能性 Cookie，不使用任何跟踪或广告 Cookie。</p>
+    <ul>
+      <li>保持登录状态的已签名会话 Cookie。</li>
+      <li><code>ou_lang</code>：你选择的语言。</li>
+      <li><code>ou_project</code>：你在应用中最近选择的项目。</li>
+      <li>浅色/深色主题偏好保存在浏览器本地存储中，不会发送给我们。</li>
+    </ul>
+
+    <h2>我们不会做的事</h2>
+    <ul>
+      <li>不投放广告，不出售或出租个人数据。</li>
+      <li>不含广告或跨站跟踪脚本。托管版使用 Plausible 风格的无 Cookie 统计（脚本来自 click.pageview.click），仅汇总统计页面浏览量，不建立个人画像。页面会从 Google Fonts 加载字体，因此你的浏览器会访问 Google 以获取字体文件。</li>
+    </ul>
+
+    <h2>数据的用途</h2>
+    <p>我们仅将数据用于运行服务：验证身份、执行检测、创建与恢复事件、发送告警与通知邮件、展示状态页以及防止滥用。我们不会将你的监控数据用于其他目的。</p>
+
+    <h2>数据处理方</h2>
+    <ul>
+      <li><strong>Cloudflare</strong>：应用运行在 Cloudflare Workers 上，通过 Hyperdrive 连接数据库，并通过 Cloudflare Email Service 发送事务性邮件（登录、重置密码、邀请、告警、订阅确认）。</li>
+      <li><strong>数据库服务商</strong>：托管存放上述数据的 Postgres 数据库。</li>
+      <li><strong>你配置的目的地：</strong>告警触发时，我们会把内容（监控名称、目标、事件标题）发送到你设置的 Slack、Telegram、PagerDuty、Webhook 或邮箱，这些服务有各自的隐私政策。</li>
+    </ul>
+
+    <h2>保留期限</h2>
+    <ul>
+      <li>检测结果保留 90 天后删除。按工作区配置该期限的功能正在计划中。</li>
+      <li>告警投递日志默认保留 30 天；工作区所有者可在设置中调整为 1 至 365 天。</li>
+      <li>账户、工作区、监控项、事件和状态页数据保留至你删除这些数据或删除账户为止。</li>
+      <li>订阅者会保留至其退订（每封邮件都含退订链接）或被状态页所有者移除。</li>
+    </ul>
+
+    <h2>你的权利</h2>
+    <p>你可以访问、更正、导出和删除自己的数据。导出和账户删除功能位于应用的账户设置中（<a href="/app/account">/app/account</a>），目前仍在完善；在其上线之前，请发邮件给我们，我们会处理你的请求。工作区所有者也可以随时删除监控项、状态页和订阅者。如果你位于欧盟、英国等有数据保护法的地区，你还享有反对或限制处理的权利，并可向数据保护机构投诉。</p>
+
+    <h2>安全</h2>
+    <p>传输过程加密，密码仅以哈希形式保存。没有任何系统是绝对安全的；如发现安全漏洞或怀疑发生数据泄露，请联系 <a href="mailto:privacy@openuptime.app">privacy@openuptime.app</a>。</p>
+
+    <h2>未成年人</h2>
+    <p>OpenUptime 不面向 16 岁以下人群，我们不会有意收集其数据。</p>
+
+    <h2>政策变更</h2>
+    <p>如对本政策作出重大修改，我们会更新下方日期，并在可行时通过邮件通知账户持有人。</p>
+
+    <h2>联系我们</h2>
+    <p>OpenUptime 贡献者 &middot; <a href="mailto:privacy@openuptime.app">privacy@openuptime.app</a></p>
+  </div>
+</Doc>

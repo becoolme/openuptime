@@ -1,0 +1,48 @@
+# docker compose up -d   →   http://localhost:8080
+services:
+  openuptime:
+    # build from source by default; to use a published image set OPENUPTIME_IMAGE and run `docker compose pull`
+    image: ${OPENUPTIME_IMAGE:-openuptime:local}
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["${PORT:-8080}:8080"]
+    environment:
+      DATABASE_URL: postgres://openuptime:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/openuptime
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -hex 32)}
+      # public origin users open in the browser (used for cookies and links in emails)
+      BETTER_AUTH_URL: ${PUBLIC_URL:-http://localhost:8080}
+      WEB_ORIGIN: ${PUBLIC_URL:-http://localhost:8080}
+      # optional: outgoing email (invitations, password reset, alerts). Without it emails are written to the log.
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # optional: Plausible analytics (PLAUSIBLE_SRC defaults to https://plausible.io/js/script.js)
+      PLAUSIBLE_DOMAIN: ${PLAUSIBLE_DOMAIN:-}
+      PLAUSIBLE_SRC: ${PLAUSIBLE_SRC:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+
+  postgres:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openuptime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: openuptime
+    # PostgreSQL 18 images keep PGDATA in a versioned subdirectory, so mount the parent
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openuptime"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

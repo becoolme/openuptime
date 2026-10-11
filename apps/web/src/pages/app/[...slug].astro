@@ -1,0 +1,15 @@
+---
+import App from "../../layouts/App.astro";
+import Router from "../../components/Router";
+import { resolveRoute } from "../../lib/routes";
+
+// Deep links (/app/monitors/<id>) are the only back-office requests that reach a Worker: it answers with the same
+// data-free shell as the static /app, only with the right title and a 404 for unknown paths.
+export const prerender = false;
+const slug = Astro.params.slug;
+const hit = resolveRoute(slug ? `/app/${slug}` : "/app");
+if (!hit) Astro.response.status = 404;
+---
+<App title={hit?.route.title ?? "Not found"} active={hit?.route.key ?? ""}>
+  <Router client:only="react" />
+</App>

@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openuptime-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // run near the database: each request makes several sequential queries
+  // run next to the Postgres origin: every query is a round trip, and one request makes several
+  "placement": { "host": "db.example.com:5432" },
+  "triggers": { "crons": ["* * * * *"] },
+  // Cron leases due monitors and fans them out here, 25 monitors per message.
+  // Create once: wrangler queues create openuptime-checks
+  "queues": {
+    "producers": [{ "binding": "CHECK_QUEUE", "queue": "openuptime-checks" }],
+    "consumers": [
+      {
+        "queue": "openuptime-checks",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 2,
+        "max_concurrency": 20
+      }
+    ]
+  },
+  // Route the API under the web domain so session cookies stay same-origin.
+  "routes": [{ "pattern": "openuptime.app/api/*", "zone_name": "openuptime.app" }],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  // Cloudflare Email Service: onboard your sending domain in the dashboard (Email Sending), then set EMAIL_FROM.
+  "send_email": [{ "name": "EMAIL", "remote": true }],
+  "vars": {
+    "EMAIL_FROM": "alerts@openuptime.app",
+    // days a team invitation stays valid (default 7)
+    "INVITE_TTL_DAYS": "7",
+    // "DISABLE_SIGNUP": "true",  // closes registration; invited people can still join
+    "BETTER_AUTH_URL": "https://openuptime.app",
+    "WEB_ORIGIN": "https://openuptime.app"
+  }
+  // secrets: wrangler secret put BETTER_AUTH_SECRET  (and CRON_SECRET, GITHUB_CLIENT_*)
+}

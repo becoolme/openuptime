@@ -1,0 +1,79 @@
+import { openDatabase } from "@openuptime/db-pg";
+import { describe, expect, it } from "vitest";
+import { createApp } from "./app";
+
+// Runs only when TEST_DATABASE_URL points at a database (shared with the other end-to-end tests).
+const url = process.env.TEST_DATABASE_URL;
+const ORIGIN = "http://localhost:8787";
+const env = { DATABASE_URL: url, BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-123", BETTER_AUTH_URL: ORIGIN, WEB_ORIGIN: ORIGIN, CRON_SECRET: "cron" };
+
+describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
+  const app = createApp(openDatabase);
+  const raw = (path: string, init: RequestInit = {}) => app.fetch(new Request(`${ORIGIN}${path}`, init), env as never);
+
+  it("adds auto-enable channels to new monitors and keeps used channels from being deleted", async () => {
+    await raw("/internal/migrate", { method: "POST", headers: { "x-cron-secret": "cron" } });
+    const su = await raw("/api/auth/sign-up/email", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: `chan-${Date.now()}@example.com`, password: "correct horse battery", name: "Ada" }),
+    });
+    expect(su.status).toBe(200);
+    const cookie = su.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    const call = async (method: string, path: string, body?: unknown, project?: string) => {
+      const r = await raw(`/api${path}`, { method, headers: { cookie, "content-type": "application/json", ...(project ? { "x-project-id": project } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: r.status, body: (await r.json().catch(() => null)) as any };
+    };
+    const monitor = { name: "Site", type: "http", target: "https://example.com" };
+
+    const plain = (await call("POST", "/channels", { type: "email", name: "Plain", config: { to: "a@example.com" } })).body;
+    const auto = (await call("POST", "/channels", { type: "email", name: "Auto", config: { to: "b@example.com" }, autoEnable: true })).body;
+    expect(plain.autoEnable).toBe(false);
+    expect(auto.autoEnable).toBe(true);
+
+    // a new monitor starts out with the auto channel, also next to channels it was given explicitly
+    const m1 = (await call("POST", "/monitors", monitor)).body;
+    expect(m1.channelIds).toEqual([auto.id]);
+    const m2 = (await call("POST", "/monitors", { ...monitor, name: "Two", channelIds: [plain.id] })).body;
+    expect(new Set(m2.channelIds)).toEqual(new Set([plain.id, auto.id]));
+
+    // channels are workspace-wide: another project sees the channel and its monitors start out with it as well
+    const other = (await call("POST", "/projects", { name: "Second" })).body;
+    expect(other.id).toBeTruthy();
+    expect(((await call("GET", "/channels", undefined, other.id)).body as { id: string }[]).map((c) => c.id)).toContain(auto.id);
+    const elsewhere = (await call("POST", "/monitors", { ...monitor, name: "Elsewhere" }, other.id)).body;
+    expect(elsewhere.channelIds).toEqual([auto.id]);
+    // a project-only channel stays in its project
+    const own = (await call("POST", "/channels", { type: "email", name: "Own", config: { to: "c@example.com" }, scope: "project" })).body;
+    expect(own.projectId).toBeTruthy();
+    expect(((await call("GET", "/channels", undefined, other.id)).body as { id: string }[]).map((c) => c.id)).not.toContain(own.id);
+    await call("DELETE", `/channels/${own.id}`);
+
+    // imported monitors get it too
+    const imp = await call("POST", "/monitors/import", [{ name: "Imported", type: "http", target: "https://example.org" }]);
+    expect(imp.status).toBe(201);
+    const listed = (await call("GET", "/monitors")).body as { name: string; channelIds: string[] }[];
+    expect(listed.find((m) => m.name === "Imported")?.channelIds).toEqual([auto.id]);
+
+    // a disabled auto channel is not added; turning auto-enable off stops it
+    await call("PATCH", `/channels/${auto.id}`, { enabled: false });
+    expect((await call("POST", "/monitors", { ...monitor, name: "Three" })).body.channelIds).toEqual([]);
+    await call("PATCH", `/channels/${auto.id}`, { enabled: true, autoEnable: false });
+    expect((await call("POST", "/monitors", { ...monitor, name: "Four" })).body.channelIds).toEqual([]);
+
+    // used channels cannot be removed
+    const blocked = await call("DELETE", `/channels/${auto.id}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.code).toBe("channel_in_use");
+    // it counts the monitors of every project, including the other one
+    expect(blocked.body.monitors.length).toBe(listed.filter((m) => m.channelIds.includes(auto.id)).length + 1);
+
+    // once every monitor lets go of it, it goes
+    for (const m of listed.filter((x) => x.channelIds.includes(auto.id))) {
+      const id = ((await call("GET", "/monitors")).body as { id: string; name: string }[]).find((x) => x.name === m.name)!.id;
+      await call("PATCH", `/monitors/${id}`, { channelIds: [] });
+    }
+    expect((await call("DELETE", `/channels/${auto.id}`)).status).toBe(409);
+    await call("PATCH", `/monitors/${elsewhere.id}`, { channelIds: [] }, other.id);
+    expect((await call("DELETE", `/channels/${auto.id}`)).status).toBe(204);
+  });
+});

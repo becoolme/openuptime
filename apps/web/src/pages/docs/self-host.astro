@@ -1,0 +1,236 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc title="Self-host" updated="2026-10-11" toc>
+  <div lang="en">
+    <h1>Self-host OpenUptime</h1>
+    <p class="lede">Run your own copy on Cloudflare Workers or in Docker. Both use the same code and a Postgres database you control.</p>
+    <p>Pick one:</p>
+    <ul>
+      <li><a href="#docker"><strong>Docker</strong></a>: one container plus Postgres, on any machine. Quickest to try.</li>
+      <li><a href="#cloudflare"><strong>Cloudflare Workers</strong></a>: two Workers, a Queue and Hyperdrive in front of Postgres. Runs checks from Cloudflare's network.</li>
+    </ul>
+
+    <h2 id="docker">Docker</h2>
+    <p>One container runs the API, the web app and the check scheduler. The compose file also starts Postgres.</p>
+    <h3>Requirements</h3>
+    <ul><li>Docker with Compose v2</li><li>A machine that can reach the services you want to monitor</li></ul>
+    <h3>Start it</h3>
+    <pre><code is:raw>git clone &lt;your copy of the repository&gt; openuptime
+cd openuptime
+cp .env.docker.example .env
+# edit .env: set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
+docker compose up -d --build</code></pre>
+    <p>Open <code>http://localhost:8080</code> and sign up. The schema is migrated automatically on every start and the data lives in the <code>pgdata</code> volume.</p>
+    <h3>Put it on a domain</h3>
+    <p>Run it behind a reverse proxy that terminates HTTPS (Caddy, nginx, Traefik, a load balancer) and set <code>PUBLIC_URL</code> in <code>.env</code> to the public address, for example <code>https://status.example.com</code>. Cookies, OAuth and links in emails all use this value, so sign-in will not work from a different origin than the one configured.</p>
+    <h3>Settings (<code>.env</code>)</h3>
+    <table class="vars">
+      <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>POSTGRES_PASSWORD</code></td><td>Required. Password of the bundled Postgres.</td></tr>
+        <tr><td><code>BETTER_AUTH_SECRET</code></td><td>Required. Signs sessions. Generate with <code>openssl rand -hex 32</code> and keep it stable.</td></tr>
+        <tr><td><code>PUBLIC_URL</code></td><td>Public origin. Default <code>http://localhost:8080</code>.</td></tr>
+        <tr><td><code>PORT</code></td><td>Host port. Default <code>8080</code>.</td></tr>
+        <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
+        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub".</td></tr>
+        <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional Plausible analytics. Off when the domain is empty.</td></tr>
+      </tbody>
+    </table>
+    <h3>Operate</h3>
+    <ul>
+      <li><strong>Upgrade</strong>: pull the new code, then <code>docker compose up -d --build</code>. Migrations run on start.</li>
+      <li><strong>Prebuilt image</strong>: tagged releases are published to <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>. Set <code>OPENUPTIME_IMAGE</code> in <code>.env</code>, then <code>docker compose pull</code>.</li>
+      <li><strong>Backup</strong>: <code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>.</li>
+      <li><strong>Several containers</strong>: checks are leased with <code>FOR UPDATE SKIP LOCKED</code>, so more containers can share one database without duplicating checks.</li>
+      <li><strong>Logs</strong>: <code>docker compose logs -f openuptime</code>. A health endpoint is at <code>/health</code>.</li>
+    </ul>
+
+    <h2 id="cloudflare">Cloudflare Workers</h2>
+    <p>Two Workers: <code>openuptime-api</code> (the API under <code>/api/*</code>, the minute cron and the queue consumer) and <code>openuptime-web</code> (the site, which reaches the API through a service binding).</p>
+    <h3>Requirements</h3>
+    <ul>
+      <li>A Cloudflare account and a domain on Cloudflare. The <strong>Workers Paid</strong> plan is needed only for the Queue mode below; the Free plan works in inline mode at small scale</li>
+      <li>A Postgres database reachable from Cloudflare. It is accessed through Hyperdrive, so any hosted Postgres works (Neon, Supabase, RDS, your own)</li>
+      <li>Node.js, pnpm and <code>wrangler</code>, signed in with <code>wrangler login</code></li>
+    </ul>
+    <h3>1. Get the code</h3>
+    <pre><code is:raw>git clone &lt;your copy of the repository&gt; openuptime
+cd openuptime
+pnpm install</code></pre>
+    <h3>2. Choose how checks run, then create Hyperdrive</h3>
+    <p>Checks run in one of two modes. The mode follows from whether the <code>queues</code> block exists in <code>apps/api/wrangler.jsonc</code>, so it is a config switch, not a code change.</p>
+    <table class="vars">
+      <thead><tr><th>Mode</th><th>Plan</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Queue</strong> (default)</td><td>Workers <strong>Paid</strong></td><td>The cron fans due monitors out to a Queue, 25 per message, and the consumer runs them in parallel invocations. Scales to thousands of monitors.</td></tr>
+        <tr><td><strong>Inline</strong></td><td>Free or Paid</td><td>No Queue. The minute cron runs the checks itself, up to <strong>40 monitors per minute</strong>, within the Free plan's 50-subrequest and 10 ms CPU limits. Small installs only.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Queue mode</strong> (the file ships this way): create the queue once.</p>
+    <pre><code is:raw>wrangler queues create openuptime-checks</code></pre>
+    <p><strong>Inline mode</strong>: delete the whole <code>"queues"</code> block from <code>apps/api/wrangler.jsonc</code> and skip the command above. Without a bound queue the Worker detects it and runs checks inline.</p>
+    <p>Then create Hyperdrive and copy its id into the <code>hyperdrive</code> block of <code>apps/api/wrangler.jsonc</code>:</p>
+    <pre><code is:raw>wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
+    <h3>3. Create the schema</h3>
+    <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
+    <p>If your database role cannot <code>CREATE SCHEMA</code> (some hosted tenants), run <code>DATABASE_URL=... node migrate-plain.mjs</code> from <code>packages/db-pg</code> instead.</p>
+    <h3>4. Point the config at your domain</h3>
+    <p>In <code>apps/api/wrangler.jsonc</code> set <code>routes</code> (<code>your-domain/api/*</code>), <code>BETTER_AUTH_URL</code> and <code>WEB_ORIGIN</code> (both <code>https://your-domain</code>) and <code>EMAIL_FROM</code>. Remove the <code>placement</code> block, or set it to your own database host.</p>
+    <p>In <code>apps/web/wrangler.jsonc</code> set the custom-domain <code>routes</code> pattern and <code>PRODUCT_URL</code> (where "Powered by" links to; use your own origin).</p>
+    <h3>5. Secrets</h3>
+    <pre><code is:raw>cd apps/api
+wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
+wrangler secret put CRON_SECRET            # any long random string; guards /internal/*
+# optional: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET for "Sign in with GitHub"</code></pre>
+    <h3>6. Deploy</h3>
+    <pre><code is:raw>cd apps/api &amp;&amp; wrangler deploy
+cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
+    <p>Deploy the API first: the web Worker binds to it. Then open your domain and sign up.</p>
+    <h3>Settings</h3>
+    <table class="vars vars-3">
+      <thead><tr><th>Where</th><th>Variable</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>api vars</td><td><code>BETTER_AUTH_URL</code><br><code>WEB_ORIGIN</code></td><td>Public origin of the site. Used for cookies, OAuth and email links.</td></tr>
+        <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>Sender address. Onboard the domain in Cloudflare Email Sending; without it emails are logged.</td></tr>
+        <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
+        <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration (email and GitHub). Create your own account first; afterwards only people with a pending invitation can still sign up.</td></tr>
+        <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>See step 5.</td></tr>
+        <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>Target of the "Powered by" link on status pages.</td></tr>
+        <tr><td>web vars</td><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional analytics. Off when the domain is unset.</td></tr>
+      </tbody>
+    </table>
+    <h3>How checks run</h3>
+    <p>A cron trigger fires every minute and leases the monitors that are due. In Queue mode it packs them 25 per message into the <code>openuptime-checks</code> Queue, and the queue consumer runs each pack, records results, opens and resolves incidents and sends alerts. In inline mode the cron does all of that itself for up to 40 monitors per run.</p>
+    <h3>Upgrade</h3>
+    <p>Pull the new code, run the migration again (it only applies what is new), then deploy the API and the web Worker in that order.</p>
+    <h3>Switching modes later</h3>
+    <ul>
+      <li><strong>Free to Paid</strong>: upgrade the plan, restore the <code>queues</code> block, run <code>wrangler queues create openuptime-checks</code>, then <code>wrangler deploy</code> the API.</li>
+      <li><strong>Paid to Free</strong>: remove the <code>queues</code> block and deploy the API again. You can delete the queue afterwards.</li>
+    </ul>
+    <p>No data migration is involved. Monitors, history and incidents are untouched.</p>
+
+    <h2 id="after">After install</h2>
+    <ul>
+      <li>Create your first monitor, then a <a href="/docs/embed">status page</a> and, optionally, embed its state on your site.</li>
+      <li>Automate with the <a href="/docs/api">API</a> or connect an agent through <a href="/docs/mcp">MCP</a>. Use your own domain in the examples.</li>
+    </ul>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>自托管 OpenUptime</h1>
+    <p class="lede">在 Cloudflare Workers 或 Docker 上运行你自己的实例。两种方式使用同一套代码和一个由你掌控的 Postgres 数据库。</p>
+    <p>二选一：</p>
+    <ul>
+      <li><a href="#docker-zh"><strong>Docker</strong></a>：一个容器加 Postgres，任意机器可跑，最适合快速试用。</li>
+      <li><a href="#cloudflare-zh"><strong>Cloudflare Workers</strong></a>：两个 Worker，加 Queue 和连接 Postgres 的 Hyperdrive，从 Cloudflare 网络发起检测。</li>
+    </ul>
+
+    <h2 id="docker-zh">Docker</h2>
+    <p>一个容器同时运行 API、网页应用和检测调度器，compose 文件会一并启动 Postgres。</p>
+    <h3>环境要求</h3>
+    <ul><li>Docker 和 Compose v2</li><li>能访问被监控服务的机器</li></ul>
+    <h3>启动</h3>
+    <pre><code is:raw>git clone &lt;你的仓库副本&gt; openuptime
+cd openuptime
+cp .env.docker.example .env
+# 编辑 .env：设置 POSTGRES_PASSWORD 和 BETTER_AUTH_SECRET（openssl rand -hex 32）
+docker compose up -d --build</code></pre>
+    <p>打开 <code>http://localhost:8080</code> 注册即可。数据库结构在每次启动时自动迁移，数据保存在 <code>pgdata</code> 卷中。</p>
+    <h3>绑定域名</h3>
+    <p>在能终止 HTTPS 的反向代理（Caddy、nginx、Traefik、负载均衡器）后面运行，并把 <code>.env</code> 里的 <code>PUBLIC_URL</code> 设为公网地址，例如 <code>https://status.example.com</code>。Cookie、OAuth 和邮件里的链接都使用该值，用与配置不一致的域名访问会无法登录。</p>
+    <h3>配置项（<code>.env</code>）</h3>
+    <table class="vars">
+      <thead><tr><th>变量</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>POSTGRES_PASSWORD</code></td><td>必填。内置 Postgres 的密码。</td></tr>
+        <tr><td><code>BETTER_AUTH_SECRET</code></td><td>必填。用于签名会话。用 <code>openssl rand -hex 32</code> 生成，并保持不变。</td></tr>
+        <tr><td><code>PUBLIC_URL</code></td><td>公网地址，默认 <code>http://localhost:8080</code>。</td></tr>
+        <tr><td><code>PORT</code></td><td>宿主机端口，默认 <code>8080</code>。</td></tr>
+        <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
+        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。</td></tr>
+        <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选的 Plausible 统计。域名为空则关闭。</td></tr>
+      </tbody>
+    </table>
+    <h3>运维</h3>
+    <ul>
+      <li><strong>升级</strong>：拉取新代码后执行 <code>docker compose up -d --build</code>，迁移在启动时自动运行。</li>
+      <li><strong>预构建镜像</strong>：发布版本会推送到 <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>。在 <code>.env</code> 中设置 <code>OPENUPTIME_IMAGE</code>，再执行 <code>docker compose pull</code>。</li>
+      <li><strong>备份</strong>：<code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>。</li>
+      <li><strong>多个容器</strong>：检测通过 <code>FOR UPDATE SKIP LOCKED</code> 加租约，多个容器共用一个数据库也不会重复检测。</li>
+      <li><strong>日志</strong>：<code>docker compose logs -f openuptime</code>。健康检查接口为 <code>/health</code>。</li>
+    </ul>
+
+    <h2 id="cloudflare-zh">Cloudflare Workers</h2>
+    <p>两个 Worker：<code>openuptime-api</code>（<code>/api/*</code> 下的 API、每分钟的 cron 和队列消费者）和 <code>openuptime-web</code>（站点本身，通过 service binding 访问 API）。</p>
+    <h3>环境要求</h3>
+    <ul>
+      <li>一个 Cloudflare 账号，以及托管在 Cloudflare 的域名。只有下文的 Queue 模式需要 <strong>Workers 付费版</strong>；免费版可用内联模式，适合小规模</li>
+      <li>一个 Cloudflare 能访问的 Postgres 数据库。通过 Hyperdrive 连接，所以 Neon、Supabase、RDS 或自建均可</li>
+      <li>Node.js、pnpm 和 <code>wrangler</code>，并已通过 <code>wrangler login</code> 登录</li>
+    </ul>
+    <h3>1. 获取代码</h3>
+    <pre><code is:raw>git clone &lt;你的仓库副本&gt; openuptime
+cd openuptime
+pnpm install</code></pre>
+    <h3>2. 选择检测运行方式，并创建 Hyperdrive</h3>
+    <p>检测有两种运行模式，是否保留 <code>apps/api/wrangler.jsonc</code> 里的 <code>queues</code> 配置块决定使用哪一种，只是配置切换，不需要改代码。</p>
+    <table class="vars">
+      <thead><tr><th>模式</th><th>套餐</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Queue</strong>（默认）</td><td>Workers <strong>付费版</strong></td><td>cron 把到期的监控项按每 25 个一条消息放入 Queue，由消费者并行执行，可扩展到数千个监控项。</td></tr>
+        <tr><td><strong>内联</strong></td><td>免费版或付费版</td><td>不用 Queue。每分钟的 cron 自己执行检测，每次最多 <strong>40 个监控项</strong>，受免费版 50 个子请求和 10 ms CPU 限制，仅适合小规模。</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Queue 模式</strong>（配置文件默认如此）：创建一次队列。</p>
+    <pre><code is:raw>wrangler queues create openuptime-checks</code></pre>
+    <p><strong>内联模式</strong>：从 <code>apps/api/wrangler.jsonc</code> 中删除整个 <code>"queues"</code> 配置块，并跳过上面的命令。没有绑定队列时 Worker 会自动改为内联执行。</p>
+    <p>然后创建 Hyperdrive，把得到的 id 填进 <code>apps/api/wrangler.jsonc</code> 的 <code>hyperdrive</code> 配置块：</p>
+    <pre><code is:raw>wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
+    <h3>3. 创建数据库结构</h3>
+    <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
+    <p>如果数据库角色没有 <code>CREATE SCHEMA</code> 权限（部分托管租户），改在 <code>packages/db-pg</code> 目录执行 <code>DATABASE_URL=... node migrate-plain.mjs</code>。</p>
+    <h3>4. 把配置指向你的域名</h3>
+    <p>在 <code>apps/api/wrangler.jsonc</code> 中设置 <code>routes</code>（<code>你的域名/api/*</code>）、<code>BETTER_AUTH_URL</code> 和 <code>WEB_ORIGIN</code>（都填 <code>https://你的域名</code>）以及 <code>EMAIL_FROM</code>。删除 <code>placement</code> 块，或改成你自己的数据库主机。</p>
+    <p>在 <code>apps/web/wrangler.jsonc</code> 中设置自定义域名的 <code>routes</code>，以及 <code>PRODUCT_URL</code>（"Powered by" 链接的目标，填你自己的地址）。</p>
+    <h3>5. 密钥</h3>
+    <pre><code is:raw>cd apps/api
+wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
+wrangler secret put CRON_SECRET            # 任意足够长的随机字符串，保护 /internal/*
+# 可选：GITHUB_CLIENT_ID 和 GITHUB_CLIENT_SECRET，用于 GitHub 登录</code></pre>
+    <h3>6. 部署</h3>
+    <pre><code is:raw>cd apps/api &amp;&amp; wrangler deploy
+cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
+    <p>务必先部署 API：web Worker 依赖它。然后打开你的域名注册即可。</p>
+    <h3>配置项</h3>
+    <table class="vars vars-3">
+      <thead><tr><th>位置</th><th>变量</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>api vars</td><td><code>BETTER_AUTH_URL</code><br><code>WEB_ORIGIN</code></td><td>站点公网地址，用于 Cookie、OAuth 和邮件链接。</td></tr>
+        <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>发件地址。需在 Cloudflare Email Sending 中接入该域名；不配置则邮件只写日志。</td></tr>
+        <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
+        <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（邮箱与 GitHub 均适用）。请先创建好自己的账号；之后只有持有待处理邀请的人还能注册。</td></tr>
+        <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>见第 5 步。</td></tr>
+        <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>状态页 "Powered by" 链接的目标。</td></tr>
+        <tr><td>web vars</td><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选统计。未设置域名则关闭。</td></tr>
+      </tbody>
+    </table>
+    <h3>检测如何运行</h3>
+    <p>cron 每分钟触发一次并租约到期的监控项。Queue 模式下每 25 个打包成一条消息放入 <code>openuptime-checks</code> 队列，由消费者执行每个分组，记录结果、开启和解决事件并发送告警。内联模式下这些都由 cron 自己完成，每次最多 40 个监控项。</p>
+    <h3>升级</h3>
+    <p>拉取新代码，重新执行迁移（只会应用新增的部分），然后先部署 API、再部署 web Worker。</p>
+    <h3>之后切换模式</h3>
+    <ul>
+      <li><strong>免费版升级到付费版</strong>：升级套餐，恢复 <code>queues</code> 配置块，执行 <code>wrangler queues create openuptime-checks</code>，再 <code>wrangler deploy</code> API。</li>
+      <li><strong>付费版降到免费版</strong>：删除 <code>queues</code> 配置块并重新部署 API，之后可以删除队列。</li>
+    </ul>
+    <p>不涉及数据迁移，监控项、历史记录和事件都不受影响。</p>
+
+    <h2 id="after-zh">安装之后</h2>
+    <ul>
+      <li>创建第一个监控项，再创建<a href="/docs/embed">状态页</a>，需要的话把状态嵌入到你的网站。</li>
+      <li>通过 <a href="/docs/api">API</a> 自动化，或用 <a href="/docs/mcp">MCP</a> 接入 Agent，示例里的域名换成你自己的。</li>
+    </ul>
+  </div>
+</Doc>

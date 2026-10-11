@@ -1,0 +1,9 @@
+---
+import App from "../../layouts/App.astro";
+import Router from "../../components/Router";
+
+// Fully static: served from the asset store with no Worker run and no database. Data is fetched by the browser.
+---
+<App title="Monitors" active="monitors">
+  <Router client:only="react" />
+</App>

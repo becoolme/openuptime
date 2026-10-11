@@ -1,0 +1,87 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc title="Embed" updated="2026-10-11" toc>
+  <div lang="en">
+    <h1>Embed your status</h1>
+    <p class="lede">Show the live state of a status page on your own site, in a README or in an email, with one line of code. No API key needed.</p>
+    <h2 id="badge">Badge</h2>
+    <p>Add the script where you want the badge to appear. Replace <code>my-page</code> with the slug of your status page and the host with your own domain if you self-host.</p>
+    <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" async&gt;&lt;/script&gt;
+&lt;noscript&gt;&lt;a href="https://openuptime.app/status/my-page"&gt;System status&lt;/a&gt;&lt;/noscript&gt;</code></pre>
+    <p>The <code>&lt;noscript&gt;</code> line is optional: visitors without JavaScript get a plain link to the status page instead of nothing. Tip: it also works as a standalone link if you do not want the script at all.</p>
+    <p>It renders a small pill with a coloured dot and the current state, links to the status page and refreshes every minute. The badge lives in a Shadow DOM, so your site's CSS cannot break it.</p>
+    <h2 id="banner">Banner</h2>
+    <p>The banner sits at the top of the page and only appears while something is degraded or down.</p>
+    <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" data-mode="banner" async&gt;&lt;/script&gt;</code></pre>
+    <h2 id="options">Script options</h2>
+    <ul>
+      <li><code>data-slug</code>: the status page slug (required).</li>
+      <li><code>data-mode</code>: <code>badge</code> (default) or <code>banner</code>.</li>
+      <li><code>data-lang</code>: <code>en</code> or <code>zh-CN</code>. Defaults to the page's <code>lang</code>.</li>
+      <li><code>data-theme</code>: <code>light</code>, <code>dark</code> or unset to follow the visitor's system.</li>
+      <li><code>data-target</code>: a CSS selector. The badge is placed inside that element instead of next to the script tag.</li>
+      <li><code>data-always</code>: set to <code>true</code> to keep the banner visible when everything is operational.</li>
+    </ul>
+    <h2 id="svg">SVG badge</h2>
+    <p>For a README, an email or anywhere JavaScript does not run, use the image. It is cached for a minute.</p>
+    <pre><code is:raw>&lt;img src="https://openuptime.app/api/public/status/my-page/badge.svg" alt="status"&gt;</code></pre>
+    <pre><code is:raw>[![status](https://openuptime.app/api/public/status/my-page/badge.svg)](https://openuptime.app/status/my-page)</code></pre>
+    <p>Add <code>?lang=zh</code> for Chinese text.</p>
+    <h2 id="json">JSON</h2>
+    <p>Build your own widget from the summary endpoint. It allows cross-origin reads from any site and is cached for 30 seconds.</p>
+    <pre><code is:raw>curl https://openuptime.app/api/public/status/my-page/summary
+
+{
+  "slug": "my-page",
+  "title": "My Product",
+  "overall": "operational",      # operational | degraded | outage
+  "label": "All systems operational",
+  "url": "https://openuptime.app/status/my-page",
+  "updatedAt": "2026-10-11T08:00:00.000Z"
+}</code></pre>
+    <p>The full board, with every component and incident, is at <code>/api/public/status/my-page</code>. Incident history is at <code>/api/public/status/my-page/incidents</code> and an RSS feed at <code>/api/public/status/my-page/rss</code>.</p>
+    <p>The status page editor has an <strong>Embed</strong> card that generates these snippets for you.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>嵌入状态</h1>
+    <p class="lede">一行代码，把状态页的实时状态显示到你自己的网站、README 或邮件里。无需 API Key。</p>
+    <h2 id="badge-zh">徽章</h2>
+    <p>把脚本放在想显示徽章的位置。把 <code>my-page</code> 换成你的状态页 slug；自托管时把域名换成你自己的。</p>
+    <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" async&gt;&lt;/script&gt;
+&lt;noscript&gt;&lt;a href="https://openuptime.app/status/my-page"&gt;服务状态&lt;/a&gt;&lt;/noscript&gt;</code></pre>
+    <p><code>&lt;noscript&gt;</code> 那一行是可选的：没有启用 JavaScript 的访客会看到一个指向状态页的普通链接，而不是空白。如果不想用脚本，直接放这个链接也可以。</p>
+    <p>它会渲染一个带彩色圆点和当前状态的小标签，点击跳转到状态页，每分钟自动刷新。徽章在 Shadow DOM 中渲染，不会被你站点的 CSS 影响。</p>
+    <h2 id="banner-zh">横幅</h2>
+    <p>横幅显示在页面顶部，只在有服务降级或中断时才出现。</p>
+    <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" data-mode="banner" async&gt;&lt;/script&gt;</code></pre>
+    <h2 id="options-zh">脚本参数</h2>
+    <ul>
+      <li><code>data-slug</code>：状态页 slug（必填）。</li>
+      <li><code>data-mode</code>：<code>badge</code>（默认）或 <code>banner</code>。</li>
+      <li><code>data-lang</code>：<code>en</code> 或 <code>zh-CN</code>，默认取页面的 <code>lang</code>。</li>
+      <li><code>data-theme</code>：<code>light</code>、<code>dark</code>，不设置则跟随访客系统。</li>
+      <li><code>data-target</code>：CSS 选择器。徽章会放进该元素，而不是脚本标签旁边。</li>
+      <li><code>data-always</code>：设为 <code>true</code> 时，一切正常也始终显示横幅。</li>
+    </ul>
+    <h2 id="svg-zh">SVG 徽章</h2>
+    <p>README、邮件等无法运行 JavaScript 的地方，请使用图片，缓存 1 分钟。</p>
+    <pre><code is:raw>&lt;img src="https://openuptime.app/api/public/status/my-page/badge.svg" alt="status"&gt;</code></pre>
+    <pre><code is:raw>[![status](https://openuptime.app/api/public/status/my-page/badge.svg)](https://openuptime.app/status/my-page)</code></pre>
+    <p>加上 <code>?lang=zh</code> 显示中文。</p>
+    <h2 id="json-zh">JSON</h2>
+    <p>也可以用摘要接口自己做组件。该接口允许任意站点跨域读取，缓存 30 秒。</p>
+    <pre><code is:raw>curl https://openuptime.app/api/public/status/my-page/summary
+
+{
+  "slug": "my-page",
+  "title": "My Product",
+  "overall": "operational",      # operational | degraded | outage
+  "label": "所有系统运行正常",
+  "url": "https://openuptime.app/status/my-page",
+  "updatedAt": "2026-10-11T08:00:00.000Z"
+}</code></pre>
+    <p>包含全部组件和事件的完整数据在 <code>/api/public/status/my-page</code>，事件历史在 <code>/api/public/status/my-page/incidents</code>，RSS 在 <code>/api/public/status/my-page/rss</code>。</p>
+    <p>状态页编辑界面的 <strong>嵌入</strong> 卡片会自动生成这些代码。</p>
+  </div>
+</Doc>
