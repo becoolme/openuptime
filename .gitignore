@@ -6,3 +6,4 @@ dist
 .env
 *.log
 dist-release
+.stripe-backup

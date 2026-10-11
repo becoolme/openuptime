@@ -1,6 +1,13 @@
 # OpenUptime
 
-Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with Postgres.
+Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with Postgres, or in one Docker container.
+
+[Hosted version](https://openuptime.app) · [Docs](https://openuptime.app/docs/self-host) · [MIT license](LICENSE)
+
+- HTTP, TCP, DNS, heartbeat, PostgreSQL, MySQL and Redis checks, with keyword matching and slow-response alerts
+- Incidents, maintenance windows and public status pages with email / RSS subscriptions
+- Alerts to Slack, Lark / Feishu, Telegram, PagerDuty, webhooks and email
+- Workspaces, projects, roles, API keys, an MCP server for agents, JSON import / export
 
 | Part | Stack |
 |---|---|
@@ -14,6 +21,7 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 One container runs the API, the web app and the check scheduler; Postgres comes with the compose file.
 
 ```bash
+git clone https://github.com/becoolme/openuptime.git && cd openuptime
 cp .env.docker.example .env      # set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
 docker compose up -d --build     # http://localhost:8080
 ```
@@ -25,7 +33,7 @@ docker compose up -d --build     # http://localhost:8080
   characters) or `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` (`SMTP_SECURE=true` for implicit TLS on 465,
   otherwise STARTTLS). The connection is verified at startup and logged. Without it, emails are written to the log.
 - **Scaling**: checks are leased with `FOR UPDATE SKIP LOCKED`, so several containers can run against one database.
-- **Prebuilt image**: tagged releases are published to `ghcr.io/<owner>/<repo>` by `.github/workflows/docker.yml`.
+- **Prebuilt image**: tagged releases are published to `ghcr.io/becoolme/openuptime` by `.github/workflows/docker.yml`.
   To use one, set `OPENUPTIME_IMAGE` in `.env` and run `docker compose pull`.
 
 ## Develop
@@ -64,7 +72,7 @@ Email goes through Cloudflare Email Sending: onboard the sending domain, then se
 
 ### One-click deploy with OpenFlare
 
-`node scripts/release.mjs` builds `dist-release/` (`api.mjs`, `web.mjs`, `web-assets.zip`, `openflare.json`). Host that directory anywhere that serves static files over HTTPS (release assets, R2, …) and open its `openflare.json` URL in [OpenFlare](https://github.com/) — it creates the Hyperdrive config, Queue and KV namespace in your Cloudflare account, uploads both Workers on `workers.dev`, attaches the queue consumer and cron, and runs the schema migration (`POST /internal/migrate`, guarded by `CRON_SECRET`). You supply a Postgres database (or let OpenFlare create a Neon one). Pick `paid` (Queues fan checks out) or `free` (no Queue: the minute cron runs up to 40 monitors inline — the Free plan's 50-subrequest and 10 ms CPU limits make this small-scale only). Email alerts need a sending domain onboarded to Cloudflare Email Sending; leave `EMAIL_FROM` empty to skip. Known limit: the `_headers` cache rules are not applied to uploaded assets.
+`node scripts/release.mjs` builds `dist-release/` (`api.mjs`, `web.mjs`, `web-assets.zip`, `openflare.json`). Host that directory anywhere that serves static files over HTTPS (release assets, R2, …) and open its `openflare.json` URL in OpenFlare (a Cloudflare deploy tool that reads `openflare.json`) — it creates the Hyperdrive config, Queue and KV namespace in your Cloudflare account, uploads both Workers on `workers.dev`, attaches the queue consumer and cron, and runs the schema migration (`POST /internal/migrate`, guarded by `CRON_SECRET`). You supply a Postgres database (or let OpenFlare create a Neon one). Pick `paid` (Queues fan checks out) or `free` (no Queue: the minute cron runs up to 40 monitors inline — the Free plan's 50-subrequest and 10 ms CPU limits make this small-scale only). Email alerts need a sending domain onboarded to Cloudflare Email Sending; leave `EMAIL_FROM` empty to skip. Known limit: the `_headers` cache rules are not applied to uploaded assets.
 
 ## Accounts & teams
 
@@ -138,6 +146,10 @@ pnpm typecheck
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+## Contributing & security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in public issues.
 
 ## License
 

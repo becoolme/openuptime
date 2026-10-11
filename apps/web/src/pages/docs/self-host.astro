@@ -40,7 +40,7 @@ docker compose up -d --build</code></pre>
     <h3>Operate</h3>
     <ul>
       <li><strong>Upgrade</strong>: pull the new code, then <code>docker compose up -d --build</code>. Migrations run on start.</li>
-      <li><strong>Prebuilt image</strong>: tagged releases are published to <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>. Set <code>OPENUPTIME_IMAGE</code> in <code>.env</code>, then <code>docker compose pull</code>.</li>
+      <li><strong>Prebuilt image</strong>: tagged releases are published to <code>ghcr.io/becoolme/openuptime</code>. Set <code>OPENUPTIME_IMAGE</code> in <code>.env</code>, then <code>docker compose pull</code>.</li>
       <li><strong>Backup</strong>: <code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>.</li>
       <li><strong>Several containers</strong>: checks are leased with <code>FOR UPDATE SKIP LOCKED</code>, so more containers can share one database without duplicating checks.</li>
       <li><strong>Logs</strong>: <code>docker compose logs -f openuptime</code>. A health endpoint is at <code>/health</code>.</li>
@@ -156,7 +156,7 @@ docker compose up -d --build</code></pre>
     <h3>运维</h3>
     <ul>
       <li><strong>升级</strong>：拉取新代码后执行 <code>docker compose up -d --build</code>，迁移在启动时自动运行。</li>
-      <li><strong>预构建镜像</strong>：发布版本会推送到 <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>。在 <code>.env</code> 中设置 <code>OPENUPTIME_IMAGE</code>，再执行 <code>docker compose pull</code>。</li>
+      <li><strong>预构建镜像</strong>：发布版本会推送到 <code>ghcr.io/becoolme/openuptime</code>。在 <code>.env</code> 中设置 <code>OPENUPTIME_IMAGE</code>，再执行 <code>docker compose pull</code>。</li>
       <li><strong>备份</strong>：<code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>。</li>
       <li><strong>多个容器</strong>：检测通过 <code>FOR UPDATE SKIP LOCKED</code> 加租约，多个容器共用一个数据库也不会重复检测。</li>
       <li><strong>日志</strong>：<code>docker compose logs -f openuptime</code>。健康检查接口为 <code>/health</code>。</li>

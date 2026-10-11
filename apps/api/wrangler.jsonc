@@ -4,9 +4,8 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
-  // run near the database: each request makes several sequential queries
-  // run next to the Postgres origin: every query is a round trip, and one request makes several
-  "placement": { "host": "db.example.com:5432" },
+  // Optional: run next to your Postgres origin (every query is a round trip, and one request makes several):
+  // "placement": { "host": "your-postgres-host:5432" },
   "triggers": { "crons": ["* * * * *"] },
   // Cron leases due monitors and fans them out here, 25 monitors per message.
   // Create once: wrangler queues create openuptime-checks
@@ -24,13 +23,9 @@
   },
   // Route the API under the web domain so session cookies stay same-origin.
   "routes": [{ "pattern": "openuptime.app/api/*", "zone_name": "openuptime.app" }],
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      // wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"
-      "id": "00000000000000000000000000000000"
-    }
-  ],
+  // Create one, then uncomment and paste its id:
+  //   wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"
+  // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<your-hyperdrive-config-id>" }],
   // Cloudflare Email Service: onboard your sending domain in the dashboard (Email Sending), then set EMAIL_FROM.
   "send_email": [{ "name": "EMAIL", "remote": true }],
   "vars": {

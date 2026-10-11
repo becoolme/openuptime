@@ -1,8 +1,9 @@
 {
   "name": "openuptime-web",
   "compatibility_date": "2026-09-01",
-  // Plausible analytics: PLAUSIBLE_DOMAIN is the reported site, PLAUSIBLE_SRC the script URL (leave both out to turn it off)
-  "vars": { "PRODUCT_URL": "https://openuptime.app", "PLAUSIBLE_DOMAIN": "openuptime.app", "PLAUSIBLE_SRC": "https://click.pageview.click/js/script.js" },
+  // Optional Plausible analytics, off unless set: PLAUSIBLE_DOMAIN is the reported site, PLAUSIBLE_SRC the script URL
+  // "vars": { "PLAUSIBLE_DOMAIN": "your-domain.com", "PLAUSIBLE_SRC": "https://plausible.io/js/script.js" },
+  "vars": { "PRODUCT_URL": "https://openuptime.app" },
   "routes": [{ "pattern": "openuptime.app", "custom_domain": true }],
   // SSR pages call the API Worker directly instead of going back out through the zone.
   "services": [{ "binding": "API", "service": "openuptime-api" }]
