@@ -18,6 +18,24 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 | `packages/repo` | Storage interface (`Repo`) and entity types |
 | `packages/db-pg` | Postgres implementation of `Repo`: Drizzle schema, migrations |
 
+## Open source vs hosted
+
+The monitoring itself is the same code in both. The hosted service at [openuptime.app](https://openuptime.app) adds
+plans, billing and a few features that live only in that build; it plugs into this repo through one interface
+(`Edition`, see [docs/editions.md](docs/editions.md)), so nothing in the core is locked or throttled.
+
+| | Self-hosted (this repo, MIT) | Hosted ([openuptime.app](https://openuptime.app)) |
+|---|---|---|
+| Monitors, incidents, status pages, alert channels, API, MCP | All of it | All of it |
+| Limits | None: no plans, quotas or metering | Free plan, paid plans from $5/month ([pricing](https://openuptime.app/pricing)); monitors, checks, emails and history length depend on the plan |
+| Running it | You: Postgres, the Worker or container, a mail provider, backups, upgrades | We do; nothing to install |
+| SSL certificate monitoring (expiry alerts, `ssl` monitor type) | Not included | Lite and above |
+| Custom domain for a status page | Not included | Team |
+| Where your data lives | Your database | Ours (Postgres on managed hosting) |
+
+Pick self-hosting if you want to own the data and the infrastructure, or have no limits to worry about. Pick hosted if
+you would rather not run anything. Both receive the same core updates.
+
 ## Self-host with Docker
 
 One container runs the API, the web app and the check scheduler; Postgres comes with the compose file.
