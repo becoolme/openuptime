@@ -3,12 +3,12 @@ import { api, type Project } from "../lib/api";
 import { t } from "../lib/i18n";
 import { authClient } from "../lib/auth-client";
 import { useBusy } from "../lib/use-busy";
-import { go } from "../lib/locale-path";
+import { switchScope } from "../lib/nav";
 
 const COOKIE = "ou_project";
 const select = (id: string) => {
   document.cookie = `${COOKIE}=${id};path=/;max-age=31536000;samesite=lax`;
-  go("/app");
+  switchScope();
 };
 
 /** Sidebar workspace block: shows the workspace and active project, and switches / creates / renames / deletes projects. */
@@ -28,8 +28,15 @@ export default function ProjectSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    Promise.all([api.projects(), api.me()]).then(([p, m]) => { setProjects(p); setCurrent(m.projectId); setOrg(m.organization.name); setOrgId(m.organization.id); }).catch(() => {});
-    authClient.organization.list().then((r) => setOrgs((r.data as { id: string; name: string }[] | null) ?? [])).catch(() => {});
+    const load = () => {
+      Promise.all([api.projects(), api.me()]).then(([p, m]) => { setProjects(p); setCurrent(m.projectId); setOrg(m.organization.name); setOrgId(m.organization.id); }).catch(() => {});
+      authClient.organization.list().then((r) => setOrgs((r.data as { id: string; name: string }[] | null) ?? [])).catch(() => {});
+    };
+    // switched workspace or project: close the menu and show the new selection
+    const onScope = () => { setOpen(false); setAdding(false); setAddingWs(false); setName(""); setWsName(""); setErr(""); load(); };
+    load();
+    window.addEventListener("ou:scope", onScope);
+    return () => window.removeEventListener("ou:scope", onScope);
   }, []);
   useEffect(() => {
     const away = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
@@ -40,7 +47,7 @@ export default function ProjectSwitcher() {
   async function switchOrg(id: string) {
     await authClient.organization.setActive({ organizationId: id });
     document.cookie = `${COOKIE}=;path=/;max-age=0`;
-    go("/app");
+    switchScope();
   }
   async function createOrg(e: React.SyntheticEvent) {
     e.preventDefault();
@@ -63,7 +70,7 @@ export default function ProjectSwitcher() {
   async function remove() {
     if (!active || !confirm(`${t("Delete project")} “${active.name}”? ${t("Its monitors, status pages and channels are deleted too.")}`)) return;
     const ok = await run(() => api.deleteProject(active.id).then(() => true).catch((x: Error) => { setErr(x.message); return false; }));
-    if (ok) { document.cookie = `${COOKIE}=;path=/;max-age=0`; go("/app"); }
+    if (ok) { document.cookie = `${COOKIE}=;path=/;max-age=0`; switchScope(); }
   }
 
   return (

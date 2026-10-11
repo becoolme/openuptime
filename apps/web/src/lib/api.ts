@@ -67,6 +67,16 @@ let armedUntil = 0;
 /** Called by the router on every navigation: the page's mount-time reads may use remembered data. */
 export const armCache = () => { armedUntil = Date.now() + 1500; };
 
+// Switching workspace or project changes what every path returns: forget everything, and let no read that was already
+// in flight for the old scope be remembered.
+let scope = 0;
+export function resetCache() {
+  scope++;
+  armedUntil = 0;
+  store.clear();
+  early.clear();
+}
+
 /** An API refusal: `code` and the rest of the body let the UI explain plan limits (HTTP 402) instead of just printing the message. */
 export class ApiError extends Error {
   status: number;
@@ -103,11 +113,13 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     early.clear();
     return fetchJson<T>(path, init);
   }
+  const asked = scope;
+  const keep = (data: unknown) => { if (asked === scope) store.set(path, { at: Date.now(), data }); };
   const pending = takeEarly(path);
   if (pending) {
     try {
       const data = await pending;
-      store.set(path, { at: Date.now(), data });
+      keep(data);
       return data as T;
     } catch { /* fall through to a fresh request */ }
   }
@@ -115,13 +127,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   if (hit && Date.now() < armedUntil && Date.now() - hit.at < STORE_TTL) {
     store.delete(path);
     fetchJson<T>(path, init).then((fresh) => {
-      store.set(path, { at: Date.now(), data: fresh });
+      if (asked !== scope) return;
+      keep(fresh);
       if (JSON.stringify(fresh) !== JSON.stringify(hit.data)) window.dispatchEvent(new Event("ou:stale"));
     }).catch(() => {});
     return hit.data as T;
   }
   const data = await fetchJson<T>(path, init);
-  store.set(path, { at: Date.now(), data });
+  keep(data);
   return data;
 }
 

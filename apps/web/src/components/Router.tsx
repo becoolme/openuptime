@@ -64,10 +64,12 @@ function View({ name, params }: { name: string; params: string[] }) {
 export default function Router() {
   const [path, setPath] = useState(() => location.pathname);
   const [bump, setBump] = useState(0);
+  const [scope, setScope] = useState(0);
 
   useEffect(() => {
-    const onPop = () => {
-      armCache();
+    let remounted = false;
+    const show = () => {
+      remounted = false;
       setPath(location.pathname);
       setBump(0);
       syncShell(location.pathname);
@@ -75,6 +77,9 @@ export default function Router() {
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event("ou:changed")); // refresh the sidebar counts
     };
+    const onPop = () => { armCache(); show(); };
+    // another workspace or project: same page, new data — remount it even though the path did not change
+    const onScope = () => { setScope((n) => n + 1); show(); };
     const onClick = (e: MouseEvent) => {
       const a = (e.target as Element | null)?.closest?.("a");
       if (!a || !internal(a, e)) return;
@@ -84,22 +89,20 @@ export default function Router() {
       onPop();
     };
     // a revisited page was painted from cache and the background refresh found newer data: remount once with it
-    let remounted = false;
     const onStale = () => {
       if (remounted) return;
       remounted = true;
       armCache();
       setBump((n) => n + 1);
     };
-    const reset = () => { remounted = false; };
-    window.addEventListener("popstate", reset);
     window.addEventListener("popstate", onPop);
+    window.addEventListener("ou:scope", onScope);
     window.addEventListener("ou:stale", onStale);
     document.addEventListener("click", onClick);
     syncShell(location.pathname);
     return () => {
-      window.removeEventListener("popstate", reset);
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("ou:scope", onScope);
       window.removeEventListener("ou:stale", onStale);
       document.removeEventListener("click", onClick);
     };
@@ -107,5 +110,5 @@ export default function Router() {
 
   const hit = resolveRoute(path);
   if (!hit) return <p className="muted">{t("Page not found.")} <a href={lp("/app")}>{t("← Monitors")}</a></p>;
-  return <><Toaster /><VerifyBar /><View key={`${path}#${bump}`} name={hit.route.name} params={hit.params} /></>;
+  return <><Toaster /><VerifyBar /><View key={`${path}#${scope}#${bump}`} name={hit.route.name} params={hit.params} /></>;
 }
