@@ -41,9 +41,9 @@ const { title, updated, toc } = Astro.props as { title: string; updated?: string
           <p class="sf-tag"><span lang="en">Open-source uptime monitoring and status pages for Cloudflare Workers and Postgres.</span><span lang="zh-CN">面向 Cloudflare Workers 与 Postgres 的开源可用性监控与状态页。</span></p>
           <a class="sf-status" id="sf-status" href="/status/openuptime" hidden><i></i><span id="sf-status-t"></span></a>
         </div>
-        <div><h4><span lang="en">Product</span><span lang="zh-CN">产品</span></h4><a href="/#features"><span lang="en">Features</span><span lang="zh-CN">功能</span></a><a href="/"><span lang="en">Changelog</span><span lang="zh-CN">更新日志</span></a><a href="/"><span lang="en">Roadmap</span><span lang="zh-CN">路线图</span></a><a href="/status/openuptime"><span lang="en">System status</span><span lang="zh-CN">服务状态</span></a></div>
-        <div><h4><span lang="en">Developers</span><span lang="zh-CN">开发者</span></h4><a href="/docs/api"><span lang="en">Docs</span><span lang="zh-CN">文档</span></a><a href="/docs/api"><span lang="en">API reference</span><span lang="zh-CN">API 参考</span></a><a href="/docs/mcp">MCP</a><a href="/docs/self-host"><span lang="en">Self-host</span><span lang="zh-CN">自托管</span></a><a href="/docs/embed"><span lang="en">Embed status</span><span lang="zh-CN">嵌入状态</span></a><a href="/">GitHub</a><a href="/"><span lang="en">Contributing</span><span lang="zh-CN">贡献指南</span></a></div>
-        <div><h4><span lang="en">Community</span><span lang="zh-CN">社区</span></h4><a href="/"><span lang="en">Discussions</span><span lang="zh-CN">讨论区</span></a><a href="/"><span lang="en">Security</span><span lang="zh-CN">安全披露</span></a><a href="/privacy"><span lang="en">Privacy</span><span lang="zh-CN">隐私</span></a><a href="/terms"><span lang="en">Terms</span><span lang="zh-CN">服务条款</span></a></div>
+        <div><h4><span lang="en">Product</span><span lang="zh-CN">产品</span></h4><a href="/#features"><span lang="en">Features</span><span lang="zh-CN">功能</span></a><a href="/status/openuptime"><span lang="en">System status</span><span lang="zh-CN">服务状态</span></a></div>
+        <div><h4><span lang="en">Developers</span><span lang="zh-CN">开发者</span></h4><a href="/docs/api"><span lang="en">Docs</span><span lang="zh-CN">文档</span></a><a href="/docs/api"><span lang="en">API reference</span><span lang="zh-CN">API 参考</span></a><a href="/docs/mcp">MCP</a><a href="/docs/self-host"><span lang="en">Self-host</span><span lang="zh-CN">自托管</span></a><a href="/docs/embed"><span lang="en">Embed status</span><span lang="zh-CN">嵌入状态</span></a><a href="https://github.com/becoolme/openuptime">GitHub</a><a href="https://github.com/becoolme/openuptime/blob/main/CONTRIBUTING.md"><span lang="en">Contributing</span><span lang="zh-CN">贡献指南</span></a></div>
+        <div><h4><span lang="en">Community</span><span lang="zh-CN">社区</span></h4><a href="https://github.com/becoolme/openuptime/blob/main/SECURITY.md"><span lang="en">Security</span><span lang="zh-CN">安全披露</span></a><a href="/privacy"><span lang="en">Privacy</span><span lang="zh-CN">隐私</span></a><a href="/terms"><span lang="en">Terms</span><span lang="zh-CN">服务条款</span></a></div>
       </div>
       <div class="sf-bot">
         <span><span lang="en">© 2026 OpenUptime contributors · MIT License</span><span lang="zh-CN">© 2026 OpenUptime 贡献者 · MIT 许可证</span></span>
@@ -65,6 +65,16 @@ const { title, updated, toc } = Astro.props as { title: string; updated?: string
     </div>
   </footer>
   <script is:inline>
+    // Signed in: the header's "Sign in" becomes a link to the app.
+    (function () {
+      fetch("/api/me", { credentials: "include" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+        var a = document.querySelector(".doc-signin");
+        if (!d || !d.user || !a) return;
+        a.href = "/app";
+        a.innerHTML = '<span lang="en">Dashboard</span><span lang="zh-CN">进入控制台</span>';
+        a.title = d.user.email || "";
+      }).catch(function () {});
+    })();
     // Our own status page, when it exists.
     (function () {
       var zh = document.documentElement.lang === "zh-CN";
