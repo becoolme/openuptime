@@ -98,7 +98,7 @@ export function createRepo(db: Db): Repo {
       await db
         .insert(schema.oauthResource)
         .values({ id: crypto.randomUUID(), identifier, name, allowedScopes: scopes, createdAt: now, updatedAt: now })
-        .onConflictDoNothing({ target: schema.oauthResource.identifier });
+        .onConflictDoUpdate({ target: schema.oauthResource.identifier, set: { allowedScopes: scopes, updatedAt: now }, setWhere: sql`${schema.oauthResource.allowedScopes} is distinct from ${sql.raw(`array[${scopes.map((x) => `'${x.replace(/'/g, "''")}'`).join(",")}]::text[]`)}` });
     },
     async workspacesOf(userId) {
       return db

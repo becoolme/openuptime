@@ -21,6 +21,9 @@ export function inviteTtlDays(env: Pick<Bindings, "INVITE_TTL_DAYS">) {
 /** Registration is closed (DISABLE_SIGNUP=true): only people with a pending invitation can still create an account. */
 export const signupDisabled = (env: Pick<Bindings, "DISABLE_SIGNUP">) => ["true", "1"].includes(String(env.DISABLE_SIGNUP ?? "").trim().toLowerCase());
 
+// scopes a token for the MCP resource may carry; offline_access must be here or refresh grants never keep it
+const MCP_RESOURCE_SCOPES = ["mcp:read", "mcp:write", "offline_access"];
+
 /** OAuth scopes an agent can be granted: read-only, or read and change. */
 export const OAUTH_SCOPES = ["openid", "offline_access", "mcp:read", "mcp:write"] as const;
 
@@ -126,7 +129,24 @@ export function createAuth(database: Database, env: Bindings) {
           picked = grantCookie(ctx.headers?.get("cookie"), typeof q === "string" ? q : "");
         }
         if (ctx.path === "/oauth2/authorize" || ctx.path === "/oauth2/token") {
-          await repo.ensureOAuthResource(mcpResource(env), "OpenUptime MCP", ["mcp:read", "mcp:write"]);
+          await repo.ensureOAuthResource(mcpResource(env), "OpenUptime MCP", MCP_RESOURCE_SCOPES);
+          // clients repeat the original scope (including offline_access) on refresh, and the library rejects any scope
+          // the grant does not hold. Grants issued before the resource allowed offline_access never stored it, so
+          // for those it is dropped (it only means "issue a refresh token" and cannot widen access).
+          const body = ctx.body as Record<string, unknown> | undefined;
+          if (ctx.path === "/oauth2/token" && body?.grant_type === "refresh_token" && typeof body.scope === "string" && typeof body.refresh_token === "string") {
+            const asked = body.scope.split(/\s+/).filter(Boolean);
+            if (asked.includes("offline_access")) {
+              const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body.refresh_token)));
+              const stored = btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+              const rows = await database.query<{ scopes: string }>("select array_to_string(scopes, ' ') as scopes from oauth_refresh_token where token = $1", [stored]);
+              const held = rows[0] ? String(rows[0].scopes).split(" ").filter(Boolean) : undefined;
+              const kept = asked.filter((x) => x !== "offline_access");
+              if (held && (!held.includes("offline_access") || !kept.length)) {
+                return { context: { ...ctx, body: { ...body, scope: (kept.length ? kept : held).join(" ") } } };
+              }
+            }
+          }
           return;
         }
         const body = ctx.body as { application_type?: string; redirect_uris?: unknown } | undefined;
