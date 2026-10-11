@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Source of public/og.png (1200x630). Render with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars --window-size=1200,630 \
+       --virtual-time-budget=8000 --screenshot=public/og.png file://$PWD/design/og.html -->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&family=Instrument+Serif:ital@0;1&display=block" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{background:#fafaf7;color:#0e1411;font-family:"Geist",system-ui,sans-serif;position:relative}
+  .glow{position:absolute;right:-220px;bottom:-300px;width:760px;height:760px;border-radius:50%;
+    background:radial-gradient(closest-side,rgba(15,157,88,.16),rgba(15,157,88,0))}
+  .frame{position:absolute;inset:0;padding:64px 72px;display:flex;flex-direction:column}
+  .top{display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:16px;font-weight:600;font-size:34px;letter-spacing:-.01em}
+  .mk{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#0f9d58,#0a5c34);display:grid;place-items:center}
+  .mk svg{width:32px;height:32px}
+  .pill{display:flex;align-items:center;gap:10px;height:44px;padding:0 20px;border-radius:99px;font-size:22px;font-weight:500;
+    color:#0f9d58;background:rgba(15,157,88,.1);border:1px solid rgba(15,157,88,.3)}
+  .pill i{width:11px;height:11px;border-radius:50%;background:#0f9d58;box-shadow:0 0 0 5px rgba(15,157,88,.18)}
+  h1{font-family:"Instrument Serif",Georgia,serif;font-weight:400;font-size:98px;line-height:1.02;letter-spacing:-.015em;margin-top:70px}
+  h1 em{color:#0f9d58;font-style:italic}
+  .bars{display:flex;gap:7px;height:46px;margin-top:auto;align-items:stretch}
+  .bars b{flex:1;border-radius:5px;background:#0f9d58}
+  .bars b.w{background:#c98a0a}
+  .bars b.f{opacity:.55}
+  .foot{display:flex;justify-content:space-between;align-items:baseline;margin-top:26px;font-size:26px;color:#5a635d}
+  .foot span:last-child{font-family:"Geist Mono",ui-monospace,monospace;font-weight:500;color:#0e1411;font-size:26px}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="frame">
+  <div class="top">
+    <div class="brand">
+      <div class="mk"><svg viewBox="0 0 32 32"><path d="M5 16h5.5l3-8 5 16 3-8H27" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      OpenUptime
+    </div>
+    <div class="pill"><i></i>All systems operational</div>
+  </div>
+  <h1>Affordable uptime monitoring <em>your AI agent can run.</em></h1>
+  <div class="bars" id="bars"></div>
+  <div class="foot"><span>Open source · Checks, alerts and status pages</span><span>openuptime.app</span></div>
+</div>
+<script>
+  // 60 daily bars: all up, one slow day. Fixed positions so the image is reproducible.
+  var el=document.getElementById("bars"),h="";
+  for(var i=0;i<60;i++){h+='<b class="'+(i===37?"w":"")+(i>=57?" f":"")+'"></b>'}
+  el.innerHTML=h;
+</script>
+</body>
+</html>
