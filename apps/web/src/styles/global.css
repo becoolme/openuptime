@@ -216,9 +216,11 @@ svg.sp{width:100%;max-width:140px;height:30px;display:block}
 }
 
 /* sidebar count badges */
-.nav em{margin-left:auto;font:12px var(--mono);font-style:normal;color:var(--faint)}
-.nav em.cnt{color:var(--down);background:var(--down-weak);padding:1px 7px;border-radius:99px}
+/* every count sits in the same right-aligned box, so the digits line up whether or not the pill is drawn */
+.nav em{margin-left:auto;min-width:22px;box-sizing:border-box;padding:1px 7px;border-radius:99px;text-align:right;font:12px var(--mono);font-style:normal;color:var(--faint)}
+.nav em.cnt{color:var(--down);background:var(--down-weak)}
 .nav.on em{color:var(--accent)}
+.nav.on em.cnt{color:var(--down)}
 
 /* ── monitor detail ── */
 .crumb-back{margin-bottom:14px;font-size:14px}
