@@ -1,5 +1,6 @@
 import type { DeliveryRetry, NewDelivery, Repo, SubscriberTarget } from "@openuptime/repo";
 import { actionEmail, appUrl, sendEmail } from "./email";
+import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 
 type Event = {
@@ -58,6 +59,17 @@ const alertText = (ev: Event) =>
     ? `${ev.slow ? "🟡" : "🔴"} ${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"} — ${ev.incident.title}`
     : `✅ ${ev.monitor.name} has recovered`;
 
+/** An alert that was not sent because the workspace's allowance for the period is used up; logged, never retried. */
+class Skipped extends Error {}
+const SKIPPED = "skipped: email allowance used up for this period";
+
+/** Take emails for `subs` from the allowance: who may be mailed and how many were left out. A failing ledger lets them all through. */
+async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: T[]) {
+  if (!subs.length) return { send: subs, skipped: 0 };
+  const granted = await entitlements.spendEmails(orgId, subs.length).catch((e) => (console.error("email allowance unavailable", e), subs.length));
+  return { send: subs.slice(0, granted), skipped: subs.length - granted };
+}
+
 /** Attempts per alert, the first one included. The first retry is queued a minute after the failure, the next five minutes later. */
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_SEC = 300;
@@ -88,7 +100,7 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
 }
 
 /** Fan an event out to every enabled channel in the org. Failures are logged, never thrown. */
-export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channelIds: string[] = []) {
+export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channelIds: string[] = [], entitlements: Entitlements = unmetered) {
   const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId });
   const text = alertText(ev);
 
@@ -98,18 +110,22 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
       const to = (c.config as { to?: string }).to;
       // an address that is an account reads in that account's language; any other address in the workspace owner's
       const lang = c.type === "email" && to ? await userLang(repo, to, fallback) : fallback;
+      if (c.type === "email" && (await withinEmails(entitlements, orgId, [c])).skipped) throw new Skipped(SKIPPED);
       return deliver(c, ev, text, lang);
     }),
   );
-  results.forEach((r, i) => r.status === "rejected" && console.error(`alert via ${channels[i].name} failed`, r.reason));
+  results.forEach((r, i) => r.status === "rejected" && !(r.reason instanceof Skipped) && console.error(`alert via ${channels[i].name} failed`, r.reason));
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name };
   const rows: NewDelivery[] = channels.map((ch, i) => {
     const r = results[i];
+    // no channel id for a skipped alert: a retry would only hit the same empty allowance
+    if (r.status === "rejected" && r.reason instanceof Skipped) return { ...base, channelId: null, channelName: ch.name, channelType: ch.type, ok: false, error: SKIPPED };
     return { ...base, channelId: ch.id, channelName: ch.name, channelType: ch.type, ok: r.status === "fulfilled", error: r.status === "rejected" ? reason(r.reason) : null };
   });
-  const subs = await notifySubscribers(repo, orgId, ev, text).catch((e) => { console.error("subscriber notify failed", e); return null; });
+  const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch((e) => { console.error("subscriber notify failed", e); return null; });
   if (subs && subs.total > 0) {
-    rows.push({ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: subs.failed === 0, error: subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : null });
+    rows.push({ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: subs.failed === 0 && subs.skipped === 0,
+      error: subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null });
   }
   await repo.logDeliveries(rows);
 }
@@ -208,17 +224,19 @@ async function mailSubscribers(
   return { total: subs.length, failed: results.filter((r) => r.status === "rejected").length, error: bad ? reason(bad.reason) : "" };
 }
 
-async function notifySubscribers(repo: Repo, orgId: string, ev: Event, _text: string) {
+async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitlements: Entitlements) {
   if (!ev.monitor.id) return null;
-  const subs = await repo.subscribersFor(orgId, ev.monitor.id);
+  const all = await repo.subscribersFor(orgId, ev.monitor.id);
+  const { send: subs, skipped } = await withinEmails(entitlements, orgId, all);
   const opened = ev.kind === "incident.opened";
   const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
-  return mailSubscribers(subs, {
+  const sent = await mailSubscribers(subs, {
     subject: (p, lang) => `[${p}] ${head(lang)}`,
     title: head,
     body: () => ev.monitor.name,
     badge: (lang) => (opened ? (ev.slow ? { label: tr(lang, "Slow"), tone: "warn" } : { label: tr(lang, "Down"), tone: "down" }) : { label: tr(lang, "Recovered"), tone: "up" }),
   });
+  return { ...sent, total: all.length, skipped };
 }
 
 /** A manual incident update (investigating → identified → … → resolved) goes to the same subscribers. */
@@ -226,8 +244,9 @@ export async function notifyIncidentUpdate(
   repo: Repo,
   inc: { organizationId: string; monitorId: string | null; title: string },
   update: { status: string; body: string },
+  entitlements: Entitlements = unmetered,
 ) {
-  const subs = await repo.subscribersFor(inc.organizationId, inc.monitorId);
+  const { send: subs } = await withinEmails(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId));
   const label = (lang: Lang) => tr(lang, update.status === "resolved" ? "Resolved" : update.status[0].toUpperCase() + update.status.slice(1));
   await mailSubscribers(subs, {
     subject: (p, lang) => `[${p}] ${label(lang)}: ${inc.title}`,

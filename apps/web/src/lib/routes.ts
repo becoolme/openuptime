@@ -1,7 +1,7 @@
 import { stripLocale } from "./locale-path";
 
 /** The back-office route table, shared by the static shell (404 status for deep links) and the client router. */
-export type NavKey = "monitors" | "incidents" | "status-pages" | "alerting" | "maintenance" | "team" | "account" | "api-keys" | "settings";
+export type NavKey = "monitors" | "incidents" | "status-pages" | "alerting" | "maintenance" | "team" | "account" | "api-keys" | "settings" | "usage";
 export type Route = {
   re: RegExp;
   name: string;
@@ -15,7 +15,7 @@ export type Route = {
 
 export const NAV_LABEL: Record<NavKey, string> = {
   monitors: "Monitors", incidents: "Incidents", "status-pages": "Status pages", alerting: "Alerting",
-  maintenance: "Maintenance", team: "Team", account: "Account", "api-keys": "API keys", settings: "Settings",
+  maintenance: "Maintenance", team: "Team", account: "Account", "api-keys": "API keys", settings: "Settings", usage: "Plan & usage",
 };
 
 export const ROUTES: Route[] = [
@@ -30,6 +30,7 @@ export const ROUTES: Route[] = [
   { re: /^\/app\/team$/, name: "Team", key: "team", title: "Team", data: () => [] },
   { re: /^\/app\/account$/, name: "Account", key: "account", title: "Account", data: () => [] },
   { re: /^\/app\/api-keys$/, name: "ApiKeys", key: "api-keys", title: "API keys", data: () => ["/projects"] },
+  { re: /^\/app\/usage$/, name: "Usage", key: "usage", title: "Plan & usage", data: () => ["/usage", "/monitors"] },
   { re: /^\/app\/settings$/, name: "Settings", key: "settings", title: "Settings", data: () => [] },
 ];
 

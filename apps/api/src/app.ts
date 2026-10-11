@@ -15,11 +15,11 @@ import { monitors } from "./routes/monitors";
 import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail } from "./email";
-import { unmetered, type Entitlements } from "./entitlements";
+import { community, type Edition } from "./edition";
 import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
 
-export function createApp(openDatabase: OpenDatabase, options: { entitlements?: Entitlements } = {}) {
-  const entitlements = options.entitlements ?? unmetered;
+export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
+  const edition = options.edition ?? community;
   const app = new Hono<AppEnv>();
 
   // the database and auth are created per request: required on Workers (no cross-request I/O objects).
@@ -29,7 +29,7 @@ export function createApp(openDatabase: OpenDatabase, options: { entitlements?: 
     c.set("repo", database.repo);
     c.set("database", database);
     c.set("auth", createAuth(database, c.env));
-    c.set("entitlements", entitlements);
+    c.set("entitlements", edition.entitlements({ database, env: c.env }));
     try {
       await next();
     } finally {
@@ -71,7 +71,7 @@ export function createApp(openDatabase: OpenDatabase, options: { entitlements?: 
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
     await repo.setMonitorState(m.id, { ...(wasDown ? {} : { status: "up" as const }), consecutiveFailures: 0, lastCheckedAt: new Date(), nextCheckAt: nextAfter(m) });
     if (wasDown) {
-      await resolveIncident(repo, m);
+      await resolveIncident(repo, m, false, c.get("entitlements"));
       await repo.setMonitorState(m.id, { status: "up" });
     }
     return c.json({ ok: true });
@@ -80,13 +80,14 @@ export function createApp(openDatabase: OpenDatabase, options: { entitlements?: 
   // trigger checks from an external scheduler when Workers Cron is not available
   app.post("/internal/run-checks", async (c) => {
     if (!c.env.CRON_SECRET || c.req.header("x-cron-secret") !== c.env.CRON_SECRET) return c.json({ error: "Forbidden" }, 403);
-    return c.json({ checked: await runDueChecks(c.get("repo"), c.env.CHECK_QUEUE, entitlements) });
+    return c.json({ checked: await runDueChecks(c.get("repo"), c.env.CHECK_QUEUE, c.get("entitlements")) });
   });
 
   // one-time schema setup for one-click deploys (OpenFlare calls it after uploading the Worker)
   app.post("/internal/migrate", async (c) => {
     if (!c.env.CRON_SECRET || c.req.header("x-cron-secret") !== c.env.CRON_SECRET) return c.json({ error: "Forbidden" }, 403);
-    return c.json({ applied: await c.get("database").migrate() });
+    const database = c.get("database");
+    return c.json({ applied: [...(await database.migrate()), ...((await edition.migrate?.(database)) ?? [])] });
   });
 
   mountMcp(app);
@@ -164,13 +165,17 @@ export function createApp(openDatabase: OpenDatabase, options: { entitlements?: 
     await c.get("repo").setUserLocale(c.get("userId"), body.locale);
     return c.json({ locale: body.locale });
   });
-  // credits of the active workspace in the current period; `metered: false` when this deployment does not count them
+  // plan, allowances and usage of the active workspace; `metered: false` when this deployment has no plans or limits
   authed.get("/usage", async (c) => {
-    const balance = await c.get("entitlements").creditBalance(c.get("orgId"));
-    return c.json(balance ? { metered: true, ...balance } : { metered: false });
+    const e = c.get("entitlements");
+    const orgId = c.get("orgId");
+    const [credits, emails, plan, activeMonitors] = await Promise.all([e.creditBalance(orgId), e.emailBalance(orgId), e.plan(orgId), c.get("repo").activeMonitorCount(orgId)]);
+    if (!credits && !emails && !plan) return c.json({ metered: false });
+    return c.json({ metered: true, ...(credits ?? {}), credits, emails, plan, activeMonitors });
   });
   // sidebar badges: one round trip, four counts
   authed.get("/counts", async (c) => c.json(await c.get("repo").counts(c.get("orgId"), c.get("projectId"))));
+  edition.mount?.({ app, authed });
   app.route("/api", authed);
 
   app.onError((err, c) => {

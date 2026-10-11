@@ -140,9 +140,9 @@ export default function Alerting() {
                 {d.kind === "test" ? t("Test alert") : d.kind === "incident.opened" ? t("Down alert") : d.kind === "incident.resolved" ? t("Recovery alert") : d.kind === "incident.muted" ? t("Down alert muted") : d.kind}
                 {d.monitorName && d.kind !== "test" ? ` · ${d.monitorName}` : ""} · {ago(d.createdAt)}
               </small>
-              {d.error && d.kind !== "incident.muted" && <small className="mono" style={{ color: "var(--down)", wordBreak: "break-word" }}>{d.error}</small>}
+              {d.error && d.kind !== "incident.muted" && <small className="mono" style={{ color: d.error.startsWith("skipped:") ? "var(--muted)" : "var(--down)", wordBreak: "break-word" }}>{d.error.startsWith("skipped:") ? t("Skipped: email allowance used up for this period") : d.error}</small>}
             </div>
-            <span className={`pill ${d.kind === "incident.muted" ? "" : d.ok ? "up" : "down"}`}>{d.kind === "incident.muted" ? t("Muted") : d.ok ? t("Sent") : t("Failed")}</span>
+            <span className={`pill ${d.kind === "incident.muted" || d.error?.startsWith("skipped:") ? "" : d.ok ? "up" : "down"}`}>{d.kind === "incident.muted" ? t("Muted") : d.error?.startsWith("skipped:") ? t("Skipped") : d.ok ? t("Sent") : t("Failed")}</span>
           </div>
         ))}
       </div>

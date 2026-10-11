@@ -37,6 +37,17 @@ function takeEarly(path: string): Promise<unknown> | undefined {
   const e = early.get(path);
   return e && Date.now() - e.at < EARLY_TTL ? e.p : undefined;
 }
+export type Quota = { limit: number; used: number; periodStart: string; periodEnd: string };
+export type Usage =
+  | { metered: false }
+  | {
+      metered: true;
+      credits: Quota | null;
+      emails: Quota | null;
+      activeMonitors: number;
+      plan: { id: string; name: string; maxActiveMonitors: number | null; minIntervalSec: number; upgradeUrl?: string; manageUrl?: string } | null;
+    };
+
 /** Starts the shell's reads and the data of the route at `pathname` right away. */
 export function prefetch(pathname: string) {
   const hit = resolveRoute(pathname);
@@ -56,6 +67,19 @@ let armedUntil = 0;
 /** Called by the router on every navigation: the page's mount-time reads may use remembered data. */
 export const armCache = () => { armedUntil = Date.now() + 1500; };
 
+/** An API refusal: `code` and the rest of the body let the UI explain plan limits (HTTP 402) instead of just printing the message. */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  upgradeUrl?: string;
+  constructor(message: string, status: number, body: { code?: string; upgradeUrl?: string } | null) {
+    super(message);
+    this.status = status;
+    this.code = body?.code;
+    this.upgradeUrl = body?.upgradeUrl;
+  }
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     credentials: "include",
@@ -66,7 +90,10 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     go("/login");
     throw new Error("Unauthorized");
   }
-  if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? res.statusText);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string; code?: string; upgradeUrl?: string } | null;
+    throw new ApiError(body?.error ?? res.statusText, res.status, body);
+  }
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
@@ -114,6 +141,7 @@ export const api = {
   me: () => req<{ userId: string; organization: { id: string; name: string }; projectId: string; user: { name: string; email: string; locale: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null } | null }>("/me"),
   setLocale: (locale: "en" | "zh-CN") => req<{ locale: string }>("/me/locale", { method: "PATCH", body: JSON.stringify({ locale }) }),
   counts: () => req<Record<string, number>>("/counts"),
+  usage: () => req<Usage>("/usage"),
   projects: () => req<Project[]>("/projects"),
   createWorkspace: (name: string) => req<{ id: string; name: string }>("/workspaces", { method: "POST", body: JSON.stringify({ name }) }),
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: JSON.stringify({ name }) }),

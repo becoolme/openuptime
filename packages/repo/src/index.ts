@@ -295,6 +295,8 @@ export interface Repo {
   ownerLocale(orgId: string): Promise<string | null>;
   exportAccount(userId: string): Promise<AccountExport>;
   counts(orgId: string, projectId: string): Promise<Counts>;
+  /** Monitors of the workspace (every project) that are not paused: what a plan's monitor cap counts. */
+  activeMonitorCount(orgId: string): Promise<number>;
 
   /** Workspaces this user owns (for the account-deletion guard). */
   ownedWorkspaces(userId: string): Promise<OwnedWorkspace[]>;
@@ -431,6 +433,11 @@ export interface Database {
   authDatabase: unknown;
   /** Apply the embedded schema migrations; returns the tags applied. */
   migrate(): Promise<string[]>;
+  /**
+   * Run a parameterised SQL statement ($1, $2, …) and return its rows. For editions that keep their own tables next to
+   * ours (the hosted edition's subscriptions and usage) so they need neither a second connection nor changes to `Repo`.
+   */
+  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
   close(timeoutSec?: number): Promise<void>;
 }
 export type OpenDatabase = (connectionString: string, opts?: { max?: number }) => Database;

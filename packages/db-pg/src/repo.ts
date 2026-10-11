@@ -176,6 +176,11 @@ export function createRepo(db: Db): Repo {
       return r[0] as never;
     },
 
+    async activeMonitorCount(o) {
+      const r = await rows<{ n: number }>(db.execute(sql`select count(*)::int as n from monitor where organization_id = ${o} and status <> 'paused'`));
+      return r[0]?.n ?? 0;
+    },
+
     async ownedWorkspaces(userId) {
       const owned = await db
         .select({ id: schema.organization.id, name: schema.organization.name })

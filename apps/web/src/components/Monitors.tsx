@@ -218,6 +218,16 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     }).catch(() => {});
   }, []);
   const [err, setErr] = useState("");
+  const [upgrade, setUpgrade] = useState<string | undefined>();
+  // the plan's shortest interval (0 = no plans, nothing locked): faster presets are shown locked
+  const [floor, setFloor] = useState(0);
+  useEffect(() => {
+    api.usage().then((u) => {
+      const min = u.metered ? (u.plan?.minIntervalSec ?? 0) : 0;
+      setFloor(min);
+      if (!monitor && min > 60) setF((x) => ({ ...x, intervalSec: Math.max(x.intervalSec, min) }));
+    }).catch(() => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
@@ -225,6 +235,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     e.preventDefault();
     setBusy(true);
     setErr("");
+    setUpgrade(undefined);
     try {
       const headers = f.type === "http" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
@@ -235,7 +246,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       } else await api.createMonitor(payload);
       onSaved();
     } catch (e) {
-      setErr((e as Error).message);
+      const x = e as Error & { code?: string; upgradeUrl?: string };
+      // plan limits read in the UI's language; the server message stays English for API clients
+      setErr(x.code === "monitor_limit" ? t("You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.") : x.code === "interval_not_allowed" ? t("This check interval is not available on your plan.") : x.message);
+      setUpgrade(x.code ? x.upgradeUrl : undefined);
       setBusy(false);
     }
   }
@@ -261,7 +275,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <div className="fld">{t("Check every")}
           <div className="seg">
             {![60, 300, 900].includes(f.intervalSec) && <i className="on">{f.intervalSec}s</i>}
-            {([[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"]] as const).map(([v, l]) => <i key={v} className={f.intervalSec === v ? "on" : ""} onClick={() => set("intervalSec", v)}>{t(l)}</i>)}
+            {([[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"]] as const).map(([v, l]) => {
+              const locked = f.type !== "heartbeat" && v < floor && v < (monitor?.intervalSec ?? Infinity);
+              return <i key={v} className={`${f.intervalSec === v ? "on" : ""}${locked ? " locked" : ""}`} title={locked ? t("Not available on your plan") : undefined} onClick={() => !locked && set("intervalSec", v)}>{t(l)}</i>;
+            })}
           </div>
         </div>
         {f.type !== "heartbeat" && (
@@ -338,7 +355,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec)).toLocaleString()} {t("checks / month")}</b></div>
-        {err && <p className="err">{err}</p>}
+        {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>

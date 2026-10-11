@@ -33,3 +33,8 @@ api.counts().then((c) => {
     el.className = k === "incidents" && n > 0 ? "cnt" : "";
   });
 }).catch(() => {});
+
+// the Plan & usage entry exists only where this deployment has plans (the hosted edition); self-hosted never shows it
+api.usage().then((u) => {
+  if (u.metered) document.querySelectorAll<HTMLElement>("[data-metered]").forEach((el) => (el.hidden = false));
+}).catch(() => {});

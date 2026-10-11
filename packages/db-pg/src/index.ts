@@ -18,6 +18,7 @@ export const openDatabase: OpenDatabase = (connectionString, opts) => {
     repo: createRepo(db),
     authDatabase: drizzleAdapter(db, { provider: "pg", schema }),
     migrate: () => migrate(db),
+    query: async <T>(text: string, params: unknown[] = []) => (await db.$client.unsafe(text, params as never[])) as unknown as T[],
     close: (timeoutSec = 1) => db.$client.end({ timeout: timeoutSec }),
   };
   return database;

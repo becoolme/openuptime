@@ -34,6 +34,7 @@ describe("billingPeriod", () => {
 describe("withinCredits", () => {
   /** A ledger with a fixed allowance per workspace. */
   const ledger = (left: Record<string, number>): Entitlements => ({
+    ...unmetered,
     spendCredits: async (w, n) => {
       const g = Math.min(n, left[w] ?? 0);
       left[w] = (left[w] ?? 0) - g;
@@ -58,7 +59,7 @@ describe("withinCredits", () => {
     expect(await withinCredits([hb, mon("a")], ledger({ a: 0 }))).toEqual([hb]);
   });
   it("keeps monitoring when the ledger fails", async () => {
-    const broken: Entitlements = { spendCredits: async () => { throw new Error("db down"); }, creditBalance: async () => null };
+    const broken: Entitlements = { ...unmetered, spendCredits: async () => { throw new Error("db down"); }, creditBalance: async () => null };
     const ms = [mon("a"), mon("a")];
     expect(await withinCredits(ms, broken)).toEqual(ms);
   });

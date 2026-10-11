@@ -130,12 +130,12 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
   for (let i = 0; i < monitors.length; i += CONCURRENCY) {
     // one failing monitor must not take the rest of the batch down with it
     const batch = monitors.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(batch.map((m) => checkOne(repo, m)));
+    const results = await Promise.allSettled(batch.map((m) => checkOne(repo, m, entitlements)));
     results.forEach((r, j) => r.status === "rejected" && console.error(`check failed for ${batch[j].id}`, r.reason));
   }
 }
 
-export async function checkOne(repo: Repo, m: Monitor) {
+export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
   // a due heartbeat monitor means no ping arrived in time
   const out = m.type === "heartbeat" ? { ok: false, error: "Heartbeat missed" } : await runCheck(m);
   const inMaintenance = await repo.underMaintenance(m);
@@ -170,24 +170,24 @@ export async function checkOne(repo: Repo, m: Monitor) {
     ...next,
   });
 
-  if (goingDown) await openIncident(repo, m, out.error ?? "Check failed");
-  if (recovering) await resolveIncident(repo, m);
-  if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!);
-  if (slowClears) await resolveIncident(repo, m, true);
+  if (goingDown) await openIncident(repo, m, out.error ?? "Check failed", entitlements);
+  if (recovering) await resolveIncident(repo, m, false, entitlements);
+  if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements);
+  if (slowClears) await resolveIncident(repo, m, true, entitlements);
   if (pending) await repo.setMonitorState(m.id, { status, consecutiveSlow: finalSlow });
 }
 
-async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number) {
+async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entitlements: Entitlements) {
   if (await repo.hasOpenIncident(m.id, true)) return;
   const reason = `${m.slowAlertAfter} consecutive checks slower than ${m.slowThresholdMs} ms (latest ${latencyMs} ms).`;
   const inc = await repo.createIncident(
     { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is responding slowly`, auto: true, severity: "minor" },
     { status: "investigating", body: reason },
   );
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds);
+  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
 }
 
-async function openIncident(repo: Repo, m: Monitor, reason: string) {
+async function openIncident(repo: Repo, m: Monitor, reason: string, entitlements: Entitlements) {
   // an outage is not blocked by a latency incident: that one is superseded (resolved without a recovery alert)
   for (const slow of await repo.openIncidents(m.id, true)) await repo.resolveIncident(slow.id, "Superseded: the monitor is down.");
   if (await repo.hasOpenIncident(m.id, false)) return;
@@ -205,7 +205,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string) {
     }]);
     return;
   }
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds);
+  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
 }
 
 const FLAP_WINDOW_MS = 15 * 60_000;
@@ -213,11 +213,11 @@ const FLAP_WINDOW_MS = 15 * 60_000;
 const consecutive = (m: Monitor) => m.failureThreshold;
 
 /** Resolve a monitor's open incidents: its outage ones, or with `slow` only the automatic latency ones. */
-export async function resolveIncident(repo: Repo, m: Monitor, slow = false) {
+export async function resolveIncident(repo: Repo, m: Monitor, slow = false, entitlements: Entitlements = unmetered) {
   for (const inc of await repo.openIncidents(m.id, slow)) {
     await repo.resolveIncident(inc.id, slow ? "Response time is back under the threshold." : "Checks are passing again.");
     if (await repo.incidentMuted(inc.id)) continue;
-    await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: { ...inc, resolvedAt: new Date() }, monitor: m, ...(slow ? { slow: true as const } : {}) }, m.channelIds);
+    await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: { ...inc, resolvedAt: new Date() }, monitor: m, ...(slow ? { slow: true as const } : {}) }, m.channelIds, entitlements);
   }
 }
 

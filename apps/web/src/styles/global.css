@@ -554,3 +554,18 @@ html[lang="zh-CN"] h1{font-weight:700}
 .callout.backup{flex-direction:column;gap:10px}
 .backup-codes{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 16px;width:100%}
 .backup-codes li{white-space:nowrap;user-select:all}
+
+/* plan & usage (shown only on deployments with plans) */
+.usage-wrap{display:grid;gap:20px;max-width:1040px}
+.plan-card{display:flex;gap:20px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.plan-card h2{margin:4px 0;font-size:34px}
+.plan-actions{display:flex;gap:10px;flex-wrap:wrap}
+.meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.meter{padding:20px;display:grid;gap:12px;align-content:start}
+.meter-h{display:flex;justify-content:space-between;align-items:center;min-height:24px}
+.meter .k{font:500 11px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.meter-n{font:400 36px/1 "Instrument Serif",Georgia,serif}
+.track{height:8px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.fill{height:100%;border-radius:99px;background:var(--accent)}.fill.warn{background:#c98a0a}
+.pill.warn{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:99px;font-size:12.5px;font-weight:500;border:1px solid rgba(201,138,10,.32);background:rgba(201,138,10,.12);color:#c98a0a}
+.seg i.locked{opacity:.45;cursor:not-allowed}

@@ -14,7 +14,25 @@ export interface Entitlements {
   spendCredits(workspaceId: string, credits: number): Promise<number>;
   /** The allowance and what is used of it, for display. null when the workspace is not metered. */
   creditBalance(workspaceId: string): Promise<CreditBalance | null>;
+  /** Like `spendCredits`, for notification emails (alerts and status-page subscriber mails). System mails are never counted. */
+  spendEmails(workspaceId: string, count: number): Promise<number>;
+  /** The email allowance and what is used of it, for display. null when emails are not metered. */
+  emailBalance(workspaceId: string): Promise<CreditBalance | null>;
+  /** The plan the workspace is on, with its hard limits. null when this deployment has no plans. */
+  plan(workspaceId: string): Promise<Plan | null>;
 }
+
+export type Plan = {
+  id: string;
+  name: string;
+  /** Monitors that are not paused. null = no cap. */
+  maxActiveMonitors: number | null;
+  /** The shortest check interval the plan allows, in seconds. */
+  minIntervalSec: number;
+  /** Where to start or change a subscription, and where to manage billing. Absent when the workspace cannot do it. */
+  upgradeUrl?: string;
+  manageUrl?: string;
+};
 
 export type CreditBalance = {
   /** Credits included in the period. */
@@ -29,6 +47,9 @@ export type CreditBalance = {
 export const unmetered: Entitlements = {
   spendCredits: async (_workspaceId, credits) => credits,
   creditBalance: async () => null,
+  spendEmails: async (_workspaceId, count) => count,
+  emailBalance: async () => null,
+  plan: async () => null,
 };
 
 /**

@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Repo } from "@openuptime/repo";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireManager } from "../middleware";
@@ -90,11 +90,33 @@ async function withAutoChannels(repo: Repo, orgId: string, projectId: string, ch
   return auto.length ? [...new Set([...channelIds, ...auto])] : channelIds;
 }
 
+/**
+ * What the workspace's plan refuses (HTTP 402), or null. `add` is how many active monitors the request would add and
+ * `intervalSec` the interval it asks for. Deployments without plans (self-hosted) never refuse.
+ */
+async function overPlan(c: Context<AppEnv>, o: { add?: number; intervalSec?: number }) {
+  const orgId = c.get("orgId");
+  const plan = await c.get("entitlements").plan(orgId);
+  if (!plan) return null;
+  if (o.intervalSec !== undefined && o.intervalSec < plan.minIntervalSec) {
+    return c.json({ error: `The ${plan.name} plan checks at most every ${plan.minIntervalSec / 60} min`, code: "interval_not_allowed", minIntervalSec: plan.minIntervalSec, plan: plan.id, upgradeUrl: plan.upgradeUrl }, 402);
+  }
+  if (o.add && plan.maxActiveMonitors !== null) {
+    const active = await c.get("repo").activeMonitorCount(orgId);
+    if (active + o.add > plan.maxActiveMonitors) {
+      return c.json({ error: `The ${plan.name} plan allows ${plan.maxActiveMonitors} active monitors`, code: "monitor_limit", limit: plan.maxActiveMonitors, active, plan: plan.id, upgradeUrl: plan.upgradeUrl }, 402);
+    }
+  }
+  return null;
+}
+
 export const monitors = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await c.get("repo").listMonitors(c.get("orgId"), c.get("projectId"))))
   .post("/", zValidator("json", body), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
+    const refused = await overPlan(c, { add: 1, intervalSec: v.type === "heartbeat" ? undefined : v.intervalSec });
+    if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
     return c.json(await repo.createMonitor(c.get("orgId"), c.get("projectId"), newMonitor({ ...v, channelIds })), 201);
   })
@@ -120,6 +142,11 @@ export const monitors = new Hono<AppEnv>()
       valid.push(p.data);
     });
     if (valid.length) {
+      // an interval below the plan's floor is raised to it rather than failing the whole file
+      const floor = (await c.get("entitlements").plan(c.get("orgId")))?.minIntervalSec ?? 0;
+      for (const v of valid) if (v.type !== "heartbeat" && v.intervalSec < floor) v.intervalSec = floor;
+      const refused = await overPlan(c, { add: valid.length });
+      if (refused) return refused;
       const repo = c.get("repo");
       const auto = await repo.autoEnabledChannelIds(c.get("orgId"), c.get("projectId"));
       await repo.createMonitors(c.get("orgId"), c.get("projectId"), valid.map((v) => newMonitor({ ...v, channelIds: auto })));
@@ -136,6 +163,16 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    if (v.intervalSec !== undefined || v.paused === false) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (current) {
+        // only a faster interval is checked against the plan's floor; leaving an older, faster one in place is fine
+        const faster = v.intervalSec !== undefined && v.intervalSec < current.intervalSec && current.type !== "heartbeat";
+        const resuming = v.paused === false && current.status === "paused";
+        const refused = await overPlan(c, { add: resuming ? 1 : 0, intervalSec: faster ? v.intervalSec : undefined });
+        if (refused) return refused;
+      }
+    }
     const row = await repo.updateMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"), {
       ...v,
       ...(v.paused !== undefined ? { status: v.paused ? "paused" : "pending", nextCheckAt: new Date() } : {}),
@@ -159,6 +196,6 @@ export const monitors = new Hono<AppEnv>()
     if ((await c.get("entitlements").spendCredits(m.organizationId, creditCost(m))) < creditCost(m)) {
       return c.json({ error: "No credits left this period", code: "credits_exhausted" }, 402);
     }
-    await checkOne(repo, m);
+    await checkOne(repo, m, c.get("entitlements"));
     return c.json({ ok: true });
   });

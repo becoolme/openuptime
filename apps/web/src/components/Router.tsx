@@ -16,6 +16,7 @@ import Team from "./Team";
 import Account from "./Account";
 import ApiKeys from "./ApiKeys";
 import Settings from "./Settings";
+import Usage from "./Usage";
 
 const NAV_PREFIX = "/app";
 
@@ -24,7 +25,7 @@ function syncShell(pathname: string) {
   const hit = resolveRoute(pathname);
   const key = hit?.route.key ?? "";
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach((el) => el.classList.toggle("on", el.dataset.nav === key));
-  document.getElementById("tab-more")?.classList.toggle("on", ["maintenance", "team", "settings"].includes(key));
+  document.getElementById("tab-more")?.classList.toggle("on", ["maintenance", "team", "settings", "usage"].includes(key));
   const label = hit ? t(NAV_LABEL[hit.route.key]) : t("Not found");
   const crumb = document.querySelector(".crumb b");
   if (crumb) crumb.textContent = label;
@@ -54,6 +55,7 @@ function View({ name, params }: { name: string; params: string[] }) {
     case "Account": return <Account />;
     case "ApiKeys": return <ApiKeys />;
     case "Settings": return <Settings />;
+    case "Usage": return <Usage />;
     default: return null;
   }
 }

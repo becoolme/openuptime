@@ -1,6 +1,6 @@
 import type { Monitor, Repo } from "@openuptime/repo";
 import { describe, expect, it } from "vitest";
-import type { Entitlements } from "./entitlements";
+import { unmetered, type Entitlements } from "./entitlements";
 import { MESSAGE_SIZE, checkOne, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 
 describe("runDueChecks", () => {
@@ -44,7 +44,7 @@ describe("queue delivery", () => {
   it("bills and checks a redelivered message only once", async () => {
     const { repo } = consumerRepo([http("a"), http("b")]);
     let spent = 0;
-    const entitlements: Entitlements = { spendCredits: async (_w, n) => ((spent += n), n), creditBalance: async () => null };
+    const entitlements: Entitlements = { ...unmetered, spendCredits: async (_w, n) => ((spent += n), n), creditBalance: async () => null };
     const msg: CheckMessage = { ids: ["a", "b"], at: [at.toISOString(), at.toISOString()] };
     await processCheckMessage(repo, msg, entitlements).catch(() => {});
     await processCheckMessage(repo, msg, entitlements).catch(() => {});

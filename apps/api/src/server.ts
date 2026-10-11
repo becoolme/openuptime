@@ -8,7 +8,7 @@ import nodemailer from "nodemailer";
 import sirv from "sirv";
 import { createApp } from "./app";
 import { configureEmail, setMailTransport } from "./email";
-import { unmetered, type Entitlements } from "./entitlements";
+import { community, type Edition } from "./edition";
 import type { Bindings } from "./env";
 import { processCheckMessage, runDueChecks, type CheckMessage, type CheckQueue } from "./scheduler";
 
@@ -59,9 +59,10 @@ configureEmail(env);
 const database: Database = openDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX ?? 10) });
 /** The app opens and closes a database per request (Workers); here every request shares the one pool. */
 const shared: OpenDatabase = () => ({ ...database, close: async () => {} });
-/** The edition: self-hosted is unmetered. */
-const entitlements: Entitlements = unmetered;
-const app = createApp(shared, { entitlements });
+/** The edition: self-hosted is the open-source one, unmetered. */
+const edition: Edition = community;
+const entitlements = edition.entitlements({ database, env: env as never });
+const app = createApp(shared, { edition });
 
 // in-process stand-in for the Cloudflare Queue: same packing and slot delays, executed in this process
 const CHECK_CONCURRENCY = 4;

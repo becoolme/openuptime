@@ -39,7 +39,7 @@ export const incidents = new Hono<AppEnv>()
       if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
       const r = await repo.postIncidentUpdate(c.get("orgId"), id, { ...v, authorId: c.get("userId") });
       if (!r) return c.json({ error: "Not found" }, 404);
-      await notifyIncidentUpdate(repo, r.incident, v);
+      await notifyIncidentUpdate(repo, r.incident, v, c.get("entitlements"));
       return c.json(r.update, 201);
     },
   )
