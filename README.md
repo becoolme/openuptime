@@ -62,17 +62,12 @@ Two Workers: `openuptime-api` (route `<domain>/api/*`, cron, queue consumer) and
 ```bash
 wrangler queues create openuptime-checks
 wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"   # then uncomment `hyperdrive` in apps/api/wrangler.jsonc
-DATABASE_URL="postgres://…" pnpm db:migrate        # or, if your role cannot CREATE SCHEMA (hosted tenants):
-DATABASE_URL="postgres://…" node packages/db-pg/migrate-plain.mjs   # run from packages/db-pg
+DATABASE_URL="postgres://…" pnpm db:migrate
 cd apps/api && wrangler secret put BETTER_AUTH_SECRET && wrangler secret put CRON_SECRET && wrangler deploy
 cd ../web && pnpm build && wrangler deploy      # deploy the API first: the web Worker binds to it
 ```
 
 Email goes through Cloudflare Email Sending: onboard the sending domain, then set `EMAIL_FROM` in `apps/api/wrangler.jsonc`. The Queue needs the Workers Paid plan. To run on the Free plan, delete the `queues` block from `apps/api/wrangler.jsonc` and skip `wrangler queues create`: the minute cron then runs up to 40 monitors inline. See `/docs/self-host`.
-
-### One-click deploy with OpenFlare
-
-`node scripts/release.mjs` builds `dist-release/` (`api.mjs`, `web.mjs`, `web-assets.zip`, `openflare.json`). Host that directory anywhere that serves static files over HTTPS (release assets, R2, …) and open its `openflare.json` URL in OpenFlare (a Cloudflare deploy tool that reads `openflare.json`) — it creates the Hyperdrive config, Queue and KV namespace in your Cloudflare account, uploads both Workers on `workers.dev`, attaches the queue consumer and cron, and runs the schema migration (`POST /internal/migrate`, guarded by `CRON_SECRET`). You supply a Postgres database (or let OpenFlare create a Neon one). Pick `paid` (Queues fan checks out) or `free` (no Queue: the minute cron runs up to 40 monitors inline — the Free plan's 50-subrequest and 10 ms CPU limits make this small-scale only). Email alerts need a sending domain onboarded to Cloudflare Email Sending; leave `EMAIL_FROM` empty to skip. Known limit: the `_headers` cache rules are not applied to uploaded assets.
 
 ## Accounts & teams
 
