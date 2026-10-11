@@ -28,7 +28,8 @@ const alternates =
 
 function build(loc) {
   const d = T[loc.code];
-  let html = src;
+  // the source already carries the English canonical + alternates: drop them so each page ends with exactly its own
+  let html = src.replace(/<link rel="canonical"[^>]*>\n?/g, "").replace(/<link rel="alternate" hreflang[^>]*>\n?/g, "");
   html = html.replace(/<html lang="[^"]*"/, `<html lang="${loc.code}"`);
   if (d.title) html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(d.title)}</title>`);
   if (d.desc) html = html.replace(/(<meta name="description" content=")[^"]*(")/, `$1${esc(d.desc)}$2`);
