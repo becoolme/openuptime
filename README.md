@@ -33,18 +33,113 @@ from `http://localhost:8080`. Email is optional; see [Reference](docs/reference.
 
 ## Deploy to Cloudflare
 
-Two Workers: `openuptime-api` (route `<domain>/api/*`, cron, queue consumer) and `openuptime-web` (custom domain,
-reaches the API through a service binding). Edit the domain in `apps/api/wrangler.jsonc` and `apps/web/wrangler.jsonc`.
+The site is two Workers on one domain:
+
+| Worker | Serves | Also does |
+|---|---|---|
+| `openuptime-api` | `your-domain/api/*` (a Worker **route** on your zone) | minute cron, queue consumer that runs the checks |
+| `openuptime-web` | everything else on `your-domain` (a Worker **custom domain**) | status pages (SSR); reaches the API through a service binding |
+
+Keeping the API under `/api/*` of the same domain means session cookies stay same-origin. You need no separate API hostname.
+
+**Before you start**
+
+- A Cloudflare account and a domain whose DNS is on Cloudflare (the zone).
+- A Postgres database reachable from the internet (Neon, Supabase, RDS, your own). Workers connect through Hyperdrive.
+- Node.js 22+ and pnpm.
+- Workers **Paid** plan for the Queue (default). On the Free plan, run in inline mode instead: see [Reference](docs/reference.md#cloudflare-free-plan).
+
+### 1. Get the code and sign in
 
 ```bash
-wrangler queues create openuptime-checks
-wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"   # then uncomment `hyperdrive` in apps/api/wrangler.jsonc
-DATABASE_URL="postgres://…" pnpm db:migrate
-cd apps/api && wrangler secret put BETTER_AUTH_SECRET && wrangler secret put CRON_SECRET && wrangler deploy
-cd ../web && pnpm build && wrangler deploy      # deploy the API first: the web Worker binds to it
+git clone https://github.com/becoolme/openuptime.git && cd openuptime
+pnpm install
+cd apps/api && npx wrangler login
 ```
 
-The Queue needs the Workers Paid plan; for the Free plan see [Reference](docs/reference.md#cloudflare-free-plan).
+All `npx wrangler …` commands below run in `apps/api` unless noted.
+
+### 2. Create the Queue and Hyperdrive
+
+```bash
+npx wrangler queues create openuptime-checks
+npx wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"
+```
+
+The second command prints an id. In `apps/api/wrangler.jsonc` uncomment the `hyperdrive` line and paste it:
+
+```jsonc
+"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id printed above>" }],
+```
+
+The commented `placement` line is optional (it runs the Worker next to your database host); leave it commented unless you
+want that.
+
+### 3. Create the schema
+
+From the repository root:
+
+```bash
+DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate
+```
+
+It only applies what is new, so run it again after every upgrade. If your database role cannot `CREATE SCHEMA`, use
+`node migrate-plain.mjs` in `packages/db-pg` with the same `DATABASE_URL`.
+
+### 4. Point the config at your domain
+
+Edit two files. In both, replace `openuptime.app` with your own domain.
+
+`apps/api/wrangler.jsonc`, where `zone_name` is the zone (the apex domain) even when you serve from a subdomain:
+
+```jsonc
+"routes": [{ "pattern": "status.example.com/api/*", "zone_name": "example.com" }],
+"vars": {
+  "BETTER_AUTH_URL": "https://status.example.com",   // public origin: cookies, OAuth, email links
+  "WEB_ORIGIN": "https://status.example.com",        // same value
+  "EMAIL_FROM": "alerts@example.com"                 // sender address, see Reference → Email
+}
+```
+
+`apps/web/wrangler.jsonc`:
+
+```jsonc
+"routes": [{ "pattern": "status.example.com", "custom_domain": true }],
+"vars": { "PRODUCT_URL": "https://status.example.com" }   // target of the "Powered by" link on status pages
+```
+
+The custom domain creates its DNS record and certificate for you; the hostname must not already have a DNS record
+pointing elsewhere.
+
+### 5. Set the secrets
+
+```bash
+npx wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
+npx wrangler secret put CRON_SECRET            # any long random string; guards /internal/*
+```
+
+If wrangler asks to create the Worker first, answer yes. Optional: `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` add
+"Sign in with GitHub".
+
+### 6. Deploy
+
+```bash
+npx wrangler deploy                           # in apps/api
+cd ../web && pnpm build && npx wrangler deploy
+```
+
+Deploy the API first: the web Worker binds to it by name.
+
+### 7. Check it
+
+```bash
+curl https://status.example.com/api/health    # {"ok":true}
+```
+
+Open the domain and sign up. Once your own account exists you can set `"DISABLE_SIGNUP": "true"` in the API `vars` and
+deploy again to close registration (invited people can still join).
+
+**Upgrade later:** pull, `pnpm install`, `pnpm db:migrate`, then deploy the API and the web Worker, in that order.
 
 ## Develop
 
