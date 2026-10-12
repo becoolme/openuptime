@@ -27,6 +27,34 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "install-as-app",
+    date: "2026-10-12",
+    edition: "community",
+    title: { en: "Install the back office as an app", zh: "把后台安装为应用" },
+    summary: {
+      en: "OpenUptime can be installed from the browser, and an open tab tells you when a new version is ready.",
+      zh: "可以从浏览器把 OpenUptime 安装成应用；有新版本时，已打开的页面会提示你刷新。",
+    },
+    points: [
+      {
+        en: "Use “Install” in your browser to get OpenUptime in its own window, with an icon on your desktop or home screen.",
+        zh: "在浏览器中选择「安装」，即可在独立窗口中使用 OpenUptime，并在桌面或主屏幕上留下图标。",
+      },
+      {
+        en: "An open tab checks for a new version every 6 hours and offers a Refresh button when there is one.",
+        zh: "已打开的页面每 6 小时检查一次新版本，有更新时会提示并提供「刷新」按钮。",
+      },
+      {
+        en: "The app's own files are downloaded in the background when a new version is found, so refreshing is quick and the app shell still opens without a network.",
+        zh: "发现新版本时，应用自身的文件会在后台提前下载，刷新后很快就能打开；没有网络时应用外壳也能打开。",
+      },
+      {
+        en: "Nothing from the API is stored on your device: monitor data and sessions always come from the server.",
+        zh: "API 数据不会缓存在设备上：监控数据和登录状态始终来自服务器。",
+      },
+    ],
+  },
+  {
     id: "multi-region-checks",
     date: "2026-10-12",
     edition: "community",

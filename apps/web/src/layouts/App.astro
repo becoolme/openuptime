@@ -79,6 +79,8 @@ const crumb = [...main, ...workspace].find(([k]) => k === active)?.[2] ?? title;
     </nav>
   </div>
   <script>import "../lib/boot";</script>
+  <script>import { registerServiceWorker } from "../lib/pwa";
+    registerServiceWorker();</script>
   <script is:inline>
     // delegated, bound once: the DOM is swapped on soft navigation but `document` survives
     if (!window.__ouApp) {

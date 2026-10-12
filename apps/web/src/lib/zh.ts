@@ -371,6 +371,8 @@ export const zh: Record<string, string> = {
   "Import": "导入",
   "Export": "导出",
   "Dismiss": "关闭",
+  "A new version of OpenUptime is available.": "OpenUptime 有新版本可用。",
+  "Refresh": "刷新",
   "All tags": "全部标签",
   "Slow above (ms)": "超过多少毫秒算「变慢」",
   "Alert when slow": "变慢时告警",

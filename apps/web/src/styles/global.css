@@ -576,6 +576,8 @@ html[lang="zh-CN"] h1{font-weight:700}
 .toasts{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:100;display:flex;flex-direction:column;gap:8px;max-width:min(92vw,460px)}
 .toast{padding:10px 16px;border-radius:10px;font-size:14px;background:var(--surface);color:var(--text,inherit);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .toast.err{border-color:var(--down);color:var(--down)}
+.toast.act{display:flex;align-items:center;gap:12px}.toast.act>span{flex:1}
+.toast-x{border:0;background:none;color:var(--muted);font-size:20px;line-height:1;padding:0 2px;cursor:pointer}
 .verify-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;margin:0 0 16px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));background:color-mix(in srgb,var(--accent) 8%,var(--surface));border-radius:12px;font-size:14px}
 .verify-bar span{flex:1 1 240px}
 .callout.backup{flex-direction:column;gap:10px}
