@@ -56,7 +56,7 @@ if (smtpConfig) {
 }
 configureEmail(env);
 
-const database: Database = openDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX ?? 10) });
+const database: Database = openDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX) || 10 });
 /** The app opens and closes a database per request (Workers); here every request shares the one pool. */
 const shared: OpenDatabase = () => ({ ...database, close: async () => {} });
 /** The edition: self-hosted is the open-source one, unmetered. */
