@@ -11,7 +11,6 @@ const latest = ENTRIES[0]?.date;
   title="Changelog"
   description="What changed in OpenUptime, newest first, for the open-source Community edition and the hosted Cloud edition."
   updated={latest}
-  wide
 >
   <div class="cl">
     <div lang="en">
@@ -104,7 +103,7 @@ const latest = ENTRIES[0]?.date;
 </script>
 
 <style is:global>
-  .doc.wide { max-width: 960px; }
+  main.doc:has(> .cl) { max-width: 960px; }
   .cl-eds { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 8px 0 8px; }
   .cl-ed { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px 18px; }
   .cl-ed p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }

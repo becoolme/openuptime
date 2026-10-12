@@ -25,6 +25,8 @@ TEST_DATABASE_URL=postgres://… pnpm --filter @openuptime/api test         # an
 
 - Keep changes focused; one concern per pull request.
 - Add or update tests next to the code you change.
+- Add a changelog entry for any change a user can notice: a fix or a feature. The format and where it goes are in
+  [AGENTS.md](AGENTS.md).
 - Match the surrounding style. New UI strings go through `t()` with a translation in `apps/web/src/lib/zh.ts`.
 - Schema changes need a migration: edit the schema in `packages/db-pg/src/`, run `pnpm db:generate`, then
   `node scripts/gen-migrations.mjs` so the embedded migrations stay in sync.

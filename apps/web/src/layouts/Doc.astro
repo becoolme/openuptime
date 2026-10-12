@@ -2,7 +2,7 @@
 import Base from "./Base.astro";
 // Long-form static pages (privacy, terms, API reference). Both languages are in the markup;
 // CSS shows the block matching <html lang>, which Base.astro's inline script sets from `ou_lang`.
-const { title, updated, toc, description, wide } = Astro.props as { title: string; updated?: string; toc?: boolean; description?: string; wide?: boolean };
+const { title, updated, toc, description } = Astro.props as { title: string; updated?: string; toc?: boolean; description?: string };
 ---
 <Base title={`${title} · OpenUptime`} description={description} router={false}>
   <header class="doc-top">
@@ -21,7 +21,7 @@ const { title, updated, toc, description, wide } = Astro.props as { title: strin
   </header>
   <div class={toc ? "doc-layout has-toc" : "doc-layout"}>
   {toc && <aside class="doc-toc" id="doc-toc" aria-label="On this page"></aside>}
-  <main class={wide ? "doc wide" : "doc"}>
+  <main class="doc">
     <slot />
     {updated && (
       <p class="doc-updated">
