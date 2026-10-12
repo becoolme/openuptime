@@ -3,9 +3,10 @@ import type { Repo } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireManager, uuidParams } from "../middleware";
+import { isManager, requireManager, uuidParams } from "../middleware";
 import { creditCost } from "../entitlements";
 import { targetProblem } from "../netguard";
+import { MASK, maskHeaders, restoreHeaders } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
 
 const fields = {
@@ -68,6 +69,10 @@ function normaliseImport(raw: unknown): unknown {
   if (r.keyword === null) o.keyword = null;
   // a new monitor never carries over ids, so a bad channel reference cannot slip in
   delete o.channelIds;
+  // an export taken by a non-manager carries placeholders instead of header values: they are not real values
+  if (o.headers && typeof o.headers === "object" && !Array.isArray(o.headers)) {
+    o.headers = Object.fromEntries(Object.entries(o.headers as Record<string, unknown>).filter(([, v]) => v !== MASK));
+  }
   return o;
 }
 
@@ -117,8 +122,12 @@ async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
   return error ? c.json({ error, code: "target_not_allowed" }, 400) : null;
 }
 
+/** Request header values (often tokens) are shown to owners and admins only. */
+const shown = async <T extends { headers?: Record<string, string> | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
+  (await isManager(c)) ? rows : rows.map((m) => (m.headers && Object.keys(m.headers).length ? { ...m, headers: maskHeaders(m.headers) } : m));
+
 export const monitors = new Hono<AppEnv>()
-  .get("/", async (c) => c.json(await c.get("repo").listMonitors(c.get("orgId"), c.get("projectId"))))
+  .get("/", async (c) => c.json(await shown(c, await c.get("repo").listMonitors(c.get("orgId"), c.get("projectId")))))
   .post("/", zValidator("json", body), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
@@ -127,12 +136,12 @@ export const monitors = new Hono<AppEnv>()
     const refused = await overPlan(c, { add: 1, intervalSec: v.type === "heartbeat" ? undefined : v.intervalSec });
     if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
-    return c.json(await repo.createMonitor(c.get("orgId"), c.get("projectId"), newMonitor({ ...v, channelIds })), 201);
+    return c.json((await shown(c, [await repo.createMonitor(c.get("orgId"), c.get("projectId"), newMonitor({ ...v, channelIds }))]))[0], 201);
   })
   // JSON backup of this project's monitors; feed it back to POST /import (here or in another workspace)
   .get("/export", async (c) => {
     const rows = await c.get("repo").exportMonitors(c.get("orgId"), c.get("projectId"));
-    const monitors = rows.map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds").map((k) => [k, (m as unknown as Record<string, unknown>)[k]])));
+    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds").map((k) => [k, (m as unknown as Record<string, unknown>)[k]])));
     c.header("content-disposition", 'attachment; filename="openuptime-monitors.json"');
     return c.json({ version: 1, exportedAt: new Date().toISOString(), monitors });
   })
@@ -168,12 +177,18 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
-    return c.json({ ...m, ...(await repo.monitorDetail(m.id)) });
+    return c.json({ ...(await shown(c, [m]))[0], ...(await repo.monitorDetail(m.id)) });
   })
   .patch("/:id", uuidParams, zValidator("json", patchBody), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    // a placeholder header value (what non-managers are shown) keeps the stored one
+    if (v.headers) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      v.headers = restoreHeaders(v.headers, current.headers);
+    }
     if (v.target !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
@@ -197,9 +212,10 @@ export const monitors = new Hono<AppEnv>()
     if (!row) return c.json({ error: "Not found" }, 404);
     // a heartbeat's deadline depends on interval + grace, so re-derive it when either changes
     if (row.type === "heartbeat" && (v.intervalSec !== undefined || v.graceSec !== undefined) && v.paused === undefined) {
-      return c.json(await repo.updateMonitor(c.get("orgId"), row.id, c.get("projectScope"), { nextCheckAt: nextAfter(row) }));
+      const again = await repo.updateMonitor(c.get("orgId"), row.id, c.get("projectScope"), { nextCheckAt: nextAfter(row) });
+      return c.json(again ? (await shown(c, [again]))[0] : again);
     }
-    return c.json(row);
+    return c.json((await shown(c, [row]))[0]);
   })
   .delete("/:id", uuidParams, requireManager, async (c) => {
     await c.get("repo").deleteMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));

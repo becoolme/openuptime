@@ -460,6 +460,8 @@ export function createRepo(db: Db): Repo {
         where m.id = r.monitor_id
           and r.checked_at < now() - make_interval(days => coalesce((select s.check_retention_days from workspace_setting s where s.organization_id = m.organization_id), ${DEFAULT_CHECK_RETENTION_DAYS}))`);
       await db.delete(schema.checkRollup).where(lte(schema.checkRollup.bucket, new Date(Date.now() - ROLLUP_RETENTION_DAYS * 864e5)));
+      // counters only matter within their window (the longest is an hour)
+      await db.execute(sql`delete from rate_limit where window_start < now() - interval '1 day'`);
       await db.execute(sql`delete from alert_delivery d
         where d.created_at < now() - make_interval(days => coalesce((select s.alert_log_retention_days from workspace_setting s where s.organization_id = d.organization_id), ${DEFAULT_ALERT_LOG_DAYS}))`);
     },

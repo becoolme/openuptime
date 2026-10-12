@@ -40,6 +40,10 @@ channel is saved (HTTP 400, `target_not_allowed`) and again on every check, incl
 `ALLOW_PRIVATE_TARGETS=true` to monitor internal services; do it only when you trust every account on the instance.
 Cloudflare Workers cannot reach private ranges in any case. `CHECK_USER_AGENT` overrides the User-Agent of HTTP checks.
 
+Sign-in, sign-up, two-step and password-reset endpoints are rate limited per client address and per email address. On
+Cloudflare the client address is the edge's; in Docker it is known only with `TRUST_PROXY=true` (exactly one reverse
+proxy in front, appending `X-Forwarded-For`); without it only the per-email limits apply.
+
 ## Accounts & teams
 
 - Workspaces with projects, members and roles; invitations expire after `INVITE_TTL_DAYS` (default 7). Set `DISABLE_SIGNUP=true` to close registration (invited people can still join).

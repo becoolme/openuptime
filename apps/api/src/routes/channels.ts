@@ -5,6 +5,7 @@ import { deliver } from "../alerts";
 import type { AppEnv } from "../env";
 import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
+import { maskConfig, restoreConfig, sameJson } from "../secrets";
 
 const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark"] as const;
 type ChannelType = (typeof TYPES)[number];
@@ -38,8 +39,12 @@ const body = z.object({
   scope: z.enum(["workspace", "project"]).default("workspace"),
 });
 
+/** Credentials in the settings are shown to owners and admins only. */
+const shown = async <T extends { config: unknown }>(c: Parameters<typeof isManager>[0], rows: T[]) =>
+  (await isManager(c)) ? rows : rows.map((r) => ({ ...r, config: maskConfig(r.config as Record<string, unknown>) }));
+
 export const channels = new Hono<AppEnv>()
-  .get("/", async (c) => c.json(await c.get("repo").listChannels(c.get("orgId"), c.get("projectId"))))
+  .get("/", async (c) => c.json(await shown(c, await c.get("repo").listChannels(c.get("orgId"), c.get("projectId")))))
   .post("/", zValidator("json", body), async (c) => {
     const v = c.req.valid("json");
     const cfg = parseConfig(v.type, v.config);
@@ -49,29 +54,36 @@ export const channels = new Hono<AppEnv>()
     // a key limited to some projects cannot create what other projects would share
     const projectId = v.scope === "project" || c.get("projectScope") ? c.get("projectId") : null;
     const { scope: _scope, ...channel } = v;
-    return c.json(await c.get("repo").createChannel(c.get("orgId"), projectId, { ...channel, config: cfg.data }), 201);
+    return c.json((await shown(c, [await c.get("repo").createChannel(c.get("orgId"), projectId, { ...channel, config: cfg.data })]))[0], 201);
   })
   .patch("/:id", uuidParams, zValidator("json", z.object({ name: z.string().min(1).max(80).optional(), enabled: z.boolean().optional(), autoEnable: z.boolean().optional(), config: z.record(z.string(), z.unknown()).optional() })), async (c) => {
     const repo = c.get("repo");
     const patch = c.req.valid("json");
-    // where alerts go (and the credentials used) is a manager's call; a member may still rename or toggle
-    if (patch.config && !(await isManager(c))) return c.json({ error: "Only workspace owners and admins can change a channel's destination" }, 403);
     if (patch.config) {
       // the settings are checked against the channel's own type
       const current = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
-      const cfg = parseConfig(current.type as ChannelType, patch.config);
-      if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
-      const refused = await configProblem(cfg.data);
-      if (refused) return c.json({ error: refused, code: "target_not_allowed" }, 400);
-      patch.config = cfg.data;
+      // placeholders stand for the stored credential; settings that end up identical are not a change
+      const next = restoreConfig(patch.config, current.config as Record<string, unknown>);
+      if (sameJson(next, current.config)) delete patch.config;
+      else {
+        // where alerts go (and the credentials used) is a manager's call; a member may still rename or toggle
+        if (!(await isManager(c))) return c.json({ error: "Only workspace owners and admins can change a channel's destination" }, 403);
+        const cfg = parseConfig(current.type as ChannelType, next);
+        if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
+        const refused = await configProblem(cfg.data);
+        if (refused) return c.json({ error: refused, code: "target_not_allowed" }, 400);
+        patch.config = cfg.data;
+      }
     }
     const row = await repo.updateChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"), patch);
-    return row ? c.json(row) : c.json({ error: "Not found" }, 404);
+    return row ? c.json((await shown(c, [row]))[0]) : c.json({ error: "Not found" }, 404);
   })
   // sends a harmless test message so people can verify the destination before an outage
   .post("/:id/test", uuidParams, async (c) => {
     const repo = c.get("repo");
+    // each call makes an outbound request to a destination of the caller's choosing
+    if (!(await repo.withinLimit(`chtest:${c.get("userId")}`, 20, 600))) return c.json({ error: "Too many test messages, try again in a few minutes" }, 429);
     const ch = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!ch) return c.json({ error: "Not found" }, 404);
     const log = (error: string | null) =>

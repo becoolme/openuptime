@@ -16,6 +16,7 @@ import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail } from "./email";
 import { configureNetGuard } from "./netguard";
+import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
 
@@ -60,6 +61,33 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env), turnstileSiteKey: turnstile(c.env)?.siteKey ?? null }));
+  // password guessing, sign-up floods and mail bombing: the library's own limiter is per isolate on Workers, so the
+  // endpoints that matter are counted in the database. A client address is used when it can be told; the email address
+  // in the body always counts, so one account cannot be hammered from many addresses either.
+  const AUTH_LIMITS: Record<string, { limit: number; windowSec: number; perEmail?: number }> = {
+    "/api/auth/sign-in/email": { limit: 30, windowSec: 600, perEmail: 15 },
+    "/api/auth/sign-up/email": { limit: 10, windowSec: 3600 },
+    "/api/auth/two-factor/verify-totp": { limit: 30, windowSec: 600 },
+    "/api/auth/two-factor/verify-backup-code": { limit: 30, windowSec: 600 },
+    "/api/auth/request-password-reset": { limit: 5, windowSec: 3600, perEmail: 3 },
+    "/api/auth/forget-password": { limit: 5, windowSec: 3600, perEmail: 3 },
+    "/api/auth/reset-password": { limit: 20, windowSec: 3600 },
+    "/api/auth/send-verification-email": { limit: 5, windowSec: 3600, perEmail: 3 },
+  };
+  app.post("/api/auth/*", async (c, next) => {
+    const rule = AUTH_LIMITS[c.req.path.replace(/\/+$/, "")];
+    if (rule) {
+      const repo = c.get("repo");
+      const ip = clientIp(c);
+      let ok = !ip || (await allow(repo, `auth:ip:${ip}:${c.req.path}`, rule.limit, rule.windowSec));
+      if (ok && rule.perEmail) {
+        const email = ((await c.req.raw.clone().json().catch(() => null)) as { email?: unknown } | null)?.email;
+        if (typeof email === "string" && email) ok = await allow(repo, `auth:mail:${email.trim().toLowerCase()}:${c.req.path}`, rule.perEmail, rule.windowSec);
+      }
+      if (!ok) return c.json({ error: "Too many attempts, try again later" }, 429);
+    }
+    await next();
+  });
   app.on(["GET", "POST"], "/api/auth/*", (c) => c.get("auth").handler(c.req.raw));
 
   // public
@@ -83,13 +111,13 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   // trigger checks from an external scheduler when Workers Cron is not available
   app.post("/internal/run-checks", async (c) => {
-    if (!c.env.CRON_SECRET || c.req.header("x-cron-secret") !== c.env.CRON_SECRET) return c.json({ error: "Forbidden" }, 403);
+    if (!c.env.CRON_SECRET || !safeEqual(c.req.header("x-cron-secret"), c.env.CRON_SECRET)) return c.json({ error: "Forbidden" }, 403);
     return c.json({ checked: await runDueChecks(c.get("repo"), c.env.CHECK_QUEUE, c.get("entitlements")) });
   });
 
   // applies pending migrations over HTTP, for deployments that cannot run `pnpm db:migrate` from a shell
   app.post("/internal/migrate", async (c) => {
-    if (!c.env.CRON_SECRET || c.req.header("x-cron-secret") !== c.env.CRON_SECRET) return c.json({ error: "Forbidden" }, 403);
+    if (!c.env.CRON_SECRET || !safeEqual(c.req.header("x-cron-secret"), c.env.CRON_SECRET)) return c.json({ error: "Forbidden" }, 403);
     const database = c.get("database");
     return c.json({ applied: [...(await database.migrate()), ...((await edition.migrate?.(database)) ?? [])] });
   });

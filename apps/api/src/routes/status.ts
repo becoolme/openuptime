@@ -180,8 +180,9 @@ ${items
     if (!page) return c.json({ error: "Not found" }, 404);
     const { email } = c.req.valid("json");
     // Each request can trigger an outbound email, so cap per client, per address and per page.
+    const ip = clientIp(c);
     const ok =
-      (await repo.withinLimit(`sub:ip:${clientIp(c)}`, 10, 3600)) &&
+      (!ip || (await repo.withinLimit(`sub:ip:${ip}`, 10, 3600))) &&
       (await repo.withinLimit(`sub:mail:${page.id}:${email}`, 3, 3600)) &&
       (await repo.withinLimit(`sub:page:${page.id}`, 200, 3600));
     if (!ok) return c.json({ error: "Too many requests, try again later" }, 429);

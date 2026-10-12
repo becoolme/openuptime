@@ -35,6 +35,8 @@ export type Bindings = {
   /** Cloudflare Turnstile: with both keys set, email sign-up shows the widget and the API verifies the token. */
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;
+  /** "true" when exactly one reverse proxy sits in front (Docker/Node): its x-forwarded-for is then trusted for rate limits. */
+  TRUST_PROXY?: string;
   /** Days a team invitation stays valid. Default 7. */
   INVITE_TTL_DAYS?: string;
   /** "true" lets monitors and alert webhooks target private, loopback and link-local addresses (default: refused). */

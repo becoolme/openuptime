@@ -24,6 +24,11 @@ const need = (k: string) => {
 };
 const port = Number(env.PORT ?? 8080);
 const databaseUrl = need("DATABASE_URL");
+// the placeholder from .env.docker.example must never reach production: it would let anyone forge sessions
+for (const k of ["BETTER_AUTH_SECRET", "CRON_SECRET"] as const) {
+  const v = env[k];
+  if (v && (/^change-me/i.test(v) || v.length < 16)) throw new Error(`${k} is a placeholder or too short: generate one with \`openssl rand -hex 32\``);
+}
 need("BETTER_AUTH_SECRET");
 env.BETTER_AUTH_URL ||= env.WEB_ORIGIN || `http://localhost:${port}`;
 env.WEB_ORIGIN ||= env.BETTER_AUTH_URL;
