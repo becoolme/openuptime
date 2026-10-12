@@ -215,13 +215,18 @@ export async function deliver(c: { type: string; name?: string; config: unknown 
   }
 }
 
+/** A page that hides the OpenUptime brand also sends its mail under its own name, when the plan allows it. */
+const mayHideBranding = async (entitlements: Entitlements, orgId: string) => (await entitlements.plan(orgId))?.hideBranding !== false;
+
 async function mailSubscribers(
   subs: SubscriberTarget[],
+  allowHide: boolean,
   o: { subject: (pageTitle: string, lang: Lang) => string; title: (lang: Lang) => string; body: (lang: Lang) => string; badge: (lang: Lang) => { label: string; tone: "down" | "up" | "warn" | "neutral" } },
 ) {
   const results = await Promise.allSettled(
     subs.map((s) => {
       const lang: Lang = isLang(s.locale) ? s.locale : "en";
+      const white = allowHide && s.hideBranding;
       const mail = actionEmail({
         title: o.title(lang),
         body: `${s.title}\n\n${o.body(lang)}`,
@@ -231,8 +236,9 @@ async function mailSubscribers(
         footer: tr(lang, "You receive this because you subscribed to updates from {title}.", { title: s.title }),
         footerUrl: { text: tr(lang, "Unsubscribe"), url: `${appUrl()}/api/public/status/_/unsubscribe?token=${s.token}` },
         lang,
+        brand: white ? s.title : undefined,
       });
-      return sendEmail({ to: s.email, subject: o.subject(s.title, lang), fromName: `${s.title} via OpenUptime`, ...mail });
+      return sendEmail({ to: s.email, subject: o.subject(s.title, lang), fromName: white ? s.title : `${s.title} via OpenUptime`, ...mail });
     }),
   );
   results.forEach((r, i) => r.status === "rejected" && console.error(`subscriber email to ${subs[i].email} failed`, r.reason));
@@ -246,7 +252,7 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
   const { send: subs, skipped } = await withinEmails(entitlements, orgId, all);
   const opened = ev.kind === "incident.opened";
   const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
-  const sent = await mailSubscribers(subs, {
+  const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, orgId), {
     subject: (p, lang) => `[${p}] ${head(lang)}`,
     title: head,
     body: () => ev.monitor.name,
@@ -264,7 +270,7 @@ export async function notifyIncidentUpdate(
 ) {
   const { send: subs } = await withinEmails(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId));
   const label = (lang: Lang) => tr(lang, update.status === "resolved" ? "Resolved" : update.status[0].toUpperCase() + update.status.slice(1));
-  await mailSubscribers(subs, {
+  await mailSubscribers(subs, await mayHideBranding(entitlements, inc.organizationId), {
     subject: (p, lang) => `[${p}] ${label(lang)}: ${inc.title}`,
     title: (lang) => `${label(lang)}: ${inc.title}`,
     body: () => update.body,

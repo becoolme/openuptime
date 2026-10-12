@@ -409,6 +409,7 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .pub-brand{display:flex;gap:10px;align-items:center;font-weight:600;font-size:17px;min-width:0}
 .pub-ext{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--muted,#6b7280);flex:none}
 .pub-ext:hover{background:rgba(127,127,127,.15);color:inherit}
+.pub-logo{width:26px;height:26px;border-radius:6px;object-fit:contain;flex:none}
 .pub-brand .mk{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#0f9d58,#0a5c34);display:grid;place-items:center;flex:none}
 .pub-hd{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:48px 0 28px}
 .pub-hd h1{font-size:56px;line-height:1.02;margin-top:16px}

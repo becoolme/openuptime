@@ -27,6 +27,39 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "hide-status-page-branding",
+    date: "2026-10-12",
+    edition: "community",
+    title: { en: "Hide OpenUptime branding", zh: "隐藏 OpenUptime 品牌标识" },
+    summary: {
+      en: "A status page can now drop the OpenUptime mark and “Powered by” line and show your own logo instead.",
+      zh: "状态页现在可以去掉 OpenUptime 标志和“技术支持”字样，改为显示你自己的 Logo。",
+    },
+    points: [
+      {
+        en: "Turn on “Hide OpenUptime branding” in the Branding card of a status page.",
+        zh: "在状态页的“品牌”卡片里打开“隐藏 OpenUptime 品牌标识”。",
+      },
+      {
+        en: "If the page has a website link, its header shows that website’s logo, fetched from favicon.im; without a link it shows the title only.",
+        zh: "页面设置了网站链接时，页眉显示该网站的 Logo（取自 favicon.im）；没有链接则只显示标题。",
+      },
+      {
+        en: "Confirmation and incident emails to subscribers then go out under the page title instead of OpenUptime.",
+        zh: "订阅者收到的确认邮件和事件通知邮件，也会以状态页标题而不是 OpenUptime 的名义发出。",
+      },
+      {
+        en: "The option is also available through the API and MCP as hideBranding.",
+        zh: "该选项也可通过 API 和 MCP 的 hideBranding 字段设置。",
+      },
+    ],
+    cloud: {
+      en: "On the hosted service this is included in the Team plan only. If a workspace moves to another plan, its pages show OpenUptime branding again and your setting is kept.",
+      zh: "托管服务中仅 Team 套餐包含此功能。工作区降级后，页面会重新显示 OpenUptime 品牌标识，你的设置会保留。",
+    },
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "install-as-app",
     date: "2026-10-12",
     edition: "community",

@@ -3,9 +3,10 @@ export const prerender = false;
 import Base from "../../layouts/Base.astro";
 import { apiFetch, PRODUCT_URL } from "../../lib/server";
 import { translate } from "../../lib/i18n";
+import { siteLogo } from "../../lib/brand";
 
 type Status = {
-  page: { title: string; slug: string; externalUrl?: string | null };
+  page: { title: string; slug: string; externalUrl?: string | null; hideBranding?: boolean };
   bucket?: "hour" | "day";
   overall: "operational" | "degraded" | "outage";
   components: { id: string; name: string; group?: string | null; status: string; uptime90d: number | null; days: { day: string; uptime: number }[] }[];
@@ -47,6 +48,9 @@ const opCount = data.components.filter((c) => c.status === "up" || c.status === 
 const fmtDay = (d: string) => new Date(d).toLocaleDateString((Astro.locals.lang ?? "en") === "zh-CN" ? "zh-CN" : "en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const stageCls = (st: string) => (st === "resolved" ? "ok" : st === "monitoring" ? "mon" : "");
 const dayClass = (u: number) => (u >= 0.999 ? "" : u >= 0.98 ? "w" : "d");
+const hideBrand = !!data.page.hideBranding;
+// without OpenUptime's mark the header shows the website's own logo, or just the title when there is no link
+const logo = hideBrand ? siteLogo(data.page.externalUrl) : null;
 Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
 ---
 <Base title={`${data.page.title} · Status`}>
@@ -58,7 +62,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
   </Fragment>
   <div class="pub">
     <header class="pub-top"><div class="pub-wrap pub-top-in">
-      <span class="pub-brand"><span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>{data.page.title}{data.page.externalUrl && (
+      <span class="pub-brand">{!hideBrand && <span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>}{logo && <img class="pub-logo" src={logo} width="26" height="26" alt="" referrerpolicy="no-referrer" loading="eager" decoding="async" />}{data.page.title}{data.page.externalUrl && (
         <a class="pub-ext" href={data.page.externalUrl} target="_blank" rel="nofollow noopener noreferrer" aria-label={t("Visit website")} title={t("Visit website")}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a>
       )}</span>
       <a class="btn sm primary" href="#subscribe">{t("Subscribe")}</a>
@@ -157,7 +161,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
     </main>
 
     <footer class="pub-wrap pub-foot">
-      <span>{t("Powered by")} <a href={PRODUCT_URL}>OpenUptime</a></span>
+      {!hideBrand && <span>{t("Powered by")} <a href={PRODUCT_URL}>OpenUptime</a></span>}
     </footer>
     <script is:inline data-astro-rerun define:vars={{ slug, sending: t("Subscribing…"), ok: t("Check your inbox to confirm your subscription."), bad: t("Could not subscribe. Try again."), slow: t("Too many attempts. Please try again later.") }}>
       document.getElementById("sub").addEventListener("submit", async (e) => {

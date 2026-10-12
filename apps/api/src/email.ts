@@ -66,6 +66,8 @@ export type MailOpts = {
   footerUrl?: { text: string; url: string };
   /** Only used for the default footer; the caller translates everything else. */
   lang?: Lang;
+  /** A white-labelled sender: this name replaces OpenUptime's mark and name in the header. */
+  brand?: string;
 };
 
 /** Branded transactional layout: header, optional status pill and detail table, one button. */
@@ -91,7 +93,7 @@ export function actionEmail(o: MailOpts) {
   const foot = [o.footer && escape(o.footer), o.footerUrl && `<a href="${escape(o.footerUrl.url)}" style="color:${MUTED}">${escape(o.footerUrl.text)}</a>`].filter(Boolean).join(" ");
   const html = `<!doctype html><html lang="${o.lang ?? "en"}"><body style="margin:0;padding:24px 12px;background:#f4f4ee;font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;color:${INK}">
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid ${LINE};border-radius:14px;overflow:hidden">
-<div style="padding:20px 32px;border-bottom:1px solid ${LINE};font-size:16px;font-weight:600"><img src="${escape(appUrl())}/logo-mark.png" width="26" height="26" alt="" style="display:inline-block;border-radius:8px;margin-right:8px;vertical-align:middle"><span style="vertical-align:middle">OpenUptime</span></div>
+<div style="padding:20px 32px;border-bottom:1px solid ${LINE};font-size:16px;font-weight:600">${o.brand ? `<span>${escape(o.brand)}</span>` : `<img src="${escape(appUrl())}/logo-mark.png" width="26" height="26" alt="" style="display:inline-block;border-radius:8px;margin-right:8px;vertical-align:middle"><span style="vertical-align:middle">OpenUptime</span>`}</div>
 <div style="padding:30px 32px 32px">${pill}<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;font-weight:600;color:${INK}">${escape(o.title)}</h1>${paras}${rows}${timeline}
 <p style="margin:${rows || timeline ? "0" : "8px"} 0 0"><a href="${escape(o.url)}" style="display:inline-block;background:${INK};color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:600">${escape(o.cta)}</a></p>
 <p style="margin:20px 0 0;color:${FAINT};font-size:12px;line-height:1.5;word-break:break-all">${escape(o.url)}</p></div>

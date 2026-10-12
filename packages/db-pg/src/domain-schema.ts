@@ -218,6 +218,7 @@ export const statusPage = pgTable(
     theme: text("theme").notNull().default("light"),
     showLatency: boolean("show_latency").notNull().default(true),
     externalUrl: text("external_url"),
+    hideBranding: boolean("hide_branding").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("status_page_slug_idx").on(t.slug)],

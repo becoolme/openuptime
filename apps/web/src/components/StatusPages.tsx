@@ -81,6 +81,7 @@ export function StatusPageEditor({ id }: { id: string }) {
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState("");
   const [err, setErr] = useState("");
+  const [upgrade, setUpgrade] = useState<string | undefined>();
   useEffect(() => {
     api.statusPage(id).then((p) => {
       setPage(p);
@@ -105,10 +106,14 @@ export function StatusPageEditor({ id }: { id: string }) {
     setPending("save");
     setErr("");
     try {
-      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), components: comps } as Partial<StatusPage>);
+      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), hideBranding: !!page!.hideBranding, components: comps } as Partial<StatusPage>);
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
-    } catch (e) { setErr((e as Error).message); }
+    } catch (e) {
+      const x = e as Error & { code?: string; upgradeUrl?: string };
+      setErr(x.code === "branding_not_allowed" ? t("Your plan cannot hide the OpenUptime branding.") : x.message);
+      setUpgrade(x.code ? x.upgradeUrl : undefined);
+    }
     setPending("");
   }
   return (
@@ -128,7 +133,7 @@ export function StatusPageEditor({ id }: { id: string }) {
           <button className="btn primary" disabled={!!pending} onClick={save}>{pending === "save" ? t("Saving…") : saved ? t("Saved ✓") : t("Save")}</button>
         </div>
       </div>
-      {err && <p className="err">{err}</p>}
+      {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
       <div className="cols">
         <div className="col">
           <div className="card cc">
@@ -147,6 +152,17 @@ export function StatusPageEditor({ id }: { id: string }) {
               <div><b style={{ fontWeight: 500 }}>{t("Show response times")}</b><small>{t("Display latency next to each component")}</small></div>
               <span className={`tg ${page.showLatency ? "on" : ""}`} />
             </button>
+            {/* a page that already hides the brand keeps the flag after a downgrade; the toggle stays usable to turn it off */}
+            <button type="button" className="route tog" disabled={page.branding?.allowed === false && !page.hideBranding} onClick={() => setPage({ ...page, hideBranding: !page.hideBranding })}>
+              <div><b style={{ fontWeight: 500 }}>{t("Hide OpenUptime branding")}</b><small>{t("Remove the OpenUptime mark and “Powered by” line. The header shows the logo of your website link instead.")}</small></div>
+              <span className={`tg ${page.hideBranding ? "on" : ""}`} />
+            </button>
+            {page.branding?.allowed === false && (
+              <p className="faint" style={{ fontSize: 13, margin: 0 }}>
+                {page.hideBranding ? t("Your plan no longer includes this, so OpenUptime branding is shown again.") : t("Not included in your plan.")}
+                {page.branding.upgradeUrl && <> <a href={page.branding.upgradeUrl}>{t("Upgrade")}</a></>}
+              </p>
+            )}
           </div>
 
           <div className="card cc">

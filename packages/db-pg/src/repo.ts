@@ -746,7 +746,7 @@ export function createRepo(db: Db): Repo {
         .limit(o.limit),
     async subscribersFor(orgId, monitorId) {
       const base = db
-        .select({ email: schema.statusSubscriber.email, locale: schema.statusSubscriber.locale, token: schema.statusSubscriber.token, slug: schema.statusPage.slug, title: schema.statusPage.title })
+        .select({ email: schema.statusSubscriber.email, locale: schema.statusSubscriber.locale, token: schema.statusSubscriber.token, slug: schema.statusPage.slug, title: schema.statusPage.title, hideBranding: schema.statusPage.hideBranding })
         .from(schema.statusSubscriber)
         .innerJoin(schema.statusPage, eq(schema.statusPage.id, schema.statusSubscriber.statusPageId));
       if (!monitorId) return base.where(and(eq(schema.statusPage.organizationId, orgId), isNotNull(schema.statusSubscriber.confirmedAt)));

@@ -120,6 +120,13 @@
       "when": 1791766905104,
       "tag": "0016_incident_open_auto_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791849304528,
+      "tag": "0017_status_page_hide_branding",
+      "breakpoints": true
     }
   ]
 }

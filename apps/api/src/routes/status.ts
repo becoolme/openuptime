@@ -1,10 +1,11 @@
 import { zValidator } from "@hono/zod-validator";
 import type { IncidentUpdate, IncidentWithUpdates } from "@openuptime/repo";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { actionEmail, appUrl, sendEmail } from "../email";
 import { langFromHeader, tr } from "../mail-i18n";
 import type { AppEnv } from "../env";
+import type { Plan } from "../entitlements";
 import { requireManager, uuidParams } from "../middleware";
 import { clientIp } from "../ratelimit";
 
@@ -17,17 +18,34 @@ const externalUrl = z
   .transform((v) => v || null)
   .nullable()
   .optional();
+/** Whether the plan lets a status page hide OpenUptime's branding. Editions without plans (null) allow it. */
+const brandingAllowed = (plan: Plan | null) => plan?.hideBranding !== false;
 const pageBody = z.object({
   title: z.string().min(1).max(120),
   theme: z.enum(["light", "dark", "auto"]).optional(),
   showLatency: z.boolean().optional(),
   externalUrl,
+  hideBranding: z.boolean().optional(),
   monitorIds: z.array(z.string().uuid()).optional(),
   // ordered, optionally grouped; takes precedence over monitorIds
   components: z.array(z.object({ monitorId: z.string().uuid(), groupName: z.string().trim().min(1).max(60).optional() })).max(200).optional(),
 });
 const toComponents = (v: { monitorIds?: string[]; components?: { monitorId: string; groupName?: string }[] }) =>
   v.components ?? (v.monitorIds ?? []).map((monitorId) => ({ monitorId }));
+
+/** The stored flag counts only while the plan allows it: after a downgrade the page shows OpenUptime again, and the flag is kept. */
+async function brandingHidden(c: Context<AppEnv>, page: { hideBranding: boolean; organizationId: string }) {
+  if (!page.hideBranding) return false;
+  return brandingAllowed(await c.get("entitlements").plan(page.organizationId));
+}
+
+/** 402 when the request turns branding off on a plan that does not include that; null otherwise (turning it back on is always fine). */
+async function brandingProblem(c: Context<AppEnv>, hide: boolean | undefined) {
+  if (!hide) return null;
+  const plan = await c.get("entitlements").plan(c.get("orgId"));
+  if (brandingAllowed(plan)) return null;
+  return c.json({ error: `The ${plan!.name} plan cannot hide the OpenUptime branding`, code: "branding_not_allowed", plan: plan!.id, upgradeUrl: plan!.upgradeUrl }, 402);
+}
 
 /** Management API for status pages (authenticated). */
 export const statusPages = new Hono<AppEnv>()
@@ -38,6 +56,8 @@ export const statusPages = new Hono<AppEnv>()
     async (c) => {
       const repo = c.get("repo");
       const { monitorIds, components, ...v } = c.req.valid("json");
+      const denied = await brandingProblem(c, v.hideBranding);
+      if (denied) return denied;
       if (await repo.slugTaken(v.slug)) return c.json({ error: "That slug is already taken" }, 409);
       const page = await repo.createStatusPage(c.get("orgId"), c.get("projectId"), v);
       await repo.setPageComponents(page.id, c.get("orgId"), toComponents({ monitorIds, components }), c.get("projectScope"));
@@ -49,13 +69,19 @@ export const statusPages = new Hono<AppEnv>()
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
     const comps = await repo.pageComponents(page.id);
-    return c.json({ ...page, monitorIds: comps.map((x) => x.monitorId), components: comps });
+    const plan = await c.get("entitlements").plan(c.get("orgId"));
+    // what the editor needs to know about the plan: may this page hide the brand, and where to upgrade if not
+    const branding = { allowed: brandingAllowed(plan), upgradeUrl: brandingAllowed(plan) ? undefined : plan?.upgradeUrl };
+    return c.json({ ...page, monitorIds: comps.map((x) => x.monitorId), components: comps, branding });
   })
   .patch("/:id", uuidParams, requireManager, zValidator("json", pageBody.partial()), async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
     const { monitorIds, components, ...v } = c.req.valid("json");
+    // a page that already hides the brand can still be edited after a downgrade; only turning it on is refused
+    const denied = await brandingProblem(c, v.hideBranding && !page.hideBranding ? true : undefined);
+    if (denied) return denied;
     await repo.updateStatusPage(page.id, v);
     if (monitorIds || components) await repo.setPageComponents(page.id, c.get("orgId"), toComponents({ monitorIds, components }), c.get("projectScope"));
     return c.json({ ok: true });
@@ -192,15 +218,17 @@ ${items
     // already subscribed (or pending): answer the same way so the endpoint does not reveal who is subscribed
     if (row) {
       const lang = row.locale === "zh-CN" ? "zh-CN" : "en";
+      const white = await brandingHidden(c, page);
       const mail = actionEmail({
         title: tr(lang, "Confirm your subscription to {title}", { title: page.title }),
         body: tr(lang, "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed."),
-        footer: tr(lang, "Status updates from {title}. Powered by OpenUptime.", { title: page.title }),
+        footer: tr(lang, white ? "Status updates from {title}." : "Status updates from {title}. Powered by OpenUptime.", { title: page.title }),
         cta: tr(lang, "Confirm subscription"),
         url: `${appUrl()}/api/public/status/_/confirm?token=${token}`,
         lang,
+        brand: white ? page.title : undefined,
       });
-      await sendEmail({ to: email, subject: tr(lang, "Confirm your subscription to {title}", { title: page.title }), fromName: "OpenUptime", ...mail }).catch((e) => console.error("confirm email failed", e));
+      await sendEmail({ to: email, subject: tr(lang, "Confirm your subscription to {title}", { title: page.title }), fromName: white ? page.title : "OpenUptime", ...mail }).catch((e) => console.error("confirm email failed", e));
     }
     return c.json({ ok: true });
   })
@@ -219,7 +247,7 @@ ${items
     const board = await repo.statusBoard(page);
     const overall = overallOf(board.components.map((x) => x.status));
     return c.json({
-      page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl },
+      page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page) },
       overall,
       bucket: board.bucket,
       components: board.components,

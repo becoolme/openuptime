@@ -220,10 +220,12 @@ export interface StatusPage {
   showLatency: boolean;
   /** optional website the page header links to (http/https) */
   externalUrl: string | null;
+  /** the owner asked to leave OpenUptime's name and mark off the page and its mails (only honoured where the plan allows it) */
+  hideBranding: boolean;
   createdAt: Date;
 }
-export type NewStatusPage = { slug: string; title: string; theme?: string; showLatency?: boolean; externalUrl?: string | null };
-export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl">>;
+export type NewStatusPage = { slug: string; title: string; theme?: string; showLatency?: boolean; externalUrl?: string | null; hideBranding?: boolean };
+export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding">>;
 export type PageComponentInput = { monitorId: string; groupName?: string };
 export interface Subscriber {
   id: string;
@@ -237,6 +239,8 @@ export interface SubscriberTarget {
   token: string;
   slug: string;
   title: string;
+  /** the page asks to hide OpenUptime's branding; the plan decides whether that is honoured */
+  hideBranding: boolean;
 }
 export interface StatusBoard {
   /** granularity of each component's `days` */

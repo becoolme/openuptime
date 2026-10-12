@@ -49,6 +49,7 @@ const zh: Record<string, string> = {
   "Confirm your subscription to {title}": "确认订阅 {title}",
   "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed.": "当出现事件、事件更新或恢复时，你会收到邮件。如果不是你本人操作，忽略此邮件即可，不会产生订阅。",
   "Status updates from {title}. Powered by OpenUptime.": "来自 {title} 的状态更新，由 OpenUptime 提供。",
+  "Status updates from {title}.": "来自 {title} 的状态更新。",
   "Confirm subscription": "确认订阅",
   // account
   "Reset your password": "重置你的密码",
