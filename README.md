@@ -138,13 +138,40 @@ deploy again to close registration (invited people can still join).
 
 ## Self-host with Docker
 
-One container runs the API, the web app and the check scheduler; Postgres comes with the compose file.
+One container runs the API, the web app and the check scheduler; Postgres comes with the compose file. Either run the
+published image or build it from source; the settings are the same.
+
+### Option A: run the published image
+
+Tagged releases are published to `ghcr.io/becoolme/openuptime` for `linux/amd64` and `linux/arm64`. You need no clone and
+no build:
+
+```bash
+mkdir openuptime && cd openuptime
+curl -fsSLO https://raw.githubusercontent.com/becoolme/openuptime/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/becoolme/openuptime/main/.env.docker.example -o .env
+```
+
+Edit `.env`: set `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), and uncomment `OPENUPTIME_IMAGE`.
+Pin a version (`ghcr.io/becoolme/openuptime:0.1.0`) or follow the newest release (`:latest`). Then:
+
+```bash
+docker compose pull && docker compose up -d     # http://localhost:8080
+```
+
+Upgrade: change the tag if you pinned one, then run the same two commands again. Migrations run on start.
+
+### Option B: build from source
 
 ```bash
 git clone https://github.com/becoolme/openuptime.git && cd openuptime
 cp .env.docker.example .env      # set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
 docker compose up -d --build     # http://localhost:8080
 ```
+
+Upgrade: `git pull`, then `docker compose up -d --build`.
+
+### Either way
 
 The schema is migrated on start and the data lives in the `pgdata` volume. Set `PUBLIC_URL` when the app is not served
 from `http://localhost:8080`. Email is optional; see [Reference](docs/reference.md#email).

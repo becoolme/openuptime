@@ -15,7 +15,8 @@ in `apps/api/wrangler.jsonc`.
 
 - **Scaling**: checks are leased with `FOR UPDATE SKIP LOCKED`, so several containers can run against one database.
 - **Prebuilt image**: tagged releases are published to `ghcr.io/becoolme/openuptime` by `.github/workflows/docker.yml`.
-  To use one, set `OPENUPTIME_IMAGE` in `.env` and run `docker compose pull`.
+  To use one, set `OPENUPTIME_IMAGE` in `.env` (for example `ghcr.io/becoolme/openuptime:0.1.0`, or `:latest`), then
+  run `docker compose pull && docker compose up -d`. Without it the compose file builds from source.
 
 ## Cloudflare Free plan
 

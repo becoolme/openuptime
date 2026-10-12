@@ -16,6 +16,14 @@ import Doc from "../../layouts/Doc.astro";
     <h3>Requirements</h3>
     <ul><li>Docker with Compose v2</li><li>A machine that can reach the services you want to monitor</li></ul>
     <h3>Start it</h3>
+    <p><strong>Option A: published image.</strong> Tagged releases are published to <code>ghcr.io/becoolme/openuptime</code> (<code>linux/amd64</code> and <code>linux/arm64</code>); nothing to clone or build.</p>
+    <pre><code is:raw>mkdir openuptime && cd openuptime
+curl -fsSLO https://raw.githubusercontent.com/becoolme/openuptime/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/becoolme/openuptime/main/.env.docker.example -o .env
+# edit .env: set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32),
+# and uncomment OPENUPTIME_IMAGE (pin ghcr.io/becoolme/openuptime:0.1.0 or follow :latest)
+docker compose pull && docker compose up -d</code></pre>
+    <p><strong>Option B: build from source.</strong></p>
     <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 cp .env.docker.example .env
@@ -46,8 +54,7 @@ docker compose up -d --build</code></pre>
     </table>
     <h3>Operate</h3>
     <ul>
-      <li><strong>Upgrade</strong>: pull the new code, then <code>docker compose up -d --build</code>. Migrations run on start.</li>
-      <li><strong>Prebuilt image</strong>: tagged releases are published to <code>ghcr.io/becoolme/openuptime</code>. Set <code>OPENUPTIME_IMAGE</code> in <code>.env</code>, then <code>docker compose pull</code>.</li>
+      <li><strong>Upgrade</strong>: with the published image, change the tag in <code>OPENUPTIME_IMAGE</code> if you pinned one, then <code>docker compose pull &amp;&amp; docker compose up -d</code>. Built from source: pull the new code, then <code>docker compose up -d --build</code>. Migrations run on start.</li>
       <li><strong>Backup</strong>: <code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>.</li>
       <li><strong>Several containers</strong>: checks are leased with <code>FOR UPDATE SKIP LOCKED</code>, so more containers can share one database without duplicating checks.</li>
       <li><strong>Logs</strong>: <code>docker compose logs -f openuptime</code>. A health endpoint is at <code>/health</code>.</li>
@@ -142,6 +149,14 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
     <h3>环境要求</h3>
     <ul><li>Docker 和 Compose v2</li><li>能访问被监控服务的机器</li></ul>
     <h3>启动</h3>
+    <p><strong>方式 A：直接使用发布的镜像。</strong>发布版本会推送到 <code>ghcr.io/becoolme/openuptime</code>（支持 <code>linux/amd64</code> 和 <code>linux/arm64</code>），无需克隆代码，也无需构建。</p>
+    <pre><code is:raw>mkdir openuptime && cd openuptime
+curl -fsSLO https://raw.githubusercontent.com/becoolme/openuptime/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/becoolme/openuptime/main/.env.docker.example -o .env
+# 编辑 .env：设置 POSTGRES_PASSWORD 和 BETTER_AUTH_SECRET（openssl rand -hex 32），
+# 并取消 OPENUPTIME_IMAGE 的注释（固定版本 ghcr.io/becoolme/openuptime:0.1.0，或跟随 :latest）
+docker compose pull && docker compose up -d</code></pre>
+    <p><strong>方式 B：从源码构建。</strong></p>
     <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 cp .env.docker.example .env
@@ -172,8 +187,7 @@ docker compose up -d --build</code></pre>
     </table>
     <h3>运维</h3>
     <ul>
-      <li><strong>升级</strong>：拉取新代码后执行 <code>docker compose up -d --build</code>，迁移在启动时自动运行。</li>
-      <li><strong>预构建镜像</strong>：发布版本会推送到 <code>ghcr.io/becoolme/openuptime</code>。在 <code>.env</code> 中设置 <code>OPENUPTIME_IMAGE</code>，再执行 <code>docker compose pull</code>。</li>
+      <li><strong>升级</strong>：使用发布镜像时，若固定了版本就修改 <code>OPENUPTIME_IMAGE</code> 的标签，再执行 <code>docker compose pull &amp;&amp; docker compose up -d</code>；从源码构建时拉取新代码后执行 <code>docker compose up -d --build</code>。迁移在启动时自动运行。</li>
       <li><strong>备份</strong>：<code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>。</li>
       <li><strong>多个容器</strong>：检测通过 <code>FOR UPDATE SKIP LOCKED</code> 加租约，多个容器共用一个数据库也不会重复检测。</li>
       <li><strong>日志</strong>：<code>docker compose logs -f openuptime</code>。健康检查接口为 <code>/health</code>。</li>

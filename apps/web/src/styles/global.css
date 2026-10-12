@@ -3,6 +3,7 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0a0c0b;--surface:#111413;--surface-2:#171b19;--line:#222826;--line-2:#2d3431;--ink:#f1f4f2;--muted:#a1aaa5;--faint:#6f7873;--accent:#3ddc84;--warn:#f5b942;--down:#ff5c5c}}
 :root[data-theme=dark]{--bg:#0a0c0b;--surface:#111413;--surface-2:#171b19;--line:#222826;--line-2:#2d3431;--ink:#f1f4f2;--muted:#a1aaa5;--faint:#6f7873;--accent:#3ddc84;--warn:#f5b942;--down:#ff5c5c}
 *{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
 h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em}
