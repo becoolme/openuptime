@@ -16,7 +16,52 @@ scheduler ──signed POST──▶ https://probe.example.app/api/probe/eu-cent
 
 Every request carries `x-ou-timestamp` and `x-ou-signature` (HMAC-SHA256 of `<timestamp>.<body>` under `PROBE_SECRET`).
 A probe refuses anything unsigned or older than 60 seconds, and refuses private and internal targets whatever the
-signature says, so it is not an open proxy.
+signature says (unless its own operator sets `ALLOW_PRIVATE_TARGETS`), so it is not an open proxy.
+
+## Run it as a container or on any Node host
+
+The probe is a plain Node server, so it can run on any VPS or machine in any country, with or without Docker. Build the
+image from the repository root:
+
+```bash
+docker build -f apps/probe/Dockerfile -t openuptime-probe .
+docker run -d --restart unless-stopped -p 8787:8787 \
+  -e PROBE_SECRET=$(openssl rand -hex 32) -e PROBE_REGION=sao-paulo \
+  openuptime-probe
+curl http://localhost:8787/          # {"ok":true,"region":"sao-paulo"}
+```
+
+Releases also publish `ghcr.io/becoolme/openuptime-probe` (linux/amd64 and arm64).
+
+`docker-compose.yml` in this folder does the same with sensible defaults (loopback-only port, read-only filesystem, no
+capabilities) and can terminate HTTPS itself with Caddy:
+
+```bash
+cd apps/probe
+cp .env.example .env                      # set PROBE_SECRET
+PROBE_DOMAIN=probe-sao.example.com docker compose --profile tls up -d   # DNS name must point at this host
+```
+
+Without the `tls` profile it listens on `127.0.0.1:8787` for your own reverse proxy. OpenUptime needs an `https` URL
+(plain `http` is accepted for `localhost` only).
+
+Without Docker (Node 22):
+
+```bash
+pnpm install
+pnpm --filter @openuptime/probe build:node
+PROBE_SECRET=… PROBE_REGION=sao-paulo node apps/probe/dist/server.mjs
+```
+
+| Variable | Meaning |
+|---|---|
+| `PROBE_SECRET` | Required. Shared with the API; requests without a valid signature are refused. |
+| `PROBE_REGION` | Label returned by the health check. The name users see comes from the API's `PROBE_REGIONS`. |
+| `PORT`, `HOST` | Where to listen. Default `8787` on `0.0.0.0`. |
+| `CHECK_USER_AGENT` | User-Agent of HTTP checks. Set it to the same value as on the API so every region looks alike. |
+| `ALLOW_PRIVATE_TARGETS` | `true` lets this probe check private and internal addresses of the network it runs in. Off by default. Use it for a probe that lives inside the network you want to watch (an office, a home lab), and only there. |
+
+The server answers `SIGTERM` by finishing checks in flight, so `docker stop` is clean.
 
 ## Deploy to Vercel (several regions)
 
@@ -25,7 +70,7 @@ One project, one function per region, each pinned to a single Vercel region.
 ```bash
 cd apps/probe
 pnpm install
-pnpm build                          # all of regions.json; or PROBE_BUILD_REGIONS=us-east,eu-central pnpm build
+pnpm build:vercel                   # all of regions.json; or PROBE_BUILD_REGIONS=us-east,eu-central pnpm build:vercel
 
 npx vercel link                     # once, creates a project for apps/probe
 npx vercel env add PROBE_SECRET production   # a long random string; the same value goes to the API
@@ -36,7 +81,8 @@ npx vercel deploy --prebuilt --prod
 what monitors store, so renaming one later means re-saving the monitors that use it.
 
 Running a function in more than one region needs a paid Vercel plan, and each plan has its own cap on how many regions
-a project may use. Check Vercel's current limits before choosing how many to build.
+a project may use. Check Vercel's current limits before choosing how many to build. Private targets are always refused
+on Vercel.
 
 ## Tell OpenUptime about them
 
@@ -44,26 +90,16 @@ On the API (Worker secrets, or `.env` for self-hosting):
 
 ```bash
 PROBE_SECRET=<the same secret>
-PROBE_REGIONS='{"us-east":"https://probe.example.app/api/probe/us-east","eu-central":"https://probe.example.app/api/probe/eu-central","ap-southeast":{"url":"https://probe.example.app/api/probe/ap-southeast","name":"Singapore"}}'
+PROBE_REGIONS='{"us-east":"https://probe.example.app/api/probe/us-east","eu-central":"https://probe.example.app/api/probe/eu-central","ap-southeast":{"url":"https://probe.example.app/api/probe/ap-southeast","name":"Singapore"},"sao-paulo":{"url":"https://probe-sao.example.com/","name":"São Paulo"}}'
 ```
 
 A value is a URL, or `{ "url": …, "name": … }` to label it yourself. Nothing configured means every monitor runs from
 `auto`, the scheduler's own location, exactly as before. Regions show up in the dashboard and in `GET /api/regions`.
 
-## Anywhere else
-
-The same code runs as a plain Node server, so a probe can be a container on any VPS in any country:
-
-```bash
-pnpm build:node
-PROBE_SECRET=… PROBE_REGION=sao-paulo PORT=8787 pnpm start
-```
-
-Put it behind HTTPS and list its URL under `PROBE_REGIONS` like any other region.
-
 ## Develop
 
 ```bash
-pnpm test        # handler: signatures, validation, private-target refusal, real http/tcp checks
+pnpm test        # handler and server: signatures, validation, private-target refusal, real http/tcp checks,
+                 # and the production bundle driven over HTTP under plain Node
 pnpm typecheck
 ```

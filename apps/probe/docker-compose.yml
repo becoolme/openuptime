@@ -1,0 +1,44 @@
+# A probe on a VPS in the place you want checks to come from.
+#
+#   cp .env.example .env     # set PROBE_SECRET (and PROBE_REGION)
+#   docker compose up -d
+#
+# The probe must be reachable over HTTPS: either put your own reverse proxy in front of 127.0.0.1:8787, or let the
+# bundled Caddy do it (needs a DNS name pointing at this host and ports 80/443 open):
+#
+#   PROBE_DOMAIN=probe-sg.example.com docker compose --profile tls up -d
+#
+# Then list https://probe-sg.example.com/ under PROBE_REGIONS on the API.
+services:
+  probe:
+    # a published image by default; `docker compose build` builds it from this repository instead
+    image: ${PROBE_IMAGE:-ghcr.io/becoolme/openuptime-probe:latest}
+    build:
+      context: ../..
+      dockerfile: apps/probe/Dockerfile
+    restart: unless-stopped
+    environment:
+      PROBE_SECRET: ${PROBE_SECRET:?set PROBE_SECRET in .env (openssl rand -hex 32), the same value as on the API}
+      # label returned by the health check; the name users see comes from the API's PROBE_REGIONS
+      PROBE_REGION: ${PROBE_REGION:-}
+      CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
+      # "true" lets this probe check private / internal addresses of the network it runs in (an office or home probe)
+      ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
+    # loopback only: the proxy (or the tls profile below) is the way in. Set PROBE_BIND=0.0.0.0 to publish it directly.
+    ports: ["${PROBE_BIND:-127.0.0.1}:${PROBE_PORT:-8787}:8787"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    profiles: [tls]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [probe]
+    ports: ["80:80", "443:443"]
+    # certificates for PROBE_DOMAIN (the DNS name of this host; required with this profile) are issued and renewed automatically
+    command: caddy reverse-proxy --from ${PROBE_DOMAIN:-localhost} --to probe:8787
+    volumes: [caddy_data:/data]
+
+volumes:
+  caddy_data:

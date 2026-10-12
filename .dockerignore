@@ -5,3 +5,4 @@
 **/.dev.vars
 .env*
 .git
+**/.vercel

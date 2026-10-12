@@ -27,6 +27,7 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm --filter @openuptime/web exec astro build
       - run: pnpm --filter @openuptime/web test
+      - run: pnpm --filter @openuptime/probe test
       - run: pnpm db:migrate
       - run: pnpm --filter @openuptime/db-pg test
       # the OAuth/MCP end-to-end test needs its own empty database (it applies the migrations itself)
@@ -35,3 +36,4 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://ci:ci@localhost:5432/openuptime_oauth_e2e
       - run: docker build -t openuptime:ci .
+      - run: docker build -f apps/probe/Dockerfile -t openuptime-probe:ci .

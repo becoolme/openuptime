@@ -81,6 +81,11 @@ async function dnsCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   return { ok, latencyMs: Date.now() - started, error: ok ? undefined : `DNS status ${data.Status}, no answer` };
 }
 
+/** Cloudflare's socket API. The import fails anywhere else (Node, tests), whatever the runtime words the error as. */
+type WorkerSockets = { connect(o: { hostname: string; port: number }): { opened: Promise<unknown>; close(): Promise<void>; readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> } };
+let sockets: Promise<WorkerSockets | null> | undefined;
+const workerSockets = () => (sockets ??= import(/* @vite-ignore */ "cloudflare:sockets" as string).then((m) => m as WorkerSockets, () => null));
+
 async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const hp = hostPort(m.target, 0);
   if (!hp) return { ok: false, error: "Target must be host:port" };
@@ -88,21 +93,19 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const hostname = await guardHost(hp.hostname);
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs));
   const connect = async () => {
-    try {
-      // Cloudflare Workers
-      const { connect } = await import(/* @vite-ignore */ "cloudflare:sockets" as string);
-      const socket = connect({ hostname, port });
+    const cf = await workerSockets();
+    if (cf) {
+      const socket = cf.connect({ hostname, port });
       await socket.opened;
       await socket.close();
-    } catch (e) {
-      if (!(e instanceof Error) || !/cloudflare:sockets|Cannot find|Failed to load|ERR_UNSUPPORTED/i.test(e.message)) throw e;
-      // Node (local dev)
-      const net = await import("node:net");
-      await new Promise<void>((resolve, reject) => {
-        const s = net.connect({ host: hostname, port }, () => { s.end(); resolve(); });
-        s.on("error", reject);
-      });
+      return;
     }
+    // Node
+    const net = await import("node:net");
+    await new Promise<void>((resolve, reject) => {
+      const s = net.connect({ host: hostname, port }, () => { s.end(); resolve(); });
+      s.on("error", reject);
+    });
   };
   await Promise.race([connect(), timeout]);
   return { ok: true, latencyMs: Date.now() - started };
@@ -116,10 +119,9 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
 type Conn = { write(b: Uint8Array): Promise<void>; read(): Promise<Uint8Array | null>; close(): void };
 
 async function open(hostname: string, port: number): Promise<Conn> {
-  try {
-    // Cloudflare Workers
-    const { connect } = await import(/* @vite-ignore */ "cloudflare:sockets" as string);
-    const socket = connect({ hostname, port });
+  const cf = await workerSockets();
+  if (cf) {
+    const socket = cf.connect({ hostname, port });
     await socket.opened;
     const w = socket.writable.getWriter();
     const r = socket.readable.getReader();
@@ -128,10 +130,8 @@ async function open(hostname: string, port: number): Promise<Conn> {
       read: async () => { const x = await r.read(); return x.done ? null : (x.value as Uint8Array); },
       close: () => { void socket.close().catch(() => {}); },
     };
-  } catch (e) {
-    if (!(e instanceof Error) || !/cloudflare:sockets|Cannot find|Failed to load|ERR_UNSUPPORTED/i.test(e.message)) throw e;
   }
-  // Node (local dev)
+  // Node
   const net = await import("node:net");
   const sock = await new Promise<import("node:net").Socket>((resolve, reject) => {
     const s = net.connect({ host: hostname, port }, () => resolve(s));

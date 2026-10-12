@@ -133,19 +133,31 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
     <h2 id="regions">Multi-region checks</h2>
     <p>By default a monitor is checked from where OpenUptime runs. To check from several places, deploy the small probe in <code>apps/probe</code> to a few regions and tell the API where they are. A monitor uses them only when you pick regions for it; everything else keeps running from this deployment, so nothing changes until you opt in.</p>
     <ol>
-      <li><strong>Deploy the probe.</strong> The bundled build targets Vercel and creates one function per region (<code>apps/probe/regions.json</code>, default: Virginia, San Francisco, Frankfurt, Singapore, Tokyo). Set <code>PROBE_SECRET</code> on the Vercel project, run <code>pnpm build</code> in <code>apps/probe</code>, then <code>vercel deploy --prebuilt --prod</code>. Running the probe in several regions needs a Vercel plan that allows multiple function regions. The probe is also a plain Node server (<code>pnpm start</code>), so it can run on your own hosts in other places.</li>
+      <li><strong>Deploy the probe</strong> in each place you want checks to come from. It is a small service that runs one check on request, and there are two ways to run it. Pick whichever fits, or mix them: every probe is just a URL to the API.</li>
+    </ol>
+    <h3>Option A: Docker or any Node host</h3>
+    <p>The probe is a plain Node server, so it runs on any VPS or machine in any country. The image is built from the repository root:</p>
+    <pre><code is:raw>docker build -f apps/probe/Dockerfile -t openuptime-probe .
+docker run -d --restart unless-stopped -p 8787:8787 \
+  -e PROBE_SECRET=&lt;a long random string&gt; -e PROBE_REGION=sao-paulo \
+  openuptime-probe</code></pre>
+    <p>Releases also publish <code>ghcr.io/becoolme/openuptime-probe</code>. <code>apps/probe/docker-compose.yml</code> wraps it and can add HTTPS with Caddy: <code is:raw>PROBE_DOMAIN=probe-sao.example.com docker compose --profile tls up -d</code>. Without Docker, run <code>pnpm --filter @openuptime/probe build:node</code> and then <code>PROBE_SECRET=… node apps/probe/dist/server.mjs</code> (Node 22). The API needs an <code>https</code> URL, so put the probe behind a reverse proxy or the bundled Caddy. Every probe answers <code>GET /</code> with <code is:raw>{"ok":true}</code> for health checks.</p>
+    <p>Settings: <code>PROBE_SECRET</code> (required), <code>PROBE_REGION</code> (a label), <code>PORT</code> (default 8787), <code>HOST</code> (default 0.0.0.0), <code>CHECK_USER_AGENT</code> (same as on the API). Private and internal targets are refused unless you set <code>ALLOW_PRIVATE_TARGETS=true</code> on that probe, which is what lets a probe inside your office or home network check internal services. Only do it for a probe that lives in the network you want to watch.</p>
+    <h3>Option B: Vercel, several regions at once</h3>
+    <p>The bundled build creates one function per region (<code>apps/probe/regions.json</code>, default: Virginia, San Francisco, Frankfurt, Singapore, Tokyo). Set <code>PROBE_SECRET</code> on the Vercel project, run <code>pnpm build:vercel</code> in <code>apps/probe</code>, then <code>vercel deploy --prebuilt --prod</code>. Running a function in several regions needs a Vercel plan that allows it.</p>
+    <ol start="2">
       <li><strong>Tell the API.</strong> Set the same secret as <code>PROBE_SECRET</code> and list the regions as JSON in <code>PROBE_REGIONS</code>:</li>
     </ol>
     <pre><code is:raw>PROBE_SECRET=&lt;the same secret as on the probe&gt;
 PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-central":"https://probe.example.app/api/probe/eu-central","ap-southeast":{"url":"https://probe.example.app/api/probe/ap-southeast","name":"Singapore"}}</code></pre>
-    <p>Keys are region ids you choose (lowercase letters, digits and dashes). A value is a URL, or <code is:raw>{ "url", "name" }</code> to set the label shown in the app. URLs must be <code>https</code>. The list appears in the app and in <code>GET /api/regions</code>, and a monitor can then pick up to its plan's limit.</p>
+    <p>Keys are region ids you choose (lowercase letters, digits and dashes). A value is a URL, or <code is:raw>{ "url", "name" }</code> to set the label shown in the app. URLs must be <code>https</code> (plain <code>http</code> is accepted for <code>localhost</code> only). The list appears in the app and in <code>GET /api/regions</code>, and a monitor can then pick up to its plan's limit.</p>
     <h3>How it behaves</h3>
     <ul>
       <li>Only <strong>HTTP and TCP</strong> monitors can use regions. Other types, and heartbeats, always run from this deployment.</li>
       <li>With several regions a run counts as failed only when <strong>most of the regions that answered</strong> failed, so one region's bad route does not open an incident. Each region's result is kept, and the monitor page shows uptime and latency per region.</li>
       <li>A probe that cannot be reached is not a failed check. It is left out of the vote, and when no probe answers the check runs from this deployment instead, so a probe outage cannot blind monitoring.</li>
       <li>Each region counts as one check against any check allowance. A single request can also be sent from one region on the monitor page (or <code>POST /api/monitors/:id/check</code> with a <code>region</code>); it is not recorded and does not change the monitor's status.</li>
-      <li>Probes only accept signed requests (HMAC-SHA256 over timestamp and body, 60 s skew) and refuse private, loopback and link-local targets whatever the signature, so a probe cannot be used as an open proxy.</li>
+      <li>Probes only accept signed requests (HMAC-SHA256 over timestamp and body, 60 s skew) and refuse private, loopback and link-local targets whatever the signature (unless its own operator turns <code>ALLOW_PRIVATE_TARGETS</code> on), so a probe cannot be used as an open proxy.</li>
     </ul>
 
     <h2 id="after">After install</h2>
@@ -286,7 +298,19 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
     <h2 id="regions-zh">多区域检测</h2>
     <p>默认情况下，监控项从 OpenUptime 自身所在位置发起检测。想从多个地点检测，可把 <code>apps/probe</code> 中的小型探针部署到几个区域，再把它们的地址告诉 API。只有你为某个监控项指定了区域，才会使用探针；其他监控项仍从本部署发起，因此不主动开启就不会有任何变化。</p>
     <ol>
-      <li><strong>部署探针。</strong>自带的构建面向 Vercel，每个区域生成一个函数（<code>apps/probe/regions.json</code>，默认：弗吉尼亚、旧金山、法兰克福、新加坡、东京）。在 Vercel 项目上设置 <code>PROBE_SECRET</code>，在 <code>apps/probe</code> 中运行 <code>pnpm build</code>，再 <code>vercel deploy --prebuilt --prod</code>。要在多个区域运行，需要允许多区域函数的 Vercel 套餐。探针也是一个普通的 Node 服务（<code>pnpm start</code>），可以跑在你自己位于其他地区的主机上。</li>
+      <li><strong>部署探针</strong>到你想让检测发起的每个地点。探针是个小服务，按请求执行一次检测，有两种运行方式，可任选或混用：对 API 来说每个探针只是一个 URL。</li>
+    </ol>
+    <h3>方式 A：Docker 或任意 Node 主机</h3>
+    <p>探针就是一个普通的 Node 服务，可以跑在任何国家的任意 VPS 或机器上。镜像在仓库根目录构建：</p>
+    <pre><code is:raw>docker build -f apps/probe/Dockerfile -t openuptime-probe .
+docker run -d --restart unless-stopped -p 8787:8787 \
+  -e PROBE_SECRET=&lt;一段足够长的随机字符串&gt; -e PROBE_REGION=sao-paulo \
+  openuptime-probe</code></pre>
+    <p>正式版本也会发布 <code>ghcr.io/becoolme/openuptime-probe</code>。<code>apps/probe/docker-compose.yml</code> 对它做了封装，并可用 Caddy 自动加上 HTTPS：<code is:raw>PROBE_DOMAIN=probe-sao.example.com docker compose --profile tls up -d</code>。不用 Docker 时，运行 <code>pnpm --filter @openuptime/probe build:node</code>，再 <code>PROBE_SECRET=… node apps/probe/dist/server.mjs</code>（Node 22）。API 需要 <code>https</code> 地址，所以请把探针放在反向代理或自带的 Caddy 后面。探针对 <code>GET /</code> 返回 <code is:raw>{"ok":true}</code>，可用于健康检查。</p>
+    <p>配置项：<code>PROBE_SECRET</code>（必填）、<code>PROBE_REGION</code>（标签）、<code>PORT</code>（默认 8787）、<code>HOST</code>（默认 0.0.0.0）、<code>CHECK_USER_AGENT</code>（与 API 上的含义相同）。默认拒绝私有和内部地址；只有在该探针上设置 <code>ALLOW_PRIVATE_TARGETS=true</code> 才允许，这样就可以把探针放在办公室或家里的内网中，检测内部服务。请只对确实位于被监控网络内的探针这样做。</p>
+    <h3>方式 B：Vercel，一次部署多个区域</h3>
+    <p>自带的构建会为每个区域生成一个函数（<code>apps/probe/regions.json</code>，默认：弗吉尼亚、旧金山、法兰克福、新加坡、东京）。在 Vercel 项目上设置 <code>PROBE_SECRET</code>，在 <code>apps/probe</code> 中运行 <code>pnpm build:vercel</code>，再 <code>vercel deploy --prebuilt --prod</code>。让函数在多个区域运行，需要允许这一点的 Vercel 套餐。</p>
+    <ol start="2">
       <li><strong>告诉 API。</strong>把同一个密钥设为 <code>PROBE_SECRET</code>，并用 JSON 在 <code>PROBE_REGIONS</code> 中列出区域：</li>
     </ol>
     <pre><code is:raw>PROBE_SECRET=&lt;与探针相同的密钥&gt;
@@ -298,7 +322,7 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
       <li>选择多个区域时，只有<strong>多数应答的区域</strong>都失败才判定为失败，单个区域的线路问题不会产生事件。各区域的结果都会保留，监控详情页按区域显示可用率和延迟。</li>
       <li>探针无法连通不算检测失败：它不参与表决；所有探针都没有应答时，改为从本部署发起检测，因此探针故障不会让监控失明。</li>
       <li>每个区域各计一次检查额度。也可以在监控详情页（或 <code>POST /api/monitors/:id/check</code> 并传 <code>region</code>）从某一个区域单次发起请求；该请求不会被记录，也不会改变监控状态。</li>
-      <li>探针只接受签名请求（对时间戳与请求体做 HMAC-SHA256，允许 60 秒偏差），并且无论签名是否有效，都会拒绝私有、回环和链路本地地址，因此不会变成开放代理。</li>
+      <li>探针只接受签名请求（对时间戳与请求体做 HMAC-SHA256，允许 60 秒偏差），并且无论签名是否有效，都会拒绝私有、回环和链路本地地址（除非该探针的运维者自己打开 <code>ALLOW_PRIVATE_TARGETS</code>），因此不会变成开放代理。</li>
     </ul>
 
     <h2 id="after-zh">安装之后</h2>
