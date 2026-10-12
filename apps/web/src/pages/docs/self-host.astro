@@ -131,7 +131,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
     <p>No data migration is involved. Monitors, history and incidents are untouched.</p>
 
     <h2 id="regions">Multi-region checks</h2>
-    <p>By default a monitor is checked from where OpenUptime runs. To check from several places, deploy the small probe in <code>apps/probe</code> to a few regions and tell the API where they are. A monitor uses them only when you pick regions for it; everything else keeps running from this deployment, so nothing changes until you opt in.</p>
+    <p>By default a monitor is checked from where OpenUptime runs. To check from several places, deploy the small probe in <code>apps/probe</code> to a few regions and tell the API where they are. A monitor uses them only when you pick regions for it; everything else keeps running from this deployment, so nothing changes until you opt in. How a verdict is reached and what the app shows are covered in <a href="/docs/regions">Multi-region checks</a>.</p>
     <ol>
       <li><strong>Deploy the probe</strong> in each place you want checks to come from. It is a small service that runs one check on request, and there are two ways to run it. Pick whichever fits, or mix them: every probe is just a URL to the API.</li>
     </ol>
@@ -296,7 +296,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
     <p>不涉及数据迁移，监控项、历史记录和事件都不受影响。</p>
 
     <h2 id="regions-zh">多区域检测</h2>
-    <p>默认情况下，监控项从 OpenUptime 自身所在位置发起检测。想从多个地点检测，可把 <code>apps/probe</code> 中的小型探针部署到几个区域，再把它们的地址告诉 API。只有你为某个监控项指定了区域，才会使用探针；其他监控项仍从本部署发起，因此不主动开启就不会有任何变化。</p>
+    <p>默认情况下，监控项从 OpenUptime 自身所在位置发起检测。想从多个地点检测，可把 <code>apps/probe</code> 中的小型探针部署到几个区域，再把它们的地址告诉 API。只有你为某个监控项指定了区域，才会使用探针；其他监控项仍从本部署发起，因此不主动开启就不会有任何变化。结论如何得出、应用里能看到什么，见<a href="/docs/regions">多区域检测</a>。</p>
     <ol>
       <li><strong>部署探针</strong>到你想让检测发起的每个地点。探针是个小服务，按请求执行一次检测，有两种运行方式，可任选或混用：对 API 来说每个探针只是一个 URL。</li>
     </ol>
