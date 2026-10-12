@@ -79,5 +79,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0015_monitor_run_token",
     "when": 1791740960869,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"last_run_token\" timestamp with time zone;"
+  },
+  {
+    "tag": "0016_incident_open_auto_unique",
+    "when": 1791766905104,
+    "sql": "-- two checks racing could each open an incident for the same outage: keep the oldest open one of each kind, resolve the rest\nUPDATE \"incident\" SET \"status\" = 'resolved', \"resolved_at\" = now()\nWHERE \"id\" IN (\n  SELECT \"id\" FROM (\n    SELECT \"id\", row_number() OVER (PARTITION BY \"monitor_id\", (\"severity\" = 'minor') ORDER BY \"started_at\", \"id\") AS rn\n    FROM \"incident\" WHERE \"auto\" AND \"resolved_at\" IS NULL AND \"monitor_id\" IS NOT NULL\n  ) d WHERE d.rn > 1\n);--> statement-breakpoint\nCREATE UNIQUE INDEX \"incident_open_auto_idx\" ON \"incident\" USING btree (\"monitor_id\",(\"severity\" = 'minor')) WHERE \"incident\".\"auto\" and \"incident\".\"resolved_at\" is null and \"incident\".\"monitor_id\" is not null;\n"
   }
 ];

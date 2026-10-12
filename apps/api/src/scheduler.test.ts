@@ -96,9 +96,14 @@ function fakeRepo(opts: { failCreate?: () => boolean } = {}) {
     hasOpenIncident: async (_id: string, slow: boolean) => incidents.some((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
     openIncidents: async (_id: string, slow: boolean) => incidents.filter((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
     hadIncidentSince: async () => false,
-    resolveIncident: async (id: string) => void (incidents.find((i) => i.id === id)!.resolved = true),
+    resolveIncident: async (id: string) => {
+      const i = incidents.find((x) => x.id === id)!;
+      if (i.resolved) return false;
+      i.resolved = true;
+      return true;
+    },
     incidentMuted: async () => false,
-    createIncident: async (inc: { title: string; auto?: boolean; severity?: string }) => {
+    openAutoIncident: async (inc: { title: string; auto?: boolean; severity?: string }) => {
       if (opts.failCreate?.()) throw new Error("db down");
       const row = { id: crypto.randomUUID(), title: inc.title, auto: !!inc.auto, severity: inc.severity ?? "major", resolved: false };
       incidents.push(row);

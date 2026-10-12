@@ -125,4 +125,20 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     await repo.createIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true });
     expect(await repo.hasOpenIncident(m.id, false)).toBe(true);
   });
+
+  it("opens one automatic incident of a kind at a time and resolves each only once", async () => {
+    const [m] = await seed(1);
+    const open = (title: string, severity?: "minor") => repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title, auto: true, severity }, { status: "investigating", body: "x" });
+    const racing = await Promise.all([open("down"), open("down"), open("down")]);
+    expect(racing.filter(Boolean)).toHaveLength(1);
+    // a latency incident is a different kind
+    const slow = await open("slow", "minor");
+    expect(slow).not.toBeNull();
+    expect(await open("slow", "minor")).toBeNull();
+    const down = racing.find(Boolean)!;
+    const resolved = await Promise.all([repo.resolveIncident(down.id, "ok"), repo.resolveIncident(down.id, "ok")]);
+    expect(resolved.filter(Boolean)).toHaveLength(1);
+    // once resolved, a new outage may open
+    expect(await open("down again")).not.toBeNull();
+  });
 });

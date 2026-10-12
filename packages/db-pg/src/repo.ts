@@ -536,6 +536,18 @@ export function createRepo(db: Db): Repo {
         return row;
       });
     },
+    async openAutoIncident(inc, firstUpdate) {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(schema.incident)
+          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId })
+          .onConflictDoNothing()
+          .returning();
+        if (!row) return null;
+        await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId });
+        return row;
+      });
+    },
     async postIncidentUpdate(orgId, id, u) {
       const [incident] = await db
         .update(schema.incident)
@@ -580,8 +592,15 @@ export function createRepo(db: Db): Repo {
         .where(and(eq(schema.incident.monitorId, monitorId), isNull(schema.incident.resolvedAt), slow ? isSlow : sql`not ${isSlow}`));
     },
     async resolveIncident(id, body) {
-      await db.update(schema.incident).set({ status: "resolved", resolvedAt: new Date() }).where(eq(schema.incident.id, id));
+      // only the caller that flips it from open to resolved gets true (and so sends the recovery alert)
+      const [done] = await db
+        .update(schema.incident)
+        .set({ status: "resolved", resolvedAt: new Date() })
+        .where(and(eq(schema.incident.id, id), isNull(schema.incident.resolvedAt)))
+        .returning({ id: schema.incident.id });
+      if (!done) return false;
       await db.insert(schema.incidentUpdate).values({ incidentId: id, status: "resolved", body });
+      return true;
     },
     async incidentMuted(id) {
       const [muted] = await db

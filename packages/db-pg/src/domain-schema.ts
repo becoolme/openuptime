@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -125,7 +125,13 @@ export const incident = pgTable(
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   },
-  (t) => [index("incident_org_idx").on(t.organizationId, t.startedAt)],
+  (t) => [
+    index("incident_org_idx").on(t.organizationId, t.startedAt),
+    // at most one open automatic outage and one open automatic latency incident per monitor, even when two checks race
+    uniqueIndex("incident_open_auto_idx")
+      .on(t.monitorId, sql`(${t.severity} = 'minor')`)
+      .where(sql`${t.auto} and ${t.resolvedAt} is null and ${t.monitorId} is not null`),
+  ],
 );
 
 export const incidentUpdate = pgTable("incident_update", {

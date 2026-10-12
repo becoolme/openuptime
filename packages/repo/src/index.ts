@@ -359,6 +359,11 @@ export interface Repo {
   incidentVisible(orgId: string, id: string, scope: Scope): Promise<boolean>;
   incidentDetail(orgId: string, id: string): Promise<IncidentDetail | null>;
   createIncident(inc: NewIncident, firstUpdate?: NewIncidentUpdate): Promise<Incident>;
+  /**
+   * Opens an automatic incident unless the monitor already has an open one of that kind (outage or latency): then
+   * nothing is written and null comes back, so only the check that really opened it sends the alert.
+   */
+  openAutoIncident(inc: NewIncident, firstUpdate: NewIncidentUpdate): Promise<Incident | null>;
   /** Set the status (stamping `resolvedAt` when resolved) and append an update. */
   postIncidentUpdate(orgId: string, id: string, u: NewIncidentUpdate): Promise<{ incident: Incident; update: IncidentUpdate } | null>;
   acknowledgeIncident(orgId: string, id: string, userId: string): Promise<Incident | null>;
@@ -367,7 +372,8 @@ export interface Repo {
   hadIncidentSince(monitorId: string, since: Date): Promise<boolean>;
   /** Unresolved incidents of the monitor: its outage ones, or with `slow` only the automatic latency ones. */
   openIncidents(monitorId: string, slow: boolean): Promise<Incident[]>;
-  resolveIncident(id: string, body: string): Promise<void>;
+  /** Resolves an open incident; false when it was already resolved (another check got there first). */
+  resolveIncident(id: string, body: string): Promise<boolean>;
   /** Was this incident's alert suppressed (flapping)? */
   incidentMuted(id: string): Promise<boolean>;
 
