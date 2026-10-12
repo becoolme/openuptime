@@ -12,6 +12,7 @@ const { title, updated, toc } = Astro.props as { title: string; updated?: string
         <b>OpenUptime</b>
       </a>
       <nav class="doc-links">
+        <a href="/docs"><span lang="en">Docs</span><span lang="zh-CN">文档</span></a>
         <a href="/docs/mcp"><span lang="en">MCP</span><span lang="zh-CN">MCP</span></a>
         <a href="/docs/api"><span lang="en">API</span><span lang="zh-CN">API</span></a>
         <a href="/docs/embed"><span lang="en">Embed</span><span lang="zh-CN">嵌入</span></a>
@@ -42,7 +43,7 @@ const { title, updated, toc } = Astro.props as { title: string; updated?: string
           <a class="sf-status" id="sf-status" href="/status/openuptime" hidden><i></i><span id="sf-status-t"></span></a>
         </div>
         <div><h4><span lang="en">Product</span><span lang="zh-CN">产品</span></h4><a href="/#features"><span lang="en">Features</span><span lang="zh-CN">功能</span></a><a href="/status/openuptime"><span lang="en">System status</span><span lang="zh-CN">服务状态</span></a></div>
-        <div><h4><span lang="en">Developers</span><span lang="zh-CN">开发者</span></h4><a href="/docs/api"><span lang="en">Docs</span><span lang="zh-CN">文档</span></a><a href="/docs/api"><span lang="en">API reference</span><span lang="zh-CN">API 参考</span></a><a href="/docs/mcp">MCP</a><a href="/docs/self-host"><span lang="en">Self-host</span><span lang="zh-CN">自托管</span></a><a href="/docs/embed"><span lang="en">Embed status</span><span lang="zh-CN">嵌入状态</span></a><a href="https://github.com/becoolme/openuptime">GitHub</a><a href="https://github.com/becoolme/openuptime/blob/main/CONTRIBUTING.md"><span lang="en">Contributing</span><span lang="zh-CN">贡献指南</span></a></div>
+        <div><h4><span lang="en">Developers</span><span lang="zh-CN">开发者</span></h4><a href="/docs"><span lang="en">Docs</span><span lang="zh-CN">文档</span></a><a href="/docs/api"><span lang="en">API reference</span><span lang="zh-CN">API 参考</span></a><a href="/docs/mcp">MCP</a><a href="/docs/self-host"><span lang="en">Self-host</span><span lang="zh-CN">自托管</span></a><a href="/docs/embed"><span lang="en">Embed status</span><span lang="zh-CN">嵌入状态</span></a><a href="https://github.com/becoolme/openuptime">GitHub</a><a href="https://github.com/becoolme/openuptime/blob/main/CONTRIBUTING.md"><span lang="en">Contributing</span><span lang="zh-CN">贡献指南</span></a></div>
         <div><h4><span lang="en">Community</span><span lang="zh-CN">社区</span></h4><a href="https://github.com/becoolme/openuptime/blob/main/SECURITY.md"><span lang="en">Security</span><span lang="zh-CN">安全披露</span></a><a href="/privacy"><span lang="en">Privacy</span><span lang="zh-CN">隐私</span></a><a href="/terms"><span lang="en">Terms</span><span lang="zh-CN">服务条款</span></a></div>
       </div>
       <div class="sf-bot">
@@ -173,7 +174,7 @@ const { title, updated, toc } = Astro.props as { title: string; updated?: string
   .doc-nav { justify-self: end; display: flex; align-items: center; gap: 10px; font-size: 14px; }
   .doc-lang, .doc-signin { height: 38px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); font: 14px var(--sans); cursor: pointer; text-decoration: none; transition: .15s; }
   .doc-lang:hover, .doc-signin:hover { border-color: var(--faint); }
-  @media (max-width: 560px) { .doc-top-in { display: flex; padding: 0 16px; gap: 16px; } .doc-links { gap: 16px; } .doc-nav { margin-left: auto; } }
+  @media (max-width: 560px) { .doc-top-in { display: flex; padding: 0 16px; gap: 12px; } .doc-top .doc-brand b { display: none; } .doc-links { gap: 12px; font-size: 14px; white-space: nowrap; } .doc-nav { margin-left: auto; } .doc-signin { padding: 0 10px; } }
 
   .doc-layout.has-toc { max-width: 1160px; margin: 0 auto; padding: 0 28px; display: grid; grid-template-columns: 200px minmax(0, 760px); gap: 56px; }
   .doc-layout.has-toc .doc { margin: 0; padding-left: 0; padding-right: 0; }

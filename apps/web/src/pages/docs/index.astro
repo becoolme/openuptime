@@ -1,0 +1,58 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+type Entry = { href: string; en: string; zh: string; descEn: string; descZh: string };
+const guides: Entry[] = [
+  { href: "/docs/self-host", en: "Self-host", zh: "自托管", descEn: "Run your own copy on Cloudflare Workers or in Docker, with a Postgres database you control.", descZh: "在 Cloudflare Workers 或 Docker 上运行你自己的实例，数据库由你自己掌控。" },
+  { href: "/docs/api", en: "API reference", zh: "API 参考", descEn: "Manage monitors, incidents, alert channels and status pages programmatically. JSON over HTTPS.", descZh: "通过程序管理监控项、事件、告警渠道和状态页。基于 HTTPS 与 JSON。" },
+  { href: "/docs/mcp", en: "MCP server", zh: "MCP 服务", descEn: "Let an AI agent such as Claude or Cursor manage your monitors, incidents and status pages.", descZh: "让 Claude、Cursor 等 AI Agent 管理你的监控、事件和状态页。" },
+  { href: "/docs/embed", en: "Embed your status", zh: "嵌入状态", descEn: "Show the live state of a status page on your site, in a README or in an email with one line of code.", descZh: "用一行代码，把状态页的实时状态放进你的网站、README 或邮件。" },
+];
+const repo = "https://github.com/becoolme/openuptime";
+const more: Entry[] = [
+  { href: `${repo}/blob/main/docs/reference.md`, en: "Reference", zh: "参考手册", descEn: "Email, alert channels, how checks run, analytics and the other details.", descZh: "邮件、告警渠道、检测如何运行、统计分析等细节。" },
+  { href: `${repo}/blob/main/CONTRIBUTING.md`, en: "Contributing", zh: "贡献指南", descEn: "Set up a dev environment, run the tests and send a pull request.", descZh: "搭建开发环境、运行测试并提交 Pull Request。" },
+  { href: `${repo}/blob/main/SECURITY.md`, en: "Security", zh: "安全披露", descEn: "How to report a vulnerability privately.", descZh: "如何私下报告安全漏洞。" },
+];
+---
+<Doc title="Docs">
+  <div lang="en">
+    <h1>Documentation</h1>
+    <p class="lede">Guides for running, integrating and extending OpenUptime.</p>
+    <div class="docs-grid">
+      {guides.map((g) => (
+        <a class="docs-card" href={g.href}><b>{g.en}</b><span>{g.descEn}</span></a>
+      ))}
+    </div>
+    <h2>More</h2>
+    <div class="docs-grid">
+      {more.map((g) => (
+        <a class="docs-card" href={g.href}><b>{g.en}</b><span>{g.descEn}</span></a>
+      ))}
+    </div>
+  </div>
+  <div lang="zh-CN">
+    <h1>文档</h1>
+    <p class="lede">运行、集成和扩展 OpenUptime 的指南。</p>
+    <div class="docs-grid">
+      {guides.map((g) => (
+        <a class="docs-card" href={g.href}><b>{g.zh}</b><span>{g.descZh}</span></a>
+      ))}
+    </div>
+    <h2>更多</h2>
+    <div class="docs-grid">
+      {more.map((g) => (
+        <a class="docs-card" href={g.href}><b>{g.zh}</b><span>{g.descZh}</span></a>
+      ))}
+    </div>
+  </div>
+</Doc>
+
+<style is:global>
+  .docs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+  .doc a.docs-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .15s; }
+  .doc a.docs-card:hover { border-color: var(--accent); }
+  .docs-card b { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .docs-card span { color: var(--muted); font-size: 14px; line-height: 1.55; }
+  @media (max-width: 560px) { .docs-grid { grid-template-columns: 1fr; } }
+</style>

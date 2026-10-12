@@ -37,7 +37,7 @@ function build(loc) {
     d[key] != null ? `${open}${esc(d[key])}${close}` : m,
   );
   // pages that exist in this language keep the visitor in it; the rest are shared
-  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs\/api|docs\/embed|docs\/self-host|privacy|terms)"/g, 'href="/zh-Hans/$1"');
+  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/self-host|privacy|terms)"/g, 'href="/zh-Hans/$1"');
   html = html.replace(/href="\/"/g, `href="${loc.path}"`);
   html = html.replace("</head>", `<link rel="canonical" href="${ORIGIN}${loc.path}">\n${alternates}\n</head>`);
   return html;
