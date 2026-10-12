@@ -11,7 +11,7 @@
 # Then list https://probe-sg.example.com/ under PROBE_REGIONS on the API.
 services:
   probe:
-    # a published image by default; `docker compose build` builds it from this repository instead
+    # the published image when there is one; otherwise `docker compose up` builds it from this repository
     image: ${PROBE_IMAGE:-ghcr.io/becoolme/openuptime-probe:latest}
     build:
       context: ../..

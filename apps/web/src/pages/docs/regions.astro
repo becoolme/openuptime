@@ -56,9 +56,9 @@ import Doc from "../../layouts/Doc.astro";
     <table class="vars">
       <thead><tr><th>Where</th><th>How</th></tr></thead>
       <tbody>
-        <tr><td>Docker, any VPS</td><td><code>docker run -d -p 8787:8787 -e PROBE_SECRET=… -e PROBE_REGION=sao-paulo ghcr.io/becoolme/openuptime-probe</code>. Also a compose file with optional automatic HTTPS (Caddy).</td></tr>
-        <tr><td>Plain Node 22</td><td><code>pnpm --filter @openuptime/probe build:node</code>, then <code>node apps/probe/dist/server.mjs</code>.</td></tr>
-        <tr><td>Vercel</td><td><code>pnpm build:vercel</code> in <code>apps/probe</code> builds one function per region, then <code>vercel deploy --prebuilt --prod</code>.</td></tr>
+        <tr><td>Docker, any VPS</td><td>From a checkout of the repository: <code>docker build -f apps/probe/Dockerfile -t openuptime-probe .</code>, then <code>docker run -d -p 8787:8787 -e PROBE_SECRET=… -e PROBE_REGION=sao-paulo openuptime-probe</code>. The port speaks plain HTTP, so put HTTPS in front of it. <code>apps/probe/docker-compose.yml</code> does both for you and can add automatic HTTPS with Caddy: <code>PROBE_DOMAIN=probe.example.com docker compose --profile tls up -d</code>.</td></tr>
+        <tr><td>Plain Node 22</td><td>From the repository root: <code>pnpm install</code> and <code>pnpm --filter @openuptime/probe build:node</code>, then <code>PROBE_SECRET=… PROBE_REGION=sao-paulo node apps/probe/dist/server.mjs</code>. It listens on port 8787 (<code>PORT</code> changes it) and needs HTTPS in front, like the Docker image.</td></tr>
+        <tr><td>Vercel</td><td>In <code>apps/probe</code>: <code>pnpm build:vercel</code> builds one function per region of <code>regions.json</code>, each pinned to a Vercel region. Run <code>vercel link</code> once and set <code>PROBE_SECRET</code> on the project, then <code>vercel deploy --prebuilt --prod</code>. Each region answers at <code>https://&lt;project&gt;.vercel.app/api/probe/&lt;id&gt;</code>. Running in several regions needs a paid Vercel plan.</td></tr>
       </tbody>
     </table>
     <p>Run one probe per place you want to check from, in the countries that matter to your users. Any provider works, so a small VM in São Paulo, Mumbai or Sydney is as good as a Vercel region.</p>
@@ -75,7 +75,7 @@ PROBE_REGIONS={
       <li>URLs must be <code>https</code>. Plain <code>http</code> is accepted for <code>localhost</code> only.</li>
       <li>With <code>PROBE_REGIONS</code> set but no <code>PROBE_SECRET</code>, regions stay disabled and a warning is logged.</li>
     </ul>
-    <p>Check a probe with <code>curl https://your-probe/</code>. It answers <code is:raw>{"ok":true,"region":"…"}</code>. The list the app offers is at <code>GET /api/regions</code>. Full deployment details are in the <a href="/docs/self-host#regions">self-hosting guide</a>.</p>
+    <p>Check a probe with a plain GET: <code>curl https://your-probe/</code> on Docker and Node, or <code>curl https://&lt;project&gt;.vercel.app/api/probe/eu-central</code> on Vercel, where the root path is a 404. It answers <code is:raw>{"ok":true,"region":"…"}</code> with the probe's <code>PROBE_REGION</code> label (the Vercel region code, such as <code>fra1</code>, on Vercel). The list the app offers is at <code>GET /api/regions</code>. Full deployment details are in the <a href="/docs/self-host#regions">self-hosting guide</a>.</p>
     <h2 id="limits">Good to know</h2>
     <ul>
       <li><strong>International regions only.</strong> The bundled Vercel build covers regions outside mainland China. To check from inside mainland China, run a probe on a host there yourself.</li>
@@ -138,9 +138,9 @@ PROBE_REGIONS={
     <table class="vars">
       <thead><tr><th>位置</th><th>方式</th></tr></thead>
       <tbody>
-        <tr><td>Docker、任意 VPS</td><td><code>docker run -d -p 8787:8787 -e PROBE_SECRET=… -e PROBE_REGION=sao-paulo ghcr.io/becoolme/openuptime-probe</code>。另有 compose 文件，可选 Caddy 自动 HTTPS。</td></tr>
-        <tr><td>原生 Node 22</td><td><code>pnpm --filter @openuptime/probe build:node</code>，然后 <code>node apps/probe/dist/server.mjs</code>。</td></tr>
-        <tr><td>Vercel</td><td>在 <code>apps/probe</code> 里运行 <code>pnpm build:vercel</code>，为每个区域生成一个函数，再 <code>vercel deploy --prebuilt --prod</code>。</td></tr>
+        <tr><td>Docker、任意 VPS</td><td>在仓库的检出目录中：<code>docker build -f apps/probe/Dockerfile -t openuptime-probe .</code>，然后 <code>docker run -d -p 8787:8787 -e PROBE_SECRET=… -e PROBE_REGION=sao-paulo openuptime-probe</code>。该端口是明文 HTTP，需要在前面放一层 HTTPS。<code>apps/probe/docker-compose.yml</code> 把这些都包好了，还能用 Caddy 自动加上 HTTPS：<code>PROBE_DOMAIN=probe.example.com docker compose --profile tls up -d</code>。</td></tr>
+        <tr><td>原生 Node 22</td><td>在仓库根目录：<code>pnpm install</code> 和 <code>pnpm --filter @openuptime/probe build:node</code>，然后 <code>PROBE_SECRET=… PROBE_REGION=sao-paulo node apps/probe/dist/server.mjs</code>。默认监听 8787 端口（用 <code>PORT</code> 修改），和 Docker 镜像一样需要在前面放 HTTPS。</td></tr>
+        <tr><td>Vercel</td><td>在 <code>apps/probe</code> 里：<code>pnpm build:vercel</code> 会按 <code>regions.json</code> 为每个区域生成一个函数，各自固定在一个 Vercel 区域。先运行一次 <code>vercel link</code> 并在项目上设置 <code>PROBE_SECRET</code>，再 <code>vercel deploy --prebuilt --prod</code>。每个区域的地址是 <code>https://&lt;project&gt;.vercel.app/api/probe/&lt;id&gt;</code>。在多个区域运行需要付费的 Vercel 套餐。</td></tr>
       </tbody>
     </table>
     <p>想从哪些地方检测，就在那里各运行一个探针，选你的用户所在的国家和地区。任何服务商都行，圣保罗、孟买或悉尼的一台小型虚拟机，和 Vercel 的一个区域一样好用。</p>
@@ -157,7 +157,7 @@ PROBE_REGIONS={
       <li>URL 必须是 <code>https</code>，只有 <code>localhost</code> 允许用 <code>http</code>。</li>
       <li>设置了 <code>PROBE_REGIONS</code> 却没有 <code>PROBE_SECRET</code> 时，区域保持禁用并输出警告日志。</li>
     </ul>
-    <p>用 <code>curl https://your-probe/</code> 检查探针，它会返回 <code is:raw>{"ok":true,"region":"…"}</code>。应用提供的区域列表在 <code>GET /api/regions</code>。完整部署说明见<a href="/docs/self-host#regions-zh">自托管指南</a>。</p>
+    <p>用一次普通的 GET 检查探针：Docker 和 Node 用 <code>curl https://your-probe/</code>；Vercel 的根路径是 404，请用 <code>curl https://&lt;project&gt;.vercel.app/api/probe/eu-central</code>。它会返回 <code is:raw>{"ok":true,"region":"…"}</code>，其中是探针的 <code>PROBE_REGION</code> 标签（在 Vercel 上是 Vercel 区域代码，如 <code>fra1</code>）。应用提供的区域列表在 <code>GET /api/regions</code>。完整部署说明见<a href="/docs/self-host#regions-zh">自托管指南</a>。</p>
     <h2 id="limits-zh">需要了解</h2>
     <ul>
       <li><strong>仅限国际区域。</strong>自带的 Vercel 构建只覆盖中国大陆以外的区域。要从中国大陆境内检测，需要你自己在那里的主机上运行探针。</li>
