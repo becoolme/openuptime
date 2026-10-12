@@ -18,19 +18,6 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 | `packages/repo` | Storage interface (`Repo`) and entity types |
 | `packages/db-pg` | Postgres implementation of `Repo`: Drizzle schema, migrations |
 
-## Self-host with Docker
-
-One container runs the API, the web app and the check scheduler; Postgres comes with the compose file.
-
-```bash
-git clone https://github.com/becoolme/openuptime.git && cd openuptime
-cp .env.docker.example .env      # set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
-docker compose up -d --build     # http://localhost:8080
-```
-
-The schema is migrated on start and the data lives in the `pgdata` volume. Set `PUBLIC_URL` when the app is not served
-from `http://localhost:8080`. Email is optional; see [Reference](docs/reference.md#email).
-
 ## Deploy to Cloudflare
 
 The site is two Workers on one domain:
@@ -140,6 +127,19 @@ Open the domain and sign up. Once your own account exists you can set `"DISABLE_
 deploy again to close registration (invited people can still join).
 
 **Upgrade later:** pull, `pnpm install`, `pnpm db:migrate`, then deploy the API and the web Worker, in that order.
+
+## Self-host with Docker
+
+One container runs the API, the web app and the check scheduler; Postgres comes with the compose file.
+
+```bash
+git clone https://github.com/becoolme/openuptime.git && cd openuptime
+cp .env.docker.example .env      # set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
+docker compose up -d --build     # http://localhost:8080
+```
+
+The schema is migrated on start and the data lives in the `pgdata` volume. Set `PUBLIC_URL` when the app is not served
+from `http://localhost:8080`. Email is optional; see [Reference](docs/reference.md#email).
 
 ## Develop
 
