@@ -5,6 +5,7 @@ import { z } from "zod";
 import { actionEmail, appUrl, sendEmail } from "../email";
 import { langFromHeader, tr } from "../mail-i18n";
 import type { AppEnv } from "../env";
+import { requireManager, uuidParams } from "../middleware";
 import { clientIp } from "../ratelimit";
 
 // optional link to the owner's own website; "" clears it
@@ -43,14 +44,14 @@ export const statusPages = new Hono<AppEnv>()
       return c.json(page, 201);
     },
   )
-  .get("/:id", async (c) => {
+  .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
     const comps = await repo.pageComponents(page.id);
     return c.json({ ...page, monitorIds: comps.map((x) => x.monitorId), components: comps });
   })
-  .patch("/:id", zValidator("json", pageBody.partial()), async (c) => {
+  .patch("/:id", uuidParams, requireManager, zValidator("json", pageBody.partial()), async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
@@ -59,20 +60,20 @@ export const statusPages = new Hono<AppEnv>()
     if (monitorIds || components) await repo.setPageComponents(page.id, c.get("orgId"), toComponents({ monitorIds, components }), c.get("projectScope"));
     return c.json({ ok: true });
   })
-  .get("/:id/subscribers", async (c) => {
+  .get("/:id/subscribers", uuidParams, async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
     return c.json(await repo.listSubscribers(page.id));
   })
-  .delete("/:id/subscribers/:sid", async (c) => {
+  .delete("/:id/subscribers/:sid", uuidParams, requireManager, async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!page) return c.json({ error: "Not found" }, 404);
     await repo.deleteSubscriber(page.id, c.req.param("sid"));
     return c.body(null, 204);
   })
-  .delete("/:id", async (c) => {
+  .delete("/:id", uuidParams, requireManager, async (c) => {
     const repo = c.get("repo");
     const page = await repo.getStatusPage(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (page) await repo.deleteStatusPage(page.id);

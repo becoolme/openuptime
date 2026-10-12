@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { notifyIncidentUpdate } from "../alerts";
 import type { AppEnv } from "../env";
+import { uuidParams } from "../middleware";
 
 export const incidents = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await c.get("repo").listIncidents(c.get("orgId"), c.get("projectId"))))
@@ -20,7 +21,7 @@ export const incidents = new Hono<AppEnv>()
       return c.json(inc, 201);
     },
   )
-  .get("/:id", async (c) => {
+  .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");
     const id = c.req.param("id");
     // a project-limited key only sees incidents of its own monitors (or ones not tied to a monitor)
@@ -31,6 +32,7 @@ export const incidents = new Hono<AppEnv>()
   })
   .post(
     "/:id/updates",
+    uuidParams,
     zValidator("json", z.object({ status: z.enum(["investigating", "identified", "monitoring", "resolved"]), body: z.string().min(1).max(4000) })),
     async (c) => {
       const repo = c.get("repo");
@@ -43,7 +45,7 @@ export const incidents = new Hono<AppEnv>()
       return c.json(r.update, 201);
     },
   )
-  .post("/:id/ack", async (c) => {
+  .post("/:id/ack", uuidParams, async (c) => {
     const repo = c.get("repo");
     const id = c.req.param("id");
     if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);

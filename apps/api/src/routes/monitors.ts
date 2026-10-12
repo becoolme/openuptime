@@ -3,7 +3,7 @@ import type { Repo } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireManager } from "../middleware";
+import { requireManager, uuidParams } from "../middleware";
 import { creditCost } from "../entitlements";
 import { checkOne, nextAfter } from "../scheduler";
 
@@ -153,13 +153,13 @@ export const monitors = new Hono<AppEnv>()
     }
     return c.json({ created: valid.length, skipped }, valid.length ? 201 : 400);
   })
-  .get("/:id", async (c) => {
+  .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
     return c.json({ ...m, ...(await repo.monitorDetail(m.id)) });
   })
-  .patch("/:id", zValidator("json", patchBody), async (c) => {
+  .patch("/:id", uuidParams, zValidator("json", patchBody), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
@@ -184,11 +184,11 @@ export const monitors = new Hono<AppEnv>()
     }
     return c.json(row);
   })
-  .delete("/:id", requireManager, async (c) => {
+  .delete("/:id", uuidParams, requireManager, async (c) => {
     await c.get("repo").deleteMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     return c.body(null, 204);
   })
-  .post("/:id/check", async (c) => {
+  .post("/:id/check", uuidParams, async (c) => {
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);

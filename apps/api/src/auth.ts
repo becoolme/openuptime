@@ -190,7 +190,8 @@ export function createAuth(database: Database, env: Bindings) {
           await sendEmail({ to: email, subject: tr(lang, "Join {org} on OpenUptime", { org: org.name }), fromName: "OpenUptime", ...mail });
         },
       }),
-      apiKey({ enableMetadata: true }),
+      // the plugin's default allows 10 requests per key per day; the REST API has no per-key quota
+      apiKey({ enableMetadata: true, defaultPrefix: "ou_", rateLimit: { enabled: false } }),
       twoFactor({ issuer: "OpenUptime" }),
       // only the OAuth provider signs tokens; do not mint a JWT (and touch the keys table) on every session read
       jwt({ disableSettingJwtHeader: true }),

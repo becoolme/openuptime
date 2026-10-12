@@ -66,6 +66,8 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     const repo = c.get("repo");
     const m = await repo.monitorByHeartbeatToken(c.req.param("token"));
     if (!m) return c.json({ error: "Unknown token" }, 404);
+    // a paused monitor stays paused: the ping is acknowledged but changes nothing
+    if (m.status === "paused") return c.json({ ok: true, paused: true });
     await repo.recordCheck({ monitorId: m.id, ok: true });
     const wasDown = m.status === "down";
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping

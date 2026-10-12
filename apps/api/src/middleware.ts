@@ -1,4 +1,5 @@
 import type { Repo, Scope } from "@openuptime/repo";
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "./env";
@@ -78,10 +79,24 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   await next();
 });
 
-/** Destructive actions are for workspace owners and admins; a plain member (by session, API key or agent) gets 403. */
-export const requireManager = createMiddleware<AppEnv>(async (c, next) => {
+/** True for workspace owners and admins (by session, API key or agent alike). */
+export async function isManager(c: Context<AppEnv>): Promise<boolean> {
   const role = await c.get("repo").memberRole(c.get("userId"), c.get("orgId"));
-  if (role !== "owner" && role !== "admin") throw new HTTPException(403, { message: "Only workspace owners and admins can delete this" });
+  return role === "owner" || role === "admin";
+}
+
+/** Destructive and configuration-changing actions are for workspace owners and admins; a plain member gets 403. */
+export const requireManager = createMiddleware<AppEnv>(async (c, next) => {
+  if (!(await isManager(c))) throw new HTTPException(403, { message: "Only workspace owners and admins can do this" });
+  await next();
+});
+
+/** Path ids are uuids: anything else is simply not found (instead of a database error surfacing as a 500). */
+export const uuidParams = createMiddleware<AppEnv>(async (c, next) => {
+  for (const key of ["id", "sid"]) {
+    const v = c.req.param(key);
+    if (v !== undefined && !UUID.test(v)) return c.json({ error: "Not found" }, 404);
+  }
   await next();
 });
 

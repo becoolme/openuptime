@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { deliver } from "../alerts";
 import type { AppEnv } from "../env";
-import { requireManager } from "../middleware";
+import { isManager, requireManager, uuidParams } from "../middleware";
 
 const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark"] as const;
 type ChannelType = (typeof TYPES)[number];
@@ -43,9 +43,11 @@ export const channels = new Hono<AppEnv>()
     const { scope: _scope, ...channel } = v;
     return c.json(await c.get("repo").createChannel(c.get("orgId"), projectId, { ...channel, config: cfg.data }), 201);
   })
-  .patch("/:id", zValidator("json", z.object({ name: z.string().min(1).max(80).optional(), enabled: z.boolean().optional(), autoEnable: z.boolean().optional(), config: z.record(z.string(), z.unknown()).optional() })), async (c) => {
+  .patch("/:id", uuidParams, zValidator("json", z.object({ name: z.string().min(1).max(80).optional(), enabled: z.boolean().optional(), autoEnable: z.boolean().optional(), config: z.record(z.string(), z.unknown()).optional() })), async (c) => {
     const repo = c.get("repo");
     const patch = c.req.valid("json");
+    // where alerts go (and the credentials used) is a manager's call; a member may still rename or toggle
+    if (patch.config && !(await isManager(c))) return c.json({ error: "Only workspace owners and admins can change a channel's destination" }, 403);
     if (patch.config) {
       // the settings are checked against the channel's own type
       const current = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
@@ -58,7 +60,7 @@ export const channels = new Hono<AppEnv>()
     return row ? c.json(row) : c.json({ error: "Not found" }, 404);
   })
   // sends a harmless test message so people can verify the destination before an outage
-  .post("/:id/test", async (c) => {
+  .post("/:id/test", uuidParams, async (c) => {
     const repo = c.get("repo");
     const ch = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!ch) return c.json({ error: "Not found" }, 404);
@@ -73,7 +75,7 @@ export const channels = new Hono<AppEnv>()
       return c.json({ error: (e as Error).message }, 502);
     }
   })
-  .delete("/:id", requireManager, async (c) => {
+  .delete("/:id", uuidParams, requireManager, async (c) => {
     const repo = c.get("repo");
     const id = c.req.param("id");
     // a channel some monitors still alert through is only removed once they have let go of it
