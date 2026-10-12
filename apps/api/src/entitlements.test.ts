@@ -54,9 +54,16 @@ describe("withinCredits", () => {
     expect(run).toEqual([a[0], a[1], b[0]]);
   });
   it("never charges or blocks heartbeat monitors", async () => {
-    expect(creditCost({ type: "heartbeat" })).toBe(0);
+    expect(creditCost({ type: "heartbeat", regions: ["auto"] })).toBe(0);
     const hb = mon("a", "heartbeat");
     expect(await withinCredits([hb, mon("a")], ledger({ a: 0 }))).toEqual([hb]);
+  });
+  it("charges one credit per region", async () => {
+    expect(creditCost({ type: "http", regions: ["auto"] })).toBe(1);
+    expect(creditCost({ type: "http", regions: ["us-east", "eu-central", "ap-southeast"] })).toBe(3);
+    expect(creditCost({ type: "http", regions: ["us-east", "us-east"] })).toBe(1);
+    // regions only apply to the types a probe can run
+    expect(creditCost({ type: "postgres", regions: ["us-east", "eu-central"] })).toBe(1);
   });
   it("keeps monitoring when the ledger fails", async () => {
     const broken: Entitlements = { ...unmetered, spendCredits: async () => { throw new Error("db down"); }, creditBalance: async () => null };

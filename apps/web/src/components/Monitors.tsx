@@ -205,6 +205,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     keyword: monitor?.keyword ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
+    regions: monitor?.regions?.length ? monitor.regions : ["auto"],
   });
   const [tagText, setTagText] = useState((monitor?.tags ?? []).join(", "));
   const [hdrs, setHdrs] = useState<{ k: string; v: string }[]>(Object.entries(monitor?.headers ?? {}).map(([k, v]) => ({ k, v })));
@@ -228,6 +229,15 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       if (!monitor && min > 60) setF((x) => ({ ...x, intervalSec: Math.max(x.intervalSec, min) }));
     }).catch(() => {});
   }, []);
+  // where checks can run from on this deployment; with only `auto` the whole section stays out of the form
+  const [places, setPlaces] = useState<{ id: string; name: string }[]>([]);
+  const [maxRegions, setMaxRegions] = useState(1);
+  useEffect(() => {
+    api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor); }).catch(() => {});
+  }, []);
+  const known = new Set(places.map((p) => p.id));
+  // a saved region this deployment no longer offers stays listed so it can be switched off
+  const choices = [...places, ...(monitor?.regions ?? []).filter((r) => !known.has(r)).map((id) => ({ id, name: id }))];
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
@@ -239,7 +249,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     try {
       const headers = f.type === "http" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
-      const payload = { ...f, tags, headers, keyword: f.type === "http" && f.keyword ? f.keyword : null };
+      const { regions, ...rest } = f;
+      // only http and tcp checks can run from a region; leaving the field out keeps the stored value
+      const probed = (f.type === "http" || f.type === "tcp") && places.length > 1;
+      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: f.type === "http" && f.keyword ? f.keyword : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         await api.updateMonitor(monitor.id, patch);
@@ -248,7 +261,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     } catch (e) {
       const x = e as Error & { code?: string; upgradeUrl?: string };
       // plan limits read in the UI's language; the server message stays English for API clients
-      setErr(x.code === "monitor_limit" ? t("You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.") : x.code === "interval_not_allowed" ? t("This check interval is not available on your plan.") : x.message);
+      setErr(x.code === "monitor_limit" ? t("You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.") : x.code === "interval_not_allowed" ? t("This check interval is not available on your plan.") : x.code === "regions_not_allowed" ? t("Your plan cannot check from that many regions.") : x.code === "unknown_region" ? t("One of the selected regions is not available.") : x.message);
       setUpgrade(x.code ? x.upgradeUrl : undefined);
       setBusy(false);
     }
@@ -354,7 +367,25 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             })}
           </div>
         )}
-        <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec)).toLocaleString()} {t("checks / month")}</b></div>
+        {(f.type === "http" || f.type === "tcp") && places.length > 1 && (
+          <div className="fld">{t("Check from")} <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))} · {t("Auto is this deployment's own location")})</span>
+            {choices.map((p) => {
+              const on = f.regions.includes(p.id);
+              const full = !on && f.regions.length >= maxRegions;
+              return (
+                <button type="button" key={p.id} className="route tog" disabled={full} title={full ? t("Your plan cannot check from that many regions.") : undefined}
+                  onClick={() => {
+                    const next = on ? f.regions.filter((x) => x !== p.id) : [...f.regions, p.id];
+                    set("regions", next.length ? next : ["auto"]);
+                  }}>
+                  <div><b style={{ fontWeight: 500 }}>{p.name}</b><small>{p.id === "auto" ? t("Default") : known.has(p.id) ? p.id : t("No longer available")}</small></div>
+                  <span className={`tg ${on ? "on" : ""}`} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
         {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>

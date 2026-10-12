@@ -38,6 +38,9 @@ services:
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
       # User-Agent of HTTP checks (default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime))
       CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
+      # remote probes for multi-region checks (apps/probe): JSON of region id -> URL, and the secret both sides share
+      PROBE_REGIONS: ${PROBE_REGIONS:-}
+      PROBE_SECRET: ${PROBE_SECRET:-}
       # target of the "Powered by" link on status pages
       PRODUCT_URL: ${PRODUCT_URL:-https://openuptime.app}
       # max connections of the shared Postgres pool (default 10)

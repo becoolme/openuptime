@@ -1,5 +1,6 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { configureProbes } from "./probes";
 import { unmetered, type Entitlements } from "./entitlements";
 import { MESSAGE_SIZE, checkOne, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 
@@ -147,5 +148,69 @@ describe("checkOne", () => {
     // a heartbeat gets a due time from the grace period; nothing else sets one here
     await checkOne(repo, hb());
     expect(states[0]).toHaveProperty("nextCheckAt");
+  });
+});
+
+describe("checkOne across regions", () => {
+  const url = (r: string) => `https://probe.example.app/api/probe/${r}`;
+  const probes = (answers: Record<string, { ok: boolean } | "down">) => {
+    configureProbes({ PROBE_REGIONS: JSON.stringify(Object.fromEntries(Object.keys(answers).map((r) => [r, url(r)]))), PROBE_SECRET: "s" });
+    vi.stubGlobal("fetch", async (u: string) => {
+      const a = answers[u.split("/").pop()!];
+      if (a === "down") throw new Error("connect refused");
+      return new Response(JSON.stringify({ ok: a.ok, statusCode: a.ok ? 200 : 503, latencyMs: 80, error: a.ok ? undefined : "Expected 200, got 503" }));
+    });
+  };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    configureProbes({});
+  });
+
+  const web = (over: Partial<Monitor> = {}) => hb({ type: "http", target: "https://example.com", method: "GET", expectedStatus: 200, timeoutMs: 5000, regions: ["us-east", "eu-central", "ap-southeast"], failureThreshold: 1, ...over });
+
+  function repoWithRecords() {
+    const f = fakeRepo();
+    const recorded = { single: [] as unknown[], many: [] as { monitorId: string; results: { region: string; ok: boolean }[]; summary: { ok: boolean } }[] };
+    (f.repo as unknown as Record<string, unknown>).recordCheck = async (r: unknown) => void recorded.single.push(r);
+    (f.repo as unknown as Record<string, unknown>).recordRegionResults = async (monitorId: string, results: never, summary: never) => void recorded.many.push({ monitorId, results, summary });
+    return { ...f, recorded };
+  }
+
+  it("records one row per region and one run, and stays up when only one region fails", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: false } });
+    const { repo, incidents, states, recorded } = repoWithRecords();
+    await checkOne(repo, web());
+    expect(recorded.single).toHaveLength(0);
+    expect(recorded.many).toHaveLength(1);
+    expect(recorded.many[0].results.map((r) => r.region).sort()).toEqual(["ap-southeast", "eu-central", "us-east"]);
+    expect(recorded.many[0].summary.ok).toBe(true);
+    expect(incidents).toHaveLength(0);
+    expect(states.at(-1)).toMatchObject({ consecutiveFailures: 0 });
+  });
+
+  it("goes down when most regions fail", async () => {
+    probes({ "us-east": { ok: false }, "eu-central": { ok: false }, "ap-southeast": { ok: true } });
+    const { repo, incidents, recorded } = repoWithRecords();
+    await checkOne(repo, web());
+    expect(recorded.many[0].summary.ok).toBe(false);
+    expect(incidents.map((i) => i.title)).toEqual(["API is down"]);
+  });
+
+  it("does not take unreachable probes for an outage", async () => {
+    probes({ "us-east": "down", "eu-central": { ok: true }, "ap-southeast": "down" });
+    const { repo, incidents, recorded } = repoWithRecords();
+    await checkOne(repo, web());
+    // only the region that answered is recorded, as a single row
+    expect(recorded.many).toHaveLength(0);
+    expect(recorded.single).toMatchObject([{ region: "eu-central", ok: true }]);
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("falls back to its own location when every probe is unreachable", async () => {
+    probes({ "us-east": "down", "eu-central": "down", "ap-southeast": "down" });
+    const { repo, recorded } = repoWithRecords();
+    // a closed local port: the fallback check itself fails, which is what a real outage would look like
+    await checkOne(repo, web({ type: "tcp", target: "127.0.0.1:1", failureThreshold: 3 }));
+    expect(recorded.single).toMatchObject([{ region: "auto", ok: false }]);
   });
 });

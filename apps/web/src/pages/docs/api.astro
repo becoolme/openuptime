@@ -12,7 +12,7 @@ expectedStatus integer 100-599                               (default 200)
 intervalSec    integer 60-86400                              (default 60)
 timeoutMs      integer 1000-30000                            (default 10000)
 failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
-regions        string[]                                      (default ["auto"])
+regions        string[], 1-10 ids from GET /regions          (default ["auto"]; http and tcp monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
 headers        { [name: string]: string }                    (default {})
@@ -32,10 +32,19 @@ const groups: Group[] = [
       { m: "GET", p: "/monitors/export", en: "Download the project's monitors as JSON ({ version, exportedAt, monitors }). Request headers are included, so treat the file as sensitive.", zh: "以 JSON 导出当前项目的监控项（{ version, exportedAt, monitors }）。文件包含请求头，请当作敏感文件保管。" },
       { m: "POST", p: "/monitors/import", en: "Create monitors from a JSON array (or an object with a monitors array), up to 500 per call. Accepts our export plus common aliases from other tools (name/friendly_name, target/url/hostname, interval in seconds, type https/keyword/port). Invalid items are skipped and reported; returns 201 { created, skipped: [{ index, name, error }] }, or 400 when nothing was created.", zh: "从 JSON 数组（或含 monitors 数组的对象）批量创建监控项，单次最多 500 个。支持本产品的导出格式，以及其他工具常见的字段别名（name/friendly_name、target/url/hostname、interval 秒、type https/keyword/port）。无效项会被跳过并返回；成功时 201 { created, skipped: [{ index, name, error }] }，一个都没创建时 400。", req: `{ "monitors": [ { "name": "API", "type": "http", "target": "https://api.example.com", "tags": ["prod"] } ] }`, res: `{ created: 1, skipped: [] }` },
       { m: "GET", p: "/monitors/:id", en: "One monitor with its last 120 check results, last 5 incidents and stats.", zh: "获取单个监控项，含最近 120 条检测结果、最近 5 个事件和统计数据。",
-        res: `{ ...monitor, results: [{ id, region, ok, statusCode, latencyMs, error, checkedAt }],\n  incidents: [...], stats: { uptime24h, uptime7d, avg24h, p95 } }` },
+        res: `{ ...monitor, results: [{ id, region, ok, statusCode, latencyMs, error, checkedAt }],\n  incidents: [...], stats: { uptime24h, uptime7d, avg24h, p95 },\n  regionStats: [{ region, checks24h, uptime24h, avgLatency24h, last }] }` },
       { m: "PATCH", p: "/monitors/:id", en: "Update the named fields only (same fields as create, except type). Also accepts paused (boolean) to pause or resume. At least one field is required.", zh: "仅更新传入的字段（与创建相同，但不含 type），另可传 paused（布尔）暂停或恢复。至少需要一个字段。", req: `any of the create fields except "type", plus:\npaused  boolean` },
       { m: "DELETE", p: "/monitors/:id", en: "Delete a monitor and its results. Returns 204.", zh: "删除监控项及其检测结果。返回 204。" },
-      { m: "POST", p: "/monitors/:id/check", en: "Run a check immediately. Returns { ok: true }.", zh: "立即执行一次检测。返回 { ok: true }。" },
+      { m: "POST", p: "/monitors/:id/check", en: "Run a check immediately from the monitor's own regions and record it. Returns { ok: true }. With a region, sends one request from that region instead, as a diagnostic: the result is returned and nothing is recorded or changes the monitor's status. It uses one check of your allowance. 502 probe_unreachable when the region could not be reached.", zh: "立即按监控项自己的区域执行一次检测并记录，返回 { ok: true }。传入 region 时，改为只从该区域发出一次请求用于诊断：返回结果，但不记录，也不会改变监控状态，消耗 1 次检查额度。区域无法连通时返回 502 probe_unreachable。", req: `(no body)   run from the monitor's regions and record the result\n{ "region": "eu-central" }   one-off request from that region`, res: `{ ok: true }\n{ ok: true, region: "eu-central", result: { ok, statusCode, latencyMs, error } }` },
+    ],
+  },
+  {
+    id: "regions", en: "Regions", zh: "检测区域",
+    noteEn: "A monitor checks from its own location (auto) unless regions says otherwise; list regions only for http and tcp monitors. With several regions a run is down when most of the regions that answered failed, so one region's bad route does not page you. Each region counts as one check of your allowance. Errors: 400 unknown_region, 400 regions_not_supported (other monitor types), 402 regions_not_allowed (more regions than the plan allows).",
+    noteZh: "监控项默认从服务自身所在位置（auto）检测，仅当设置 regions 时才走多区域，且只适用于 http 与 tcp 类型。多区域时，只有多数应答的区域都失败才判定为故障，单个区域的线路问题不会触发告警。每个区域各计一次检查额度。错误：400 unknown_region、400 regions_not_supported（其他类型）、402 regions_not_allowed（超出套餐允许的区域数）。",
+    eps: [
+      { m: "GET", p: "/regions", en: "The regions this deployment can check from, the monitor types that support them and how many one monitor may list.", zh: "当前部署可用的检测区域、支持区域检测的监控类型，以及单个监控项最多可选的区域数。",
+        res: `{ regions: [{ id: "auto", name: "Auto" }, { id: "us-east", name: "US East (Virginia)" }, ...],\n  types: ["http", "tcp"], maxPerMonitor: 3 }` },
     ],
   },
   {
@@ -120,7 +129,7 @@ const groups: Group[] = [
   },
 ];
 ---
-<Doc description="REST API reference: authentication, monitors, incidents, alert channels, status pages and heartbeats." title="API Reference" updated="2026-10-10" toc>
+<Doc description="REST API reference: authentication, monitors, incidents, alert channels, status pages and heartbeats." title="API Reference" updated="2026-10-12" toc>
   <div lang="en">
     <h1>API reference</h1>
     <p class="lede">Manage monitors, incidents, alert channels and status pages programmatically. The API is JSON over HTTPS.</p>

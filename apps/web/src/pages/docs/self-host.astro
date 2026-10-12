@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc description="Run OpenUptime on Cloudflare Workers with Postgres, or in one Docker container." title="Self-host" updated="2026-10-11" toc>
+<Doc description="Run OpenUptime on Cloudflare Workers with Postgres, or in one Docker container." title="Self-host" updated="2026-10-12" toc>
   <div lang="en">
     <h1>Self-host OpenUptime</h1>
     <p class="lede">Run your own copy on Cloudflare Workers or in Docker. Both use the same code and a Postgres database you control.</p>
@@ -47,6 +47,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CRON_SECRET</code></td><td>Optional. Lets an external scheduler call <code>POST /internal/run-checks</code>; unset leaves <code>/internal/*</code> closed.</td></tr>
         <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to monitor internal services. By default monitors and alert webhooks pointing at private, loopback or link-local addresses (and single-label names such as compose service names) are refused, so a signed-up user cannot probe your network.</td></tr>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>Optional. User-Agent of HTTP checks.</td></tr>
+        <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>Optional. Remote probes for <a href="#regions">multi-region checks</a>. Unset, every check runs from this deployment.</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub".</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional Plausible analytics. Off when the domain is empty.</td></tr>
@@ -109,6 +110,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>Sender address. Onboard the domain in Cloudflare Email Sending; without it emails are logged.</td></tr>
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
         <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to let monitors and alert webhooks target private addresses. Default: refused. Cloudflare Workers cannot reach private ranges anyway; this mostly matters for Docker.</td></tr>
+        <tr><td>api vars + secret</td><td><code>PROBE_REGIONS</code>, <code>PROBE_SECRET</code></td><td>Optional. Remote probes for <a href="#regions">multi-region checks</a>. Put the region list in <code>vars</code> and the shared secret with <code>wrangler secret put PROBE_SECRET</code>.</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration (email and GitHub). Create your own account first; afterwards only people with a pending invitation can still sign up.</td></tr>
         <tr><td>api vars</td><td><code>LEGAL_LINKS</code></td><td>Set to <code>true</code> to add "you agree to the Terms and Privacy Policy" to the sign-up form. The bundled <code>/terms</code> and <code>/privacy</code> pages describe the hosted service at openuptime.app: replace them with your own text first.</td></tr>
         <tr><td>api vars + secret</td><td><code>TURNSTILE_SITE_KEY</code>, <code>TURNSTILE_SECRET_KEY</code></td><td>Optional. Put the site key in the API <code>vars</code> and the secret key with <code>wrangler secret put TURNSTILE_SECRET_KEY</code>; email sign-up then requires a verified Turnstile token. Both must be set.</td></tr>
@@ -127,6 +129,24 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
       <li><strong>Paid to Free</strong>: remove the <code>queues</code> block and deploy the API again. You can delete the queue afterwards.</li>
     </ul>
     <p>No data migration is involved. Monitors, history and incidents are untouched.</p>
+
+    <h2 id="regions">Multi-region checks</h2>
+    <p>By default a monitor is checked from where OpenUptime runs. To check from several places, deploy the small probe in <code>apps/probe</code> to a few regions and tell the API where they are. A monitor uses them only when you pick regions for it; everything else keeps running from this deployment, so nothing changes until you opt in.</p>
+    <ol>
+      <li><strong>Deploy the probe.</strong> The bundled build targets Vercel and creates one function per region (<code>apps/probe/regions.json</code>, default: Virginia, San Francisco, Frankfurt, Singapore, Tokyo). Set <code>PROBE_SECRET</code> on the Vercel project, run <code>pnpm build</code> in <code>apps/probe</code>, then <code>vercel deploy --prebuilt --prod</code>. Running the probe in several regions needs a Vercel plan that allows multiple function regions. The probe is also a plain Node server (<code>pnpm start</code>), so it can run on your own hosts in other places.</li>
+      <li><strong>Tell the API.</strong> Set the same secret as <code>PROBE_SECRET</code> and list the regions as JSON in <code>PROBE_REGIONS</code>:</li>
+    </ol>
+    <pre><code is:raw>PROBE_SECRET=&lt;the same secret as on the probe&gt;
+PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-central":"https://probe.example.app/api/probe/eu-central","ap-southeast":{"url":"https://probe.example.app/api/probe/ap-southeast","name":"Singapore"}}</code></pre>
+    <p>Keys are region ids you choose (lowercase letters, digits and dashes). A value is a URL, or <code is:raw>{ "url", "name" }</code> to set the label shown in the app. URLs must be <code>https</code>. The list appears in the app and in <code>GET /api/regions</code>, and a monitor can then pick up to its plan's limit.</p>
+    <h3>How it behaves</h3>
+    <ul>
+      <li>Only <strong>HTTP and TCP</strong> monitors can use regions. Other types, and heartbeats, always run from this deployment.</li>
+      <li>With several regions a run counts as failed only when <strong>most of the regions that answered</strong> failed, so one region's bad route does not open an incident. Each region's result is kept, and the monitor page shows uptime and latency per region.</li>
+      <li>A probe that cannot be reached is not a failed check. It is left out of the vote, and when no probe answers the check runs from this deployment instead, so a probe outage cannot blind monitoring.</li>
+      <li>Each region counts as one check against any check allowance. A single request can also be sent from one region on the monitor page (or <code>POST /api/monitors/:id/check</code> with a <code>region</code>); it is not recorded and does not change the monitor's status.</li>
+      <li>Probes only accept signed requests (HMAC-SHA256 over timestamp and body, 60 s skew) and refuse private, loopback and link-local targets whatever the signature, so a probe cannot be used as an open proxy.</li>
+    </ul>
 
     <h2 id="after">After install</h2>
     <ul>
@@ -180,6 +200,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CRON_SECRET</code></td><td>可选。允许外部调度器调用 <code>POST /internal/run-checks</code>；不设置则 <code>/internal/*</code> 保持关闭。</td></tr>
         <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 以监控内网服务。默认拒绝指向私有、回环、链路本地地址（以及 compose 服务名这类单段主机名）的监控项和告警 Webhook，避免已注册用户探测你的内网。</td></tr>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>可选。HTTP 检查使用的 User-Agent。</td></tr>
+        <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>可选。用于<a href="#regions-zh">多区域检测</a>的远程探针。不设置时，所有检测都从本部署发起。</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选的 Plausible 统计。域名为空则关闭。</td></tr>
@@ -242,6 +263,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>发件地址。需在 Cloudflare Email Sending 中接入该域名；不配置则邮件只写日志。</td></tr>
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
         <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 允许监控项和告警 Webhook 指向私有地址，默认拒绝。Cloudflare Workers 本身无法访问私有网段，此项主要影响 Docker 部署。</td></tr>
+        <tr><td>api vars + secret</td><td><code>PROBE_REGIONS</code>, <code>PROBE_SECRET</code></td><td>可选。用于<a href="#regions-zh">多区域检测</a>的远程探针。区域列表放在 <code>vars</code>，共享密钥用 <code>wrangler secret put PROBE_SECRET</code> 设置。</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（邮箱与 GitHub 均适用）。请先创建好自己的账号；之后只有持有待处理邀请的人还能注册。</td></tr>
         <tr><td>api vars</td><td><code>LEGAL_LINKS</code></td><td>设为 <code>true</code> 后，注册表单会显示“创建账户即表示同意服务条款与隐私政策”。自带的 <code>/terms</code> 和 <code>/privacy</code> 描述的是 openuptime.app 托管服务，请先换成你自己的文本。</td></tr>
         <tr><td>api vars + secret</td><td><code>TURNSTILE_SITE_KEY</code>、<code>TURNSTILE_SECRET_KEY</code></td><td>可选。站点密钥放进 API 的 <code>vars</code>，私钥用 <code>wrangler secret put TURNSTILE_SECRET_KEY</code> 设置；之后邮箱注册需要通过 Turnstile 验证。两者必须同时设置。</td></tr>
@@ -260,6 +282,24 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
       <li><strong>付费版降到免费版</strong>：删除 <code>queues</code> 配置块并重新部署 API，之后可以删除队列。</li>
     </ul>
     <p>不涉及数据迁移，监控项、历史记录和事件都不受影响。</p>
+
+    <h2 id="regions-zh">多区域检测</h2>
+    <p>默认情况下，监控项从 OpenUptime 自身所在位置发起检测。想从多个地点检测，可把 <code>apps/probe</code> 中的小型探针部署到几个区域，再把它们的地址告诉 API。只有你为某个监控项指定了区域，才会使用探针；其他监控项仍从本部署发起，因此不主动开启就不会有任何变化。</p>
+    <ol>
+      <li><strong>部署探针。</strong>自带的构建面向 Vercel，每个区域生成一个函数（<code>apps/probe/regions.json</code>，默认：弗吉尼亚、旧金山、法兰克福、新加坡、东京）。在 Vercel 项目上设置 <code>PROBE_SECRET</code>，在 <code>apps/probe</code> 中运行 <code>pnpm build</code>，再 <code>vercel deploy --prebuilt --prod</code>。要在多个区域运行，需要允许多区域函数的 Vercel 套餐。探针也是一个普通的 Node 服务（<code>pnpm start</code>），可以跑在你自己位于其他地区的主机上。</li>
+      <li><strong>告诉 API。</strong>把同一个密钥设为 <code>PROBE_SECRET</code>，并用 JSON 在 <code>PROBE_REGIONS</code> 中列出区域：</li>
+    </ol>
+    <pre><code is:raw>PROBE_SECRET=&lt;与探针相同的密钥&gt;
+PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-central":"https://probe.example.app/api/probe/eu-central","ap-southeast":{"url":"https://probe.example.app/api/probe/ap-southeast","name":"Singapore"}}</code></pre>
+    <p>键是你自己定的区域 id（小写字母、数字和连字符）。值可以是 URL，或 <code is:raw>{ "url", "name" }</code> 以设置在应用中显示的名称。URL 必须是 <code>https</code>。区域列表会出现在应用和 <code>GET /api/regions</code> 中，监控项可在套餐上限内选择多个区域。</p>
+    <h3>行为说明</h3>
+    <ul>
+      <li>只有 <strong>HTTP 和 TCP</strong> 监控项可以使用区域。其他类型和心跳始终从本部署发起。</li>
+      <li>选择多个区域时，只有<strong>多数应答的区域</strong>都失败才判定为失败，单个区域的线路问题不会产生事件。各区域的结果都会保留，监控详情页按区域显示可用率和延迟。</li>
+      <li>探针无法连通不算检测失败：它不参与表决；所有探针都没有应答时，改为从本部署发起检测，因此探针故障不会让监控失明。</li>
+      <li>每个区域各计一次检查额度。也可以在监控详情页（或 <code>POST /api/monitors/:id/check</code> 并传 <code>region</code>）从某一个区域单次发起请求；该请求不会被记录，也不会改变监控状态。</li>
+      <li>探针只接受签名请求（对时间戳与请求体做 HMAC-SHA256，允许 60 秒偏差），并且无论签名是否有效，都会拒绝私有、回环和链路本地地址，因此不会变成开放代理。</li>
+    </ul>
 
     <h2 id="after-zh">安装之后</h2>
     <ul>

@@ -55,6 +55,29 @@ export function createRepo(db: Db): Repo {
     return list.map((i) => ({ ...i, updates: updates.filter((u) => u.incidentId === i.id) }));
   }
 
+  /** Count one run in the monitor's hourly rollup. */
+  async function foldIntoRollup(monitorId: string, ok: boolean, latencyMs: number | null) {
+    await db
+      .insert(schema.checkRollup)
+      .values({
+        monitorId,
+        bucket: sql`date_trunc('hour', now())`,
+        total: 1,
+        ok: ok ? 1 : 0,
+        latencySum: latencyMs ?? 0,
+        latencyN: latencyMs == null ? 0 : 1,
+      })
+      .onConflictDoUpdate({
+        target: [schema.checkRollup.monitorId, schema.checkRollup.bucket],
+        set: {
+          total: sql`${schema.checkRollup.total} + 1`,
+          ok: sql`${schema.checkRollup.ok} + ${ok ? 1 : 0}`,
+          latencySum: sql`${schema.checkRollup.latencySum} + ${latencyMs ?? 0}`,
+          latencyN: sql`${schema.checkRollup.latencyN} + ${latencyMs == null ? 0 : 1}`,
+        },
+      });
+  }
+
   const repo: Repo = {
     // ── workspaces, users, projects ────────────────────────────────────────────
     async isMember(userId, orgId) {
@@ -306,7 +329,7 @@ export function createRepo(db: Db): Repo {
     async monitorDetail(monitorId) {
       const day = new Date(Date.now() - 864e5).toISOString();
       const week = new Date(Date.now() - 7 * 864e5).toISOString();
-      const [results, statRows, p95Rows, incidents] = await Promise.all([
+      const [results, statRows, p95Rows, incidents, regionRows] = await Promise.all([
         db.select().from(schema.checkResult).where(eq(schema.checkResult.monitorId, monitorId)).orderBy(desc(schema.checkResult.checkedAt)).limit(120),
         // uptime and averages come from the hourly rollup; only the p95 needs the raw rows of the last day
         rows<Record<string, number | null>>(
@@ -323,6 +346,11 @@ export function createRepo(db: Db): Repo {
             from check_result where monitor_id = ${monitorId} and checked_at >= ${day}::timestamptz`),
         ),
         db.select().from(schema.incident).where(eq(schema.incident.monitorId, monitorId)).orderBy(desc(schema.incident.startedAt)).limit(5),
+        rows<{ region: string; n: number; ok_n: number; avg: number | null }>(
+          db.execute(sql`select region, count(*)::int as n, count(*) filter (where ok)::int as ok_n,
+            round(avg(latency_ms) filter (where ok))::int as avg
+            from check_result where monitor_id = ${monitorId} and checked_at >= ${day}::timestamptz group by region order by region`),
+        ),
       ]);
       const st = { ...(statRows[0] ?? {}), ...(p95Rows[0] ?? {}) };
       const pct = (ok: number | null, n: number | null) => (n ? Math.round(((ok ?? 0) / n) * 10000) / 100 : null);
@@ -330,6 +358,17 @@ export function createRepo(db: Db): Repo {
         results,
         incidents,
         stats: { uptime24h: pct(st.ok24, st.n24), uptime7d: pct(st.ok7, st.n7), avg24h: st.avg24 ?? null, p95: st.p95 ?? null },
+        regionStats: regionRows.map((r) => {
+          // `results` is newest first, so the first row of a region is its latest
+          const last = results.find((x) => x.region === r.region);
+          return {
+            region: r.region,
+            checks24h: r.n,
+            uptime24h: pct(r.ok_n, r.n),
+            avgLatency24h: r.avg ?? null,
+            last: last ? { ok: last.ok, statusCode: last.statusCode, latencyMs: last.latencyMs, error: last.error, checkedAt: last.checkedAt } : null,
+          };
+        }),
       };
     },
     async createMonitor(orgId, projectId, input) {
@@ -411,27 +450,15 @@ export function createRepo(db: Db): Repo {
       );
     },
     async recordCheck(r) {
-      await db.insert(schema.checkResult).values({ monitorId: r.monitorId, ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });
-      const lat = r.latencyMs ?? null;
-      await db
-        .insert(schema.checkRollup)
-        .values({
-          monitorId: r.monitorId,
-          bucket: sql`date_trunc('hour', now())`,
-          total: 1,
-          ok: r.ok ? 1 : 0,
-          latencySum: lat ?? 0,
-          latencyN: lat == null ? 0 : 1,
-        })
-        .onConflictDoUpdate({
-          target: [schema.checkRollup.monitorId, schema.checkRollup.bucket],
-          set: {
-            total: sql`${schema.checkRollup.total} + 1`,
-            ok: sql`${schema.checkRollup.ok} + ${r.ok ? 1 : 0}`,
-            latencySum: sql`${schema.checkRollup.latencySum} + ${lat ?? 0}`,
-            latencyN: sql`${schema.checkRollup.latencyN} + ${lat == null ? 0 : 1}`,
-          },
-        });
+      await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });
+      await foldIntoRollup(r.monitorId, r.ok, r.latencyMs ?? null);
+    },
+    async recordRegionResults(monitorId, results, summary) {
+      if (!results.length) return;
+      await db.insert(schema.checkResult).values(
+        results.map((r) => ({ monitorId, region: r.region, ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error })),
+      );
+      await foldIntoRollup(monitorId, summary.ok, summary.latencyMs ?? null);
     },
     async setMonitorState(id, state) {
       await db.update(schema.monitor).set(state).where(eq(schema.monitor.id, id));

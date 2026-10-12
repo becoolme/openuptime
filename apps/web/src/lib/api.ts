@@ -9,11 +9,19 @@ export type Monitor = {
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
   keyword?: string | null; keywordMode?: "contains" | "absent"; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;
+  /** where checks run from: `auto` (this deployment) or ids from `api.regions()` */
+  regions?: string[];
 };
 export type Project = { id: string; name: string };
 export type Subscriber = { id: string; email: string; confirmedAt: string | null; createdAt: string };
 export type Maintenance = { id: string; name: string; startsAt: string; endsAt: string; monitorIds: string[] };
-export type CheckResult = { id: string; ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string };
+export type CheckResult = { id: string; ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string; region?: string };
+export type RegionStat = {
+  region: string; checks24h: number; uptime24h: number | null; avgLatency24h: number | null;
+  last: { ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string } | null;
+};
+export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number };
+export type SpotCheck = { ok: true; region?: string; result?: { ok: boolean; statusCode?: number; latencyMs?: number; error?: string } };
 export type Incident = {
   id: string; title: string; status: "investigating" | "identified" | "monitoring" | "resolved";
   severity: string; startedAt: string; resolvedAt: string | null; acknowledgedAt: string | null; monitorName?: string | null;
@@ -45,7 +53,7 @@ export type Usage =
       credits: Quota | null;
       emails: Quota | null;
       activeMonitors: number;
-      plan: { id: string; name: string; maxActiveMonitors: number | null; minIntervalSec: number; upgradeUrl?: string; manageUrl?: string } | null;
+      plan: { id: string; name: string; maxActiveMonitors: number | null; minIntervalSec: number; maxRegions?: number | null; upgradeUrl?: string; manageUrl?: string } | null;
     };
 
 /** Starts the shell's reads and the data of the route at `pathname` right away. */
@@ -146,11 +154,13 @@ export type AlertDelivery = {
 
 export const api = {
   monitors: () => req<Monitor[]>("/monitors"),
-  monitor: (id: string) => req<Monitor & { results: CheckResult[] }>(`/monitors/${id}`),
+  monitor: (id: string) => req<Monitor & { results: CheckResult[]; regionStats: RegionStat[] }>(`/monitors/${id}`),
+  regions: () => req<RegionList>("/regions"),
   createMonitor: (b: Partial<Monitor> & { name: string }) => req<Monitor>("/monitors", { method: "POST", body: JSON.stringify(b) }),
   updateMonitor: (id: string, b: Partial<Monitor>) => req<Monitor>(`/monitors/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteMonitor: (id: string) => req<void>(`/monitors/${id}`, { method: "DELETE" }),
-  checkNow: (id: string) => req<{ ok: true }>(`/monitors/${id}/check`, { method: "POST" }),
+  /** Without `region` the monitor's own check runs and is recorded; with it one request is sent from there and only returned. */
+  checkNow: (id: string, region?: string) => req<SpotCheck>(`/monitors/${id}/check`, { method: "POST", ...(region ? { body: JSON.stringify({ region }) } : {}) }),
   me: () => req<{ userId: string; organization: { id: string; name: string }; projectId: string; user: { name: string; email: string; locale: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null } | null }>("/me"),
   setLocale: (locale: "en" | "zh-CN") => req<{ locale: string }>("/me/locale", { method: "PATCH", body: JSON.stringify({ locale }) }),
   counts: () => req<Record<string, number>>("/counts"),

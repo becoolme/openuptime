@@ -1,10 +1,10 @@
 import { navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { ago, api, type Channel, type CheckResult, type Incident, type Monitor } from "../lib/api";
+import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
 import { MonitorForm } from "./Monitors";
 
-type Detail = Monitor & { results: CheckResult[]; incidents: Incident[]; stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null } };
+type Detail = Monitor & { results: CheckResult[]; regionStats: RegionStat[]; incidents: Incident[]; stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null } };
 const every = (s: number) => (s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
 
 export default function MonitorDetail({ id }: { id: string }) {
@@ -13,6 +13,9 @@ export default function MonitorDetail({ id }: { id: string }) {
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState("");
   const [err, setErr] = useState("");
+  const [names, setNames] = useState<Record<string, string>>({});
+  // the answer to the last single-region request, shown under the regions table
+  const [spot, setSpot] = useState<{ region: string; run: NonNullable<SpotCheck["result"]> } | null>(null);
   const act = async (name: string, fn: () => Promise<unknown>) => {
     setPending(name);
     setErr("");
@@ -23,6 +26,7 @@ export default function MonitorDetail({ id }: { id: string }) {
   useEffect(() => {
     load();
     api.channels().then(setChannels).catch(() => {});
+    api.regions().then((r) => setNames(Object.fromEntries(r.regions.map((x) => [x.id, x.name])))).catch(() => {});
     const t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, [id]);
@@ -32,6 +36,18 @@ export default function MonitorDetail({ id }: { id: string }) {
   const max = Math.max(1, ...chrono.map((r) => r.latencyMs ?? 0));
   const lat = chrono.map((r) => r.latencyMs).filter((v): v is number => typeof v === "number");
   const routed = m.channelIds?.length ? channels.filter((c) => m.channelIds!.includes(c.id)) : channels.filter((c) => c.enabled);
+  const regionName = (id: string) => (id === "auto" ? t("Auto") : (names[id] ?? id));
+  // the card appears once a monitor checks from somewhere other than the default
+  const configured = m.regions?.length ? m.regions : ["auto"];
+  const multi = configured.some((r) => r !== "auto") || m.regionStats.some((r) => r.region !== "auto");
+  // configured regions first, in the order the monitor lists them; then any region that only has history
+  const stats: RegionStat[] = [
+    ...configured.map((r) => m.regionStats.find((s) => s.region === r) ?? { region: r, checks24h: 0, uptime24h: null, avgLatency24h: null, last: null }),
+    ...m.regionStats.filter((s) => !configured.includes(s.region)),
+  ].filter((s, i, all) => all.findIndex((x) => x.region === s.region) === i);
+  const probable = m.type === "http" || m.type === "tcp";
+  const places = Object.keys(names);
+  const showRegion = m.results.some((r) => r.region && r.region !== "auto");
   const num = (v: number | null | undefined, unit: string, digits = 0) => (v == null ? "—" : <>{digits ? v.toFixed(digits) : v}<u>{unit}</u></>);
   return (
     <>
@@ -96,10 +112,11 @@ export default function MonitorDetail({ id }: { id: string }) {
 
           <div className="card cc">
             <div className="cc-h"><h3>{t("Recent checks")}</h3><span className="faint" style={{ fontSize: 13 }}>{Math.min(30, m.results.length)} {t("latest")}</span></div>
-            <div className="rr res th"><span>{t("Time")}</span><span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
+            <div className={`rr res th${showRegion ? " rg" : ""}`}><span>{t("Time")}</span>{showRegion && <span className="rr-rg">{t("Region")}</span>}<span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
             {m.results.slice(0, 30).map((r) => (
-              <div className="rr res" key={r.id}>
+              <div className={`rr res${showRegion ? " rg" : ""}`} key={r.id}>
                 <span className="mono muted">{new Date(r.checkedAt).toLocaleTimeString([], { hour12: false })}</span>
+                {showRegion && <span className="rr-rg" title={regionName(r.region ?? "auto")}>{regionName(r.region ?? "auto")}</span>}
                 <span><span className={`pill ${r.ok ? "up" : "down"}`}>{r.ok ? t("OK") : t("Failed")}</span></span>
                 <span className="mono">{r.statusCode ?? "—"}</span>
                 <span className="mono">{r.latencyMs ?? "—"} ms</span>
@@ -111,6 +128,43 @@ export default function MonitorDetail({ id }: { id: string }) {
         </div>
 
         <div className="col">
+          {probable && (multi || places.length > 1) && (
+            <div className="card cc">
+              <div className="cc-h"><h3>{t("Regions")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("last 24 h")}</span></div>
+              {stats.map((s) => (
+                <div className="rr reg" key={s.region}>
+                  <span title={regionName(s.region)}>{regionName(s.region)}</span>
+                  <span className="mono">{s.uptime24h == null ? "—" : `${s.uptime24h}%`}</span>
+                  <span className="mono muted">{s.avgLatency24h == null ? "—" : `${s.avgLatency24h} ms`}</span>
+                  <span>{s.last ? <span className={`pill ${s.last.ok ? "up" : "down"}`}>{s.last.ok ? t("OK") : t("Failed")}</span> : <span className="faint">—</span>}</span>
+                </div>
+              ))}
+              {places.length > 1 && (
+                <div className="spot">
+                  <span className="faint">{t("Test once from")}</span>
+                  <div className="spot-r">
+                    {places.map((id) => (
+                      <button key={id} className="btn sm" disabled={!!pending} onClick={() => act(`spot:${id}`, async () => {
+                        setSpot(null);
+                        const r = await api.checkNow(m.id, id);
+                        if (r.result) setSpot({ region: id, run: r.result });
+                      })}>{pending === `spot:${id}` ? t("Checking…") : regionName(id)}</button>
+                    ))}
+                  </div>
+                  {spot && (
+                    <p className="spot-out">
+                      <span className={`pill ${spot.run.ok ? "up" : "down"}`}>{spot.run.ok ? t("OK") : t("Failed")}</span>{" "}
+                      <b>{regionName(spot.region)}</b>
+                      <span className="mono muted"> {spot.run.statusCode ?? ""}{spot.run.latencyMs != null ? ` · ${spot.run.latencyMs} ms` : ""}</span>
+                      {spot.run.error && <small className="faint mono"> {spot.run.error}</small>}
+                    </p>
+                  )}
+                  <small className="faint">{t("One-off test: it is not recorded and does not change the monitor's status.")}</small>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="card cc">
             <div className="cc-h"><h3>{t("Configuration")}</h3></div>
             <div className="kv">
@@ -120,6 +174,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               <div><span>{t("Interval")}</span><b className="mono">{every(m.intervalSec)}</b></div>
               <div><span>{t("Timeout")}</span><b className="mono">{m.timeoutMs / 1000} s</b></div>
               <div><span>{t("Failures before incident")}</span><b className="mono">{m.failureThreshold}</b></div>
+              {probable && <div><span>{t("Regions")}</span><b className="mono">{configured.map(regionName).join(", ")}</b></div>}
               {m.keyword && <div><span>{t("Keyword")}</span><b className="mono">{m.keywordMode === "absent" ? "≠ " : ""}{m.keyword}</b></div>}
               {m.type === "heartbeat" && <div><span>{t("Grace period")}</span><b className="mono">{every(m.graceSec ?? 0)}</b></div>}
             </div>

@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src", "../api/src/checker.ts", "../api/src/netguard.ts", "../api/src/probe-protocol.ts"],
+  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"] }
+}

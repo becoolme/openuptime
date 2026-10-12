@@ -258,7 +258,13 @@ form.card,.modal form{grid-template-columns:minmax(0,1fr)}
 fieldset{min-width:0}
 .fld{min-width:0}
 .rr.res{grid-template-columns:92px 84px 50px 72px minmax(0,1fr)}
-@media (max-width:640px){.rr.res{grid-template-columns:70px 74px 36px minmax(0,1fr);gap:10px}.rr.res>span:nth-child(5){display:none}.cc{padding:18px 16px}}
+.rr.res.rg{grid-template-columns:92px 110px 84px 50px 72px minmax(0,1fr)}
+.rr-rg{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rr.reg{grid-template-columns:minmax(0,1fr) 64px 70px 64px;gap:10px;font-size:13px}
+.spot{border-top:1px solid var(--line);padding-top:14px;margin-top:4px;display:grid;gap:10px;font-size:13px}
+.spot-r{display:flex;flex-wrap:wrap;gap:6px}
+.spot-out{margin:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+@media (max-width:640px){.rr.res{grid-template-columns:70px 74px 36px minmax(0,1fr);gap:10px}.rr.res:not(.rg)>span:nth-child(5){display:none}.rr.res.rg{grid-template-columns:70px 74px 36px minmax(0,1fr)}.rr.res.rg>.rr-rg,.rr.res.rg>span:nth-child(6){display:none}.cc{padding:18px 16px}}
 
 /* ── Auth (split layout, boards Login / Signup / Forgot) ── */
 .auth2{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:var(--bg)}

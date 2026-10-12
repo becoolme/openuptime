@@ -1,6 +1,6 @@
 import type { Monitor, Repo } from "@openuptime/repo";
 import { dispatchAlert, retryDeliveries } from "./alerts";
-import { runCheck } from "./checker";
+import { measure } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
 
 const CONCURRENCY = 20;
@@ -137,9 +137,14 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
 
 export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
   // a due heartbeat monitor means no ping arrived in time
-  const out = m.type === "heartbeat" ? { ok: false, error: "Heartbeat missed" } : await runCheck(m);
+  const { out, results } =
+    m.type === "heartbeat"
+      ? { out: { ok: false, error: "Heartbeat missed" } as { ok: boolean; statusCode?: number; latencyMs?: number; error?: string }, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }] }
+      : await measure(m);
   const inMaintenance = await repo.underMaintenance(m);
-  await repo.recordCheck({ monitorId: m.id, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
+  // one region is one row; several are rows per region that count as a single run in the rollup
+  if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
+  else await repo.recordRegionResults(m.id, results, { ok: out.ok, latencyMs: out.latencyMs });
   // Regular monitors keep the due time the lease gave them (a fixed cadence, whatever the check duration). A heartbeat is
   // due one interval plus grace after this moment.
   const next = m.type === "heartbeat" ? { nextCheckAt: nextAfter(m) } : {};

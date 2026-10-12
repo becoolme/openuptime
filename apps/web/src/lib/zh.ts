@@ -415,4 +415,13 @@ export const zh: Record<string, string> = {
   // plan & usage
   "Plan & usage": "套餐与用量", "Usage is counted per workspace and resets every billing period.": "用量按工作区统计，每个计费周期开始时重置。", "This deployment has no plans or usage limits.": "此部署没有套餐和用量限制。", "Current plan": "当前套餐", "Next reset": "下次重置", "Manage billing": "管理账单", "Change plan": "更换套餐", "Checks": "检查额度", "Heartbeat monitors do not count.": "Heartbeat 监控不计入。", "Active monitors": "活跃监控", "Limit reached": "已达上限", "Paused monitors do not count and use no checks.": "暂停的监控不占用上限，也不消耗检查额度。", "Email notifications": "邮件通知", "Alert emails and status page subscriber emails.": "含告警邮件与状态页订阅者通知邮件。", "Used up": "已用完", "Used": "已用", "Resets on": "重置于", "Monitors that use the most checks": "用量最多的监控", "Estimated from each monitor's interval. Lengthen the interval of monitors that matter less.": "按每个监控的检查间隔估算。把不太重要的监控放宽间隔即可省下额度。", "Checks / month": "每月检查次数", "Share": "占比", "Upgrade": "升级", "You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.": "已达到套餐的活跃监控上限。请暂停一些监控，或升级套餐。", "This check interval is not available on your plan.": "当前套餐不支持这个检查间隔。", "Not available on your plan": "当前套餐不可用",
   "Skipped: email allowance used up for this period": "已跳过：本周期邮件额度已用完", Skipped: "已跳过",
+  // multi-region checks
+  "Check from": "检查位置", "Regions": "区域", "Region": "区域", "Default": "默认", "up to {n}": "最多 {n} 个",
+  "Auto is this deployment's own location": "自动：由本服务所在位置发起检查",
+  "No longer available": "已不可用",
+  "Your plan cannot check from that many regions.": "当前套餐不支持从这么多区域检查。",
+  "One of the selected regions is not available.": "所选区域中有不可用的区域。",
+  "each region counts as a check": "每个区域各计一次检查",
+  "last 24 h": "近 24 小时", "Test once from": "单次测试位置",
+  "One-off test: it is not recorded and does not change the monitor's status.": "一次性测试：不会被记录，也不会改变监控状态。",
 };

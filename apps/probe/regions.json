@@ -1,0 +1,7 @@
+{
+  "us-east": "iad1",
+  "us-west": "sfo1",
+  "eu-central": "fra1",
+  "ap-southeast": "sin1",
+  "ap-northeast": "hnd1"
+}

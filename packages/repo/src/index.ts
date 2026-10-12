@@ -85,12 +85,27 @@ export interface CheckResult {
   error: string | null;
   checkedAt: Date;
 }
-export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null };
+/** `region` is where the check ran from (default `auto`: the scheduler's own location). */
+export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; region?: string };
+/** One region's result of a run that was checked from several. */
+export type RegionResult = { region: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null };
+
+/** A monitor's last day from one region, for the regions it has been checked from. */
+export interface RegionStat {
+  region: string;
+  checks24h: number;
+  uptime24h: number | null;
+  avgLatency24h: number | null;
+  /** the most recent result from this region */
+  last: Pick<CheckResult, "ok" | "statusCode" | "latencyMs" | "error" | "checkedAt"> | null;
+}
 
 export interface MonitorDetail {
   results: CheckResult[];
   incidents: Incident[];
   stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null };
+  /** per-region view of the last day; empty until a result exists */
+  regionStats: RegionStat[];
 }
 
 export interface Incident {
@@ -345,6 +360,11 @@ export interface Repo {
   releaseClaims(runs: { id: string; token: Date }[]): Promise<void>;
   /** Store a raw result and fold it into its hourly rollup. */
   recordCheck(r: NewCheck): Promise<void>;
+  /**
+   * Store one raw result per region of a run checked from several, and fold the run into the hourly rollup once, as
+   * `summary` (the verdict across regions), so uptime counts runs and not regions.
+   */
+  recordRegionResults(monitorId: string, results: RegionResult[], summary: { ok: boolean; latencyMs?: number | null }): Promise<void>;
   setMonitorState(id: string, state: MonitorState): Promise<void>;
   /** Is a maintenance window of the monitor's project (or a workspace-wide one) covering it right now? */
   underMaintenance(m: Pick<Monitor, "id" | "organizationId" | "projectId">): Promise<boolean>;

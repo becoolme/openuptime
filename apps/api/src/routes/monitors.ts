@@ -8,6 +8,8 @@ import { creditCost } from "../entitlements";
 import { targetProblem } from "../netguard";
 import { MASK, maskHeaders, restoreHeaders } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
+import { isRegionConfigured, runInRegion } from "../probes";
+import { AUTO, MAX_MONITOR_REGIONS, PROBE_TYPES, REGION_ID } from "../regions";
 
 const fields = {
   name: z.string().min(1).max(120),
@@ -18,7 +20,7 @@ const fields = {
   intervalSec: z.number().int().min(60).max(86400),
   timeoutMs: z.number().int().min(1000).max(30000),
   failureThreshold: z.number().int().min(1).max(10),
-  regions: z.array(z.string()),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).max(MAX_MONITOR_REGIONS),
   keyword: z.string().max(500).nullable(),
   keywordMode: z.enum(["contains", "absent"]),
   headers: z.record(z.string().max(100), z.string().max(2000)),
@@ -61,6 +63,7 @@ function normaliseImport(raw: unknown): unknown {
   r.target ??= r.url ?? r.hostname ?? r.host;
   if (r.target != null && r.port && typeof r.target === "string" && !r.target.includes(":") && r.type === "port") r.target = `${r.target}:${r.port}`;
   r.intervalSec ??= typeof r.interval === "number" ? Math.max(60, r.interval) : undefined;
+  if (Array.isArray(r.regions) && r.regions.length === 0) delete r.regions;
   r.keyword ??= r.keyword_value ?? r.expectedKeyword ?? undefined;
   const t = typeof r.type === "string" ? r.type.toLowerCase() : undefined;
   if (t) r.type = ({ https: "http", keyword: "http", port: "tcp", "tcp-port": "tcp", mysql: "mysql", postgres: "postgres", postgresql: "postgres" } as Record<string, string>)[t] ?? t;
@@ -116,6 +119,26 @@ async function overPlan(c: Context<AppEnv>, o: { add?: number; intervalSec?: num
   return null;
 }
 
+/**
+ * What is wrong with asking for these regions (HTTP 400 or 402), or null. Regions are explicit opt-in: `auto` alone is the
+ * default and always fine. Anything else needs a probe configured on this deployment, a type a probe can run, and room in
+ * the plan.
+ */
+async function regionProblem(c: Context<AppEnv>, type: string, regions: string[]) {
+  const wanted = [...new Set(regions)];
+  if (wanted.every((r) => r === AUTO)) return null;
+  if (!(PROBE_TYPES as readonly string[]).includes(type)) {
+    return c.json({ error: `Regions other than auto are available for ${PROBE_TYPES.join(" and ")} monitors only`, code: "regions_not_supported" }, 400);
+  }
+  const unknown = wanted.filter((r) => !isRegionConfigured(r));
+  if (unknown.length) return c.json({ error: `Unknown region: ${unknown.join(", ")}`, code: "unknown_region", regions: unknown }, 400);
+  const plan = await c.get("entitlements").plan(c.get("orgId"));
+  if (plan?.maxRegions != null && wanted.length > plan.maxRegions) {
+    return c.json({ error: `The ${plan.name} plan checks from at most ${plan.maxRegions} region${plan.maxRegions === 1 ? "" : "s"} per monitor`, code: "regions_not_allowed", limit: plan.maxRegions, plan: plan.id, upgradeUrl: plan.upgradeUrl }, 402);
+  }
+  return null;
+}
+
 /** HTTP 400 for a target that points at a private address (unless the deployment allows those), or null. */
 async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
   const error = await targetProblem(type, target);
@@ -133,6 +156,8 @@ export const monitors = new Hono<AppEnv>()
     const v = c.req.valid("json");
     const blocked = await refuseTarget(c, v.type, v.target);
     if (blocked) return blocked;
+    const badRegion = await regionProblem(c, v.type, v.regions);
+    if (badRegion) return badRegion;
     const refused = await overPlan(c, { add: 1, intervalSec: v.type === "heartbeat" ? undefined : v.intervalSec });
     if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
@@ -162,6 +187,13 @@ export const monitors = new Hono<AppEnv>()
       valid.push(p.data);
     }
     if (valid.length) {
+      // regions that do not exist here (a file from another deployment) or that the plan has no room for fall back
+      // rather than failing the whole file; a monitor left with none runs on auto
+      const room = (await c.get("entitlements").plan(c.get("orgId")))?.maxRegions ?? Infinity;
+      for (const v of valid) {
+        const usable = (PROBE_TYPES as readonly string[]).includes(v.type) ? [...new Set(v.regions)].filter(isRegionConfigured).slice(0, room) : [];
+        v.regions = usable.length ? usable : [AUTO];
+      }
       // an interval below the plan's floor is raised to it rather than failing the whole file
       const floor = (await c.get("entitlements").plan(c.get("orgId")))?.minIntervalSec ?? 0;
       for (const v of valid) if (v.type !== "heartbeat" && v.intervalSec < floor) v.intervalSec = floor;
@@ -195,6 +227,12 @@ export const monitors = new Hono<AppEnv>()
       const blocked = await refuseTarget(c, current.type, v.target);
       if (blocked) return blocked;
     }
+    if (v.regions !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      const badRegion = await regionProblem(c, current.type, v.regions);
+      if (badRegion) return badRegion;
+    }
     if (v.intervalSec !== undefined || v.paused === false) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (current) {
@@ -221,14 +259,32 @@ export const monitors = new Hono<AppEnv>()
     await c.get("repo").deleteMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     return c.body(null, 204);
   })
+  // Runs the monitor's check now. With `region` it is one request from that region instead: the answer is returned and
+  // nothing is recorded, so a spot check from elsewhere cannot flip the monitor's state.
   .post("/:id/check", uuidParams, async (c) => {
     const repo = c.get("repo");
+    const asked = z.object({ region: z.string().regex(REGION_ID).optional() }).safeParse(await c.req.json().catch(() => ({})));
+    if (!asked.success) return c.json({ error: "region must be a region id", code: "unknown_region" }, 400);
+    const region = asked.data.region;
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
+    if (region !== undefined) {
+      if (!(PROBE_TYPES as readonly string[]).includes(m.type) && region !== AUTO) {
+        return c.json({ error: `Regions other than auto are available for ${PROBE_TYPES.join(" and ")} monitors only`, code: "regions_not_supported" }, 400);
+      }
+      if (!isRegionConfigured(region)) return c.json({ error: `Unknown region: ${region}`, code: "unknown_region", regions: [region] }, 400);
+    }
+    const cost = region !== undefined ? (m.type === "heartbeat" ? 0 : 1) : creditCost(m);
     // a manual check is a request like any other: it takes a credit
-    if ((await c.get("entitlements").spendCredits(m.organizationId, creditCost(m))) < creditCost(m)) {
+    if ((await c.get("entitlements").spendCredits(m.organizationId, cost)) < cost) {
       return c.json({ error: "No credits left this period", code: "credits_exhausted" }, 402);
     }
-    await checkOne(repo, m, c.get("entitlements"));
-    return c.json({ ok: true });
+    if (region === undefined) {
+      await checkOne(repo, m, c.get("entitlements"));
+      return c.json({ ok: true });
+    }
+    if (m.type === "heartbeat") return c.json({ error: "Heartbeat monitors have no check to run", code: "regions_not_supported" }, 400);
+    const run = await runInRegion(region, m);
+    if ("unreachable" in run) return c.json({ error: run.unreachable, code: "probe_unreachable", region }, 502);
+    return c.json({ ok: true, region, result: run.outcome });
   });

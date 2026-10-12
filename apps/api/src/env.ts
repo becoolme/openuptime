@@ -47,6 +47,13 @@ export type Bindings = {
   CHECK_USER_AGENT?: string;
   /** Shared secret that lets an external cron hit POST /internal/run-checks. */
   CRON_SECRET?: string;
+  /**
+   * Remote check regions: JSON object of region id to the probe's URL (or `{"url", "name"}`), e.g.
+   * {"us-east":"https://probe.example.app/api/probe/us-east"}. Unset: monitors can only run from `auto`.
+   */
+  PROBE_REGIONS?: string;
+  /** Secret the probes in PROBE_REGIONS verify requests with (required for those regions to be usable). */
+  PROBE_SECRET?: string;
 };
 
 export type Auth = ReturnType<typeof createAuth>;

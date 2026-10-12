@@ -47,7 +47,7 @@ export const TOOLS: Tool[] = [
   { name: "get_monitor", description: "Get one monitor with its recent checks and uptime.", schema: z.object({ id }), readOnly: true, build: (a) => ({ method: "GET", path: `/api/monitors/${a.id}` }) },
   {
     name: "create_monitor",
-    description: "Create a monitor. type is http, tcp, dns, heartbeat, postgres, mysql or redis; target is the URL, host:port or hostname. Omitted fields take defaults (60 s interval, expect HTTP 200).",
+    description: "Create a monitor. type is http, tcp, dns, heartbeat, postgres, mysql or redis; target is the URL, host:port or hostname. Omitted fields take defaults (60 s interval, expect HTTP 200). regions defaults to [\"auto\"]; name other regions (see list_regions) to check http and tcp monitors from several places.",
     schema: monitorCreateSchema,
     build: (a) => ({ method: "POST", path: "/api/monitors", body: a }),
   },
@@ -59,7 +59,13 @@ export const TOOLS: Tool[] = [
   },
   { name: "pause_monitor", description: "Pause a monitor: no checks run and no alerts are sent until it is resumed.", schema: z.object({ id }), build: (a) => ({ method: "PATCH", path: `/api/monitors/${a.id}`, body: { paused: true } }) },
   { name: "resume_monitor", description: "Resume a paused monitor.", schema: z.object({ id }), build: (a) => ({ method: "PATCH", path: `/api/monitors/${a.id}`, body: { paused: false } }) },
-  { name: "run_check", description: "Run a check for a monitor right now and record the result.", schema: z.object({ id }), build: (a) => ({ method: "POST", path: `/api/monitors/${a.id}/check` }) },
+  {
+    name: "run_check",
+    description: "Run a check for a monitor right now and record the result. With `region` (an id from list_regions) it is one request from that region instead: the result is returned and nothing is recorded.",
+    schema: z.object({ id, region: z.string().optional() }),
+    build: ({ id, region }) => ({ method: "POST", path: `/api/monitors/${id}/check`, ...(region ? { body: { region } } : {}) }),
+  },
+  { name: "list_regions", description: "List the regions checks can run from on this deployment (`auto` is always there) and how many one monitor may use. Set a monitor's `regions` to use them.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/regions" }) },
   { name: "delete_monitor", description: "Permanently delete a monitor and its history.", schema: z.object({ id }), destructive: true, build: (a) => ({ method: "DELETE", path: `/api/monitors/${a.id}` }) },
   { name: "list_incidents", description: "List incidents (open ones first), automatic and manual.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/incidents" }) },
   { name: "get_incident", description: "Get an incident with its update timeline and the failed checks around it.", schema: z.object({ id }), readOnly: true, build: (a) => ({ method: "GET", path: `/api/incidents/${a.id}` }) },

@@ -1,4 +1,5 @@
 import type { Monitor } from "@openuptime/repo";
+import { effectiveRegions } from "./regions";
 
 /**
  * What a workspace may use. The open-source build never limits anything (`unmetered`); the hosted edition passes its
@@ -29,6 +30,8 @@ export type Plan = {
   maxActiveMonitors: number | null;
   /** The shortest check interval the plan allows, in seconds. */
   minIntervalSec: number;
+  /** Regions one monitor may check from (`auto` counts as one). Absent or null = no cap. */
+  maxRegions?: number | null;
   /** Where to start or change a subscription, and where to manage billing. Absent when the workspace cannot do it. */
   upgradeUrl?: string;
   manageUrl?: string;
@@ -53,10 +56,11 @@ export const unmetered: Entitlements = {
 };
 
 /**
- * Credits one check costs. A heartbeat monitor makes no request of ours: the app being watched pings us, and
- * evaluating a missed deadline is free, so a workspace is never blinded to a dead cron job because it ran out.
+ * Credits one check costs: one per request made, so a monitor checked from three regions costs three. A heartbeat
+ * monitor makes no request of ours: the app being watched pings us, and evaluating a missed deadline is free, so a
+ * workspace is never blinded to a dead cron job because it ran out.
  */
-export const creditCost = (m: Pick<Monitor, "type">) => (m.type === "heartbeat" ? 0 : 1);
+export const creditCost = (m: Pick<Monitor, "type" | "regions">) => (m.type === "heartbeat" ? 0 : effectiveRegions(m).length);
 
 /** The same day of the month `n` months after `d` (UTC), clamped to the month's end: Jan 31 + 1 month = Feb 28/29. */
 function addMonths(d: Date, n: number) {

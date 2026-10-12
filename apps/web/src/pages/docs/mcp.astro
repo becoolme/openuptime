@@ -11,7 +11,8 @@ const tools: Tool[] = [
   { name: "create_monitor", en: "Create an http, tcp, dns, heartbeat, postgres, mysql or redis monitor.", zh: "创建 http、tcp、dns、heartbeat、postgres、mysql 或 redis 监控。" },
   { name: "update_monitor", en: "Change fields of a monitor.", zh: "修改监控项字段。" },
   { name: "pause_monitor / resume_monitor", en: "Stop or restart checks and alerts.", zh: "暂停或恢复检测与告警。" },
-  { name: "run_check", en: "Run a check right now and record the result.", zh: "立即执行一次检测并记录结果。" },
+  { name: "run_check", en: "Run a check right now and record the result. With a region, a one-off request from that region that is not recorded.", zh: "立即执行一次检测并记录结果。传入 region 时，仅从该区域发出一次不记录的请求。" },
+  { name: "list_regions", en: "Regions a monitor can check from, and how many one monitor may use.", zh: "监控项可用的检测区域，以及单个监控项最多可用的区域数。" },
   { name: "delete_monitor", en: "Permanently delete a monitor and its history.", zh: "永久删除监控项及其历史。" },
   { name: "list_incidents / get_incident", en: "Incidents, open ones first, with their timeline.", zh: "事件列表（未结束的在前）及时间线。" },
   { name: "create_incident", en: "Open a manual incident, optionally tied to a monitor.", zh: "创建手动事件，可关联监控项。" },
@@ -24,7 +25,7 @@ const tools: Tool[] = [
   { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
 ];
 ---
-<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-11" toc>
+<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-12" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>
