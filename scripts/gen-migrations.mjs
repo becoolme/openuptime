@@ -1,5 +1,5 @@
 // Embeds the drizzle SQL migrations into packages/db-pg so a deployed Worker can migrate its own database
-// (POST /internal/migrate). Run after `pnpm db:generate`; the release script runs it too.
+// (POST /internal/migrate). Run after `pnpm db:generate`; the Docker build runs it too.
 import { readFileSync, writeFileSync } from "node:fs";
 
 const dir = new URL("../packages/db-pg/drizzle/", import.meta.url);

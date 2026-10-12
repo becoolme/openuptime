@@ -5,5 +5,4 @@ dist
 .dev.vars
 .env
 *.log
-dist-release
 .stripe-backup

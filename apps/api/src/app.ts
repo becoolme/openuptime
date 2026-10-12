@@ -83,7 +83,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     return c.json({ checked: await runDueChecks(c.get("repo"), c.env.CHECK_QUEUE, c.get("entitlements")) });
   });
 
-  // one-time schema setup for one-click deploys (OpenFlare calls it after uploading the Worker)
+  // applies pending migrations over HTTP, for deployments that cannot run `pnpm db:migrate` from a shell
   app.post("/internal/migrate", async (c) => {
     if (!c.env.CRON_SECRET || c.req.header("x-cron-secret") !== c.env.CRON_SECRET) return c.json({ error: "Forbidden" }, 403);
     const database = c.get("database");
