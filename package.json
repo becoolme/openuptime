@@ -9,5 +9,16 @@
     "db:migrate": "pnpm --filter @openuptime/db-pg migrate",
     "typecheck": "pnpm -r typecheck"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/becoolme/openuptime.git"
+  },
+  "homepage": "https://github.com/becoolme/openuptime#readme",
+  "bugs": {
+    "url": "https://github.com/becoolme/openuptime/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

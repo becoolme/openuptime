@@ -97,9 +97,14 @@ Light/dark is toggled from the same place. To add strings, wrap them with `t()` 
 ## Tests & CI
 
 ```bash
-DATABASE_URL=postgres://… pnpm --filter @openuptime/api test   # scheduler integration tests (skipped without a DB)
-pnpm --filter @openuptime/web test       # web unit tests (routes, i18n dictionary, redirect safety)
 pnpm typecheck
+pnpm --filter @openuptime/web test                                  # web unit tests (routes, i18n dictionary, redirect safety)
+DATABASE_URL=postgres://… pnpm db:migrate                           # a disposable database
+DATABASE_URL=postgres://… pnpm --filter @openuptime/db-pg test      # storage tests against that database
+TEST_DATABASE_URL=postgres://…/empty_db pnpm --filter @openuptime/api test   # API + scheduler + OAuth/MCP end-to-end tests
 ```
+
+The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset; it must point at an **empty** database
+because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.

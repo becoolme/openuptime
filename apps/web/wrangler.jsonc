@@ -3,8 +3,9 @@
   "compatibility_date": "2026-09-01",
   // Optional Plausible analytics, off unless set: PLAUSIBLE_DOMAIN is the reported site, PLAUSIBLE_SRC the script URL
   // "vars": { "PLAUSIBLE_DOMAIN": "your-domain.com", "PLAUSIBLE_SRC": "https://plausible.io/js/script.js" },
-  "vars": { "PRODUCT_URL": "https://openuptime.app" },
-  "routes": [{ "pattern": "openuptime.app", "custom_domain": true }],
+  "vars": { "PRODUCT_URL": "https://status.example.com" },
+  // Your domain. Without a zone on Cloudflare, leave routes out and use the workers.dev address.
+  "routes": [{ "pattern": "status.example.com", "custom_domain": true }],
   // SSR pages call the API Worker directly instead of going back out through the zone.
   "services": [{ "binding": "API", "service": "openuptime-api" }]
 }

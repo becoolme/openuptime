@@ -7,7 +7,7 @@ Thanks for helping. Bug reports, fixes, docs and translations are all welcome.
 ```bash
 pnpm install
 cp .env.example apps/api/.dev.vars   # edit DATABASE_URL and secrets
-pnpm db:migrate
+DATABASE_URL=postgres://user:pass@localhost:5432/openuptime_dev pnpm db:migrate   # same URL as in .dev.vars
 pnpm dev:api    # http://localhost:8787
 pnpm dev:web    # http://localhost:4321
 ```
@@ -18,8 +18,9 @@ You need Node 22+, pnpm and a Postgres database. See the README for the full pic
 
 ```bash
 pnpm typecheck
-DATABASE_URL=postgres://… pnpm --filter @openuptime/api test
 pnpm --filter @openuptime/web test
+DATABASE_URL=postgres://… pnpm --filter @openuptime/db-pg test            # a migrated, disposable database
+TEST_DATABASE_URL=postgres://… pnpm --filter @openuptime/api test         # an empty database (see docs/reference.md)
 ```
 
 - Keep changes focused; one concern per pull request.

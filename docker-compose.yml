@@ -23,6 +23,15 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      # optional: close registration once your own account exists (invited people can still join)
+      DISABLE_SIGNUP: ${DISABLE_SIGNUP:-}
+      INVITE_TTL_DAYS: ${INVITE_TTL_DAYS:-}
+      # optional: lets an external scheduler call POST /internal/run-checks; unset keeps /internal/* closed
+      CRON_SECRET: ${CRON_SECRET:-}
+      # target of the "Powered by" link on status pages
+      PRODUCT_URL: ${PRODUCT_URL:-https://openuptime.app}
+      # max connections of the shared Postgres pool (default 10)
+      DB_POOL_MAX: ${DB_POOL_MAX:-}
       # optional: Plausible analytics (PLAUSIBLE_SRC defaults to https://plausible.io/js/script.js)
       PLAUSIBLE_DOMAIN: ${PLAUSIBLE_DOMAIN:-}
       PLAUSIBLE_SRC: ${PLAUSIBLE_SRC:-}

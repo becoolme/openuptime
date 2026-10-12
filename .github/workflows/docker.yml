@@ -2,7 +2,7 @@ name: Docker image
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
+  workflow_dispatch:   # builds and tags only on a v* ref: run it from a tag, not from a branch
 
 permissions:
   contents: read

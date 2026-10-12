@@ -1,6 +1,6 @@
 # OpenUptime UI/UX specification
 
-The source of truth for how the product looks and behaves. Design boards live in the design artifact; this document records the rules they follow so new pages don't drift. Implementation: `apps/web/src/styles/global.css` (tokens + shared classes) and `apps/web/src/components/*`.
+The source of truth for how the product looks and behaves. This document records the design rules so new pages don't drift. Implementation: `apps/web/src/styles/global.css` (tokens + shared classes) and `apps/web/src/components/*`.
 
 ## 1. Principles
 
@@ -66,9 +66,9 @@ Rules: never hard-code a colour in a component — use a token so dark mode work
 - **Desktop ≥ 1024px**: 240px sidebar (logo, workspace/project switcher, nav, account), top bar (breadcrumb title, locale, theme), content max-width ≈ 960–1200.
 - **Tablet 900–1023px**: sidebar remains; two-column `.cols` collapses to one.
 - **Mobile < 900px**: sidebar → drawer (hamburger), bottom tab bar (Monitors, Incidents, Status pages, Alerting, More). Tables → cards, KPI grid 2×2, modals → bottom sheets.
-- Grid children must set `min-width: 0` so long URLs never force horizontal scroll. Check every new page with `ovf.mjs` at 375px.
+- Grid children must set `min-width: 0` so long URLs never force horizontal scroll. Check every new page at a 375px viewport.
 
-## 7. Pages (board → rule)
+## 7. Pages
 
 | Page | Must contain |
 |---|---|
@@ -103,7 +103,7 @@ Rules: never hard-code a colour in a component — use a token so dark mode work
 
 ## 11. Definition of done for a page
 
-1. Matches the board's structure (or the deviation is listed in `docs/ui-alignment-checklist.md` with the reason).
+1. Follows the structure and rules in this document (a deliberate deviation is explained in the pull request).
 2. Light + dark checked; desktop + 375px checked (no horizontal overflow).
 3. zh-CN strings added; `astro check` clean.
 4. No fabricated claims; unsupported features omitted, not faked.

@@ -33,7 +33,7 @@ Keeping the API under `/api/*` of the same domain means session cookies stay sam
 
 - A Cloudflare account and a domain whose DNS is on Cloudflare (the zone).
 - A Postgres database reachable from the internet (Neon, Supabase, RDS, your own). Workers connect through Hyperdrive.
-- Node.js 22+ and pnpm.
+- Node.js 22+ and pnpm (`corepack enable` provides the pinned version).
 - Workers **Paid** plan for the Queue (default). On the Free plan, run in inline mode instead: see [Reference](docs/reference.md#cloudflare-free-plan).
 
 ### 1. Get the code and sign in
@@ -70,23 +70,27 @@ From the repository root:
 DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate
 ```
 
-It only applies what is new, so run it again after every upgrade. If your database role cannot `CREATE SCHEMA`, use
-`node migrate-plain.mjs` in `packages/db-pg` with the same `DATABASE_URL`.
+It only applies what is new, so run it again after every upgrade. It never issues `CREATE SCHEMA`, so a role without
+database-level `CREATE` works too.
 
 ### 4. Point the config at your domain
 
-Edit two files. In both, replace `openuptime.app` with your own domain.
+Edit two files. In both, replace `status.example.com` with your own domain.
 
-`apps/api/wrangler.jsonc`, where `zone_name` is the zone (the apex domain) even when you serve from a subdomain:
+`apps/api/wrangler.jsonc`, where `zone_name` is the zone (the apex domain) even when you serve from a subdomain.
+Uncomment `routes` and set:
 
 ```jsonc
 "routes": [{ "pattern": "status.example.com/api/*", "zone_name": "example.com" }],
 "vars": {
   "BETTER_AUTH_URL": "https://status.example.com",   // public origin: cookies, OAuth, email links
   "WEB_ORIGIN": "https://status.example.com",        // same value
-  "EMAIL_FROM": "alerts@example.com"                 // sender address, see Reference → Email
+  "EMAIL_FROM": "alerts@example.com"                 // sender address; optional, see below
 }
 ```
+
+Email is optional: without it invitations and alerts are written to the Worker log. To send it, onboard your domain
+under **Email Sending** in the Cloudflare dashboard first (see [Reference](docs/reference.md#email)).
 
 `apps/web/wrangler.jsonc`:
 
@@ -97,6 +101,10 @@ Edit two files. In both, replace `openuptime.app` with your own domain.
 
 The custom domain creates its DNS record and certificate for you; the hostname must not already have a DNS record
 pointing elsewhere.
+
+**No domain on Cloudflare?** Leave `routes` out of both files and set `BETTER_AUTH_URL` and `WEB_ORIGIN` to the web
+Worker's `https://openuptime-web.<your-subdomain>.workers.dev` address. The web Worker then forwards `/api/*` to the API
+Worker through the service binding, so cookies stay same-origin.
 
 ### 5. Set the secrets
 
@@ -111,8 +119,8 @@ If wrangler asks to create the Worker first, answer yes. Optional: `GITHUB_CLIEN
 ### 6. Deploy
 
 ```bash
-npx wrangler deploy                           # in apps/api
-cd ../web && pnpm build && npx wrangler deploy
+pnpm exec wrangler deploy                     # in apps/api
+cd ../web && pnpm build && pnpm exec wrangler deploy
 ```
 
 Deploy the API first: the web Worker binds to it by name.
@@ -141,12 +149,15 @@ docker compose up -d --build     # http://localhost:8080
 The schema is migrated on start and the data lives in the `pgdata` volume. Set `PUBLIC_URL` when the app is not served
 from `http://localhost:8080`. Email is optional; see [Reference](docs/reference.md#email).
 
+Once your own account exists, set `DISABLE_SIGNUP=true` in `.env` and run `docker compose up -d` to close registration
+(invited people can still join).
+
 ## Develop
 
 ```bash
 pnpm install
 cp .env.example apps/api/.dev.vars   # edit DATABASE_URL and secrets
-pnpm db:migrate
+DATABASE_URL=postgres://user:pass@localhost:5432/openuptime_dev pnpm db:migrate   # same URL as in .dev.vars
 pnpm dev:api    # http://localhost:8787  (checks run inline every 15s)
 pnpm dev:web    # http://localhost:4321  (proxies /api to the API)
 pnpm typecheck

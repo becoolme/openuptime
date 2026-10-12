@@ -16,7 +16,7 @@ import Doc from "../../layouts/Doc.astro";
     <h3>Requirements</h3>
     <ul><li>Docker with Compose v2</li><li>A machine that can reach the services you want to monitor</li></ul>
     <h3>Start it</h3>
-    <pre><code is:raw>git clone &lt;your copy of the repository&gt; openuptime
+    <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 cp .env.docker.example .env
 # edit .env: set POSTGRES_PASSWORD and BETTER_AUTH_SECRET (openssl rand -hex 32)
@@ -32,6 +32,9 @@ docker compose up -d --build</code></pre>
         <tr><td><code>BETTER_AUTH_SECRET</code></td><td>Required. Signs sessions. Generate with <code>openssl rand -hex 32</code> and keep it stable.</td></tr>
         <tr><td><code>PUBLIC_URL</code></td><td>Public origin. Default <code>http://localhost:8080</code>.</td></tr>
         <tr><td><code>PORT</code></td><td>Host port. Default <code>8080</code>.</td></tr>
+        <tr><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration once your own account exists. Invited people can still join.</td></tr>
+        <tr><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
+        <tr><td><code>CRON_SECRET</code></td><td>Optional. Lets an external scheduler call <code>POST /internal/run-checks</code>; unset leaves <code>/internal/*</code> closed.</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub".</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional Plausible analytics. Off when the domain is empty.</td></tr>
@@ -52,10 +55,10 @@ docker compose up -d --build</code></pre>
     <ul>
       <li>A Cloudflare account and a domain on Cloudflare. The <strong>Workers Paid</strong> plan is needed only for the Queue mode below; the Free plan works in inline mode at small scale</li>
       <li>A Postgres database reachable from Cloudflare. It is accessed through Hyperdrive, so any hosted Postgres works (Neon, Supabase, RDS, your own)</li>
-      <li>Node.js, pnpm and <code>wrangler</code>, signed in with <code>wrangler login</code></li>
+      <li>Node.js 22+ and pnpm (<code>corepack enable</code> gives you the pinned version). Wrangler is installed with the project; sign in with <code>pnpm exec wrangler login</code> in <code>apps/api</code></li>
     </ul>
     <h3>1. Get the code</h3>
-    <pre><code is:raw>git clone &lt;your copy of the repository&gt; openuptime
+    <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 pnpm install</code></pre>
     <h3>2. Choose how checks run, then create Hyperdrive</h3>
@@ -68,24 +71,24 @@ pnpm install</code></pre>
       </tbody>
     </table>
     <p><strong>Queue mode</strong> (the file ships this way): create the queue once.</p>
-    <pre><code is:raw>wrangler queues create openuptime-checks</code></pre>
+    <pre><code is:raw>pnpm exec wrangler queues create openuptime-checks</code></pre>
     <p><strong>Inline mode</strong>: delete the whole <code>"queues"</code> block from <code>apps/api/wrangler.jsonc</code> and skip the command above. Without a bound queue the Worker detects it and runs checks inline.</p>
     <p>Then create Hyperdrive and copy its id into the <code>hyperdrive</code> block of <code>apps/api/wrangler.jsonc</code>:</p>
-    <pre><code is:raw>wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
+    <pre><code is:raw>pnpm exec wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
     <h3>3. Create the schema</h3>
     <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
-    <p>If your database role cannot <code>CREATE SCHEMA</code> (some hosted tenants), run <code>DATABASE_URL=... node migrate-plain.mjs</code> from <code>packages/db-pg</code> instead.</p>
+    <p>It never issues <code>CREATE SCHEMA</code>, so a database role without database-level <code>CREATE</code> works too. Run it again after every upgrade.</p>
     <h3>4. Point the config at your domain</h3>
     <p>In <code>apps/api/wrangler.jsonc</code> set <code>routes</code> (<code>your-domain/api/*</code>), <code>BETTER_AUTH_URL</code> and <code>WEB_ORIGIN</code> (both <code>https://your-domain</code>) and <code>EMAIL_FROM</code>. Remove the <code>placement</code> block, or set it to your own database host.</p>
     <p>In <code>apps/web/wrangler.jsonc</code> set the custom-domain <code>routes</code> pattern and <code>PRODUCT_URL</code> (where "Powered by" links to; use your own origin).</p>
     <h3>5. Secrets</h3>
     <pre><code is:raw>cd apps/api
-wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
-wrangler secret put CRON_SECRET            # any long random string; guards /internal/*
+pnpm exec wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
+pnpm exec wrangler secret put CRON_SECRET            # any long random string; guards /internal/*
 # optional: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET for "Sign in with GitHub"</code></pre>
     <h3>6. Deploy</h3>
-    <pre><code is:raw>cd apps/api &amp;&amp; wrangler deploy
-cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
+    <pre><code is:raw>cd apps/api &amp;&amp; pnpm exec wrangler deploy
+cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre>
     <p>Deploy the API first: the web Worker binds to it. Then open your domain and sign up.</p>
     <h3>Settings</h3>
     <table class="vars vars-3">
@@ -106,7 +109,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
     <p>Pull the new code, run the migration again (it only applies what is new), then deploy the API and the web Worker in that order.</p>
     <h3>Switching modes later</h3>
     <ul>
-      <li><strong>Free to Paid</strong>: upgrade the plan, restore the <code>queues</code> block, run <code>wrangler queues create openuptime-checks</code>, then <code>wrangler deploy</code> the API.</li>
+      <li><strong>Free to Paid</strong>: upgrade the plan, restore the <code>queues</code> block, run <code>pnpm exec wrangler queues create openuptime-checks</code>, then <code>pnpm exec wrangler deploy</code> the API.</li>
       <li><strong>Paid to Free</strong>: remove the <code>queues</code> block and deploy the API again. You can delete the queue afterwards.</li>
     </ul>
     <p>No data migration is involved. Monitors, history and incidents are untouched.</p>
@@ -132,7 +135,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
     <h3>环境要求</h3>
     <ul><li>Docker 和 Compose v2</li><li>能访问被监控服务的机器</li></ul>
     <h3>启动</h3>
-    <pre><code is:raw>git clone &lt;你的仓库副本&gt; openuptime
+    <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 cp .env.docker.example .env
 # 编辑 .env：设置 POSTGRES_PASSWORD 和 BETTER_AUTH_SECRET（openssl rand -hex 32）
@@ -148,6 +151,9 @@ docker compose up -d --build</code></pre>
         <tr><td><code>BETTER_AUTH_SECRET</code></td><td>必填。用于签名会话。用 <code>openssl rand -hex 32</code> 生成，并保持不变。</td></tr>
         <tr><td><code>PUBLIC_URL</code></td><td>公网地址，默认 <code>http://localhost:8080</code>。</td></tr>
         <tr><td><code>PORT</code></td><td>宿主机端口，默认 <code>8080</code>。</td></tr>
+        <tr><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（请先创建好自己的账号），受邀的人仍可加入。</td></tr>
+        <tr><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
+        <tr><td><code>CRON_SECRET</code></td><td>可选。允许外部调度器调用 <code>POST /internal/run-checks</code>；不设置则 <code>/internal/*</code> 保持关闭。</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选的 Plausible 统计。域名为空则关闭。</td></tr>
@@ -168,10 +174,10 @@ docker compose up -d --build</code></pre>
     <ul>
       <li>一个 Cloudflare 账号，以及托管在 Cloudflare 的域名。只有下文的 Queue 模式需要 <strong>Workers 付费版</strong>；免费版可用内联模式，适合小规模</li>
       <li>一个 Cloudflare 能访问的 Postgres 数据库。通过 Hyperdrive 连接，所以 Neon、Supabase、RDS 或自建均可</li>
-      <li>Node.js、pnpm 和 <code>wrangler</code>，并已通过 <code>wrangler login</code> 登录</li>
+      <li>Node.js 22+ 和 pnpm（<code>corepack enable</code> 会装好指定版本）。Wrangler 随项目安装，在 <code>apps/api</code> 中执行 <code>pnpm exec wrangler login</code> 登录</li>
     </ul>
     <h3>1. 获取代码</h3>
-    <pre><code is:raw>git clone &lt;你的仓库副本&gt; openuptime
+    <pre><code is:raw>git clone https://github.com/becoolme/openuptime.git
 cd openuptime
 pnpm install</code></pre>
     <h3>2. 选择检测运行方式，并创建 Hyperdrive</h3>
@@ -184,24 +190,24 @@ pnpm install</code></pre>
       </tbody>
     </table>
     <p><strong>Queue 模式</strong>（配置文件默认如此）：创建一次队列。</p>
-    <pre><code is:raw>wrangler queues create openuptime-checks</code></pre>
+    <pre><code is:raw>pnpm exec wrangler queues create openuptime-checks</code></pre>
     <p><strong>内联模式</strong>：从 <code>apps/api/wrangler.jsonc</code> 中删除整个 <code>"queues"</code> 配置块，并跳过上面的命令。没有绑定队列时 Worker 会自动改为内联执行。</p>
     <p>然后创建 Hyperdrive，把得到的 id 填进 <code>apps/api/wrangler.jsonc</code> 的 <code>hyperdrive</code> 配置块：</p>
-    <pre><code is:raw>wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
+    <pre><code is:raw>pnpm exec wrangler hyperdrive create openuptime-prod --connection-string="postgres://user:pass@host:5432/db"</code></pre>
     <h3>3. 创建数据库结构</h3>
     <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
-    <p>如果数据库角色没有 <code>CREATE SCHEMA</code> 权限（部分托管租户），改在 <code>packages/db-pg</code> 目录执行 <code>DATABASE_URL=... node migrate-plain.mjs</code>。</p>
+    <p>它不会执行 <code>CREATE SCHEMA</code>，所以没有数据库级 <code>CREATE</code> 权限的角色也能运行。每次升级后重新执行即可。</p>
     <h3>4. 把配置指向你的域名</h3>
     <p>在 <code>apps/api/wrangler.jsonc</code> 中设置 <code>routes</code>（<code>你的域名/api/*</code>）、<code>BETTER_AUTH_URL</code> 和 <code>WEB_ORIGIN</code>（都填 <code>https://你的域名</code>）以及 <code>EMAIL_FROM</code>。删除 <code>placement</code> 块，或改成你自己的数据库主机。</p>
     <p>在 <code>apps/web/wrangler.jsonc</code> 中设置自定义域名的 <code>routes</code>，以及 <code>PRODUCT_URL</code>（"Powered by" 链接的目标，填你自己的地址）。</p>
     <h3>5. 密钥</h3>
     <pre><code is:raw>cd apps/api
-wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
-wrangler secret put CRON_SECRET            # 任意足够长的随机字符串，保护 /internal/*
+pnpm exec wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
+pnpm exec wrangler secret put CRON_SECRET            # 任意足够长的随机字符串，保护 /internal/*
 # 可选：GITHUB_CLIENT_ID 和 GITHUB_CLIENT_SECRET，用于 GitHub 登录</code></pre>
     <h3>6. 部署</h3>
-    <pre><code is:raw>cd apps/api &amp;&amp; wrangler deploy
-cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
+    <pre><code is:raw>cd apps/api &amp;&amp; pnpm exec wrangler deploy
+cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre>
     <p>务必先部署 API：web Worker 依赖它。然后打开你的域名注册即可。</p>
     <h3>配置项</h3>
     <table class="vars vars-3">
@@ -222,7 +228,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; wrangler deploy</code></pre>
     <p>拉取新代码，重新执行迁移（只会应用新增的部分），然后先部署 API、再部署 web Worker。</p>
     <h3>之后切换模式</h3>
     <ul>
-      <li><strong>免费版升级到付费版</strong>：升级套餐，恢复 <code>queues</code> 配置块，执行 <code>wrangler queues create openuptime-checks</code>，再 <code>wrangler deploy</code> API。</li>
+      <li><strong>免费版升级到付费版</strong>：升级套餐，恢复 <code>queues</code> 配置块，执行 <code>pnpm exec wrangler queues create openuptime-checks</code>，再 <code>pnpm exec wrangler deploy</code> API。</li>
       <li><strong>付费版降到免费版</strong>：删除 <code>queues</code> 配置块并重新部署 API，之后可以删除队列。</li>
     </ul>
     <p>不涉及数据迁移，监控项、历史记录和事件都不受影响。</p>

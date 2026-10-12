@@ -21,20 +21,23 @@
       }
     ]
   },
-  // Route the API under the web domain so session cookies stay same-origin.
-  "routes": [{ "pattern": "openuptime.app/api/*", "zone_name": "openuptime.app" }],
+  // Route the API under the web domain so session cookies stay same-origin. Set your own domain; zone_name is the
+  // zone (apex domain). Without a zone, leave this out: the web Worker forwards /api/* to this Worker.
+  "routes": [{ "pattern": "status.example.com/api/*", "zone_name": "example.com" }],
   // Create one, then uncomment and paste its id:
   //   wrangler hyperdrive create openuptime-prod --connection-string="postgres://…"
   // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<your-hyperdrive-config-id>" }],
   // Cloudflare Email Service: onboard your sending domain in the dashboard (Email Sending), then set EMAIL_FROM.
   "send_email": [{ "name": "EMAIL", "remote": true }],
   "vars": {
-    "EMAIL_FROM": "alerts@openuptime.app",
+    // sender address; optional (without it emails are written to the log)
+    "EMAIL_FROM": "alerts@example.com",
     // days a team invitation stays valid (default 7)
     "INVITE_TTL_DAYS": "7",
     // "DISABLE_SIGNUP": "true",  // closes registration; invited people can still join
-    "BETTER_AUTH_URL": "https://openuptime.app",
-    "WEB_ORIGIN": "https://openuptime.app"
+    // public origin of the site: cookies, OAuth, links in emails (both the same value)
+    "BETTER_AUTH_URL": "https://status.example.com",
+    "WEB_ORIGIN": "https://status.example.com"
   }
-  // secrets: wrangler secret put BETTER_AUTH_SECRET  (and CRON_SECRET, GITHUB_CLIENT_*)
+  // secrets: pnpm exec wrangler secret put BETTER_AUTH_SECRET  (and CRON_SECRET, GITHUB_CLIENT_*)
 }
