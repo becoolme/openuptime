@@ -60,7 +60,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", (c) => c.json({ ok: true }));
-  app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env), turnstileSiteKey: turnstile(c.env)?.siteKey ?? null }));
+  app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env), turnstileSiteKey: turnstile(c.env)?.siteKey ?? null, legal: c.env.LEGAL_LINKS === "true" }));
   // password guessing, sign-up floods and mail bombing: the library's own limiter is per isolate on Workers, so the
   // endpoints that matter are counted in the database. A client address is used when it can be told; the email address
   // in the body always counts, so one account cannot be hammered from many addresses either.

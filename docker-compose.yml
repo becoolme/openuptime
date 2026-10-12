@@ -31,6 +31,7 @@ services:
       # optional: Cloudflare Turnstile on email sign-up (set both)
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      LEGAL_LINKS: ${LEGAL_LINKS:-}
       # optional: lets an external scheduler call POST /internal/run-checks; unset keeps /internal/* closed
       CRON_SECRET: ${CRON_SECRET:-}
       # "true" lets monitors and alert webhooks target private / internal addresses (127.x, 10.x, 192.168.x, compose service names)

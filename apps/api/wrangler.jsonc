@@ -35,6 +35,7 @@
     // days a team invitation stays valid (default 7)
     "INVITE_TTL_DAYS": "7",
     // "DISABLE_SIGNUP": "true",  // closes registration; invited people can still join
+    // "LEGAL_LINKS": "true",  // sign-up says "you agree to the Terms / Privacy" (replace the bundled /terms and /privacy first)
     // "TURNSTILE_SITE_KEY": "0x4AAA…",  // Cloudflare Turnstile on sign-up; also `wrangler secret put TURNSTILE_SECRET_KEY`
     // "ALLOW_PRIVATE_TARGETS": "true",  // monitors / webhooks may target private addresses (default: refused)
     // "CHECK_USER_AGENT": "OpenUptime/0.1 (+https://status.example.com)",

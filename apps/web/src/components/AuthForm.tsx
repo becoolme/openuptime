@@ -43,6 +43,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   // Cloudflare Turnstile on sign-up: the site key comes from the API, which only reports one when verification is on
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  const [legal, setLegal] = useState(false);
   const widget = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
   const login = mode === "login";
@@ -50,7 +51,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   useEffect(() => {
     // the page is static, so "already signed in" is checked here
     fetch("/api/me", { credentials: "include" }).then((r) => r.ok && (window.location.href = nextPath())).catch(() => {});
-    fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean; signup?: boolean; turnstileSiteKey?: string | null }) => { setGithub(!!d.github); setOpen(d.signup !== false); setSiteKey(d.turnstileSiteKey || null); }).catch(() => {});
+    fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean; signup?: boolean; turnstileSiteKey?: string | null; legal?: boolean }) => { setLegal(!!d.legal); setGithub(!!d.github); setOpen(d.signup !== false); setSiteKey(d.turnstileSiteKey || null); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           {t("Sign-ups are closed here. Only people who were invited to a workspace can create an account, using the invited email address.")}
         </p>
       )}
-      {!login && (
+      {!login && legal && (
         <p className="faint" style={{ fontSize: 12.5, textAlign: "center", marginTop: 14 }}>
           {t("By creating an account you agree to the")} <a href="/terms" className="auth-link">{t("Terms of Service")}</a> {t("and the")} <a href="/privacy" className="auth-link">{t("Privacy Policy")}</a>.
         </p>

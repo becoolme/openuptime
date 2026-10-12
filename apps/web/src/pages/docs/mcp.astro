@@ -19,10 +19,12 @@ const tools: Tool[] = [
   { name: "acknowledge_incident", en: "Acknowledge an incident.", zh: "确认事件。" },
   { name: "list_channels", en: "Alert channels.", zh: "告警渠道。" },
   { name: "list_status_pages", en: "Status pages.", zh: "状态页。" },
+  { name: "create_status_page", en: "Create a public status page showing the given monitors.", zh: "创建公开状态页，展示指定的监控项。" },
+  { name: "update_status_page", en: "Change a status page's title, theme, latency display or monitors.", zh: "修改状态页的标题、主题、延迟显示或监控项。" },
   { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
 ];
 ---
-<Doc title="MCP" updated="2026-10-11" toc>
+<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-11" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>

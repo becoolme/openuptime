@@ -1,7 +1,7 @@
 ---
 import "../styles/global.css";
 import { ClientRouter } from "astro:transitions";
-const { title = "OpenUptime", router = true, noindex = false } = Astro.props;
+const { title = "OpenUptime", router = true, noindex = false, description = "" } = Astro.props;
 ---
 <!doctype html>
 <html lang={Astro.locals.lang ?? "en"}>
@@ -11,6 +11,11 @@ const { title = "OpenUptime", router = true, noindex = false } = Astro.props;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     {noindex && <meta name="robots" content="noindex,nofollow" />}
+    {description && <meta name="description" content={description} />}
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenUptime" />
+    <meta property="og:title" content={title} />
     <slot name="head" />
     <script is:inline defer src="/ou-analytics.js"></script>
     <title>{title}</title>

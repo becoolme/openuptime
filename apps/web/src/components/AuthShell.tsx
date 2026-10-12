@@ -16,7 +16,7 @@ export function AuthShell({ side, children }: { side: "login" | "signup"; childr
           <div className="auth-tools"><TopBar /></div>
         </header>
         <div className="auth-form">{children}</div>
-        <p className="legal faint">{t("Open source · self-host or use the hosted version.")}</p>
+        <p className="legal faint">{t("Open source · MIT licensed.")}</p>
       </div>
       <aside className="auth-r" aria-hidden="true">
         {side === "login" ? <LoginShowcase /> : <SignupShowcase />}
@@ -54,7 +54,7 @@ function SignupShowcase() {
     [t("HTTP, TCP, DNS and heartbeat checks"), t("Monitor sites, ports, records and cron jobs.")],
     [t("Alerts where you already are"), t("Email, Slack, Telegram, PagerDuty and webhooks.")],
     [t("Public status pages"), t("Share live status and incident updates with your users.")],
-    [t("Open source"), t("Self-host it for free, or use the hosted version.")],
+    [t("Open source"), t("Self-host it for free on Cloudflare or Docker.")],
   ];
   return (
     <div className="show">

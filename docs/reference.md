@@ -101,12 +101,23 @@ Off by default. Set these on the web Worker (`vars` in `apps/web/wrangler.jsonc`
 | `PLAUSIBLE_DOMAIN` | the site to report to (`data-domain`; several may be comma-separated). Unset = no script is loaded. |
 | `PLAUSIBLE_SRC` | where the script comes from. Defaults to `https://plausible.io/js/script.js`; for self-hosted Plausible use e.g. `https://stats.example.com/js/script.js`. |
 
-Pages load `/ou-analytics.js`, which injects the Plausible script only when `PLAUSIBLE_DOMAIN` is set. If you turn it on, update the privacy page, which says there are no third-party analytics scripts.
+Pages load `/ou-analytics.js`, which injects the Plausible script only when `PLAUSIBLE_DOMAIN` is set. If you turn it on, say so in your privacy page: the bundled `/privacy` text describes the hosted service at openuptime.app, so replace it with your own anyway.
 
 ## Language & theme
 
 The app ships English and 简体中文 (switcher in the sidebar; stored in the `ou_lang` cookie, defaults to the browser language).
 Light/dark is toggled from the same place. To add strings, wrap them with `t()` and add the translation to `apps/web/src/lib/zh.ts`.
+
+## Upgrade notes
+
+Behaviour that changed and can surprise an existing install. Run `pnpm db:migrate` (Docker applies migrations on start) before deploying.
+
+- **Private targets are refused.** Monitors and alert webhooks that resolve to private, loopback or link-local addresses fail unless `ALLOW_PRIVATE_TARGETS=true`. Docker users who monitor services on their own network need that setting.
+- **Credentials are masked for members.** Channel configs and monitor headers show `••••••••` to non-admins; owners and admins see the real values.
+- **Authentication endpoints are rate limited** per client address and per email (HTTP 429). Behind a reverse proxy set `TRUST_PROXY=true`, otherwise every visitor shares one address.
+- **Secrets are validated at start** in Docker: `BETTER_AUTH_SECRET` and `CRON_SECRET` must not be the `change-me…` placeholder and need at least 16 characters.
+- **One automatic incident per monitor and kind.** Migration `0016` merges duplicate open incidents and adds a unique index.
+- **Optional:** `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` (sign-up challenge) and `LEGAL_LINKS` (terms and privacy consent line on sign-up).
 
 ## Tests & CI
 

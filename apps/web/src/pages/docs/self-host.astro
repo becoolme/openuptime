@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc title="Self-host" updated="2026-10-11" toc>
+<Doc description="Run OpenUptime on Cloudflare Workers with Postgres, or in one Docker container." title="Self-host" updated="2026-10-11" toc>
   <div lang="en">
     <h1>Self-host OpenUptime</h1>
     <p class="lede">Run your own copy on Cloudflare Workers or in Docker. Both use the same code and a Postgres database you control.</p>
@@ -33,6 +33,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>PUBLIC_URL</code></td><td>Public origin. Default <code>http://localhost:8080</code>.</td></tr>
         <tr><td><code>PORT</code></td><td>Host port. Default <code>8080</code>.</td></tr>
         <tr><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration once your own account exists. Invited people can still join.</td></tr>
+        <tr><td><code>LEGAL_LINKS</code></td><td>Set to <code>true</code> to add "you agree to the Terms and Privacy Policy" to the sign-up form. The bundled <code>/terms</code> and <code>/privacy</code> pages describe the hosted service at openuptime.app: replace them with your own text first.</td></tr>
         <tr><td><code>TURNSTILE_SITE_KEY</code><br /><code>TURNSTILE_SECRET_KEY</code></td><td>Set both to put a <a href="https://developers.cloudflare.com/turnstile/">Cloudflare Turnstile</a> check on the email sign-up form; the API verifies the token too. GitHub sign-in is not covered.</td></tr>
         <tr><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
         <tr><td><code>CRON_SECRET</code></td><td>Optional. Lets an external scheduler call <code>POST /internal/run-checks</code>; unset leaves <code>/internal/*</code> closed.</td></tr>
@@ -102,6 +103,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
         <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to let monitors and alert webhooks target private addresses. Default: refused. Cloudflare Workers cannot reach private ranges anyway; this mostly matters for Docker.</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration (email and GitHub). Create your own account first; afterwards only people with a pending invitation can still sign up.</td></tr>
+        <tr><td>api vars</td><td><code>LEGAL_LINKS</code></td><td>Set to <code>true</code> to add "you agree to the Terms and Privacy Policy" to the sign-up form. The bundled <code>/terms</code> and <code>/privacy</code> pages describe the hosted service at openuptime.app: replace them with your own text first.</td></tr>
         <tr><td>api vars + secret</td><td><code>TURNSTILE_SITE_KEY</code>, <code>TURNSTILE_SECRET_KEY</code></td><td>Optional. Put the site key in the API <code>vars</code> and the secret key with <code>wrangler secret put TURNSTILE_SECRET_KEY</code>; email sign-up then requires a verified Turnstile token. Both must be set.</td></tr>
         <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>See step 5.</td></tr>
         <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>Target of the "Powered by" link on status pages.</td></tr>
@@ -157,6 +159,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>PUBLIC_URL</code></td><td>公网地址，默认 <code>http://localhost:8080</code>。</td></tr>
         <tr><td><code>PORT</code></td><td>宿主机端口，默认 <code>8080</code>。</td></tr>
         <tr><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（请先创建好自己的账号），受邀的人仍可加入。</td></tr>
+        <tr><td><code>LEGAL_LINKS</code></td><td>设为 <code>true</code> 后，注册表单会显示“创建账户即表示同意服务条款与隐私政策”。自带的 <code>/terms</code> 和 <code>/privacy</code> 描述的是 openuptime.app 托管服务，请先换成你自己的文本。</td></tr>
         <tr><td><code>TURNSTILE_SITE_KEY</code><br /><code>TURNSTILE_SECRET_KEY</code></td><td>两者都设置后，邮箱注册表单会显示 <a href="https://developers.cloudflare.com/turnstile/">Cloudflare Turnstile</a> 验证，API 也会校验令牌。GitHub 登录不受影响。</td></tr>
         <tr><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
         <tr><td><code>CRON_SECRET</code></td><td>可选。允许外部调度器调用 <code>POST /internal/run-checks</code>；不设置则 <code>/internal/*</code> 保持关闭。</td></tr>
@@ -226,6 +229,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
         <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 允许监控项和告警 Webhook 指向私有地址，默认拒绝。Cloudflare Workers 本身无法访问私有网段，此项主要影响 Docker 部署。</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（邮箱与 GitHub 均适用）。请先创建好自己的账号；之后只有持有待处理邀请的人还能注册。</td></tr>
+        <tr><td>api vars</td><td><code>LEGAL_LINKS</code></td><td>设为 <code>true</code> 后，注册表单会显示“创建账户即表示同意服务条款与隐私政策”。自带的 <code>/terms</code> 和 <code>/privacy</code> 描述的是 openuptime.app 托管服务，请先换成你自己的文本。</td></tr>
         <tr><td>api vars + secret</td><td><code>TURNSTILE_SITE_KEY</code>、<code>TURNSTILE_SECRET_KEY</code></td><td>可选。站点密钥放进 API 的 <code>vars</code>，私钥用 <code>wrangler secret put TURNSTILE_SECRET_KEY</code> 设置；之后邮箱注册需要通过 Turnstile 验证。两者必须同时设置。</td></tr>
         <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>见第 5 步。</td></tr>
         <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>状态页 "Powered by" 链接的目标。</td></tr>

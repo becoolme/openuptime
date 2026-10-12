@@ -35,6 +35,8 @@ export type Bindings = {
   /** Cloudflare Turnstile: with both keys set, email sign-up shows the widget and the API verifies the token. */
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;
+  /** "true" makes sign-up show "you agree to the Terms and Privacy Policy" (the bundled pages describe the hosted service, so off by default). */
+  LEGAL_LINKS?: string;
   /** "true" when exactly one reverse proxy sits in front (Docker/Node): its x-forwarded-for is then trusted for rate limits. */
   TRUST_PROXY?: string;
   /** Days a team invitation stays valid. Default 7. */

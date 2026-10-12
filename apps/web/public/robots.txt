@@ -3,5 +3,3 @@ Disallow: /app
 Disallow: /zh-Hans/app
 Disallow: /api/
 Allow: /
-
-Sitemap: https://openuptime.app/sitemap.xml

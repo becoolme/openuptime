@@ -1,13 +1,16 @@
 // Builds one landing page per language from public/index.html (English, with the dictionaries in its inline script):
 // public/zh-Hans.html, public/ja.html, public/es.html. Real files per language so crawlers get the translated text,
 // <html lang>, canonical and hreflang without running JavaScript. Run by `predev` / `prebuild`.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 const src = readFileSync(join(root, "index.html"), "utf8");
-const ORIGIN = "https://openuptime.app";
+// The public origin of the site, set when building a deployment that has one (the hosted build sets
+// SITE_ORIGIN=https://openuptime.app). Without it the pages carry no canonical / hreflang / og:image / sitemap,
+// so a self-hosted copy never claims to be a duplicate of someone else's domain.
+const ORIGIN = (process.env.SITE_ORIGIN ?? "").replace(/\/+$/, "");
 
 const start = src.indexOf("var T={");
 const end = src.indexOf("\n}};", start);
@@ -21,15 +24,40 @@ const LOCALES = [
 ];
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
-const alternates =
-  [{ hreflang: "en", path: "/" }, ...LOCALES, { hreflang: "x-default", path: "/" }]
-    .map((l) => `<link rel="alternate" hreflang="${l.hreflang}" href="${ORIGIN}${l.path === "/" ? "/" : l.path}">`)
-    .join("\n");
+const alternates = ORIGIN
+  ? [{ hreflang: "en", path: "/" }, ...LOCALES, { hreflang: "x-default", path: "/" }]
+      .map((l) => `<link rel="alternate" hreflang="${l.hreflang}" href="${ORIGIN}${l.path === "/" ? "/" : l.path}">`)
+      .join("\n")
+  : "";
+const STRIP = /<link rel="canonical"[^>]*>\n?|<link rel="alternate" hreflang[^>]*>\n?|<meta (?:property="og:|name="twitter:)[^>]*>\n?/g;
+const attr = (html, re) => (html.match(re)?.[1] ?? "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+
+/** canonical + hreflang + Open Graph / Twitter tags for one language of the landing page */
+function headTags(html, loc) {
+  const title = attr(html, /<title>([\s\S]*?)<\/title>/);
+  const desc = attr(html, /<meta name="description" content="([^"]*)"/);
+  const url = ORIGIN ? `${ORIGIN}${loc.path}` : "";
+  const tags = [
+    ORIGIN && `<link rel="canonical" href="${url}">`,
+    alternates,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="OpenUptime">`,
+    `<meta property="og:title" content="${esc(title)}">`,
+    `<meta property="og:description" content="${esc(desc)}">`,
+    ORIGIN && `<meta property="og:url" content="${url}">`,
+    ORIGIN && `<meta property="og:image" content="${ORIGIN}/og.png">`,
+    `<meta name="twitter:card" content="${ORIGIN ? "summary_large_image" : "summary"}">`,
+    `<meta name="twitter:title" content="${esc(title)}">`,
+    `<meta name="twitter:description" content="${esc(desc)}">`,
+    ORIGIN && `<meta name="twitter:image" content="${ORIGIN}/og.png">`,
+  ];
+  return tags.filter(Boolean).join("\n");
+}
 
 function build(loc) {
   const d = T[loc.code];
   // the source already carries the English canonical + alternates: drop them so each page ends with exactly its own
-  let html = src.replace(/<link rel="canonical"[^>]*>\n?/g, "").replace(/<link rel="alternate" hreflang[^>]*>\n?/g, "");
+  let html = src.replace(STRIP, "");
   html = html.replace(/<html lang="[^"]*"/, `<html lang="${loc.code}"`);
   if (d.title) html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(d.title)}</title>`);
   if (d.desc) html = html.replace(/(<meta name="description" content=")[^"]*(")/, `$1${esc(d.desc)}$2`);
@@ -37,16 +65,28 @@ function build(loc) {
     d[key] != null ? `${open}${esc(d[key])}${close}` : m,
   );
   // pages that exist in this language keep the visitor in it; the rest are shared
-  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/self-host|privacy|terms)"/g, 'href="/zh-Hans/$1"');
+  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/mcp|docs\/self-host|privacy|terms)"/g, 'href="/zh-Hans/$1"');
   html = html.replace(/href="\/"/g, `href="${loc.path}"`);
-  html = html.replace("</head>", `<link rel="canonical" href="${ORIGIN}${loc.path}">\n${alternates}\n</head>`);
+  html = html.replace("</head>", `${headTags(html, loc)}\n</head>`);
   return html;
 }
 
 // the English page gets canonical + alternates too (it is the source file, so patch it once, idempotently)
-let en = src.replace(/<link rel="canonical"[^>]*>\n?/g, "").replace(/<link rel="alternate" hreflang[^>]*>\n?/g, "");
-en = en.replace("</head>", `<link rel="canonical" href="${ORIGIN}/">\n${alternates}\n</head>`);
+let en = src.replace(STRIP, "");
+en = en.replace("</head>", `${headTags(en, { path: "/" })}\n</head>`);
 if (en !== src) writeFileSync(join(root, "index.html"), en);
 
 for (const loc of LOCALES) writeFileSync(join(root, `${loc.file}.html`), build(loc));
+// sitemap.xml and the Sitemap line of robots.txt need absolute URLs, so they exist only when the origin is known
+const PAGES = ["/", ...LOCALES.map((l) => l.path), ...["", "/api", "/embed", "/mcp", "/self-host"].flatMap((p) => [`/docs${p}`, `/zh-Hans/docs${p}`]), "/privacy", "/terms", "/zh-Hans/privacy", "/zh-Hans/terms"];
+const robots = ["User-agent: *", "Disallow: /app", "Disallow: /zh-Hans/app", "Disallow: /api/", "Allow: /", ""];
+if (ORIGIN) {
+  writeFileSync(
+    join(root, "sitemap.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${PAGES.map((p) => `  <url><loc>${ORIGIN}${p}</loc></url>`).join("\n")}\n</urlset>\n`,
+  );
+  robots.push(`Sitemap: ${ORIGIN}/sitemap.xml`, "");
+} else rmSync(join(root, "sitemap.xml"), { force: true });
+writeFileSync(join(root, "robots.txt"), robots.join("\n"));
+
 console.log("landing pages:", ["index", ...LOCALES.map((l) => l.file)].join(", "));
