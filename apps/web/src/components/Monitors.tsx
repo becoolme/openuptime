@@ -383,10 +383,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
                     const on = f.regions.includes(p.id);
                     const full = regionLocked(f.regions, p.id, maxRegions);
                     return (
-                      <button type="button" key={p.id} className={`rg ${on ? "on" : ""}`} aria-pressed={on} disabled={full}
+                      <button type="button" key={p.id} className={`region-opt ${on ? "on" : ""}`} aria-pressed={on} disabled={full}
                         title={full ? t("Your plan cannot check from that many regions.") : p.id === "auto" ? t("Auto is this deployment's own location") : known.has(p.id) ? undefined : t("No longer available")}
                         onClick={() => set("regions", toggleRegion(f.regions, p.id, maxRegions))}>
-                        <span className="rg-mark">{on ? "✓" : ""}</span>{p.name}
+                        <span className="region-opt-mark">{on ? "✓" : ""}</span>{p.name}
                       </button>
                     );
                   })}

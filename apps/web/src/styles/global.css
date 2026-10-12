@@ -258,13 +258,21 @@ form.card,.modal form{grid-template-columns:minmax(0,1fr)}
 fieldset{min-width:0}
 .fld{min-width:0}
 .rr.res{grid-template-columns:92px 84px 50px 72px minmax(0,1fr)}
-.rr.res.rg{grid-template-columns:92px 110px 84px 50px 72px minmax(0,1fr)}
+.rr.res.has-rg{grid-template-columns:84px minmax(120px,170px) 84px 50px 72px minmax(0,1fr)}
 .rr-rg{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rr.reg{grid-template-columns:minmax(0,1fr) 64px 70px 64px;gap:10px;font-size:13px}
+.rr.res.grp{min-height:38px}.rr.res.grp:not(.in-run){padding-top:6px}.rr.res.in-run{border-top-color:transparent}
+.rr.reg{grid-template-columns:8px minmax(0,1fr) auto;gap:10px;min-height:44px;font-size:13.5px}
+.rr.reg .dot{width:8px;height:8px;border-radius:50%;background:var(--line-2)}
+.rr.reg .dot.up{background:var(--accent)}.rr.reg .dot.down{background:var(--down)}
+.reg-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reg-v{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.reg-v b{font-weight:500}.reg-v small{min-width:58px;text-align:right;color:var(--muted);font-size:12px}
+.spot-pick{display:flex;gap:8px;align-items:center}
+.spot-pick .in{height:32px;padding:0 10px;font-size:13.5px;flex:1;min-width:0}
+.rt-tip small.rt-r{display:block;margin-top:2px}.rt-tip small.rt-r.d{color:var(--down)}
 .spot{border-top:1px solid var(--line);padding-top:14px;margin-top:4px;display:grid;gap:10px;font-size:13px}
-.spot-r{display:flex;flex-wrap:wrap;gap:6px}
 .spot-out{margin:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-@media (max-width:640px){.rr.res{grid-template-columns:70px 74px 36px minmax(0,1fr);gap:10px}.rr.res:not(.rg)>span:nth-child(5){display:none}.rr.res.rg{grid-template-columns:70px 74px 36px minmax(0,1fr)}.rr.res.rg>.rr-rg,.rr.res.rg>span:nth-child(6){display:none}.cc{padding:18px 16px}}
+@media (max-width:640px){.rr.res{grid-template-columns:70px 74px 36px minmax(0,1fr);gap:10px}.rr.res:not(.has-rg)>span:nth-child(5){display:none}.rr.res.has-rg{grid-template-columns:64px minmax(0,1fr) 74px 58px;gap:8px}.rr.res.has-rg>span:nth-child(4),.rr.res.has-rg>span:nth-child(6){display:none}.cc{padding:18px 16px}}
 
 /* ── Auth (split layout, boards Login / Signup / Forgot) ── */
 .auth2{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:var(--bg)}
@@ -498,10 +506,10 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .region-sum .names{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .region-sum .faint{flex:none;font-size:12.5px}
 .region-grid{min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
-.rg{display:flex;align-items:center;gap:7px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;font:inherit;font-size:13.5px;font-weight:400;color:inherit;text-align:left}
-.rg.on{border-color:var(--accent);background:var(--accent-weak,var(--surface-2))}
-.rg:disabled{opacity:.45;cursor:not-allowed}
-.rg-mark{width:14px;flex:none;color:var(--accent);font-size:12px}
+.region-opt{display:flex;align-items:center;gap:7px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;font:inherit;font-size:13.5px;font-weight:400;color:inherit;text-align:left}
+.region-opt.on{border-color:var(--accent);background:var(--accent-weak,var(--surface-2))}
+.region-opt:disabled{opacity:.45;cursor:not-allowed}
+.region-opt-mark{width:14px;flex:none;color:var(--accent);font-size:12px}
 
 /* Onboarding (empty workspace) */
 .onb { display: grid; gap: 16px; min-width: 0; }

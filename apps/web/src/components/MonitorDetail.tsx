@@ -2,6 +2,7 @@ import { navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
+import { groupRuns } from "../lib/runs";
 import { MonitorForm } from "./Monitors";
 
 type Detail = Monitor & { results: CheckResult[]; regionStats: RegionStat[]; incidents: Incident[]; stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null } };
@@ -16,6 +17,7 @@ export default function MonitorDetail({ id }: { id: string }) {
   const [names, setNames] = useState<Record<string, string>>({});
   // the answer to the last single-region request, shown under the regions table
   const [spot, setSpot] = useState<{ region: string; run: NonNullable<SpotCheck["result"]> } | null>(null);
+  const [spotFrom, setSpotFrom] = useState("");
   const act = async (name: string, fn: () => Promise<unknown>) => {
     setPending(name);
     setErr("");
@@ -32,13 +34,15 @@ export default function MonitorDetail({ id }: { id: string }) {
   }, [id]);
   if (!m) return <p className="muted">{t("Loading…")}</p>;
 
-  const chrono = [...m.results].reverse();
+  const configured = m.regions?.length ? m.regions : ["auto"];
+  // a multi-region check records one row per region at the same moment: the chart and the table treat those as one run
+  const runs = groupRuns(m.results, configured);
+  const chrono = [...runs].reverse();
   const max = Math.max(1, ...chrono.map((r) => r.latencyMs ?? 0));
-  const lat = chrono.map((r) => r.latencyMs).filter((v): v is number => typeof v === "number");
+  const lat = m.results.map((r) => r.latencyMs).filter((v): v is number => typeof v === "number");
   const routed = m.channelIds?.length ? channels.filter((c) => m.channelIds!.includes(c.id)) : channels.filter((c) => c.enabled);
   const regionName = (id: string) => (id === "auto" ? t("Auto") : (names[id] ?? id));
   // the card appears once a monitor checks from somewhere other than the default
-  const configured = m.regions?.length ? m.regions : ["auto"];
   const multi = configured.some((r) => r !== "auto") || m.regionStats.some((r) => r.region !== "auto");
   // configured regions first, in the order the monitor lists them; then any region that only has history
   const stats: RegionStat[] = [
@@ -48,6 +52,9 @@ export default function MonitorDetail({ id }: { id: string }) {
   const probable = m.type === "http" || m.type === "tcp";
   const places = Object.keys(names);
   const showRegion = m.results.some((r) => r.region && r.region !== "auto");
+  // the newest 30 rows, whole runs only where they fit; `lead` marks the first row of a run, which carries the time
+  const rows = runs.flatMap((run) => run.rows.map((r, i) => ({ r, lead: i === 0, size: run.rows.length }))).slice(0, 30);
+  const spotId = places.includes(spotFrom) ? spotFrom : places[0];
   const num = (v: number | null | undefined, unit: string, digits = 0) => (v == null ? "—" : <>{digits ? v.toFixed(digits) : v}<u>{unit}</u></>);
   return (
     <>
@@ -95,31 +102,34 @@ export default function MonitorDetail({ id }: { id: string }) {
               <span className="faint mono" style={{ fontSize: 12.5 }}>{lat.length ? `min ${Math.min(...lat)} · avg ${Math.round(lat.reduce((a, b) => a + b, 0) / lat.length)} · max ${Math.max(...lat)} ms` : ""}</span>
             </div>
             <div className="bars rt">
-              {chrono.map((r) => (
-                <div key={r.id} className="rt-col">
-                  <i className={r.ok ? "" : "d"} style={{ height: `${Math.max(4, ((r.latencyMs ?? max) / max) * 100)}%` }} />
+              {chrono.map((run) => (
+                <div key={run.rows[0].id} className="rt-col">
+                  <i className={run.state === "up" ? "" : run.state === "down" ? "d" : "w"} style={{ height: `${Math.max(4, ((run.latencyMs ?? max) / max) * 100)}%` }} />
                   <span className="rt-tip">
-                    <b>{r.latencyMs != null ? `${r.latencyMs} ms` : "—"}</b>
-                    <small>{r.ok ? "OK" : r.statusCode ?? "Failed"} · {new Date(r.checkedAt).toLocaleTimeString()}</small>
+                    <b>{run.latencyMs != null ? `${run.rows.length > 1 ? "avg " : ""}${run.latencyMs} ms` : "—"}</b>
+                    <small>{run.rows.length > 1 ? `${run.okCount}/${run.rows.length} OK` : run.rows[0].ok ? "OK" : run.rows[0].statusCode ?? "Failed"} · {new Date(run.at).toLocaleTimeString()}</small>
+                    {run.rows.length > 1 && run.rows.map((r) => (
+                      <small key={r.id} className={`rt-r${r.ok ? "" : " d"}`}>{regionName(r.region ?? "auto")} · {r.ok ? `${r.latencyMs ?? "—"} ms` : r.error ?? t("Failed")}</small>
+                    ))}
                   </span>
                 </div>
               ))}
             </div>
             {chrono.length > 1 && (
-              <div className="ax"><span>{new Date(chrono[0].checkedAt).toLocaleTimeString()}</span><span>{new Date(chrono[chrono.length - 1].checkedAt).toLocaleTimeString()}</span></div>
+              <div className="ax"><span>{new Date(chrono[0].at).toLocaleTimeString()}</span><span>{new Date(chrono[chrono.length - 1].at).toLocaleTimeString()}</span></div>
             )}
           </div>
 
           <div className="card cc">
-            <div className="cc-h"><h3>{t("Recent checks")}</h3><span className="faint" style={{ fontSize: 13 }}>{Math.min(30, m.results.length)} {t("latest")}</span></div>
-            <div className={`rr res th${showRegion ? " rg" : ""}`}><span>{t("Time")}</span>{showRegion && <span className="rr-rg">{t("Region")}</span>}<span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
-            {m.results.slice(0, 30).map((r) => (
-              <div className={`rr res${showRegion ? " rg" : ""}`} key={r.id}>
-                <span className="mono muted">{new Date(r.checkedAt).toLocaleTimeString([], { hour12: false })}</span>
+            <div className="cc-h"><h3>{t("Recent checks")}</h3><span className="faint" style={{ fontSize: 13 }}>{rows.length} {t("latest")}</span></div>
+            <div className={`rr res th${showRegion ? " has-rg" : ""}`}><span>{t("Time")}</span>{showRegion && <span className="rr-rg">{t("Region")}</span>}<span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
+            {rows.map(({ r, lead, size }) => (
+              <div className={`rr res${showRegion ? " has-rg" : ""}${size > 1 ? " grp" : ""}${lead ? "" : " in-run"}`} key={r.id}>
+                <span className="mono muted">{lead || size === 1 ? new Date(r.checkedAt).toLocaleTimeString([], { hour12: false }) : ""}</span>
                 {showRegion && <span className="rr-rg" title={regionName(r.region ?? "auto")}>{regionName(r.region ?? "auto")}</span>}
                 <span><span className={`pill ${r.ok ? "up" : "down"}`}>{r.ok ? t("OK") : t("Failed")}</span></span>
                 <span className="mono">{r.statusCode ?? "—"}</span>
-                <span className="mono">{r.latencyMs ?? "—"} ms</span>
+                <span className="mono">{r.latencyMs != null ? `${r.latencyMs} ms` : "—"}</span>
                 <span className="faint mono rr-err" title={r.error ?? ""}>{r.error ?? ""}</span>
               </div>
             ))}
@@ -132,24 +142,27 @@ export default function MonitorDetail({ id }: { id: string }) {
             <div className="card cc">
               <div className="cc-h"><h3>{t("Regions")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("last 24 h")}</span></div>
               {stats.map((s) => (
-                <div className="rr reg" key={s.region}>
-                  <span title={regionName(s.region)}>{regionName(s.region)}</span>
-                  <span className="mono">{s.uptime24h == null ? "—" : `${s.uptime24h}%`}</span>
-                  <span className="mono muted">{s.avgLatency24h == null ? "—" : `${s.avgLatency24h} ms`}</span>
-                  <span>{s.last ? <span className={`pill ${s.last.ok ? "up" : "down"}`}>{s.last.ok ? t("OK") : t("Failed")}</span> : <span className="faint">—</span>}</span>
+                <div className="rr reg" key={s.region} title={s.last?.error ?? undefined}>
+                  <i className={`dot ${s.last ? (s.last.ok ? "up" : "down") : "n"}`} aria-label={s.last ? (s.last.ok ? t("OK") : t("Failed")) : undefined} />
+                  <span className="reg-n">{regionName(s.region)}</span>
+                  <span className="mono reg-v">
+                    <b>{s.uptime24h == null ? "—" : `${s.uptime24h}%`}</b>
+                    <small>{s.avgLatency24h == null ? "—" : `${s.avgLatency24h} ms`}</small>
+                  </span>
                 </div>
               ))}
               {places.length > 1 && (
                 <div className="spot">
                   <span className="faint">{t("Test once from")}</span>
-                  <div className="spot-r">
-                    {places.map((id) => (
-                      <button key={id} className="btn sm" disabled={!!pending} onClick={() => act(`spot:${id}`, async () => {
-                        setSpot(null);
-                        const r = await api.checkNow(m.id, id);
-                        if (r.result) setSpot({ region: id, run: r.result });
-                      })}>{pending === `spot:${id}` ? t("Checking…") : regionName(id)}</button>
-                    ))}
+                  <div className="spot-pick">
+                    <select className="in" value={spotId} aria-label={t("Test once from")} disabled={!!pending} onChange={(e) => { setSpotFrom(e.target.value); setSpot(null); }}>
+                      {places.map((id) => <option key={id} value={id}>{regionName(id)}</option>)}
+                    </select>
+                    <button className="btn sm" disabled={!!pending} onClick={() => act(`spot:${spotId}`, async () => {
+                      setSpot(null);
+                      const r = await api.checkNow(m.id, spotId);
+                      if (r.result) setSpot({ region: spotId, run: r.result });
+                    })}>{pending.startsWith("spot:") ? t("Checking…") : t("Test")}</button>
                   </div>
                   {spot && (
                     <p className="spot-out">
