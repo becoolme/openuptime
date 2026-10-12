@@ -493,10 +493,11 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .modal .fld .seg{margin-top:6px}
 .modal .fld .route.tog{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:none;cursor:pointer;font:inherit;color:inherit;text-align:left}
 /* region picker: a one-line summary that opens into a compact grid */
-.region-sum{display:flex;align-items:center;gap:10px;width:100%;margin-top:6px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:none;cursor:pointer;font:inherit;font-weight:400;color:inherit;text-align:left}
+.region-fld{grid-template-columns:minmax(0,1fr)}
+.region-sum{min-width:0;display:flex;align-items:center;gap:10px;width:100%;margin-top:6px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:none;cursor:pointer;font:inherit;font-weight:400;color:inherit;text-align:left}
 .region-sum .names{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .region-sum .faint{flex:none;font-size:12.5px}
-.region-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
+.region-grid{min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
 .rg{display:flex;align-items:center;gap:7px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;font:inherit;font-size:13.5px;font-weight:400;color:inherit;text-align:left}
 .rg.on{border-color:var(--accent);background:var(--accent-weak,var(--surface-2))}
 .rg:disabled{opacity:.45;cursor:not-allowed}
