@@ -2,6 +2,7 @@ import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type Incident, type Monitor } from "../lib/api";
+import { regionLocked, toggleRegion } from "../lib/regions";
 
 const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS" };
 
@@ -380,14 +381,11 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
                 <div className="region-grid">
                   {choices.map((p) => {
                     const on = f.regions.includes(p.id);
-                    const full = !on && f.regions.length >= maxRegions;
+                    const full = regionLocked(f.regions, p.id, maxRegions);
                     return (
                       <button type="button" key={p.id} className={`rg ${on ? "on" : ""}`} aria-pressed={on} disabled={full}
                         title={full ? t("Your plan cannot check from that many regions.") : p.id === "auto" ? t("Auto is this deployment's own location") : known.has(p.id) ? undefined : t("No longer available")}
-                        onClick={() => {
-                          const next = on ? f.regions.filter((x) => x !== p.id) : [...f.regions, p.id];
-                          set("regions", next.length ? next : ["auto"]);
-                        }}>
+                        onClick={() => set("regions", toggleRegion(f.regions, p.id, maxRegions))}>
                         <span className="rg-mark">{on ? "✓" : ""}</span>{p.name}
                       </button>
                     );
