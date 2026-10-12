@@ -3,7 +3,7 @@ import { isLang } from "./mail-i18n";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { createAuth, signupDisabled, slugify } from "./auth";
+import { createAuth, signupDisabled, slugify, turnstile } from "./auth";
 import { connectionString, type AppEnv } from "./env";
 import { mountMcp } from "./mcp-route";
 import { requireOrg } from "./middleware";
@@ -47,7 +47,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   const privateCors = cors({
     origin: (origin, c) => (origin === c.env.WEB_ORIGIN ? origin : null),
     credentials: true,
-    allowHeaders: ["content-type", "authorization", "x-api-key", "x-project-id", "x-workspace-id", "mcp-protocol-version", "mcp-session-id"],
+    allowHeaders: ["content-type", "authorization", "x-api-key", "x-project-id", "x-workspace-id", "x-captcha-response", "mcp-protocol-version", "mcp-session-id"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
   // status summaries and badges are public reads meant to be embedded on any site
@@ -59,7 +59,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", (c) => c.json({ ok: true }));
-  app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env) }));
+  app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env), turnstileSiteKey: turnstile(c.env)?.siteKey ?? null }));
   app.on(["GET", "POST"], "/api/auth/*", (c) => c.get("auth").handler(c.req.raw));
 
   // public

@@ -32,6 +32,9 @@ export type Bindings = {
   SMTP_PASS?: string;
   /** "true" closes registration: new accounts can only be created by someone with a pending invitation. */
   DISABLE_SIGNUP?: string;
+  /** Cloudflare Turnstile: with both keys set, email sign-up shows the widget and the API verifies the token. */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
   /** Days a team invitation stays valid. Default 7. */
   INVITE_TTL_DAYS?: string;
   /** "true" lets monitors and alert webhooks target private, loopback and link-local addresses (default: refused). */

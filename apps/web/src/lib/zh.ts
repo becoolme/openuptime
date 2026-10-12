@@ -98,6 +98,7 @@ export const zh: Record<string, string> = {
   Subscribers: "订阅者", "No subscribers yet.": "还没有订阅者。", Confirmed: "已确认", Pending: "待确认",
   "Signing in…": "登录中…",
   "Creating account…": "正在创建账号…",
+  "Please complete the verification.": "请先完成人机验证。",
   "Sending…": "发送中…",
   "Saving…": "保存中…",
   "Creating…": "创建中…",

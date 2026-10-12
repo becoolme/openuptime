@@ -1,5 +1,5 @@
 import { t } from "../lib/i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "../lib/auth-client";
 import { AuthShell } from "./AuthShell";
 import { nextPath as safeNext } from "../lib/next-path";
@@ -11,6 +11,20 @@ const oauthResume = () => {
   return p.has("client_id") && p.has("sig") ? `/api/auth/oauth2/authorize${location.search}` : null;
 };
 const nextPath = () => oauthResume() ?? lp(safeNext(location.search));
+
+type TurnstileApi = { render(el: HTMLElement, o: Record<string, unknown>): string; reset(id?: string): void; remove(id?: string): void };
+const turnstileApi = () => (window as unknown as { turnstile?: TurnstileApi }).turnstile;
+let turnstileScript: Promise<void> | undefined;
+/** Cloudflare's Turnstile script, loaded on demand (only when the operator configured a site key). */
+const loadTurnstile = () =>
+  (turnstileScript ??= new Promise<void>((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.onload = () => ok();
+    s.onerror = () => { turnstileScript = undefined; fail(new Error("turnstile")); };
+    document.head.append(s);
+  }));
 
 export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = useState("");
@@ -26,23 +40,56 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [twoStep, setTwoStep] = useState(false);
   const [code, setCode] = useState("");
   const [backup, setBackup] = useState(false);
+  // Cloudflare Turnstile on sign-up: the site key comes from the API, which only reports one when verification is on
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [token, setToken] = useState("");
+  const widget = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | undefined>(undefined);
   const login = mode === "login";
 
   useEffect(() => {
     // the page is static, so "already signed in" is checked here
     fetch("/api/me", { credentials: "include" }).then((r) => r.ok && (window.location.href = nextPath())).catch(() => {});
-    fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean; signup?: boolean }) => { setGithub(!!d.github); setOpen(d.signup !== false); }).catch(() => {});
+    fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean; signup?: boolean; turnstileSiteKey?: string | null }) => { setGithub(!!d.github); setOpen(d.signup !== false); setSiteKey(d.turnstileSiteKey || null); }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (login || !siteKey) return;
+    let gone = false;
+    loadTurnstile().then(() => {
+      const api = turnstileApi();
+      if (gone || !api || !widget.current) return;
+      widgetId.current = api.render(widget.current, {
+        sitekey: siteKey,
+        callback: (v: string) => setToken(v),
+        "expired-callback": () => setToken(""),
+        "error-callback": () => setToken(""),
+      });
+    }).catch(() => setError(t("Something went wrong")));
+    return () => {
+      gone = true;
+      if (widgetId.current) turnstileApi()?.remove(widgetId.current);
+      widgetId.current = undefined;
+    };
+  }, [login, siteKey]);
 
   async function submit(e: React.SyntheticEvent) {
     e.preventDefault();
+    if (!login && siteKey && !token) return setError(t("Please complete the verification."));
     setBusy(true);
     setError("");
     try {
       const res = login
         ? await authClient.signIn.email({ email, password })
-        : await authClient.signUp.email({ email, password, name: name || email.split("@")[0], callbackURL: "/app/account?verified=1" });
-      if (res.error) setError(res.error.message ?? t("Something went wrong"));
+        : await authClient.signUp.email(
+            { email, password, name: name || email.split("@")[0], callbackURL: "/app/account?verified=1" },
+            siteKey ? { headers: { "x-captcha-response": token } } : undefined,
+          );
+      if (res.error) {
+        setError(res.error.message ?? t("Something went wrong"));
+        // a Turnstile token works once: ask for a fresh one
+        if (!login && siteKey) { setToken(""); turnstileApi()?.reset(widgetId.current); }
+      }
       else if (login && (res.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) { setTwoStep(true); }
       else { window.location.href = nextPath(); return; } // stay disabled while navigating
     } catch {
@@ -109,6 +156,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <button type="button" className="pw-t" onClick={() => setShow(!show)}>{t(show ? "Hide" : "Show")}</button>
           </span>
         </label>
+        {!login && siteKey && <div ref={widget} className="auth-captcha" style={{ minHeight: 65 }} />}
         {error && <p className="err">{error}</p>}
         <button className="btn primary full auth-go" disabled={busy}>{busy ? t(login ? "Signing in…" : "Creating account…") : t(login ? "Sign in" : "Create account")}</button>
       </form>

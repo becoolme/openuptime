@@ -3,7 +3,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Database } from "@openuptime/repo";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { jwt, organization, twoFactor } from "better-auth/plugins";
+import { captcha, jwt, organization, twoFactor } from "better-auth/plugins";
 import { actionEmail, sendEmail } from "./email";
 import { userLang, tr } from "./mail-i18n";
 import type { Bindings } from "./env";
@@ -20,6 +20,17 @@ export function inviteTtlDays(env: Pick<Bindings, "INVITE_TTL_DAYS">) {
 
 /** Registration is closed (DISABLE_SIGNUP=true): only people with a pending invitation can still create an account. */
 export const signupDisabled = (env: Pick<Bindings, "DISABLE_SIGNUP">) => ["true", "1"].includes(String(env.DISABLE_SIGNUP ?? "").trim().toLowerCase());
+
+/**
+ * Cloudflare Turnstile guards email sign-up when both keys are set: the site key is public (the form renders the
+ * widget), the secret key stays on the server. Either one alone leaves it off, since a form with no widget could
+ * never be submitted.
+ */
+export const turnstile = (env: Pick<Bindings, "TURNSTILE_SITE_KEY" | "TURNSTILE_SECRET_KEY">) => {
+  const siteKey = String(env.TURNSTILE_SITE_KEY ?? "").trim();
+  const secretKey = String(env.TURNSTILE_SECRET_KEY ?? "").trim();
+  return siteKey && secretKey ? { siteKey, secretKey } : null;
+};
 
 // scopes a token for the MCP resource may carry; offline_access must be here or refresh grants never keep it
 const MCP_RESOURCE_SCOPES = ["mcp:read", "mcp:write", "offline_access"];
@@ -190,6 +201,7 @@ export function createAuth(database: Database, env: Bindings) {
           await sendEmail({ to: email, subject: tr(lang, "Join {org} on OpenUptime", { org: org.name }), fromName: "OpenUptime", ...mail });
         },
       }),
+      ...(turnstile(env) ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile(env)!.secretKey, endpoints: ["/sign-up/email"] })] : []),
       // the plugin's default allows 10 requests per key per day; the REST API has no per-key quota
       apiKey({ enableMetadata: true, defaultPrefix: "ou_", rateLimit: { enabled: false } }),
       twoFactor({ issuer: "OpenUptime" }),

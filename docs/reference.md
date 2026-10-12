@@ -43,6 +43,7 @@ Cloudflare Workers cannot reach private ranges in any case. `CHECK_USER_AGENT` o
 ## Accounts & teams
 
 - Workspaces with projects, members and roles; invitations expire after `INVITE_TTL_DAYS` (default 7). Set `DISABLE_SIGNUP=true` to close registration (invited people can still join).
+- Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (a [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) widget) to require a verified challenge on email sign-up: the form shows the widget and the API checks the token. Both must be set; GitHub sign-in is not covered.
 - Email verification is requested at sign-up (it never blocks sign-in), optional TOTP two-step verification with backup codes, account deletion and a JSON data export under **Account**.
 - Legal pages live at `/privacy` and `/terms`; the REST reference is at `/docs/api`.
 
