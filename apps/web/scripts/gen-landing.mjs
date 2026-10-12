@@ -65,7 +65,7 @@ function build(loc) {
     d[key] != null ? `${open}${esc(d[key])}${close}` : m,
   );
   // pages that exist in this language keep the visitor in it; the rest are shared
-  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/mcp|docs\/self-host|privacy|terms)"/g, 'href="/zh-Hans/$1"');
+  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/mcp|docs\/self-host|docs\/regions|changelog|privacy|terms)"/g, 'href="/zh-Hans/$1"');
   html = html.replace(/href="\/"/g, `href="${loc.path}"`);
   html = html.replace("</head>", `${headTags(html, loc)}\n</head>`);
   return html;
@@ -78,7 +78,7 @@ if (en !== src) writeFileSync(join(root, "index.html"), en);
 
 for (const loc of LOCALES) writeFileSync(join(root, `${loc.file}.html`), build(loc));
 // sitemap.xml and the Sitemap line of robots.txt need absolute URLs, so they exist only when the origin is known
-const PAGES = ["/", ...LOCALES.map((l) => l.path), ...["", "/api", "/embed", "/mcp", "/self-host"].flatMap((p) => [`/docs${p}`, `/zh-Hans/docs${p}`]), "/privacy", "/terms", "/zh-Hans/privacy", "/zh-Hans/terms"];
+const PAGES = ["/", ...LOCALES.map((l) => l.path), ...["", "/api", "/embed", "/mcp", "/self-host"].flatMap((p) => [`/docs${p}`, `/zh-Hans/docs${p}`]), "/changelog", "/zh-Hans/changelog", "/privacy", "/terms", "/zh-Hans/privacy", "/zh-Hans/terms"];
 const robots = ["User-agent: *", "Disallow: /app", "Disallow: /zh-Hans/app", "Disallow: /api/", "Allow: /", ""];
 if (ORIGIN) {
   writeFileSync(

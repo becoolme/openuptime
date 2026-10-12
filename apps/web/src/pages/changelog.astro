@@ -1,0 +1,135 @@
+---
+import Doc from "../layouts/Doc.astro";
+import { ENTRIES } from "../lib/changelog-list";
+import { CLOUD_ENTRIES } from "../lib/changelog-cloud";
+
+// With no cloud-only entries (the community build) the edition filter would only repeat "All", so it is left out.
+const hasCloud = CLOUD_ENTRIES.length > 0;
+const latest = ENTRIES[0]?.date;
+---
+<Doc
+  title="Changelog"
+  description="What changed in OpenUptime, newest first, for the open-source Community edition and the hosted Cloud edition."
+  updated={latest}
+  wide
+>
+  <div class="cl">
+    <div lang="en">
+      <h1>Changelog</h1>
+      <p class="lede">What changed in OpenUptime, newest first. Everything in the Community edition also ships in Cloud; Cloud adds the features that only make sense in a hosted service.</p>
+    </div>
+    <div lang="zh-CN">
+      <h1>更新日志</h1>
+      <p class="lede">OpenUptime 的变更记录，按时间倒序。社区版的所有改动同样会进入 Cloud 版；Cloud 版另有只适用于托管服务的功能。</p>
+    </div>
+
+    <div class="cl-eds">
+      <div class="cl-ed">
+        <div class="cl-ed-h"><span class="cl-badge community">Community</span><code>main · MIT</code></div>
+        <p>
+          <span lang="en">The open-source edition you run yourself, with no plans and no limits. Every change lands here first.</span>
+          <span lang="zh-CN">你自己部署的开源版本，没有套餐，也没有额度限制。所有改动都先在这里落地。</span>
+        </p>
+      </div>
+      <div class="cl-ed">
+        <div class="cl-ed-h"><span class="cl-badge cloud">Cloud</span><code>cloud</code></div>
+        <p>
+          <span lang="en">The hosted service. It includes everything in Community, plus plans, billing, hosted probes and the features marked Cloud only.</span>
+          <span lang="zh-CN">托管服务。包含社区版的全部功能，另有套餐、计费、托管探针，以及标注为「仅 Cloud」的功能。</span>
+        </p>
+      </div>
+    </div>
+
+    {hasCloud && (
+      <div class="cl-bar" role="group" aria-label="Filter by edition">
+        <button type="button" class="on" data-f="all" aria-pressed="true"><span lang="en">All</span><span lang="zh-CN">全部</span></button>
+        <button type="button" data-f="community" aria-pressed="false"><span lang="en">Community</span><span lang="zh-CN">社区版</span></button>
+        <button type="button" data-f="cloud" aria-pressed="false"><span lang="en">Cloud only</span><span lang="zh-CN">仅 Cloud</span></button>
+      </div>
+    )}
+
+    <section class="cl-list" id="cl-list">
+      {ENTRIES.map((e) => (
+        <article class="cl-e" id={e.id} data-ed={e.edition}>
+          <div class="cl-d"><time datetime={e.date}>{e.date}</time></div>
+          <div class="cl-b">
+            <div class="cl-h">
+              <span class={`cl-badge ${e.edition}`}>
+                {e.edition === "cloud"
+                  ? <><span lang="en">Cloud only</span><span lang="zh-CN">仅 Cloud</span></>
+                  : <><span lang="en">Community</span><span lang="zh-CN">社区版</span></>}
+              </span>
+              <h2><a href={`#${e.id}`}><span lang="en">{e.title.en}</span><span lang="zh-CN">{e.title.zh}</span></a></h2>
+            </div>
+            <p class="cl-sum"><span lang="en">{e.summary.en}</span><span lang="zh-CN">{e.summary.zh}</span></p>
+            {e.points.length > 0 && (
+              <ul>
+                {e.points.map((p) => <li><span lang="en">{p.en}</span><span lang="zh-CN">{p.zh}</span></li>)}
+              </ul>
+            )}
+            {e.cloud && (
+              <div class="cl-note">
+                <span class="cl-badge cloud sm"><span lang="en">On Cloud</span><span lang="zh-CN">Cloud 版</span></span>
+                <span><span lang="en">{e.cloud.en}</span><span lang="zh-CN">{e.cloud.zh}</span></span>
+              </div>
+            )}
+            {e.link && (
+              <a class="cl-link" href={e.link.href}><span lang="en">{e.link.label.en}</span><span lang="zh-CN">{e.link.label.zh}</span> →</a>
+            )}
+          </div>
+        </article>
+      ))}
+    </section>
+  </div>
+</Doc>
+
+<script is:inline>
+  // Edition filter: hides the entries that do not belong to the chosen edition.
+  (function () {
+    var bar = document.querySelector(".cl-bar");
+    if (!bar) return;
+    var items = [].slice.call(document.querySelectorAll(".cl-e"));
+    bar.addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-f]");
+      if (!b) return;
+      var f = b.getAttribute("data-f");
+      [].forEach.call(bar.querySelectorAll("button"), function (x) {
+        var on = x === b;
+        x.classList.toggle("on", on);
+        x.setAttribute("aria-pressed", String(on));
+      });
+      items.forEach(function (el) { el.hidden = f !== "all" && el.getAttribute("data-ed") !== f; });
+    });
+  })();
+</script>
+
+<style is:global>
+  .doc.wide { max-width: 960px; }
+  .cl-eds { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 8px 0 8px; }
+  .cl-ed { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px 18px; }
+  .cl-ed p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+  .cl-ed-h { display: flex; align-items: center; gap: 10px; }
+  .cl-ed-h code { background: none; border: 0; padding: 0; color: var(--muted); }
+  .cl-badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 12px var(--sans); white-space: nowrap; }
+  .cl-badge.community { color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .cl-badge.cloud { background: var(--ink); color: var(--bg); }
+  .cl-badge.sm { height: 22px; padding: 0 8px; font-size: 11.5px; flex: none; }
+  .cl-bar { display: inline-flex; gap: 4px; padding: 4px; margin: 28px 0 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .cl-bar button { height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: 500 14px var(--sans); cursor: pointer; }
+  .cl-bar button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .cl-list { margin-top: 24px; border-top: 1px solid var(--line); }
+  .cl-e { display: flex; flex-wrap: wrap; gap: 12px 40px; padding: 28px 0; border-bottom: 1px solid var(--line); }
+  .cl-e[hidden] { display: none; }
+  .cl-d { flex: 0 0 110px; padding-top: 3px; }
+  .cl-d time { font: 500 13.5px var(--mono); color: var(--ink); }
+  .cl-b { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .cl-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .doc .cl-e h2 { margin: 0; padding: 0; border: 0; font-size: 20px; line-height: 1.3; }
+  .doc .cl-e h2 a { color: var(--ink); text-decoration: none; }
+  .doc .cl-e h2 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .doc .cl-b p, .doc .cl-b ul { margin: 0; }
+  .cl-sum { color: var(--muted); }
+  .cl-note { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 14.5px; line-height: 1.55; }
+  .cl-link { font-weight: 500; font-size: 14.5px; }
+  @media (max-width: 640px) { .cl-d { flex-basis: 100%; padding-top: 0; } }
+</style>
