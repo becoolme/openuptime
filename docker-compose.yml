@@ -28,6 +28,10 @@ services:
       INVITE_TTL_DAYS: ${INVITE_TTL_DAYS:-}
       # optional: lets an external scheduler call POST /internal/run-checks; unset keeps /internal/* closed
       CRON_SECRET: ${CRON_SECRET:-}
+      # "true" lets monitors and alert webhooks target private / internal addresses (127.x, 10.x, 192.168.x, compose service names)
+      ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
+      # User-Agent of HTTP checks (default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime))
+      CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
       # target of the "Powered by" link on status pages
       PRODUCT_URL: ${PRODUCT_URL:-https://openuptime.app}
       # max connections of the shared Postgres pool (default 10)

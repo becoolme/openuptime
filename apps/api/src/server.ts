@@ -8,6 +8,7 @@ import nodemailer from "nodemailer";
 import sirv from "sirv";
 import { createApp } from "./app";
 import { configureEmail, setMailTransport } from "./email";
+import { configureNetGuard } from "./netguard";
 import { community, type Edition } from "./edition";
 import type { Bindings } from "./env";
 import { processCheckMessage, runDueChecks, type CheckMessage, type CheckQueue } from "./scheduler";
@@ -55,6 +56,7 @@ if (smtpConfig) {
   }
 }
 configureEmail(env);
+configureNetGuard(env);
 
 const database: Database = openDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX) || 10 });
 /** The app opens and closes a database per request (Workers); here every request shares the one pool. */

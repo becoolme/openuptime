@@ -2,6 +2,11 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runCheck, type CheckInput } from "./checker";
+import { configureNetGuard } from "./netguard";
+
+// these tests talk to servers on 127.0.0.1; the guard has its own tests in netguard.test.ts
+beforeAll(() => configureNetGuard({ ALLOW_PRIVATE_TARGETS: "true" }));
+afterAll(() => configureNetGuard({}));
 
 describe("http keyword checks", () => {
   const server = createServer((req, res) => {

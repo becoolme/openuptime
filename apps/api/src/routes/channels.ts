@@ -4,6 +4,7 @@ import { z } from "zod";
 import { deliver } from "../alerts";
 import type { AppEnv } from "../env";
 import { isManager, requireManager, uuidParams } from "../middleware";
+import { urlProblem } from "../netguard";
 
 const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark"] as const;
 type ChannelType = (typeof TYPES)[number];
@@ -20,6 +21,11 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
 };
 const parseConfig = (type: ChannelType, config: unknown) => CONFIG[type].safeParse(config);
 const configError = (e: z.ZodError) => `Invalid channel settings: ${e.issues.map((i) => `${i.path.join(".") || "config"} ${i.message}`).join("; ")}`;
+
+/** A webhook-style URL must point at a public address (see netguard.ts). */
+async function configProblem(config: Record<string, unknown>): Promise<string | null> {
+  return typeof config.url === "string" ? urlProblem(config.url) : null;
+}
 
 const body = z.object({
   type: z.enum(TYPES),
@@ -38,6 +44,8 @@ export const channels = new Hono<AppEnv>()
     const v = c.req.valid("json");
     const cfg = parseConfig(v.type, v.config);
     if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
+    const refused = await configProblem(cfg.data);
+    if (refused) return c.json({ error: refused, code: "target_not_allowed" }, 400);
     // a key limited to some projects cannot create what other projects would share
     const projectId = v.scope === "project" || c.get("projectScope") ? c.get("projectId") : null;
     const { scope: _scope, ...channel } = v;
@@ -54,6 +62,8 @@ export const channels = new Hono<AppEnv>()
       if (!current) return c.json({ error: "Not found" }, 404);
       const cfg = parseConfig(current.type as ChannelType, patch.config);
       if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
+      const refused = await configProblem(cfg.data);
+      if (refused) return c.json({ error: refused, code: "target_not_allowed" }, 400);
       patch.config = cfg.data;
     }
     const row = await repo.updateChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"), patch);

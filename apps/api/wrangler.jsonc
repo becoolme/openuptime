@@ -35,6 +35,8 @@
     // days a team invitation stays valid (default 7)
     "INVITE_TTL_DAYS": "7",
     // "DISABLE_SIGNUP": "true",  // closes registration; invited people can still join
+    // "ALLOW_PRIVATE_TARGETS": "true",  // monitors / webhooks may target private addresses (default: refused)
+    // "CHECK_USER_AGENT": "OpenUptime/0.1 (+https://status.example.com)",
     // public origin of the site: cookies, OAuth, links in emails (both the same value)
     "BETTER_AUTH_URL": "https://status.example.com",
     "WEB_ORIGIN": "https://status.example.com"

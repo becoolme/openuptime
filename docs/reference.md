@@ -31,6 +31,15 @@ and skip `wrangler queues create`: the minute cron then runs up to 40 monitors i
 
 Without a bound queue (local dev, or `POST /internal/run-checks` with `x-cron-secret`), checks run inline.
 
+### Which targets a check may reach
+
+Monitors and alert webhooks may only point at public addresses. Literal IPs in private, loopback, link-local (cloud
+metadata) and other reserved ranges, names that can only be internal (`localhost`, `*.local`, `*.internal`, single-label
+names such as a compose service) and, on Node, names that resolve to such an address are refused: when a monitor or
+channel is saved (HTTP 400, `target_not_allowed`) and again on every check, including each redirect hop. Set
+`ALLOW_PRIVATE_TARGETS=true` to monitor internal services; do it only when you trust every account on the instance.
+Cloudflare Workers cannot reach private ranges in any case. `CHECK_USER_AGENT` overrides the User-Agent of HTTP checks.
+
 ## Accounts & teams
 
 - Workspaces with projects, members and roles; invitations expire after `INVITE_TTL_DAYS` (default 7). Set `DISABLE_SIGNUP=true` to close registration (invited people can still join).

@@ -2,6 +2,7 @@ import type { OpenDatabase } from "@openuptime/repo";
 import { openDatabase } from "@openuptime/db-pg";
 import { createApp } from "./app";
 import { configureEmail } from "./email";
+import { configureNetGuard } from "./netguard";
 import { community, type Edition } from "./edition";
 import { connectionString, type Bindings } from "./env";
 import { processCheckMessage, runDueChecks, type CheckMessage } from "./scheduler";
@@ -18,6 +19,7 @@ export function createWorker(edition: Edition = community) {
     // Cron Trigger (`* * * * *`): lease due monitors and fan them out to CHECK_QUEUE.
     async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
       configureEmail(env);
+      configureNetGuard(env);
       const database = open(connectionString(env), { max: 2 });
       ctx.waitUntil(runDueChecks(database.repo, env.CHECK_QUEUE, edition.entitlements({ database, env })).finally(() => database.close(5)));
     },
@@ -25,6 +27,7 @@ export function createWorker(edition: Edition = community) {
     // Queue consumer: each message is a pack of monitor ids, handled in its own invocation.
     async queue(batch: MessageBatch<CheckMessage>, env: Bindings) {
       configureEmail(env);
+      configureNetGuard(env);
       const database = open(connectionString(env), { max: 5 });
       const entitlements = edition.entitlements({ database, env });
       try {

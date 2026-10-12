@@ -2,6 +2,7 @@ import type { DeliveryRetry, NewDelivery, Repo, SubscriberTarget } from "@openup
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
+import { guardedFetch } from "./netguard";
 
 type Event = {
   kind: "incident.opened" | "incident.resolved";
@@ -30,9 +31,24 @@ const SEND_TIMEOUT_MS = 10_000;
 
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
 
+/** The destination's host only: webhook paths and bot tokens are credentials and must not end up in logs or delivery rows. */
+const hostOf = (url: string) => {
+  try { return new URL(url).host; } catch { return "the destination"; }
+};
+
+/** Sends through the SSRF guard; errors name the host, never the full URL. */
+async function send(url: string, body: unknown) {
+  try {
+    return (await guardedFetch(url, json(body))).res;
+  } catch (e) {
+    const name = (e as Error).name;
+    throw new Error(name === "BlockedTarget" ? (e as Error).message : name === "TimeoutError" ? `${hostOf(url)} timed out` : `Could not reach ${hostOf(url)}`);
+  }
+}
+
 async function post(url: string, body: unknown) {
-  const res = await fetch(url, json(body));
-  if (!res.ok) throw new Error(`${url.split("?")[0]} responded ${res.status}`);
+  const res = await send(url, body);
+  if (!res.ok) throw new Error(`${hostOf(url)} responded ${res.status}`);
 }
 
 /**
@@ -48,7 +64,7 @@ async function postLark(url: string, text: string, secret?: string) {
     body.timestamp = timestamp;
     body.sign = btoa(String.fromCharCode(...mac));
   }
-  const res = await fetch(url, json(body));
+  const res = await send(url, body);
   const data = (await res.json().catch(() => null)) as { code?: number; StatusCode?: number; msg?: string; StatusMessage?: string } | null;
   const code = data?.code ?? data?.StatusCode ?? 0;
   if (!res.ok || code !== 0) throw new Error(`Lark responded ${res.status}${code ? ` (${code}: ${data?.msg ?? data?.StatusMessage ?? "rejected"})` : ""}`);

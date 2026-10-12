@@ -15,6 +15,7 @@ import { monitors } from "./routes/monitors";
 import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail } from "./email";
+import { configureNetGuard } from "./netguard";
 import { community, type Edition } from "./edition";
 import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
 
@@ -25,6 +26,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   // the database and auth are created per request: required on Workers (no cross-request I/O objects).
   app.use("*", async (c, next) => {
     configureEmail(c.env);
+    configureNetGuard(c.env);
     const database = openDatabase(connectionString(c.env), { max: 1 });
     c.set("repo", database.repo);
     c.set("database", database);

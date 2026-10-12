@@ -35,6 +35,8 @@ docker compose up -d --build</code></pre>
         <tr><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration once your own account exists. Invited people can still join.</td></tr>
         <tr><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
         <tr><td><code>CRON_SECRET</code></td><td>Optional. Lets an external scheduler call <code>POST /internal/run-checks</code>; unset leaves <code>/internal/*</code> closed.</td></tr>
+        <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to monitor internal services. By default monitors and alert webhooks pointing at private, loopback or link-local addresses (and single-label names such as compose service names) are refused, so a signed-up user cannot probe your network.</td></tr>
+        <tr><td><code>CHECK_USER_AGENT</code></td><td>Optional. User-Agent of HTTP checks.</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub".</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional Plausible analytics. Off when the domain is empty.</td></tr>
@@ -97,6 +99,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>BETTER_AUTH_URL</code><br><code>WEB_ORIGIN</code></td><td>Public origin of the site. Used for cookies, OAuth and email links.</td></tr>
         <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>Sender address. Onboard the domain in Cloudflare Email Sending; without it emails are logged.</td></tr>
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>How long invitations stay valid. Default 7.</td></tr>
+        <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to let monitors and alert webhooks target private addresses. Default: refused. Cloudflare Workers cannot reach private ranges anyway; this mostly matters for Docker.</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>Set to <code>true</code> to close registration (email and GitHub). Create your own account first; afterwards only people with a pending invitation can still sign up.</td></tr>
         <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>See step 5.</td></tr>
         <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>Target of the "Powered by" link on status pages.</td></tr>
@@ -154,6 +157,8 @@ docker compose up -d --build</code></pre>
         <tr><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（请先创建好自己的账号），受邀的人仍可加入。</td></tr>
         <tr><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
         <tr><td><code>CRON_SECRET</code></td><td>可选。允许外部调度器调用 <code>POST /internal/run-checks</code>；不设置则 <code>/internal/*</code> 保持关闭。</td></tr>
+        <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 以监控内网服务。默认拒绝指向私有、回环、链路本地地址（以及 compose 服务名这类单段主机名）的监控项和告警 Webhook，避免已注册用户探测你的内网。</td></tr>
+        <tr><td><code>CHECK_USER_AGENT</code></td><td>可选。HTTP 检查使用的 User-Agent。</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选的 Plausible 统计。域名为空则关闭。</td></tr>
@@ -216,6 +221,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
         <tr><td>api vars</td><td><code>BETTER_AUTH_URL</code><br><code>WEB_ORIGIN</code></td><td>站点公网地址，用于 Cookie、OAuth 和邮件链接。</td></tr>
         <tr><td>api vars</td><td><code>EMAIL_FROM</code></td><td>发件地址。需在 Cloudflare Email Sending 中接入该域名；不配置则邮件只写日志。</td></tr>
         <tr><td>api vars</td><td><code>INVITE_TTL_DAYS</code></td><td>邀请有效天数，默认 7。</td></tr>
+        <tr><td>api vars</td><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 允许监控项和告警 Webhook 指向私有地址，默认拒绝。Cloudflare Workers 本身无法访问私有网段，此项主要影响 Docker 部署。</td></tr>
         <tr><td>api vars</td><td><code>DISABLE_SIGNUP</code></td><td>设为 <code>true</code> 关闭注册（邮箱与 GitHub 均适用）。请先创建好自己的账号；之后只有持有待处理邀请的人还能注册。</td></tr>
         <tr><td>api secrets</td><td><code>BETTER_AUTH_SECRET</code><br><code>CRON_SECRET</code></td><td>见第 5 步。</td></tr>
         <tr><td>web vars</td><td><code>PRODUCT_URL</code></td><td>状态页 "Powered by" 链接的目标。</td></tr>

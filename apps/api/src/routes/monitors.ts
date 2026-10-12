@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireManager, uuidParams } from "../middleware";
 import { creditCost } from "../entitlements";
+import { targetProblem } from "../netguard";
 import { checkOne, nextAfter } from "../scheduler";
 
 const fields = {
@@ -110,11 +111,19 @@ async function overPlan(c: Context<AppEnv>, o: { add?: number; intervalSec?: num
   return null;
 }
 
+/** HTTP 400 for a target that points at a private address (unless the deployment allows those), or null. */
+async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
+  const error = await targetProblem(type, target);
+  return error ? c.json({ error, code: "target_not_allowed" }, 400) : null;
+}
+
 export const monitors = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await c.get("repo").listMonitors(c.get("orgId"), c.get("projectId"))))
   .post("/", zValidator("json", body), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
+    const blocked = await refuseTarget(c, v.type, v.target);
+    if (blocked) return blocked;
     const refused = await overPlan(c, { add: 1, intervalSec: v.type === "heartbeat" ? undefined : v.intervalSec });
     if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
@@ -134,13 +143,15 @@ export const monitors = new Hono<AppEnv>()
     if (list.length === 0 || list.length > IMPORT_MAX) return c.json({ error: `Import between 1 and ${IMPORT_MAX} monitors at a time` }, 400);
     const valid: z.infer<typeof body>[] = [];
     const skipped: { index: number; name: string | null; error: string }[] = [];
-    list.forEach((item, index) => {
+    for (const [index, item] of list.entries()) {
       const p = body.safeParse(normaliseImport(item));
       const name = typeof (item as { name?: unknown })?.name === "string" ? (item as { name: string }).name : null;
-      if (!p.success) return skipped.push({ index, name, error: p.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; ") });
-      if (p.data.type !== "heartbeat" && !p.data.target.trim()) return skipped.push({ index, name: p.data.name, error: "target: required" });
+      if (!p.success) { skipped.push({ index, name, error: p.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; ") }); continue; }
+      if (p.data.type !== "heartbeat" && !p.data.target.trim()) { skipped.push({ index, name: p.data.name, error: "target: required" }); continue; }
+      const problem = await targetProblem(p.data.type, p.data.target);
+      if (problem) { skipped.push({ index, name: p.data.name, error: `target: ${problem}` }); continue; }
       valid.push(p.data);
-    });
+    }
     if (valid.length) {
       // an interval below the plan's floor is raised to it rather than failing the whole file
       const floor = (await c.get("entitlements").plan(c.get("orgId")))?.minIntervalSec ?? 0;
@@ -163,6 +174,12 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    if (v.target !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      const blocked = await refuseTarget(c, current.type, v.target);
+      if (blocked) return blocked;
+    }
     if (v.intervalSec !== undefined || v.paused === false) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (current) {

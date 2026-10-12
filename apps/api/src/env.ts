@@ -34,6 +34,10 @@ export type Bindings = {
   DISABLE_SIGNUP?: string;
   /** Days a team invitation stays valid. Default 7. */
   INVITE_TTL_DAYS?: string;
+  /** "true" lets monitors and alert webhooks target private, loopback and link-local addresses (default: refused). */
+  ALLOW_PRIVATE_TARGETS?: string;
+  /** User-Agent of HTTP checks. Default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime). */
+  CHECK_USER_AGENT?: string;
   /** Shared secret that lets an external cron hit POST /internal/run-checks. */
   CRON_SECRET?: string;
 };

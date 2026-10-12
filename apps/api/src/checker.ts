@@ -1,3 +1,5 @@
+import { checkUserAgent, guardHost, guardedFetch, hostPort } from "./netguard";
+
 export type CheckInput = {
   type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
   target: string;
@@ -28,14 +30,13 @@ export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
 }
 
 async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
-  const res = await fetch(m.target, {
+  const { res, url } = await guardedFetch(m.target, {
     method: m.method,
-    redirect: "follow",
     signal: AbortSignal.timeout(m.timeoutMs),
-    headers: { "user-agent": "OpenUptime/0.1 (+https://openuptime.app)", accept: "*/*", ...m.headers },
+    headers: { "user-agent": checkUserAgent(), accept: "*/*", ...m.headers },
   });
   // when redirects were followed, say where we ended up: a 404 usually comes from the final hop, not the URL typed
-  const where = res.url && res.url !== m.target ? ` at ${res.url}` : "";
+  const where = url !== m.target ? ` at ${url}` : "";
   const statusOk = res.status === m.expectedStatus || (m.expectedStatus === 200 && res.status >= 200 && res.status < 300);
   if (!m.keyword || m.method === "HEAD") {
     await res.body?.cancel();
@@ -81,9 +82,10 @@ async function dnsCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
 }
 
 async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
-  const [hostname, portStr] = m.target.split(":");
-  const port = Number(portStr);
-  if (!hostname || !port) return { ok: false, error: "Target must be host:port" };
+  const hp = hostPort(m.target, 0);
+  if (!hp) return { ok: false, error: "Target must be host:port" };
+  const { port } = hp;
+  const hostname = await guardHost(hp.hostname);
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs));
   const connect = async () => {
     try {
@@ -110,14 +112,6 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
 // These speak just enough of each wire protocol, without credentials, to prove a real server answers (not merely that
 // a port is open). Auth failures therefore count as "up": the server is alive and talking. A bad or missing password
 // cannot be detected here.
-
-const hostPort = (target: string, defaultPort: number): { hostname: string; port: number } | null => {
-  const t = target.trim().replace(/^[a-z]+:\/\//i, "");
-  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(t);
-  if (!m) return null;
-  const port = m[2] ? Number(m[2]) : defaultPort;
-  return port > 0 && port < 65536 ? { hostname: m[1].replace(/^\[|\]$/g, ""), port } : null;
-};
 
 type Conn = { write(b: Uint8Array): Promise<void>; read(): Promise<Uint8Array | null>; close(): void };
 
@@ -163,11 +157,12 @@ async function open(hostname: string, port: number): Promise<Conn> {
 async function exchange(m: CheckInput, port: number, send: Uint8Array | null, done: (b: Uint8Array) => boolean): Promise<Uint8Array> {
   const hp = hostPort(m.target, port);
   if (!hp) throw new Error("Target must be host or host:port");
+  const hostname = await guardHost(hp.hostname);
   let conn: Conn | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs); });
   const run = async () => {
-    conn = await open(hp.hostname, hp.port);
+    conn = await open(hostname, hp.port);
     if (send) await conn.write(send);
     let buf = new Uint8Array(0);
     while (!done(buf)) {
