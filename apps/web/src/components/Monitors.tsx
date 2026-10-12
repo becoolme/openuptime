@@ -235,6 +235,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   useEffect(() => {
     api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor); }).catch(() => {});
   }, []);
+  const [regionsOpen, setRegionsOpen] = useState(false);
   const known = new Set(places.map((p) => p.id));
   // a saved region this deployment no longer offers stays listed so it can be switched off
   const choices = [...places, ...(monitor?.regions ?? []).filter((r) => !known.has(r)).map((id) => ({ id, name: id }))];
@@ -368,21 +369,33 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         {(f.type === "http" || f.type === "tcp") && places.length > 1 && (
-          <div className="fld">{t("Check from")} <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))} · {t("Auto is this deployment's own location")})</span>
-            {choices.map((p) => {
-              const on = f.regions.includes(p.id);
-              const full = !on && f.regions.length >= maxRegions;
-              return (
-                <button type="button" key={p.id} className="route tog" disabled={full} title={full ? t("Your plan cannot check from that many regions.") : undefined}
-                  onClick={() => {
-                    const next = on ? f.regions.filter((x) => x !== p.id) : [...f.regions, p.id];
-                    set("regions", next.length ? next : ["auto"]);
-                  }}>
-                  <div><b style={{ fontWeight: 500 }}>{p.name}</b><small>{p.id === "auto" ? t("Default") : known.has(p.id) ? p.id : t("No longer available")}</small></div>
-                  <span className={`tg ${on ? "on" : ""}`} />
-                </button>
-              );
-            })}
+          <div className="fld">{t("Check from")} <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))})</span>
+            {/* collapsed to what is selected; the full list only opens on request */}
+            <button type="button" className="region-sum" aria-expanded={regionsOpen} onClick={() => setRegionsOpen((o) => !o)}>
+              <span className="names">{choices.filter((p) => f.regions.includes(p.id)).map((p) => p.name).join(", ") || t("Auto")}</span>
+              <span className="faint">{regionsOpen ? t("Done") : t("Change")}</span>
+            </button>
+            {regionsOpen && (
+              <>
+                <div className="region-grid">
+                  {choices.map((p) => {
+                    const on = f.regions.includes(p.id);
+                    const full = !on && f.regions.length >= maxRegions;
+                    return (
+                      <button type="button" key={p.id} className={`rg ${on ? "on" : ""}`} aria-pressed={on} disabled={full}
+                        title={full ? t("Your plan cannot check from that many regions.") : p.id === "auto" ? t("Auto is this deployment's own location") : known.has(p.id) ? undefined : t("No longer available")}
+                        onClick={() => {
+                          const next = on ? f.regions.filter((x) => x !== p.id) : [...f.regions, p.id];
+                          set("regions", next.length ? next : ["auto"]);
+                        }}>
+                        <span className="rg-mark">{on ? "✓" : ""}</span>{p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <small className="faint">{t("Auto is this deployment's own location")}</small>
+              </>
+            )}
           </div>
         )}
         <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
