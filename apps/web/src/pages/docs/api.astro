@@ -12,7 +12,7 @@ expectedStatus integer 100-599                               (default 200)
 intervalSec    integer 60-86400                              (default 60)
 timeoutMs      integer 1000-30000                            (default 10000)
 failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
-regions        string[], 1-10 ids from GET /regions          (default ["auto"]; http and tcp monitors only)
+regions        string[], ids from GET /regions                 (default ["auto"]; http and tcp monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
 headers        { [name: string]: string }                    (default {})
@@ -43,8 +43,8 @@ const groups: Group[] = [
     noteEn: "A monitor checks from its own location (auto) unless regions says otherwise; list regions only for http and tcp monitors. With several regions a run is down when most of the regions that answered failed, so one region's bad route does not page you. Each region counts as one check of your allowance. Errors: 400 unknown_region, 400 regions_not_supported (other monitor types), 402 regions_not_allowed (more regions than the plan allows).",
     noteZh: "监控项默认从服务自身所在位置（auto）检测，仅当设置 regions 时才走多区域，且只适用于 http 与 tcp 类型。多区域时，只有多数应答的区域都失败才判定为故障，单个区域的线路问题不会触发告警。每个区域各计一次检查额度。错误：400 unknown_region、400 regions_not_supported（其他类型）、402 regions_not_allowed（超出套餐允许的区域数）。",
     eps: [
-      { m: "GET", p: "/regions", en: "The regions this deployment can check from, the monitor types that support them and how many one monitor may list.", zh: "当前部署可用的检测区域、支持区域检测的监控类型，以及单个监控项最多可选的区域数。",
-        res: `{ regions: [{ id: "auto", name: "Auto" }, { id: "us-east", name: "US East (Virginia)" }, ...],\n  types: ["http", "tcp"], maxPerMonitor: 3 }` },
+      { m: "GET", p: "/regions", en: "The regions this deployment can check from, the monitor types that support them and how many one monitor may list (null: no limit, which is always the case when self-hosting).", zh: "当前部署可用的检测区域、支持区域检测的监控类型，以及单个监控项最多可选的区域数（null 表示不限，自部署始终不限）。",
+        res: `{ regions: [{ id: "auto", name: "Auto" }, { id: "us-east", name: "US East (Virginia)" }, ...],\n  types: ["http", "tcp"], maxPerMonitor: 3 }   // null: no limit` },
     ],
   },
   {

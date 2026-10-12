@@ -50,15 +50,15 @@ describe.skipIf(!url)("regions", () => {
     configureProbes({});
   });
 
-  async function signedIn() {
-    await raw("/internal/migrate", { method: "POST", headers: { "x-cron-secret": "cron" } });
-    const su = await raw("/api/auth/sign-up/email", {
+  async function signedIn(send: (path: string, init?: RequestInit) => Response | Promise<Response> = raw) {
+    await send("/internal/migrate", { method: "POST", headers: { "x-cron-secret": "cron" } });
+    const su = await send("/api/auth/sign-up/email", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: `regions-${Date.now()}@example.com`, password: "correct horse battery", name: "Ada" }),
     });
     const cookie = su.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
     return async (method: string, path: string, body?: unknown) => {
-      const r = await raw(`/api${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+      const r = await send(`/api${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
       return { status: r.status, body: (await r.json().catch(() => null)) as any };
     };
   }
@@ -70,6 +70,17 @@ describe.skipIf(!url)("regions", () => {
     expect(r.status).toBe(200);
     expect(r.body.regions.map((x: { id: string }) => x.id)).toEqual(["auto", "us-east", "eu-central", "ap-southeast"]);
     expect(r.body).toMatchObject({ types: ["http", "tcp"], maxPerMonitor: 2 });
+  });
+
+  it("puts no limit on the regions of one monitor in the community edition", async () => {
+    const community = createApp(openDatabase);
+    const call = await signedIn((path, init = {}) => community.fetch(new Request(`${ORIGIN}${path}`, init), env as never));
+    const r = await call("GET", "/regions");
+    expect(r.body.maxPerMonitor).toBeNull();
+    // the plan above stops at two; with none, every configured region is allowed, and a repeated one counts once
+    const all = await call("POST", "/monitors", web("Everywhere", { regions: ["us-east", "eu-central", "ap-southeast", "us-east"] }));
+    expect(all.status).toBe(201);
+    expect(all.body.regions).toEqual(["us-east", "eu-central", "ap-southeast"]);
   });
 
   it("runs from auto unless regions are asked for, and validates the ones that are", async () => {

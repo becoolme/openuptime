@@ -234,7 +234,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [places, setPlaces] = useState<{ id: string; name: string }[]>([]);
   const [maxRegions, setMaxRegions] = useState(1);
   useEffect(() => {
-    api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor); }).catch(() => {});
+    api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor ?? Infinity); }).catch(() => {});
   }, []);
   const [regionsOpen, setRegionsOpen] = useState(false);
   const known = new Set(places.map((p) => p.id));
@@ -370,7 +370,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         {(f.type === "http" || f.type === "tcp") && places.length > 1 && (
-          <div className="fld region-fld">{t("Check from")} <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))})</span>
+          <div className="fld region-fld">{t("Check from")} {Number.isFinite(maxRegions) && <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))})</span>}
             {/* collapsed to what is selected; the full list only opens on request */}
             <button type="button" className="region-sum" aria-expanded={regionsOpen} onClick={() => setRegionsOpen((o) => !o)}>
               <span className="names">{choices.filter((p) => f.regions.includes(p.id)).map((p) => p.name).join(", ") || t("Auto")}</span>

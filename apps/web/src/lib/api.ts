@@ -20,7 +20,7 @@ export type RegionStat = {
   region: string; checks24h: number; uptime24h: number | null; avgLatency24h: number | null;
   last: { ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string } | null;
 };
-export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number };
+export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number | null };
 export type SpotCheck = { ok: true; region?: string; result?: { ok: boolean; statusCode?: number; latencyMs?: number; error?: string } };
 export type Incident = {
   id: string; title: string; status: "investigating" | "identified" | "monitoring" | "resolved";

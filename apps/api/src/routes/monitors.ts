@@ -9,7 +9,7 @@ import { targetProblem } from "../netguard";
 import { MASK, maskHeaders, restoreHeaders } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
 import { isRegionConfigured, runInRegion } from "../probes";
-import { AUTO, MAX_MONITOR_REGIONS, PROBE_TYPES, REGION_ID } from "../regions";
+import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 const fields = {
   name: z.string().min(1).max(120),
@@ -20,7 +20,8 @@ const fields = {
   intervalSec: z.number().int().min(60).max(86400),
   timeoutMs: z.number().int().min(1000).max(30000),
   failureThreshold: z.number().int().min(1).max(10),
-  regions: z.array(z.string().regex(REGION_ID)).min(1).max(MAX_MONITOR_REGIONS),
+  // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]),
   keyword: z.string().max(500).nullable(),
   keywordMode: z.enum(["contains", "absent"]),
   headers: z.record(z.string().max(100), z.string().max(2000)),

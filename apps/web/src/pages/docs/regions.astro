@@ -15,7 +15,7 @@ import Doc from "../../layouts/Doc.astro";
     <h2 id="use">Using regions</h2>
     <ol>
       <li>Open a monitor (or create one) and find <strong>Check from</strong>. It lists the regions this deployment offers, with <strong>Auto</strong> first. The field only appears when at least one region besides <code>auto</code> is configured.</li>
-      <li>Tick the regions you want, up to the limit shown next to the label. On the hosted service the limit depends on your plan; self-hosted, one monitor can use up to 10 regions.</li>
+      <li>Tick the regions you want. On the hosted service the limit shown next to the label depends on your plan; a self-hosted deployment has no limit, so a monitor can use every region you have configured.</li>
       <li>Save. The next scheduled run goes out from every region you picked. The estimate on the form multiplies the number of checks per month by the number of regions.</li>
     </ol>
     <p>A saved region that has since been removed from the deployment is shown as <em>No longer available</em>. Untick it and save, or the monitor keeps skipping it.</p>

@@ -20,7 +20,7 @@ import { configureProbes } from "./probes";
 import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { availableRegions } from "./probes";
-import { MAX_MONITOR_REGIONS, PROBE_TYPES } from "./regions";
+import { PROBE_TYPES } from "./regions";
 import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
 
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
@@ -209,10 +209,10 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     if (!credits && !emails && !plan) return c.json({ metered: false });
     return c.json({ metered: true, ...(credits ?? {}), credits, emails, plan, activeMonitors });
   });
-  // where checks can run from on this deployment, and how many of those one monitor may use under the workspace's plan
+  // where checks can run from on this deployment, and how many of those one monitor may use under the workspace's plan (null: no limit)
   authed.get("/regions", async (c) => {
     const plan = await c.get("entitlements").plan(c.get("orgId"));
-    return c.json({ regions: availableRegions(), types: PROBE_TYPES, maxPerMonitor: Math.min(plan?.maxRegions ?? MAX_MONITOR_REGIONS, MAX_MONITOR_REGIONS) });
+    return c.json({ regions: availableRegions(), types: PROBE_TYPES, maxPerMonitor: plan?.maxRegions ?? null });
   });
   // sidebar badges: one round trip, four counts
   authed.get("/counts", async (c) => c.json(await c.get("repo").counts(c.get("orgId"), c.get("projectId"))));
