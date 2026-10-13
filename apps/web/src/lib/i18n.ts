@@ -4,7 +4,7 @@ export type Locale = "en" | "zh-CN";
 export const LOCALES: Record<Locale, string> = { en: "English", "zh-CN": "简体中文" };
 export const COOKIE = "ou_lang";
 
-export function pickLocale(cookie: string | null | undefined, acceptLanguage?: string | null, pathname?: string): Locale {
+export function pickLocale(cookie: string | null | undefined, pathname?: string): Locale {
   // the URL wins: /zh-Hans/... is Chinese, any other path (even with a cookie saying otherwise) is whatever the cookie says
   if (pathname && /^\/zh-Hans(\/|$)/.test(pathname)) return "zh-CN";
   // public status pages are indexed: the URL alone decides, so crawlers (and everyone without /zh-Hans) get English
@@ -12,7 +12,7 @@ export function pickLocale(cookie: string | null | undefined, acceptLanguage?: s
   const m = cookie?.match(new RegExp(`${COOKIE}=([^;]+)`))?.[1];
   if (m === "en" || m === "zh-CN") return m;
   if (m === "ja" || m === "es") return "en"; // landing page only
-  return acceptLanguage?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+  return "en"; // the browser language is a suggestion at most, never a choice
 }
 
 /** English text is the key; locales without an entry fall back to English. */

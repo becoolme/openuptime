@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "language-follows-your-choice",
+    date: "2026-10-13",
+    edition: "community",
+    title: { en: "Language follows your choice", zh: "语言以你的选择为准" },
+    summary: {
+      en: "The site no longer switches language on its own because of your browser settings.",
+      zh: "网站不再根据浏览器设置自行切换语言。",
+    },
+    points: [
+      {
+        en: "A first visit to an English page stays in English; the language you pick, or the language page you open, is remembered for next time.",
+        zh: "首次访问英文页面时保持英文；你选择的语言，或你打开的语言版页面，会被记住并用于下次访问。",
+      },
+    ],
+  },
+  {
     id: "hide-status-page-branding",
     date: "2026-10-12",
     edition: "community",

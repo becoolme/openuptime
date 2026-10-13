@@ -18,17 +18,21 @@ describe("t (no DOM)", () => {
 
 describe("pickLocale", () => {
   it("prefers a valid cookie", () => {
-    expect(pickLocale(`${COOKIE}=en`, "zh-CN")).toBe("en");
-    expect(pickLocale(`a=b; ${COOKIE}=zh-CN`, "en")).toBe("zh-CN");
+    expect(pickLocale(`${COOKIE}=en`)).toBe("en");
+    expect(pickLocale(`a=b; ${COOKIE}=zh-CN`)).toBe("zh-CN");
   });
-  it("falls back to Accept-Language", () => {
-    expect(pickLocale(null, "zh-TW,zh;q=0.9")).toBe("zh-CN");
-    expect(pickLocale(undefined, "en-US")).toBe("en");
-    expect(pickLocale(`${COOKIE}=fr`, "zh")).toBe("zh-CN");
+  it("never follows the browser language", () => {
+    expect(pickLocale(null)).toBe("en");
+    expect(pickLocale(undefined)).toBe("en");
+    expect(pickLocale(`${COOKIE}=fr`)).toBe("en");
   });
-  it("defaults to en", () => expect(pickLocale(null, null)).toBe("en"));
-  it("status pages ignore cookie and Accept-Language", () => {
-    expect(pickLocale(`${COOKIE}=zh-CN`, "zh-CN", "/status/acme")).toBe("en");
-    expect(pickLocale(null, "zh", "/zh-Hans/status/acme")).toBe("zh-CN");
+  it("landing-only languages render the rest of the site in English", () => {
+    expect(pickLocale(`${COOKIE}=ja`)).toBe("en");
+    expect(pickLocale(`${COOKIE}=es`)).toBe("en");
+  });
+  it("the URL wins over the cookie", () => {
+    expect(pickLocale(`${COOKIE}=en`, "/zh-Hans/pricing")).toBe("zh-CN");
+    expect(pickLocale(`${COOKIE}=zh-CN`, "/status/acme")).toBe("en");
+    expect(pickLocale(null, "/zh-Hans/status/acme")).toBe("zh-CN");
   });
 });

@@ -9,7 +9,7 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     const forced = ctx.request.headers.get("x-ou-lang") === "zh-CN";
     ctx.locals.lang = forced
       ? "zh-CN"
-      : pickLocale(ctx.request.headers.get("cookie"), ctx.request.headers.get("accept-language"), new URL(ctx.request.url).pathname);
+      : pickLocale(ctx.request.headers.get("cookie"), new URL(ctx.request.url).pathname);
   }
   return next();
 });

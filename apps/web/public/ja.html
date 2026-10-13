@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+JP:wght@500;600&display=swap" rel="stylesheet">
 <script>
 // Resolve theme + language before first paint. The URL decides (/ = English, /zh-Hans, /ja, /es); a visit is
-// remembered in the ou_lang cookie, and an unprefixed visit goes to the remembered (else browser) language.
+// remembered in the ou_lang cookie, and an unprefixed visit goes to the remembered language (English when nothing is remembered).
 (function(){
   var d=document.documentElement,t,P={'zh-Hans':'zh-CN',ja:'ja',es:'es'},R={'zh-CN':'zh-Hans',ja:'ja',es:'es'},l='en';
   try{t=localStorage.getItem('ou_theme')}catch(e){}
@@ -20,7 +20,7 @@
   var m=location.pathname.match(/^\/(zh-Hans|ja|es)\/?$/),ck=(document.cookie.match(/(?:^|; )ou_lang=([^;]+)/)||[])[1];
   if(m){l=P[m[1]];if(ck!==l)document.cookie='ou_lang='+l+';path=/;max-age=31536000;samesite=lax'}
   else{
-    var pref=ck||({zh:'zh-CN',ja:'ja',es:'es'})[(navigator.language||'').toLowerCase().slice(0,2)]||'en';
+    var pref=ck||'en';
     if(R[pref])location.replace('/'+R[pref]+location.search+location.hash);
   }
   d.setAttribute('lang',l);

@@ -23,7 +23,8 @@ const { title = "OpenUptime", router = true, noindex = false, description = "" }
     {router && <ClientRouter />}
     <script is:inline>
       // Language comes from the URL (/zh-Hans/...); English is unprefixed. A visit remembers the choice in `ou_lang`,
-      // and later visits to an unprefixed page jump to the remembered language (the browser language on a first visit).
+      // and later visits to an unprefixed page jump to the remembered language. Without a remembered choice the page
+      // stays English: the browser language is never used to move a visitor.
       try {
         var lm = document.cookie.match(/(?:^|; )ou_lang=([^;]+)/);
         var ck = lm ? lm[1] : "";
@@ -34,7 +35,7 @@ const { title = "OpenUptime", router = true, noindex = false, description = "" }
           if (ck !== "zh-CN" && pm[1] === "zh-Hans") document.cookie = "ou_lang=zh-CN;path=/;max-age=31536000;samesite=lax";
         } else {
           var pub = /^\/status(\/|$)/.test(location.pathname);
-          lg = pub ? "en" : ck || ((navigator.language || "").toLowerCase().indexOf("zh") === 0 ? "zh-CN" : "en");
+          lg = pub ? "en" : ck === "zh-CN" ? "zh-CN" : "en";
           if (lg === "zh-CN") {
             location.replace("/zh-Hans" + (location.pathname === "/" ? "" : location.pathname) + location.search + location.hash);
           }
