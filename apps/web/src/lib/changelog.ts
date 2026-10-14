@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "email-takeover-protection",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "Protection for unverified email accounts", zh: "未验证邮箱账号保护" },
+    summary: {
+      en: "Signing in with GitHub now clears any password someone else set on an unverified account with your email.",
+      zh: "用 GitHub 登录时，会清除他人在使用你邮箱的未验证账号上设置的密码。",
+    },
+    points: [
+      { en: "The password, sessions, API keys and two-factor setup on that account are removed, so only you can use it.", zh: "该账号上的密码、会话、API 密钥和两步验证设置都会被移除，只有你能使用它。" },
+      { en: "You can sign in with GitHub even when someone registered your email before you.", zh: "即使有人比你先用你的邮箱注册，你也可以用 GitHub 登录。" },
+    ],
+  },
+  {
     id: "github-sign-in-and-linking",
     date: "2026-10-14",
     edition: "community",

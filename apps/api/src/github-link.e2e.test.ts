@@ -136,4 +136,75 @@ describe.skipIf(!url)("GitHub sign-in, linking and native handoff", () => {
     expect(accounts).toHaveLength(1);
     expect((await raw("/api/auth/unlink-account", json(cookie, { accountId: accounts[0].id }))).status).toBe(400);
   });
+
+  describe("pre-registration takeover", () => {
+    const signIn = (email: string, password: string) => raw("/api/auth/sign-in/email", json("", { email, password }));
+    const sql = async <T,>(q: string, p: unknown[] = []) => {
+      const db = openDatabase(url!, { max: 1 });
+      try { return await db.query<T>(q, p); } finally { await db.close(1); }
+    };
+
+    it("clears credentials, sessions and keys set on an unverified account when its owner signs in with GitHub", async () => {
+      const email = `victim-${Date.now()}@example.com`;
+      const up = await raw("/api/auth/sign-up/email", json("", { email, password: "attacker knows this", name: "Mallory" }));
+      expect(up.status).toBe(200);
+      const attacker = jar(up);
+      const userId = ((await up.json()) as { user: { id: string } }).user.id;
+      const key = await raw("/api/auth/api-key/create", json(attacker, { name: "planted" }));
+      expect(key.status).toBe(200);
+      expect((await raw("/api/me", { headers: { cookie: attacker } })).status).toBe(200);
+
+      ghUser = { id: Date.now() + 10, login: "victim", email, name: "Victim" };
+      const r = await github(`${ORIGIN}/dashboard`);
+      expect(r.location).toBe(`${ORIGIN}/dashboard`);
+
+      // the same user, now verified, signed in through GitHub
+      const me = await raw("/api/auth/get-session", { headers: { cookie: r.cookie } });
+      expect(((await me.json()) as { user: { id: string } }).user.id).toBe(userId);
+      expect(await sql(`select 1 from "user" where id = $1 and email_verified`, [userId])).toHaveLength(1);
+      // everything the squatter set up is gone
+      expect((await signIn(email, "attacker knows this")).status).toBeGreaterThanOrEqual(400);
+      expect((await raw("/api/me", { headers: { cookie: attacker } })).status).toBe(401);
+      expect(await sql("select 1 from apikey where reference_id = $1", [userId])).toHaveLength(0);
+      const left = await sql<{ provider_id: string }>("select provider_id from account where user_id = $1", [userId]);
+      expect(left.map((a) => a.provider_id)).toEqual(["github"]);
+    });
+
+    it("keeps the password of a verified local user who signs in with GitHub", async () => {
+      const email = `verified-${Date.now()}@example.com`;
+      const up = await raw("/api/auth/sign-up/email", json("", { email, password: "my own password", name: "Vera" }));
+      const userId = ((await up.json()) as { user: { id: string } }).user.id;
+      await sql(`update "user" set email_verified = true where id = $1`, [userId]);
+      ghUser = { id: Date.now() + 11, login: "vera", email, name: "Vera" };
+      const r = await github(`${ORIGIN}/dashboard`);
+      expect(r.location).toBe(`${ORIGIN}/dashboard`);
+      expect((await signIn(email, "my own password")).status).toBe(200);
+      const accounts = await sql<{ provider_id: string }>("select provider_id from account where user_id = $1", [userId]);
+      expect(accounts.map((a) => a.provider_id).sort()).toEqual(["credential", "github"]);
+    });
+
+    it("does not wipe an unverified user who links GitHub from their own session", async () => {
+      const email = `own-${Date.now()}@example.com`;
+      const up = await raw("/api/auth/sign-up/email", json("", { email, password: "my own password", name: "Own" }));
+      const cookie = jar(up);
+      ghUser = { id: Date.now() + 12, login: "own", email, name: "Own" };
+      const r = await github(`${ORIGIN}/settings`, cookie, true);
+      expect(r.location).toBe(`${ORIGIN}/settings`);
+      expect((await signIn(email, "my own password")).status).toBe(200);
+      expect((await raw("/api/me", { headers: { cookie } })).status).toBe(200);
+    });
+
+    it("refuses a password sign-up for an email a GitHub sign-in already created", async () => {
+      const email = `ghfirst-${Date.now()}@example.com`;
+      ghUser = { id: Date.now() + 13, login: "ghfirst", email, name: "Gh" };
+      await github(`${ORIGIN}/dashboard`);
+      const up = await raw("/api/auth/sign-up/email", json("", { email, password: "squatter password", name: "Mallory" }));
+      const body = (await up.json()) as { token?: string | null };
+      expect(up.status).toBeGreaterThanOrEqual(400);
+      expect(body.token ?? null).toBeNull();
+      expect((await signIn(email, "squatter password")).status).toBeGreaterThanOrEqual(400);
+      const accounts = await sql<{ provider_id: string }>(`select a.provider_id from account a join "user" u on u.id = a.user_id where u.email = $1`, [email]);
+      expect(accounts.map((a) => a.provider_id)).toEqual(["github"]);
+    });
+  });
 });

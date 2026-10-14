@@ -3,7 +3,7 @@ import { isLang } from "./mail-i18n";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { createAuth, NATIVE_CALLBACK, signupDisabled, slugify, turnstile } from "./auth";
+import { createAuth, currentSession, NATIVE_CALLBACK, signupDisabled, slugify, turnstile } from "./auth";
 import { connectionString, type AppEnv } from "./env";
 import { mountMcp } from "./mcp-route";
 import { requireOrg } from "./middleware";
@@ -162,7 +162,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   // the authorization screen's picker: the signed-in user's workspaces with their projects (before any workspace is active)
   app.get("/api/oauth/picker", async (c) => {
-    const session = await c.get("auth").api.getSession({ headers: c.req.raw.headers });
+    const session = await currentSession(c.get("auth"), c.req.raw.headers);
     if (!session) return c.json({ error: "Unauthorized" }, 401);
     const repo = c.get("repo");
     const spaces = await repo.workspacesOf(session.user.id);

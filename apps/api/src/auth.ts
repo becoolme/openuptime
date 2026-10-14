@@ -2,7 +2,7 @@ import { apiKey } from "@better-auth/api-key";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Database } from "@openuptime/repo";
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { captcha, jwt, oneTimeToken, organization, twoFactor } from "better-auth/plugins";
 import { actionEmail, sendEmail } from "./email";
 import { userLang, tr } from "./mail-i18n";
@@ -84,6 +84,32 @@ export function parseGrant(raw: string): "all" | GrantEntry[] {
     .map(([org, sel]) => ({ org, ids: !sel || sel === "*" ? null : sel.split(",") }));
 }
 
+/** Removes everything that could let someone who never proved the email keep access to the user. */
+export async function purgeUnverifiedSecrets(database: Database, userId: string) {
+  for (const sql of [
+    `delete from account where user_id = $1 and (provider_id = 'credential' or password is not null)`,
+    `delete from session where user_id = $1`,
+    `delete from apikey where reference_id = $1`,
+    `delete from two_factor where user_id = $1`,
+    `update "user" set two_factor_enabled = false where id = $1`,
+    `delete from oauth_access_token where user_id = $1`,
+    `delete from oauth_refresh_token where user_id = $1`,
+    `delete from oauth_consent where user_id = $1`,
+    `delete from verification where value = $1`,
+  ]) await database.query(sql, [userId]);
+}
+
+/**
+ * The session for a request. The signed cookie cache serves a session for minutes without asking the database, which
+ * would let a session that was just revoked (see purgeUnverifiedSecrets) live on; so for a user whose email is not
+ * verified the cache is skipped and the database decides.
+ */
+export async function currentSession(auth: { api: { getSession: (o: { headers: Headers; query?: { disableCookieCache?: boolean } }) => Promise<any> } }, headers: Headers) {
+  const cached = await auth.api.getSession({ headers });
+  if (!cached || cached.user?.emailVerified) return cached;
+  return auth.api.getSession({ headers, query: { disableCookieCache: true } });
+}
+
 export function createAuth(database: Database, env: Bindings) {
   const repo = database.repo;
   // this auth object lives for one request, so the cookie of that request can be parked here for the OAuth callbacks
@@ -95,7 +121,9 @@ export function createAuth(database: Database, env: Bindings) {
     // A signed-in user may connect a GitHub account whose email differs from theirs (linking is always an explicit
     // action by the signed-in user). On sign-in an existing account is only matched when the provider says the email
     // is verified: trustedProviders stays empty, so an unverified address never links by itself.
-    account: { accountLinking: { enabled: true, allowDifferentEmails: true, trustedProviders: [] } },
+    // requireLocalEmailVerified is off so the real owner of an email someone else registered without verifying it is
+    // not locked out of GitHub sign-in; the account.create hook below then strips whatever that someone set up.
+    account: { accountLinking: { enabled: true, allowDifferentEmails: true, trustedProviders: [], requireLocalEmailVerified: false } },
     // signed session cookie cache: most requests skip the session/user DB lookups entirely
     session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
     database: database.authDatabase as never,
@@ -321,6 +349,23 @@ export function createAuth(database: Database, env: Bindings) {
           after: async (user) => {
             const name = `${user.name || user.email.split("@")[0]}'s workspace`;
             await repo.createPersonalWorkspace({ id: crypto.randomUUID(), name, slug: slugify(name), ownerId: user.id });
+          },
+        },
+      },
+      account: {
+        create: {
+          // Pre-registration takeover: email sign-up needs no verification, so someone can register a victim's email
+          // with a password they know. When the victim then signs in with GitHub (verified email), the provider is
+          // matched to that unverified user. Everything created while the address was unproven is removed first, so
+          // only the proven owner holds the account afterwards. A signed-in user linking GitHub to their own account
+          // is not this case and keeps what they have.
+          before: async (account, ctx) => {
+            if (account.providerId !== "github") return;
+            const rows = await database.query<{ email_verified: boolean }>(`select email_verified from "user" where id = $1`, [account.userId]);
+            if (!rows[0] || rows[0].email_verified) return;
+            const session = ctx ? await getSessionFromCtx(ctx).catch(() => null) : null;
+            if (session?.user.id === account.userId) return;
+            await purgeUnverifiedSecrets(database, account.userId);
           },
         },
       },

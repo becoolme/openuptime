@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "./env";
+import { currentSession } from "./auth";
 import { verifyOAuthToken } from "./oauth";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -10,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Resolves the session and the active organization; 401 if there is none. */
 export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   const auth = c.get("auth");
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const session = await currentSession(auth, c.req.raw.headers);
   let userId = session?.user.id;
   let orgId = (session?.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId ?? undefined;
 
