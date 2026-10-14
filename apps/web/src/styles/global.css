@@ -489,6 +489,11 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .fresh{padding:18px 20px;margin-bottom:20px;border-color:var(--accent)}
 .fresh-r{display:flex;gap:10px;align-items:center;margin-top:10px}
 .fresh-r code{flex:1;min-width:0;word-break:break-all;font-size:13px}
+.fresh-qr{display:flex;gap:18px;align-items:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.fresh-qr img{flex:none;width:132px;height:132px;padding:8px;box-sizing:content-box;background:#fff;border:1px solid var(--line);border-radius:12px}
+.fresh-qr b{display:block;font-size:14px;margin-bottom:4px}
+.fresh-qr p{margin:0;max-width:420px;font-size:13px;line-height:1.5}
+@media(max-width:560px){.fresh-qr{flex-direction:column}}
 .code2{margin-top:8px;padding:16px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font:13px/1.6 var(--mono);overflow:auto;white-space:pre}
 .set-wrap{display:grid;gap:20px;max-width:720px}
 .sect{padding:24px;display:grid;gap:14px}

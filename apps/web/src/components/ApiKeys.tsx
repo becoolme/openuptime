@@ -95,7 +95,7 @@ export default function ApiKeys() {
   const [qr, setQr] = useState("");
   useEffect(() => {
     if (!fresh) { setQr(""); return; }
-    QRCode.toDataURL(`openuptime://connect?server=${encodeURIComponent(location.origin)}&key=${encodeURIComponent(fresh)}`, { margin: 1, width: 168 })
+    QRCode.toDataURL(`openuptime://connect?server=${encodeURIComponent(location.origin)}&key=${encodeURIComponent(fresh)}`, { margin: 1, width: 264 })
       .then(setQr).catch(() => setQr(""));
   }, [fresh]);
   const keyIcon = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3" /></svg>;
@@ -113,9 +113,12 @@ export default function ApiKeys() {
             <button className="btn sm" onClick={() => { navigator.clipboard?.writeText(fresh); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? t("Copied ✓") : t("Copy")}</button>
           </div>
           {qr && (
-            <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
-              <img src={qr} alt={t("QR code to connect the mobile app")} width={168} height={168} style={{ background: "#fff", borderRadius: 8, flex: "none" }} />
-              <p className="muted" style={{ fontSize: 13 }}>{t("Scan with the OpenUptime app to connect it to this server. The code contains the key, so do not share it.")}</p>
+            <div className="fresh-qr">
+              <img src={qr} alt={t("QR code to connect the mobile app")} />
+              <div>
+                <b>{t("Connect the mobile app")}</b>
+                <p className="muted">{t("Scan with the OpenUptime app to connect it to this server. The code contains the key, so do not share it.")}</p>
+              </div>
             </div>
           )}
         </div>
