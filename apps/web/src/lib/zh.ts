@@ -55,6 +55,8 @@ export const zh: Record<string, string> = {
   "Add a channel": "添加渠道", "Add channel": "添加渠道", "Slack (incoming webhook)": "Slack（Incoming Webhook）", "Generic webhook (JSON POST)": "通用 Webhook（JSON POST）",
   "Webhook URL": "Webhook 地址", Telegram: "Telegram", PagerDuty: "PagerDuty", "Email address": "邮箱地址",
   "Post to a group with a custom bot.": "通过自定义机器人发送到群聊。", "Signing secret (optional)": "签名密钥（可选）",
+  "Mobile app (push)": "手机 App 推送", "Notify the OpenUptime app on your team's phones.": "通知团队成员手机上的 OpenUptime App。",
+  "Sent to the OpenUptime app of every member of this workspace": "发送到此工作区每位成员的 OpenUptime App", "App on members' phones": "成员手机上的 App", "Mobile app": "手机 App",
   "Bot token": "Bot Token", "Chat ID": "Chat ID", "Routing key": "Routing Key",
   // keys / team / settings
   "Copy your key now — it won’t be shown again.": "请立即复制密钥，之后不会再显示。", "Create key": "创建密钥", Key: "密钥", "No keys yet.": "还没有密钥。",

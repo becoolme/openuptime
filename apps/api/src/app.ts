@@ -9,12 +9,14 @@ import { mountMcp } from "./mcp-route";
 import { requireOrg } from "./middleware";
 import { alertLog, settings } from "./routes/alert-log";
 import { channels } from "./routes/channels";
+import { push } from "./routes/push";
 import { incidents } from "./routes/incidents";
 import { maintenance } from "./routes/maintenance";
 import { monitors } from "./routes/monitors";
 import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail, emailEnabled } from "./email";
+import { apnsConfigured, configureApns } from "./apns";
 import { configureNetGuard } from "./netguard";
 import { configureProbes } from "./probes";
 import { allow, clientIp, safeEqual } from "./ratelimit";
@@ -32,6 +34,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     configureEmail(c.env);
     configureNetGuard(c.env);
     configureProbes(c.env);
+    configureApns(c.env);
     const database = openDatabase(connectionString(c.env), { max: 1 });
     c.set("repo", database.repo);
     c.set("database", database);
@@ -53,7 +56,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     origin: (origin, c) => (origin === c.env.WEB_ORIGIN ? origin : null),
     credentials: true,
     allowHeaders: ["content-type", "authorization", "x-api-key", "x-project-id", "x-workspace-id", "x-captcha-response", "mcp-protocol-version", "mcp-session-id"],
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   // status summaries and badges are public reads meant to be embedded on any site
   const publicCors = cors({ origin: "*", allowMethods: ["GET", "OPTIONS"], maxAge: 86400 });
@@ -79,6 +82,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
       edition: edition.id ?? "community",
       auth: { emailPassword: true, ...authInfo(c.env), emailDelivery: emailEnabled(), nativeHandoff: true },
       features: { multiRegion: availableRegions().length > 2, statusPages: true },
+      push: { apns: apnsConfigured() },
     }),
   );
   // password guessing, sign-up floods and mail bombing: the library's own limiter is per isolate on Workers, so the
@@ -180,6 +184,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   authed.route("/monitors", monitors);
   authed.route("/incidents", incidents);
   authed.route("/channels", channels);
+  authed.route("/push", push);
   authed.route("/alert-log", alertLog);
   authed.route("/settings", settings);
   authed.route("/maintenance", maintenance);

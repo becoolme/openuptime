@@ -3,6 +3,7 @@ import { openDatabase } from "@openuptime/db-pg";
 import { createApp } from "./app";
 import type { Bindings } from "./env";
 import { configureEmail } from "./email";
+import { configureApns } from "./apns";
 import { configureNetGuard } from "./netguard";
 import { configureProbes } from "./probes";
 import { runDueChecks } from "./scheduler";
@@ -11,6 +12,7 @@ const env = process.env as unknown as Bindings;
 configureEmail(env);
 configureNetGuard(env);
 configureProbes(env);
+configureApns(env);
 const app = createApp(openDatabase);
 const port = Number(process.env.PORT ?? 8787);
 

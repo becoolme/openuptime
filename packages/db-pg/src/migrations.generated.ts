@@ -89,5 +89,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0017_status_page_hide_branding",
     "when": 1791849304528,
     "sql": "ALTER TABLE \"status_page\" ADD COLUMN \"hide_branding\" boolean DEFAULT false NOT NULL;"
+  },
+  {
+    "tag": "0018_careless_tomorrow_man",
+    "when": 1791998395225,
+    "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'push';--> statement-breakpoint\nCREATE TABLE \"push_device\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"token\" text NOT NULL,\n\t\"platform\" text DEFAULT 'ios' NOT NULL,\n\t\"environment\" text DEFAULT 'production' NOT NULL,\n\t\"locale\" text,\n\t\"name\" text,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"last_seen_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"push_device\" ADD CONSTRAINT \"push_device_user_id_user_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"user\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nCREATE UNIQUE INDEX \"push_device_token_idx\" ON \"push_device\" USING btree (\"token\");--> statement-breakpoint\nCREATE INDEX \"push_device_user_idx\" ON \"push_device\" USING btree (\"user_id\");"
   }
 ];

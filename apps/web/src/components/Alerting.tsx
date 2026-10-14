@@ -10,6 +10,7 @@ const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "telegram", label: "Telegram", desc: "Message a chat or group through your bot." },
   { id: "pagerduty", label: "PagerDuty", desc: "Trigger and resolve incidents on a service." },
   { id: "webhook", label: "Webhook", desc: "POST a JSON payload to any URL." },
+  { id: "push", label: "Mobile app (push)", desc: "Notify the OpenUptime app on your team's phones." },
 ];
 const svg = (d: React.ReactNode) => (
   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
@@ -21,9 +22,10 @@ const ICONS: Record<Channel["type"], React.ReactNode> = {
   email: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>),
   telegram: svg(<path d="M21 4L3 11l6 2.2L11 20l3-4.5 4.5 3.3L21 4zM9 13.2L21 4" />),
   pagerduty: svg(<><path d="M6 17V11a6 6 0 0 1 12 0v6" /><path d="M4 17h16M10 21h4" /></>),
+  push: svg(<><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18h2" /></>),
   webhook: svg(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" /></>),
 };
-const dest = (c: Channel) => c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
+const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
 
 export default function Alerting() {
   const [items, setItems] = useState<Channel[] | null>(null);
@@ -37,9 +39,10 @@ export default function Alerting() {
   const [note, setNote] = useState("");
   const [log, setLog] = useState<AlertDelivery[] | null>(null);
   const [days, setDays] = useState(30);
+  const [push, setPush] = useState(false);
   const loadLog = () => api.alertLog(30).then(setLog).catch(() => setLog([]));
   const load = () => api.channels().then(setItems);
-  useEffect(() => { load(); loadLog(); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); }, []);
+  useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", auto: false };
   const openAdd = () => { setErr(""); setEditId(""); setF(blank); setAdding(true); };
@@ -57,6 +60,7 @@ export default function Alerting() {
         f.type === "email" ? { to: f.to }
         : f.type === "telegram" ? { botToken: f.botToken, chatId: f.chatId }
         : f.type === "pagerduty" ? { routingKey: f.routingKey }
+        : f.type === "push" ? {}
         : f.type === "lark" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
         : { url: f.url };
       if (editId) await api.updateChannel(editId, { name: f.name, config, autoEnable: f.auto });
@@ -152,13 +156,13 @@ export default function Alerting() {
           <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={add}>
             <h2 style={{ fontSize: 30 }}>{editId ? t("Edit channel") : t("Add a channel")}</h2>
             {!editId && <div className="type-grid">
-              {TYPES.map((x) => (
+              {TYPES.filter((x) => x.id !== "push" || push).map((x) => (
                 <button type="button" key={x.id} className={`type-c ${f.type === x.id ? "on" : ""}`} onClick={() => setF({ ...f, type: x.id })}>
                   <b>{x.label}</b><small>{t(x.desc)}</small>
                 </button>
               ))}
             </div>}
-            <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="#ops-alerts" /></label>
+            <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : "#ops-alerts"} /></label>
             {(f.type === "slack" || f.type === "webhook" || f.type === "lark") && (
               <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
             )}
@@ -177,6 +181,7 @@ export default function Alerting() {
             {f.type === "pagerduty" && (
               <label className="fld">{t("Routing key")}<input className="in mono" required value={f.routingKey} onChange={(e) => setF({ ...f, routingKey: e.target.value })} /></label>
             )}
+            {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to the OpenUptime app of every member of this workspace")}</p>}
             <button type="button" className="route tog" onClick={() => setF({ ...f, auto: !f.auto })}>
               <div><b style={{ fontWeight: 500 }}>{t("Turn on for new monitors")}</b><small>{t("Every monitor you create alerts this channel from the start.")}</small></div>
               <span className={`tg ${f.auto ? "on" : ""}`} />

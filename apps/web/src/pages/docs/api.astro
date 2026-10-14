@@ -163,6 +163,17 @@ content-type: application/json
       <li>Keep the cookie and use it like a browser session for every <code>/api</code> request.</li>
     </ol>
     <p>The token is random, valid for 60 seconds and works once. Only the exact callback <code>openuptime://auth</code> is accepted; no other scheme or path receives a token. The verify endpoint is rate limited (<code>429</code>). Account actions such as <code>GET /api/auth/list-accounts</code>, <code>POST /api/auth/link-social</code> and <code>POST /api/auth/unlink-account</code> need this cookie session and do not accept API keys. The last way to sign in cannot be unlinked (<code>400</code>).</p>
+    <h2 id="push">Push notifications (mobile app)</h2>
+    <p>The mobile app registers its APNs device token with the server it is connected to. These endpoints work with a session cookie or an API key and act on the signed-in person's own devices. Check <code>GET /api/config</code> first: <code>push.apns</code> is <code>true</code> when the server can send push notifications.</p>
+<pre><code is:raw>PUT /api/push/devices
+{ "token": "&lt;hex, 32-200 chars&gt;", "platform": "ios", "environment": "sandbox" | "production",
+  "locale": "en" | "zh-CN", "name": "Ada's iPhone" }          (locale and name optional, name up to 80 characters)
+
+200 { "id", "token", "platform", "environment", "locale", "name" }
+
+GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name" } ]
+DELETE /api/push/devices/:token    204</code></pre>
+    <p>Registering is an upsert by token: a token that was registered by another person moves to the caller. When push is configured, registering also gives every workspace where the caller is owner or admin a <em>Mobile app</em> channel (type <code>push</code>, on for new monitors) if it has none. A <code>push</code> channel alerts every member of its workspace who has a registered device; creating one while push is not configured fails with <code>400</code> and <code>code: "push_not_configured"</code>. A key limited to some projects registers devices but does not create channels.</p>
     <h2 id="examples">Examples</h2>
     <h3>Create a monitor</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
@@ -211,6 +222,17 @@ content-type: application/json
       <li>保存该 Cookie，之后的所有 <code>/api</code> 请求都像浏览器会话一样携带它。</li>
     </ol>
     <p>令牌随机生成，有效期 60 秒，只能使用一次。只接受精确的回调地址 <code>openuptime://auth</code>，其他 scheme 或路径都不会得到令牌。兑换接口有限流（<code>429</code>）。<code>GET /api/auth/list-accounts</code>、<code>POST /api/auth/link-social</code>、<code>POST /api/auth/unlink-account</code> 等账号操作需要此 Cookie 会话，不接受 API 密钥。最后一种登录方式无法取消关联（<code>400</code>）。</p>
+    <h2 id="push-zh">推送通知（手机 App）</h2>
+    <p>手机 App 会把 APNs 设备令牌注册到它所连接的服务器。这些接口可用会话 Cookie 或 API 密钥调用，只操作当前登录者自己的设备。请先请求 <code>GET /api/config</code>：<code>push.apns</code> 为 <code>true</code> 表示服务器可以发送推送。</p>
+<pre><code is:raw>PUT /api/push/devices
+{ "token": "&lt;十六进制，32-200 个字符&gt;", "platform": "ios", "environment": "sandbox" | "production",
+  "locale": "en" | "zh-CN", "name": "Ada 的 iPhone" }          （locale 与 name 可选，name 最多 80 个字符）
+
+200 { "id", "token", "platform", "environment", "locale", "name" }
+
+GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name" } ]
+DELETE /api/push/devices/:token    204</code></pre>
+    <p>注册按令牌做 upsert：之前由其他人注册的令牌会转移给当前调用者。已配置推送时，注册还会为调用者担任所有者或管理员的每个工作区创建一个名为 <em>Mobile app</em> 的渠道（类型 <code>push</code>，对新监控默认开启），已有则不重复创建。<code>push</code> 渠道会通知其工作区中所有已注册设备的成员；未配置推送时创建会返回 <code>400</code> 与 <code>code: "push_not_configured"</code>。仅限部分项目的密钥可以注册设备，但不会创建渠道。</p>
     <h2 id="examples-zh">示例</h2>
     <h3>创建监控项</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \

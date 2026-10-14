@@ -127,6 +127,13 @@
       "when": 1791849304528,
       "tag": "0017_status_page_hide_branding",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791998395225,
+      "tag": "0018_careless_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

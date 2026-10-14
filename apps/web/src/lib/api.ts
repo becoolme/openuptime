@@ -33,7 +33,7 @@ export type Incident = {
   checks?: CheckResult[];
 };
 
-export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
+export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
 export type StatusPage = { id: string; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
 
 // Requests started as soon as the page's HTML is parsed (lib/boot.ts), in parallel with the JS bundles loading:
@@ -173,6 +173,8 @@ export const api = {
   maintenance: () => req<Maintenance[]>("/maintenance"),
   createMaintenance: (b: Omit<Maintenance, "id">) => req<Maintenance>("/maintenance", { method: "POST", body: JSON.stringify(b) }),
   deleteMaintenance: (id: string) => req<void>(`/maintenance/${id}`, { method: "DELETE" }),
+  /** What this deployment can do (public). */
+  config: () => req<{ push?: { apns: boolean } }>("/config"),
   channels: () => req<Channel[]>("/channels"),
   alertLog: (limit = 30) => req<AlertDelivery[]>(`/alert-log?limit=${limit}`),
   settings: () => req<{ alertLogRetentionDays: number; checkRetentionDays: number }>("/settings"),

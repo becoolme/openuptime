@@ -2,6 +2,7 @@ import type { OpenDatabase } from "@openuptime/repo";
 import { openDatabase } from "@openuptime/db-pg";
 import { createApp } from "./app";
 import { configureEmail } from "./email";
+import { configureApns } from "./apns";
 import { configureNetGuard } from "./netguard";
 import { configureProbes } from "./probes";
 import { community, type Edition } from "./edition";
@@ -22,6 +23,7 @@ export function createWorker(edition: Edition = community) {
       configureEmail(env);
       configureNetGuard(env);
       configureProbes(env);
+      configureApns(env);
       const database = open(connectionString(env), { max: 2 });
       ctx.waitUntil(runDueChecks(database.repo, env.CHECK_QUEUE, edition.entitlements({ database, env })).finally(() => database.close(5)));
     },
@@ -31,6 +33,7 @@ export function createWorker(edition: Edition = community) {
       configureEmail(env);
       configureNetGuard(env);
       configureProbes(env);
+      configureApns(env);
       const database = open(connectionString(env), { max: 5 });
       const entitlements = edition.entitlements({ database, env });
       try {

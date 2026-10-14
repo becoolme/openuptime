@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "push-notifications-ios",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "Push alerts to the iOS app", zh: "iOS 应用推送告警" },
+    summary: {
+      en: "Alerts can now arrive as push notifications on the phones of your workspace members.",
+      zh: "告警现在可以作为推送通知，发送到工作区成员的手机上。",
+    },
+    points: [
+      { en: "Add a Mobile app (push) channel and every member who signed in on the app gets down and recovery alerts, in their own language.", zh: "添加“手机 App 推送”渠道后，在应用中登录过的每位成员都会收到宕机与恢复告警，并使用各自的语言。" },
+      { en: "The first phone an owner or admin registers creates the channel for the workspace, so alerts start without any setup.", zh: "所有者或管理员注册第一台手机时会自动为工作区创建该渠道，无需额外设置。" },
+      { en: "Self-hosted servers need their own Apple push key; the setup is described in the self-hosting guide.", zh: "自托管服务器需要配置自己的 Apple 推送密钥，步骤见自托管指南。" },
+    ],
+    cloud: { en: "Push is set up on the hosted service; nothing to configure.", zh: "托管服务已配置好推送，无需设置。" },
+    link: { href: "/docs/self-host#apns", label: { en: "Read the push setup guide", zh: "阅读推送配置指南" } },
+  },
+  {
     id: "api-key-qr-code",
     date: "2026-10-14",
     edition: "community",

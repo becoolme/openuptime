@@ -54,6 +54,14 @@ export type Bindings = {
   PROBE_REGIONS?: string;
   /** Secret the probes in PROBE_REGIONS verify requests with (required for those regions to be usable). */
   PROBE_SECRET?: string;
+  /**
+   * iOS push notifications (APNs). All four must be set: the APNs Auth Key (.p8 file contents; literal `\n` is accepted),
+   * its key id, the Apple team id and the app's bundle id.
+   */
+  APNS_KEY?: string;
+  APNS_KEY_ID?: string;
+  APNS_TEAM_ID?: string;
+  APNS_BUNDLE_ID?: string;
 };
 
 export type Auth = ReturnType<typeof createAuth>;

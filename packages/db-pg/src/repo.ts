@@ -4,6 +4,7 @@ import {
   ROLLUP_RETENTION_DAYS,
   type DeliveryRetry,
   type IncidentWithUpdates,
+  type PushDevice,
   type Repo,
   type Scope,
 } from "@openuptime/repo";
@@ -679,6 +680,49 @@ export function createRepo(db: Db): Repo {
         .select({ id: schema.monitor.id, name: schema.monitor.name })
         .from(schema.monitor)
         .where(and(eq(schema.monitor.organizationId, orgId), sql`${schema.monitor.channelIds} @> ARRAY[${channelId}]::uuid[]`)),
+    async upsertPushDevice(userId, d) {
+      const now = new Date();
+      const [row] = await db
+        .insert(schema.pushDevice)
+        .values({ userId, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, lastSeenAt: now })
+        .onConflictDoUpdate({
+          target: schema.pushDevice.token,
+          set: { userId, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, lastSeenAt: now },
+        })
+        .returning();
+      return row as PushDevice;
+    },
+    async listPushDevices(userId) {
+      return (await db.select().from(schema.pushDevice).where(eq(schema.pushDevice.userId, userId)).orderBy(asc(schema.pushDevice.createdAt))) as PushDevice[];
+    },
+    async deletePushDevice(userId, token) {
+      const gone = await db.delete(schema.pushDevice).where(and(eq(schema.pushDevice.userId, userId), eq(schema.pushDevice.token, token))).returning({ id: schema.pushDevice.id });
+      return gone.length > 0;
+    },
+    async pushDevicesForOrganization(orgId) {
+      const rows = await db
+        .select({ d: schema.pushDevice })
+        .from(schema.pushDevice)
+        .innerJoin(schema.member, eq(schema.member.userId, schema.pushDevice.userId))
+        .where(eq(schema.member.organizationId, orgId));
+      return rows.map((r) => r.d) as PushDevice[];
+    },
+    async deletePushDeviceByToken(token) {
+      await db.delete(schema.pushDevice).where(eq(schema.pushDevice.token, token));
+    },
+    async managedOrgsWithoutPushChannel(userId) {
+      const rows = await db
+        .select({ id: schema.member.organizationId })
+        .from(schema.member)
+        .where(
+          and(
+            eq(schema.member.userId, userId),
+            inArray(schema.member.role, ["owner", "admin"]),
+            sql`not exists (select 1 from ${schema.alertChannel} where ${schema.alertChannel.organizationId} = ${schema.member.organizationId} and ${schema.alertChannel.type} = 'push')`,
+          ),
+        );
+      return rows.map((r) => r.id);
+    },
     channelsToAlert: (orgId, o) =>
       db
         .select()

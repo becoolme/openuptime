@@ -13,7 +13,7 @@ export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "m
 export type MonitorStatus = "pending" | "up" | "degraded" | "down" | "paused";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type IncidentSeverity = "minor" | "major";
-export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark";
+export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push";
 
 /** Project ids a limited API key may touch; `null` = no limit (sessions and unrestricted keys). */
 export type Scope = string[] | null;
@@ -283,6 +283,19 @@ export interface AccountExport {
   sessions: unknown[];
   workspaces: unknown[];
 }
+export interface PushDevice {
+  id: string;
+  userId: string;
+  token: string;
+  platform: string;
+  environment: "sandbox" | "production";
+  locale: string | null;
+  name: string | null;
+  createdAt: Date;
+  lastSeenAt: Date;
+}
+export type NewPushDevice = Pick<PushDevice, "token" | "platform" | "environment"> & { locale?: string | null; name?: string | null };
+
 export interface Counts {
   monitors: number;
   incidents: number;
@@ -413,6 +426,17 @@ export interface Repo {
   /** Monitors that list the channel explicitly (a monitor with no list alerts every channel, so it does not count). */
   monitorsUsingChannel(orgId: string, channelId: string): Promise<{ id: string; name: string }[]>;
   /** Enabled channels to alert: the listed ones, or (no list) the project's own plus workspace-wide ones. */
+  /** Registers a device for the user; a token that belonged to someone else moves to this user. */
+  upsertPushDevice(userId: string, d: NewPushDevice): Promise<PushDevice>;
+  listPushDevices(userId: string): Promise<PushDevice[]>;
+  /** Removes the user's own device; false when they have no such token. */
+  deletePushDevice(userId: string, token: string): Promise<boolean>;
+  /** Devices of every member of the workspace. */
+  pushDevicesForOrganization(orgId: string): Promise<PushDevice[]>;
+  /** APNs said the token is dead: forget it, whoever owns it. */
+  deletePushDeviceByToken(token: string): Promise<void>;
+  /** Workspaces where the user is owner or admin and that have no push channel yet. */
+  managedOrgsWithoutPushChannel(userId: string): Promise<string[]>;
   channelsToAlert(orgId: string, o: { channelIds: string[]; projectId?: string | null }): Promise<AlertChannel[]>;
   logDeliveries(rows: NewDelivery[]): Promise<void>;
   /** Lease failed incident alerts that are due a retry (a few attempts, with backoff). */

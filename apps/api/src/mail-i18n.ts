@@ -12,6 +12,8 @@ const zh: Record<string, string> = {
   // alerts
   "Your channel is connected": "渠道已连通",
   "This is a test alert from OpenUptime. When a monitor goes down or recovers, you'll get a message like this one at this address.": "这是一封来自 OpenUptime 的测试告警。当监控宕机或恢复时，你会在这个地址收到类似的邮件。",
+  "This is a test alert from OpenUptime": "这是一条来自 OpenUptime 的测试告警",
+  "Down for {duration}": "宕机时长 {duration}",
   Test: "测试",
   "Open alerting": "打开告警设置",
   "Test alert from OpenUptime": "OpenUptime 测试告警",

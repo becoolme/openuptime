@@ -19,7 +19,7 @@ export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartb
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentSeverity = pgEnum("incident_severity", ["minor", "major"]);
-export const channelType = pgEnum("channel_type", ["email", "slack", "telegram", "webhook", "pagerduty", "lark"]);
+export const channelType = pgEnum("channel_type", ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push"]);
 
 /** A project groups monitors, status pages, channels and maintenance inside one workspace (organization). */
 export const project = pgTable(
@@ -155,6 +155,25 @@ export const alertChannel = pgTable("alert_channel", {
   autoEnable: boolean("auto_enable").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A phone registered for push alerts. Belongs to a user, not to a channel: a `push` channel reaches every member's devices. */
+export const pushDevice = pgTable(
+  "push_device",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    /** the APNs device token (hex); one device is one row, whoever registered it last owns it */
+    token: text("token").notNull(),
+    platform: text("platform").notNull().default("ios"),
+    /** sandbox | production: which APNs host the token belongs to */
+    environment: text("environment").notNull().default("production"),
+    locale: text("locale"),
+    name: text("name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("push_device_token_idx").on(t.token), index("push_device_user_idx").on(t.userId)],
+);
 
 /** One row per attempt to notify a channel (or the subscribers of a status page), kept for the workspace's retention window. */
 export const alertDelivery = pgTable(

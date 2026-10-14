@@ -188,6 +188,30 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
       <li><strong>Button missing</strong>: <code>/api/config</code> shows <code>github: false</code>, so a variable is empty or the service was not restarted.</li>
       <li><strong>"Sign-ups are closed"</strong>: <code>DISABLE_SIGNUP=true</code>; invite the person first, or connect GitHub from an existing account.</li>
     </ul>
+    <h2 id="apns">iOS push notifications (APNs)</h2>
+    <p>The OpenUptime iOS app can receive alerts as push notifications. The server sends them through Apple's APNs, so it needs an APNs credential. Push is off until all four variables below are set; <code>GET /api/config</code> then reports <code>push.apns: true</code> and the <em>Mobile app (push)</em> channel type appears under Alerting.</p>
+    <h3>What you need</h3>
+    <ul>
+      <li>An Apple Developer account and an App ID for the app, with the Push Notifications capability.</li>
+      <li>An APNs Auth Key (a <code>.p8</code> file) from <strong>Certificates, Identifiers &amp; Profiles → Keys</strong>, with its <strong>Key ID</strong>.</li>
+      <li>Your <strong>Team ID</strong> and the app's <strong>bundle id</strong>.</li>
+    </ul>
+    <table>
+      <thead><tr><th>Variable</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>APNS_KEY</code></td><td>The contents of the <code>.p8</code> file. A literal <code>\n</code> in place of line breaks is accepted, which is handy in <code>.env</code> files.</td></tr>
+        <tr><td><code>APNS_KEY_ID</code></td><td>The key's 10-character id.</td></tr>
+        <tr><td><code>APNS_TEAM_ID</code></td><td>Your Apple Developer team id.</td></tr>
+        <tr><td><code>APNS_BUNDLE_ID</code></td><td>The app's bundle id, used as the APNs topic.</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Docker</strong>: add the four variables to <code>.env</code> and run <code>docker compose up -d</code>.</li>
+      <li><strong>Cloudflare</strong>: in <code>apps/api</code> run <code>pnpm exec wrangler secret put APNS_KEY</code> (paste the whole file), then the same for <code>APNS_KEY_ID</code>, <code>APNS_TEAM_ID</code> and <code>APNS_BUNDLE_ID</code>, and redeploy the API Worker.</li>
+    </ul>
+    <h3>How it works</h3>
+    <p>People register their phone from the app; a <code>push</code> channel then alerts every member of the workspace who has a registered device, each in their own language. Registering a phone as an owner or admin creates a <em>Mobile app</em> channel for you if the workspace has none. Phones that Apple reports as no longer valid are forgotten automatically.</p>
+    <p><strong>Important:</strong> an APNs key is tied to your Apple team and the app's bundle id, and a phone's token only works with the app that produced it. The official OpenUptime app can therefore receive push only from the hosted service. On a self-hosted server push works for an app you build and sign yourself with your own bundle id and key. A relay that would let the official app receive push from self-hosted servers is not implemented.</p>
     <h2 id="after">After install</h2>
     <ul>
       <li>Create your first monitor, then a <a href="/docs/embed">status page</a> and, optionally, embed its state on your site.</li>
@@ -381,6 +405,30 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
       <li><strong>看不到按钮</strong>：<code>/api/config</code> 显示 <code>github: false</code>，说明变量为空或服务未重启。</li>
       <li><strong>“Sign-ups are closed”</strong>：已设置 <code>DISABLE_SIGNUP=true</code>；请先邀请对方，或在已有账号中关联 GitHub。</li>
     </ul>
+    <h2 id="apns-zh">iOS 推送通知（APNs）</h2>
+    <p>OpenUptime iOS 应用可以通过推送接收告警。服务器经由 Apple 的 APNs 发送，因此需要 APNs 凭证。以下四个变量全部设置后才会启用推送；此时 <code>GET /api/config</code> 会返回 <code>push.apns: true</code>，告警页里也会出现 <em>手机 App 推送</em> 渠道类型。</p>
+    <h3>你需要准备</h3>
+    <ul>
+      <li>一个 Apple Developer 账号，以及为应用创建的 App ID（开启 Push Notifications 能力）。</li>
+      <li>在 <strong>Certificates, Identifiers &amp; Profiles → Keys</strong> 中创建的 APNs Auth Key（<code>.p8</code> 文件）及其 <strong>Key ID</strong>。</li>
+      <li>你的 <strong>Team ID</strong> 和应用的 <strong>bundle id</strong>。</li>
+    </ul>
+    <table>
+      <thead><tr><th>变量</th><th>取值</th></tr></thead>
+      <tbody>
+        <tr><td><code>APNS_KEY</code></td><td><code>.p8</code> 文件的内容。可以用字面的 <code>\n</code> 代替换行，写在 <code>.env</code> 里更方便。</td></tr>
+        <tr><td><code>APNS_KEY_ID</code></td><td>密钥的 10 位 id。</td></tr>
+        <tr><td><code>APNS_TEAM_ID</code></td><td>Apple Developer 团队 id。</td></tr>
+        <tr><td><code>APNS_BUNDLE_ID</code></td><td>应用的 bundle id，用作 APNs topic。</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Docker</strong>：把四个变量写进 <code>.env</code>，然后执行 <code>docker compose up -d</code>。</li>
+      <li><strong>Cloudflare</strong>：在 <code>apps/api</code> 中执行 <code>pnpm exec wrangler secret put APNS_KEY</code>（粘贴整个文件），再对 <code>APNS_KEY_ID</code>、<code>APNS_TEAM_ID</code>、<code>APNS_BUNDLE_ID</code> 做同样操作，然后重新部署 API Worker。</li>
+    </ul>
+    <h3>工作方式</h3>
+    <p>成员在应用里注册自己的手机；<code>push</code> 渠道会通知工作区中所有已注册设备的成员，并按各自的语言显示。所有者或管理员注册手机时，如果工作区还没有该渠道，会自动创建名为 <em>Mobile app</em> 的渠道。Apple 反馈已失效的手机会被自动清除。</p>
+    <p><strong>重要：</strong>APNs 密钥绑定你的 Apple 团队和应用的 bundle id，手机令牌也只对产生它的应用有效。因此官方 OpenUptime 应用只能接收托管服务发出的推送。自托管服务器上，推送适用于你自己用自己的 bundle id 和密钥构建并签名的应用。让官方应用接收自托管服务器推送的中继服务尚未实现。</p>
     <h2 id="after-zh">安装之后</h2>
     <ul>
       <li>创建第一个监控项，再创建<a href="/docs/embed">状态页</a>，需要的话把状态嵌入到你的网站。</li>

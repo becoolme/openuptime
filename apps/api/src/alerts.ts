@@ -1,4 +1,5 @@
 import type { DeliveryRetry, NewDelivery, Repo, SubscriberTarget } from "@openuptime/repo";
+import { sendPush } from "./apns";
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
@@ -105,7 +106,7 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
     const lang = channel.type === "email" && to ? await userLang(repo, to, await orgLang(repo, channel.organizationId)) : "en";
     const attempts = delivery.attempts + 1;
     try {
-      await deliver(channel, ev, alertText(ev), lang);
+      await deliver(channel, ev, alertText(ev), lang, repo);
       await repo.finishRetry(delivery.id, { ok: true, error: null, retryInSec: null });
     } catch (e) {
       console.error(`alert retry via ${channel.name} failed`, e);
@@ -127,7 +128,7 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
       // an address that is an account reads in that account's language; any other address in the workspace owner's
       const lang = c.type === "email" && to ? await userLang(repo, to, fallback) : fallback;
       if (c.type === "email" && (await withinEmails(entitlements, orgId, [c])).skipped) throw new Skipped(SKIPPED);
-      return deliver(c, ev, text, lang);
+      return deliver(c, ev, text, lang, repo);
     }),
   );
   results.forEach((r, i) => r.status === "rejected" && !(r.reason instanceof Skipped) && console.error(`alert via ${channels[i].name} failed`, r.reason));
@@ -148,7 +149,7 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
 
 
 /** Send one alert to one channel; throws when the provider rejects it. */
-export async function deliver(c: { type: string; name?: string; config: unknown }, ev: Event, text: string, lang: Lang = "en") {
+export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo) {
   const L = (k: string, v?: Record<string, string>) => tr(lang, k, v);
   const opened = ev.kind === "incident.opened";
   const cfg = c.config as Record<string, string | undefined>;
@@ -175,6 +176,12 @@ export async function deliver(c: { type: string; name?: string; config: unknown 
           payload: { summary: text, source: ev.monitor.target || ev.monitor.name, severity: "critical" },
         });
       break;
+    case "push": {
+      // devices belong to people: every member of the workspace who registered one is reached, each in their own language
+      if (!repo || !c.organizationId) throw new Error("Push channel has no workspace to look devices up in");
+      await sendPush(repo, await repo.pushDevicesForOrganization(c.organizationId), ev, c.organizationId);
+      break;
+    }
     case "email":
       if (cfg.to) {
         if (ev.test) {
