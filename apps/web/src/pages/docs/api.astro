@@ -146,6 +146,23 @@ const groups: Group[] = [
     <p>Permissions follow workspace roles. Members can read everything and create or edit monitors, incidents and status pages; deleting a monitor or an alert channel, and editing a channel's configuration, need the owner or admin role. For members, channel credentials (webhook URLs, tokens, routing keys) and monitor request headers come back masked as <code>••••••••</code>; send the mask back unchanged to keep the stored value. A few endpoints need a browser session and refuse API keys and agents with <code>403</code>: <code>GET /me/export</code> and <code>PATCH /me/locale</code>. Targets that resolve to private or internal addresses are refused with <code>400</code> and <code>"error": "target_not_allowed"</code> unless the operator set <code>ALLOW_PRIVATE_TARGETS</code>.</p>
     <h2 id="limits">Rate limiting</h2>
     <p>Authenticated endpoints have no fixed per-key quota at the application level, but please be considerate and avoid tight polling; use the monitor's interval and alert channels instead. Sign-in, sign-up, password reset and two-factor attempts, the alert-channel test button and public subscription requests are rate limited and return <code>429</code> when exceeded.</p>
+    <h2 id="native-signin">Native app sign-in (GitHub)</h2>
+    <p>A native app signs in with GitHub inside <code>ASWebAuthenticationSession</code> and ends with a normal cookie session. The browser session owns the OAuth state, so the app must not start the flow with its own HTTP client. Check <code>GET /api/config</code> first: use this flow only when <code>auth.github</code> and <code>auth.nativeHandoff</code> are <code>true</code>.</p>
+    <ol>
+      <li>Open <code>GET https://&lt;host&gt;/api/auth/native/github</code> in <code>ASWebAuthenticationSession</code> with callback scheme <code>openuptime</code>. It answers <code>302</code> to GitHub (<code>404</code> when GitHub is not configured, <code>429</code> when rate limited).</li>
+      <li>The user signs in at GitHub. The server completes the sign-in and redirects the session to <code>openuptime://auth?token=&lt;token&gt;</code>. On failure it redirects to <code>openuptime://auth?error=&lt;code&gt;</code> with no token (for example <code>signup_disabled</code> when registration is closed).</li>
+      <li>Exchange the token within 60 seconds:
+<pre><code is:raw>POST https://&lt;host&gt;/api/auth/one-time-token/verify
+content-type: application/json
+
+{ "token": "&lt;token&gt;" }
+
+200 { "session": { "token", "expiresAt", ... }, "user": { "id", "email", "name", ... } }
+    + Set-Cookie: better-auth.session_token=...   (__Secure- prefix over HTTPS)
+400 { "message": "Invalid token" }   unknown, already used or expired</code></pre></li>
+      <li>Keep the cookie and use it like a browser session for every <code>/api</code> request.</li>
+    </ol>
+    <p>The token is random, valid for 60 seconds and works once. Only the exact callback <code>openuptime://auth</code> is accepted; no other scheme or path receives a token. The verify endpoint is rate limited (<code>429</code>). Account actions such as <code>GET /api/auth/list-accounts</code>, <code>POST /api/auth/link-social</code> and <code>POST /api/auth/unlink-account</code> need this cookie session and do not accept API keys. The last way to sign in cannot be unlinked (<code>400</code>).</p>
     <h2 id="examples">Examples</h2>
     <h3>Create a monitor</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
@@ -177,6 +194,23 @@ const groups: Group[] = [
     <p>权限遵循工作区角色。成员可读取全部内容，并创建或编辑监控项、事件和状态页；删除监控项或告警渠道、修改渠道配置需要所有者或管理员角色。对成员而言，渠道凭证（Webhook 地址、令牌、路由密钥）和监控项的请求头会以 <code>••••••••</code> 掩码返回，原样回传掩码即保留已存储的值。少数接口需要浏览器会话，API 密钥和智能体会得到 <code>403</code>：<code>GET /me/export</code> 与 <code>PATCH /me/locale</code>。解析到私有或内部地址的目标会被拒绝，返回 <code>400</code> 与 <code>"error": "target_not_allowed"</code>，除非运维设置了 <code>ALLOW_PRIVATE_TARGETS</code>。</p>
     <h2 id="limits-zh">限流</h2>
     <p>需认证的接口在应用层没有固定的按密钥配额，但请合理使用，避免高频轮询；建议依靠监控项的检测间隔和告警渠道。登录、注册、重置密码与两步验证尝试、告警渠道的测试按钮以及公开的订阅接口都有限流，超出会返回 <code>429</code>。</p>
+    <h2 id="native-signin-zh">原生应用登录（GitHub）</h2>
+    <p>原生应用在 <code>ASWebAuthenticationSession</code> 中完成 GitHub 登录，最终得到普通的 Cookie 会话。OAuth 状态保存在发起流程的浏览器会话里，因此应用不能用自己的 HTTP 客户端发起流程。请先请求 <code>GET /api/config</code>：仅当 <code>auth.github</code> 与 <code>auth.nativeHandoff</code> 均为 <code>true</code> 时才使用此流程。</p>
+    <ol>
+      <li>在 <code>ASWebAuthenticationSession</code> 中打开 <code>GET https://&lt;host&gt;/api/auth/native/github</code>，回调 scheme 为 <code>openuptime</code>。它返回 <code>302</code> 跳转到 GitHub（未配置 GitHub 返回 <code>404</code>，被限流返回 <code>429</code>）。</li>
+      <li>用户在 GitHub 登录。服务器完成登录后把会话重定向到 <code>openuptime://auth?token=&lt;token&gt;</code>。失败时重定向到 <code>openuptime://auth?error=&lt;code&gt;</code>，不带令牌（例如注册关闭时为 <code>signup_disabled</code>）。</li>
+      <li>在 60 秒内兑换令牌：
+<pre><code is:raw>POST https://&lt;host&gt;/api/auth/one-time-token/verify
+content-type: application/json
+
+{ "token": "&lt;token&gt;" }
+
+200 { "session": { "token", "expiresAt", ... }, "user": { "id", "email", "name", ... } }
+    + Set-Cookie: better-auth.session_token=...   （HTTPS 下带 __Secure- 前缀）
+400 { "message": "Invalid token" }   令牌未知、已使用或已过期</code></pre></li>
+      <li>保存该 Cookie，之后的所有 <code>/api</code> 请求都像浏览器会话一样携带它。</li>
+    </ol>
+    <p>令牌随机生成，有效期 60 秒，只能使用一次。只接受精确的回调地址 <code>openuptime://auth</code>，其他 scheme 或路径都不会得到令牌。兑换接口有限流（<code>429</code>）。<code>GET /api/auth/list-accounts</code>、<code>POST /api/auth/link-social</code>、<code>POST /api/auth/unlink-account</code> 等账号操作需要此 Cookie 会话，不接受 API 密钥。最后一种登录方式无法取消关联（<code>400</code>）。</p>
     <h2 id="examples-zh">示例</h2>
     <h3>创建监控项</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \

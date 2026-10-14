@@ -49,7 +49,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>Optional. User-Agent of HTTP checks.</td></tr>
         <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>Optional. Remote probes for <a href="#regions">multi-region checks</a>. Unset, every check runs from this deployment.</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
-        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub".</td></tr>
+        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub". <a href="#github">Setup and troubleshooting</a>.</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>Optional Plausible analytics. Off when the domain is empty.</td></tr>
       </tbody>
     </table>
@@ -97,7 +97,7 @@ pnpm install</code></pre>
     <pre><code is:raw>cd apps/api
 pnpm exec wrangler secret put BETTER_AUTH_SECRET     # openssl rand -hex 32
 pnpm exec wrangler secret put CRON_SECRET            # any long random string; guards /internal/*
-# optional: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET for "Sign in with GitHub"</code></pre>
+# optional "Sign in with GitHub": wrangler secret put GITHUB_CLIENT_ID, then GITHUB_CLIENT_SECRET (see the GitHub sign-in section)</code></pre>
     <h3>6. Deploy</h3>
     <pre><code is:raw>cd apps/api &amp;&amp; pnpm exec wrangler deploy
 cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre>
@@ -160,6 +160,33 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
       <li>Probes only accept signed requests (HMAC-SHA256 over timestamp and body, 60 s skew) and refuse private, loopback and link-local targets whatever the signature (unless its own operator turns <code>ALLOW_PRIVATE_TARGETS</code> on), so a probe cannot be used as an open proxy.</li>
     </ul>
 
+    <h2 id="github">GitHub sign-in</h2>
+    <p>"Continue with GitHub" is optional and off until you configure a GitHub OAuth App. Without it the GitHub button is hidden everywhere (web and mobile app) and email sign-in keeps working unchanged.</p>
+    <h3>1. Create the OAuth App</h3>
+    <p>In GitHub, open <strong>Settings → Developer settings → OAuth Apps → New OAuth App</strong> (or the same page of an organization). Fill in:</p>
+    <ul>
+      <li><strong>Homepage URL</strong>: your public address, for example <code>https://status.example.com</code>.</li>
+      <li><strong>Authorization callback URL</strong>: <code>&lt;BETTER_AUTH_URL&gt;/api/auth/callback/github</code>, exactly. With Docker <code>BETTER_AUTH_URL</code> is your <code>PUBLIC_URL</code>; on Cloudflare it is the <code>BETTER_AUTH_URL</code> var of the API Worker, the public origin of the site (the API is served at <code>/api</code> on the same domain). Example: <code>https://status.example.com/api/auth/callback/github</code>.</li>
+    </ul>
+    <p>Create a client secret and keep both values.</p>
+    <h3>2. Set the two variables</h3>
+    <ul>
+      <li><strong>Docker</strong>: add <code>GITHUB_CLIENT_ID</code> and <code>GITHUB_CLIENT_SECRET</code> to <code>.env</code>, then <code>docker compose up -d</code>.</li>
+      <li><strong>Cloudflare</strong>: in <code>apps/api</code> run <code>pnpm exec wrangler secret put GITHUB_CLIENT_ID</code> and <code>pnpm exec wrangler secret put GITHUB_CLIENT_SECRET</code>, then redeploy the API Worker.</li>
+    </ul>
+    <h3>3. Check it</h3>
+    <pre><code is:raw>curl https://status.example.com/api/config
+# "auth": { ..., "github": true, ... }</code></pre>
+    <p>Both variables must be set; with only one, <code>github</code> stays <code>false</code>. Signed-in users can then connect or disconnect GitHub under <strong>Account → Connected accounts</strong>, even when the GitHub email differs from the account email. A GitHub login is only matched to an existing account by email when GitHub reports that address as verified, and an account always keeps at least one way to sign in. <code>DISABLE_SIGNUP</code> also applies to first-time GitHub sign-ins.</p>
+    <p>The mobile app uses the same provider: it reads <code>auth.github</code> from <code>/api/config</code> and opens the same OAuth App through <code>/api/auth/native/github</code>, so there is nothing extra to register (see <a href="/docs/api#native-signin">native sign-in</a>).</p>
+    <h3>Troubleshooting</h3>
+    <ul>
+      <li><strong>"redirect_uri is not associated with this application"</strong>: the callback URL in the OAuth App differs from <code>&lt;BETTER_AUTH_URL&gt;/api/auth/callback/github</code> (scheme, host, port or path). Fix it in GitHub, not in the app.</li>
+      <li><strong>The callback goes to the wrong host</strong>: <code>BETTER_AUTH_URL</code> (<code>PUBLIC_URL</code> in Docker) is wrong, often still <code>localhost</code>. Set it to the public address and restart.</li>
+      <li><strong>Behind a proxy</strong>: terminate HTTPS at the proxy and pass the original <code>Host</code> and <code>X-Forwarded-Proto</code> headers. The public address configured above is what GitHub must be given.</li>
+      <li><strong>Button missing</strong>: <code>/api/config</code> shows <code>github: false</code>, so a variable is empty or the service was not restarted.</li>
+      <li><strong>"Sign-ups are closed"</strong>: <code>DISABLE_SIGNUP=true</code>; invite the person first, or connect GitHub from an existing account.</li>
+    </ul>
     <h2 id="after">After install</h2>
     <ul>
       <li>Create your first monitor, then a <a href="/docs/embed">status page</a> and, optionally, embed its state on your site.</li>
@@ -214,7 +241,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>可选。HTTP 检查使用的 User-Agent。</td></tr>
         <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>可选。用于<a href="#regions-zh">多区域检测</a>的远程探针。不设置时，所有检测都从本部署发起。</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
-        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。</td></tr>
+        <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。<a href="#github-zh">配置与排错</a>。</td></tr>
         <tr><td><code>PLAUSIBLE_DOMAIN</code><br><code>PLAUSIBLE_SRC</code></td><td>可选的 Plausible 统计。域名为空则关闭。</td></tr>
       </tbody>
     </table>
@@ -325,6 +352,33 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
       <li>探针只接受签名请求（对时间戳与请求体做 HMAC-SHA256，允许 60 秒偏差），并且无论签名是否有效，都会拒绝私有、回环和链路本地地址（除非该探针的运维者自己打开 <code>ALLOW_PRIVATE_TARGETS</code>），因此不会变成开放代理。</li>
     </ul>
 
+    <h2 id="github-zh">GitHub 登录</h2>
+    <p>“使用 GitHub 继续”是可选功能，配置 GitHub OAuth App 后才会启用。未配置时，网页和移动应用都不会显示 GitHub 按钮，邮箱登录照常使用。</p>
+    <h3>1. 创建 OAuth App</h3>
+    <p>在 GitHub 打开 <strong>Settings → Developer settings → OAuth Apps → New OAuth App</strong>（组织账号在其对应页面）。填写：</p>
+    <ul>
+      <li><strong>Homepage URL</strong>：你的公网地址，例如 <code>https://status.example.com</code>。</li>
+      <li><strong>Authorization callback URL</strong>：必须精确为 <code>&lt;BETTER_AUTH_URL&gt;/api/auth/callback/github</code>。Docker 中 <code>BETTER_AUTH_URL</code> 即 <code>PUBLIC_URL</code>；Cloudflare 上是 API Worker 的 <code>BETTER_AUTH_URL</code> 变量，即站点公网地址（API 在同一域名的 <code>/api</code> 下）。例如 <code>https://status.example.com/api/auth/callback/github</code>。</li>
+    </ul>
+    <p>创建 Client secret，并保存这两个值。</p>
+    <h3>2. 设置两个变量</h3>
+    <ul>
+      <li><strong>Docker</strong>：把 <code>GITHUB_CLIENT_ID</code> 和 <code>GITHUB_CLIENT_SECRET</code> 写入 <code>.env</code>，然后执行 <code>docker compose up -d</code>。</li>
+      <li><strong>Cloudflare</strong>：在 <code>apps/api</code> 中执行 <code>pnpm exec wrangler secret put GITHUB_CLIENT_ID</code> 和 <code>pnpm exec wrangler secret put GITHUB_CLIENT_SECRET</code>，然后重新部署 API Worker。</li>
+    </ul>
+    <h3>3. 验证</h3>
+    <pre><code is:raw>curl https://status.example.com/api/config
+# "auth": { ..., "github": true, ... }</code></pre>
+    <p>两个变量必须同时设置，只设一个时 <code>github</code> 仍为 <code>false</code>。之后已登录的用户可以在 <strong>账号 → 已关联的账号</strong> 中关联或取消关联 GitHub，GitHub 邮箱可以与账号邮箱不同。只有 GitHub 报告该邮箱已验证时，GitHub 登录才会按邮箱匹配已有账号；账号始终至少保留一种登录方式。<code>DISABLE_SIGNUP</code> 同样适用于首次 GitHub 登录。</p>
+    <p>移动应用使用同一个提供方：它从 <code>/api/config</code> 读取 <code>auth.github</code>，并通过 <code>/api/auth/native/github</code> 走同一个 OAuth App，无需额外注册（见<a href="/docs/api#native-signin-zh">原生登录</a>）。</p>
+    <h3>排错</h3>
+    <ul>
+      <li><strong>“redirect_uri is not associated with this application”</strong>：OAuth App 中的回调地址与 <code>&lt;BETTER_AUTH_URL&gt;/api/auth/callback/github</code> 不一致（协议、主机、端口或路径）。请在 GitHub 中修改。</li>
+      <li><strong>回调跳到了错误的主机</strong>：<code>BETTER_AUTH_URL</code>（Docker 中为 <code>PUBLIC_URL</code>）设置有误，常见是仍为 <code>localhost</code>。改成公网地址并重启。</li>
+      <li><strong>位于反向代理之后</strong>：在代理处终止 HTTPS，并传递原始的 <code>Host</code> 与 <code>X-Forwarded-Proto</code> 请求头。给 GitHub 填写的应是上面配置的公网地址。</li>
+      <li><strong>看不到按钮</strong>：<code>/api/config</code> 显示 <code>github: false</code>，说明变量为空或服务未重启。</li>
+      <li><strong>“Sign-ups are closed”</strong>：已设置 <code>DISABLE_SIGNUP=true</code>；请先邀请对方，或在已有账号中关联 GitHub。</li>
+    </ul>
     <h2 id="after-zh">安装之后</h2>
     <ul>
       <li>创建第一个监控项，再创建<a href="/docs/embed">状态页</a>，需要的话把状态嵌入到你的网站。</li>
