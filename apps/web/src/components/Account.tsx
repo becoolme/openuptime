@@ -118,6 +118,54 @@ function Security({ me, reload }: { me: Me; reload: () => void }) {
   );
 }
 
+type Linked = { id: string; providerId: string };
+
+/** GitHub (when the server has it configured) as a second way to sign in, never the only way removed. */
+function ConnectedAccounts() {
+  const [github, setGithub] = useState(false);
+  const [accounts, setAccounts] = useState<Linked[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const load = () => authClient.listAccounts().then((r) => setAccounts((r.data as Linked[] | null) ?? [])).catch(() => setAccounts([]));
+  useEffect(() => {
+    fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean }) => setGithub(!!d.github)).catch(() => {});
+    load();
+    if (new URLSearchParams(location.search).has("link_error")) setErr(t("GitHub could not be connected. It may already be linked to another account."));
+  }, []);
+  if (!github || !accounts) return null;
+  const linked = accounts.find((a) => a.providerId === "github");
+  // the account must keep another way in: a password or another provider
+  const onlyWay = accounts.length <= 1;
+  async function connect() {
+    setErr(""); setBusy(true);
+    const r = await authClient.linkSocial({ provider: "github", callbackURL: "/app/account", errorCallbackURL: "/app/account?link_error=1" });
+    if (r.error) { setErr(r.error.message ?? t("Something went wrong")); toast(t("Something went wrong"), "err"); setBusy(false); }
+  }
+  async function disconnect() {
+    if (!linked) return;
+    setErr(""); setBusy(true);
+    const r = await authClient.unlinkAccount({ accountId: linked.id });
+    setBusy(false);
+    if (r.error) { setErr(r.error.message ?? t("Something went wrong")); toast(t("Something went wrong"), "err"); return; }
+    toast(t("GitHub disconnected."));
+    load();
+  }
+  return (
+    <div className="card sect">
+      <h3>{t("Connected accounts")}</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>{t("Sign in with GitHub as well as with your email. The GitHub email may differ from your account email.")}</p>
+      <div className="kv"><div><span>GitHub</span><b>{linked ? t("Connected") : t("Not connected")}</b></div></div>
+      <div style={{ marginTop: 12 }}>
+        {linked
+          ? <button className="btn" disabled={busy || onlyWay} onClick={disconnect}>{t("Disconnect GitHub")}</button>
+          : <button className="btn" disabled={busy} onClick={connect}>{t("Connect GitHub")}</button>}
+      </div>
+      {linked && onlyWay && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("GitHub is your only way to sign in, so it cannot be disconnected.")}</p>}
+      {err && <p className="err" style={{ marginTop: 10 }}>{err}</p>}
+    </div>
+  );
+}
+
 /** Personal settings: who you are and which language emails (and the app) use. API keys live on their own page. */
 export default function Account() {
   const [me, setMe] = useState<Me | null>(null);
@@ -156,6 +204,7 @@ export default function Account() {
             {saved && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Saved")}</p>}
           </div>
         )}
+        {me && <ConnectedAccounts />}
         {me && <Security me={me} reload={load} />}
       </div>
     </>
