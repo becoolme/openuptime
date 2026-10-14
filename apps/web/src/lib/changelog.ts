@@ -53,6 +53,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Account has a Connected accounts block to connect or disconnect GitHub, even when its email differs from yours.", zh: "账号页新增“已关联的账号”，可关联或取消关联 GitHub，GitHub 邮箱可以与账号邮箱不同。" },
       { en: "The last way to sign in cannot be disconnected, and a GitHub address is only matched to an existing account when GitHub reports it as verified.", zh: "最后一种登录方式无法取消关联；只有 GitHub 报告邮箱已验证时，才会按邮箱匹配已有账号。" },
       { en: "Native apps can finish GitHub sign-in with a single-use token that is valid for 60 seconds; /api/config reports it as auth.nativeHandoff.", zh: "原生应用可用有效期 60 秒、只能使用一次的令牌完成 GitHub 登录；/api/config 以 auth.nativeHandoff 报告该能力。" },
+      { en: "After connecting, a confirmation appears and the card shows which GitHub account is linked.", zh: "关联完成后会提示成功，卡片上显示已关联的 GitHub 账号。" },
       { en: "Self-hosting docs now explain how to create the GitHub OAuth App, the callback URL and troubleshooting.", zh: "自托管文档新增 GitHub OAuth App 的创建方法、回调地址和排错说明。" },
     ],
     link: { href: "/docs/self-host#github", label: { en: "Read the GitHub sign-in setup", zh: "阅读 GitHub 登录配置" } },

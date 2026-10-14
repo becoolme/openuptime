@@ -188,6 +188,8 @@ export const zh: Record<string, string> = {
   "Connected": "已关联",
   "Not connected": "未关联",
   "Connect GitHub": "关联 GitHub",
+  "GitHub connected.": "已关联 GitHub。",
+  "Disconnect": "取消关联",
   "Disconnect GitHub": "取消关联 GitHub",
   "GitHub disconnected.": "已取消关联 GitHub。",
   "GitHub is your only way to sign in, so it cannot be disconnected.": "GitHub 是你唯一的登录方式，因此无法取消关联。",

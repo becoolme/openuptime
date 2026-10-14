@@ -119,26 +119,41 @@ function Security({ me, reload }: { me: Me; reload: () => void }) {
 }
 
 type Linked = { id: string; providerId: string };
+type GithubProfile = { login?: string; name?: string; email?: string | null; image?: string };
 
 /** GitHub (when the server has it configured) as a second way to sign in, never the only way removed. */
 function ConnectedAccounts() {
   const [github, setGithub] = useState(false);
   const [accounts, setAccounts] = useState<Linked[] | null>(null);
+  const [profile, setProfile] = useState<GithubProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const load = () => authClient.listAccounts().then((r) => setAccounts((r.data as Linked[] | null) ?? [])).catch(() => setAccounts([]));
   useEffect(() => {
     fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean }) => setGithub(!!d.github)).catch(() => {});
     load();
-    if (new URLSearchParams(location.search).has("link_error")) setErr(t("GitHub could not be connected. It may already be linked to another account."));
+    const q = new URLSearchParams(location.search);
+    if (q.has("link_error")) setErr(t("GitHub could not be connected. It may already be linked to another account."));
+    if (q.has("linked")) toast(t("GitHub connected."));
+    if (q.has("linked") || q.has("link_error")) history.replaceState(null, "", location.pathname);
   }, []);
+  const linkedId = accounts?.find((a) => a.providerId === "github")?.id;
+  useEffect(() => {
+    setProfile(null);
+    if (!linkedId) return;
+    // asks GitHub who the linked account is; the card still works if that fails
+    authClient.accountInfo({ query: { accountId: linkedId } }).then((r) => {
+      const d = r.data as { user?: { name?: string; email?: string | null; image?: string }; data?: { login?: string } } | null;
+      if (d) setProfile({ login: d.data?.login, name: d.user?.name, email: d.user?.email, image: d.user?.image });
+    }).catch(() => {});
+  }, [linkedId]);
   if (!github || !accounts) return null;
   const linked = accounts.find((a) => a.providerId === "github");
   // the account must keep another way in: a password or another provider
   const onlyWay = accounts.length <= 1;
   async function connect() {
     setErr(""); setBusy(true);
-    const r = await authClient.linkSocial({ provider: "github", callbackURL: "/app/account", errorCallbackURL: "/app/account?link_error=1" });
+    const r = await authClient.linkSocial({ provider: "github", callbackURL: "/app/account?linked=1", errorCallbackURL: "/app/account?link_error=1" });
     if (r.error) { setErr(r.error.message ?? t("Something went wrong")); toast(t("Something went wrong"), "err"); setBusy(false); }
   }
   async function disconnect() {
@@ -154,11 +169,20 @@ function ConnectedAccounts() {
     <div className="card sect">
       <h3>{t("Connected accounts")}</h3>
       <p className="muted" style={{ marginBottom: 12 }}>{t("Sign in with GitHub as well as with your email. The GitHub email may differ from your account email.")}</p>
-      <div className="kv"><div><span>GitHub</span><b>{linked ? t("Connected") : t("Not connected")}</b></div></div>
-      <div style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+        {profile?.image
+          ? <img src={profile.image} alt="" width={36} height={36} style={{ borderRadius: "50%", flex: "none" }} />
+          : <svg width="36" height="36" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ flex: "none" }}><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>GitHub</div>
+          <div className="muted" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {linked ? (profile?.login ? `@${profile.login}` : profile?.name || profile?.email || t("Connected")) : t("Not connected")}
+            {linked && profile?.login && profile.email ? ` · ${profile.email}` : ""}
+          </div>
+        </div>
         {linked
-          ? <button className="btn" disabled={busy || onlyWay} onClick={disconnect}>{t("Disconnect GitHub")}</button>
-          : <button className="btn" disabled={busy} onClick={connect}>{t("Connect GitHub")}</button>}
+          ? <button className="btn" disabled={busy || onlyWay} onClick={disconnect}>{t("Disconnect")}</button>
+          : <button className="btn" disabled={busy} onClick={connect}>{t("Connect")}</button>}
       </div>
       {linked && onlyWay && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("GitHub is your only way to sign in, so it cannot be disconnected.")}</p>}
       {err && <p className="err" style={{ marginTop: 10 }}>{err}</p>}
