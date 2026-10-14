@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "api-keys-table-layout",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "API keys table layout fixed", zh: "修复 API 密钥列表布局" },
+    summary: {
+      en: "The Revoke button on the API keys page no longer wraps onto a second line.",
+      zh: "API 密钥页面的“撤销”按钮不再换到第二行。",
+    },
+    points: [
+      {
+        en: "Name, key, projects and created time line up in one row, on desktop and on phones.",
+        zh: "名称、密钥、项目和创建时间在桌面和手机上都排成一行。",
+      },
+    ],
+  },
+  {
     id: "language-follows-your-choice",
     date: "2026-10-13",
     edition: "community",

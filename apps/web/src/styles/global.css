@@ -480,7 +480,7 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .step small{display:block;margin-top:3px;font-size:13px}
 
 /* Team / Keys / Settings */
-.ak-tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 120px auto!important}
+.ak-tr{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) 110px 84px!important}
 .tm-tr .nm,.ak-tr .nm{display:flex;gap:12px;align-items:center;min-width:0}
 .tm-tr .nm small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#1a8f9b);color:#fff;display:grid;place-items:center;font-weight:600;flex:none}
@@ -493,7 +493,7 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .set-wrap{display:grid;gap:20px;max-width:720px}
 .sect{padding:24px;display:grid;gap:14px}
 .sect h3{font-size:22px}
-@media(max-width:700px){.ak-tr>:nth-child(3){display:none}}
+@media(max-width:700px){.ak-tr>:nth-child(3),.ak-tr>:nth-child(4){display:none}.ak-tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto!important}}
 
 .est{padding:12px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font-size:13.5px;color:var(--muted)}
 .est b{color:var(--ink);font-weight:500}
