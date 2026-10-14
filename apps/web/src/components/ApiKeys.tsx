@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
 import { ago, api, type Project } from "../lib/api";
 import { authClient } from "../lib/auth-client";
+import QRCode from "qrcode";
 
 type Key = { id: string; name: string | null; start: string | null; createdAt: string; metadata?: { projectIds?: string[] } | null };
 
@@ -90,6 +91,13 @@ export default function ApiKeys() {
       } catch (e) { setErr((e as Error).message); }
     });
   }
+  // the mobile app reads this link: scan it from Settings, or on the welcome screen
+  const [qr, setQr] = useState("");
+  useEffect(() => {
+    if (!fresh) { setQr(""); return; }
+    QRCode.toDataURL(`openuptime://connect?server=${encodeURIComponent(location.origin)}&key=${encodeURIComponent(fresh)}`, { margin: 1, width: 168 })
+      .then(setQr).catch(() => setQr(""));
+  }, [fresh]);
   const keyIcon = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3" /></svg>;
   return (
     <>
@@ -104,6 +112,12 @@ export default function ApiKeys() {
             <code className="mono">{fresh}</code>
             <button className="btn sm" onClick={() => { navigator.clipboard?.writeText(fresh); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? t("Copied ✓") : t("Copy")}</button>
           </div>
+          {qr && (
+            <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
+              <img src={qr} alt={t("QR code to connect the mobile app")} width={168} height={168} style={{ background: "#fff", borderRadius: 8, flex: "none" }} />
+              <p className="muted" style={{ fontSize: 13 }}>{t("Scan with the OpenUptime app to connect it to this server. The code contains the key, so do not share it.")}</p>
+            </div>
+          )}
         </div>
       )}
       {err && !open && <p className="err">{err}</p>}

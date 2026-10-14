@@ -425,6 +425,8 @@ export const zh: Record<string, string> = {
   "Permanently deletes your account, and any workspace where you are the only member, with its monitors, incidents and status pages. This cannot be undone.": "永久删除你的账号，以及只有你一人的工作区（连同其中的监控、事件和状态页）。此操作无法撤销。",
   "Delete my account…": "删除我的账号…",
   "Delete permanently": "永久删除",
+  "QR code to connect the mobile app": "用于连接移动应用的二维码",
+  "Scan with the OpenUptime app to connect it to this server. The code contains the key, so do not share it.": "用 OpenUptime 应用扫描即可连接到此服务器。二维码包含密钥，请勿分享。",
   "For your security, sign in with GitHub again, then come back and delete the account.": "为了安全，请重新用 GitHub 登录，然后回来删除账号。",
   "You have no password, so deleting needs a recent sign-in. If it asks, sign in with GitHub again.": "你没有设置密码，删除账号需要最近登录过。如果提示，请重新用 GitHub 登录。",
   "Sign in with GitHub again": "重新用 GitHub 登录",

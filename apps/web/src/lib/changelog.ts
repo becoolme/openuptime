@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "api-key-qr-code",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "Connect the mobile app with a QR code", zh: "用二维码连接移动应用" },
+    summary: {
+      en: "A new API key now comes with a QR code that the mobile app can scan.",
+      zh: "新建 API 密钥后会同时显示二维码，移动应用扫一下即可连接。",
+    },
+    points: [
+      { en: "The code carries this server's address and the new key, shown once with the key, so keep it private.", zh: "二维码包含此服务器地址和新密钥，与密钥一起只显示一次，请勿外传。" },
+    ],
+  },
+  {
     id: "email-takeover-protection",
     date: "2026-10-14",
     edition: "community",
