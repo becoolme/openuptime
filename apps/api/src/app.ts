@@ -77,7 +77,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     c.json({
       apiVersion: 1,
       edition: edition.id ?? "community",
-      auth: { emailPassword: true, ...authInfo(c.env), emailDelivery: emailEnabled() },
+      auth: { emailPassword: true, ...authInfo(c.env), emailDelivery: emailEnabled(), nativeHandoff: true },
       features: { multiRegion: availableRegions().length > 2, statusPages: true },
     }),
   );
@@ -92,6 +92,8 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     "/api/auth/request-password-reset": { limit: 5, windowSec: 3600, perEmail: 3 },
     "/api/auth/forget-password": { limit: 5, windowSec: 3600, perEmail: 3 },
     "/api/auth/reset-password": { limit: 20, windowSec: 3600 },
+    "/api/auth/one-time-token/verify": { limit: 30, windowSec: 600 },
+    "/api/auth/unlink-account": { limit: 20, windowSec: 600 },
     "/api/auth/send-verification-email": { limit: 5, windowSec: 3600, perEmail: 3 },
   };
   app.post("/api/auth/*", async (c, next) => {

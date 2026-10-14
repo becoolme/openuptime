@@ -16,7 +16,7 @@ describe.skipIf(!url)("GET /api/config", () => {
     const body = (await res.json()) as { apiVersion: number; edition: string; auth: Record<string, unknown> };
     expect(body.apiVersion).toBe(1);
     expect(body.edition).toBe("community");
-    expect(body.auth).toMatchObject({ emailPassword: true, github: false, signup: true, turnstileSiteKey: null });
+    expect(body.auth).toMatchObject({ emailPassword: true, github: false, signup: true, turnstileSiteKey: null, nativeHandoff: true });
   });
 
   it("shows the Turnstile site key only when both keys are set", async () => {

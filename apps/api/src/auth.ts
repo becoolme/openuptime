@@ -3,7 +3,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Database } from "@openuptime/repo";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { captcha, jwt, organization, twoFactor } from "better-auth/plugins";
+import { captcha, jwt, oneTimeToken, organization, twoFactor } from "better-auth/plugins";
 import { actionEmail, sendEmail } from "./email";
 import { userLang, tr } from "./mail-i18n";
 import type { Bindings } from "./env";
@@ -41,6 +41,21 @@ export const OAUTH_SCOPES = ["openid", "offline_access", "mcp:read", "mcp:write"
 /** The MCP endpoint, which is the OAuth "resource" access tokens are issued for (RFC 8707). */
 export const mcpResource = (env: Pick<Bindings, "BETTER_AUTH_URL">) => `${new URL(env.BETTER_AUTH_URL).origin}/api/mcp`;
 
+/** The only redirect target a native app may ask for; the exact scheme and host, so no other custom scheme is trusted. */
+export const NATIVE_CALLBACK = "openuptime://auth";
+/** How long a handoff token stays valid, in minutes (the plugin counts minutes). */
+export const HANDOFF_TTL_MINUTES = 1;
+
+const sha256Hex = async (s: string) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** True when a redirect location is the native app's callback (and nothing that merely starts with it). */
+export const isNativeCallback = (location: string | null | undefined) => {
+  if (!location || !location.startsWith(NATIVE_CALLBACK)) return false;
+  const rest = location.slice(NATIVE_CALLBACK.length);
+  return rest === "" || /^[/?#]/.test(rest);
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -76,7 +91,11 @@ export function createAuth(database: Database, env: Bindings) {
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
-    trustedOrigins: [env.WEB_ORIGIN],
+    trustedOrigins: [env.WEB_ORIGIN, NATIVE_CALLBACK],
+    // A signed-in user may connect a GitHub account whose email differs from theirs (linking is always an explicit
+    // action by the signed-in user). On sign-in an existing account is only matched when the provider says the email
+    // is verified: trustedProviders stays empty, so an unverified address never links by itself.
+    account: { accountLinking: { enabled: true, allowDifferentEmails: true, trustedProviders: [] } },
     // signed session cookie cache: most requests skip the session/user DB lookups entirely
     session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
     database: database.authDatabase as never,
@@ -174,6 +193,39 @@ export function createAuth(database: Database, env: Bindings) {
       }),
     },
     plugins: [
+      // Native handoff: the app signs in with GitHub inside ASWebAuthenticationSession, whose cookies the app cannot
+      // read. A short-lived single-use token is appended to the openuptime://auth redirect and exchanged for the
+      // cookie session at POST /api/auth/one-time-token/verify. Only the handoff below mints tokens: the plugin's
+      // own generate endpoint is closed to clients, and tokens are stored hashed.
+      oneTimeToken({
+        expiresIn: HANDOFF_TTL_MINUTES,
+        disableClientRequest: true,
+        storeToken: { type: "custom-hasher", hash: sha256Hex },
+      }),
+      {
+        id: "native-handoff",
+        hooks: {
+          after: [
+            {
+              matcher: (c) => c.path === "/callback/:id",
+              handler: createAuthMiddleware(async (ctx) => {
+                const location = ctx.context.responseHeaders?.get("location");
+                const created = ctx.context.newSession;
+                if (!isNativeCallback(location) || !created) return;
+                const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+                await ctx.context.internalAdapter.createVerificationValue({
+                  value: created.session.token,
+                  identifier: `one-time-token:${await sha256Hex(token)}`,
+                  expiresAt: new Date(Date.now() + HANDOFF_TTL_MINUTES * 60_000),
+                });
+                const url = new URL(location!);
+                url.searchParams.set("token", token);
+                ctx.setHeader("location", url.toString());
+              }),
+            },
+          ],
+        },
+      },
       organization({
         invitationExpiresIn: Math.round(inviteTtlDays(env) * 86400),
         organizationHooks: {
