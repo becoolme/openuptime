@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "server-config-endpoint",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "Server capabilities endpoint", zh: "服务器能力接口" },
+    summary: {
+      en: "Clients can ask a server what it supports before anyone signs in.",
+      zh: "客户端可以在登录之前查询服务器支持哪些功能。",
+    },
+    points: [
+      { en: "GET /api/config reports the API version, the sign-in methods, whether sign-up and Turnstile are on, and whether the server can send email.", zh: "GET /api/config 返回 API 版本、可用的登录方式、是否开放注册和启用 Turnstile，以及服务器能否发送邮件。" },
+      { en: "The existing /api/auth-providers answer is unchanged.", zh: "原有的 /api/auth-providers 返回内容保持不变。" },
+    ],
+  },
+  {
     id: "api-keys-table-layout",
     date: "2026-10-14",
     edition: "community",

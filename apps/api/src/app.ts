@@ -14,7 +14,7 @@ import { maintenance } from "./routes/maintenance";
 import { monitors } from "./routes/monitors";
 import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
-import { configureEmail } from "./email";
+import { configureEmail, emailEnabled } from "./email";
 import { configureNetGuard } from "./netguard";
 import { configureProbes } from "./probes";
 import { allow, clientIp, safeEqual } from "./ratelimit";
@@ -64,7 +64,23 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", (c) => c.json({ ok: true }));
-  app.get("/api/auth-providers", (c) => c.json({ github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET), signup: !signupDisabled(c.env), turnstileSiteKey: turnstile(c.env)?.siteKey ?? null, legal: c.env.LEGAL_LINKS === "true" }));
+  const authInfo = (env: AppEnv["Bindings"]) => ({
+    github: !!(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET),
+    signup: !signupDisabled(env),
+    turnstileSiteKey: turnstile(env)?.siteKey ?? null,
+    legal: env.LEGAL_LINKS === "true",
+  });
+  app.get("/api/auth-providers", (c) => c.json(authInfo(c.env)));
+  // what this deployment can do, for clients that must adapt before anyone has signed in (the mobile app). Clients
+  // read capabilities, never the edition name, so a hosted build only changes the values here.
+  app.get("/api/config", (c) =>
+    c.json({
+      apiVersion: 1,
+      edition: edition.id ?? "community",
+      auth: { emailPassword: true, ...authInfo(c.env), emailDelivery: emailEnabled() },
+      features: { multiRegion: availableRegions().length > 2, statusPages: true },
+    }),
+  );
   // password guessing, sign-up floods and mail bombing: the library's own limiter is per isolate on Workers, so the
   // endpoints that matter are counted in the database. A client address is used when it can be told; the email address
   // in the body always counts, so one account cannot be hammered from many addresses either.

@@ -8,6 +8,8 @@ import type { AppEnv, Bindings } from "./env";
  * tables) plugs in through these three hooks, so it lives in files of its own and never edits the core.
  */
 export interface Edition {
+  /** Reported by `GET /api/config` so clients can label the deployment. Absent means "community". */
+  id?: string;
   /**
    * Allowances for a request or a scheduler run. Built from the database in hand because Workers open one per
    * request; an implementation keeps its state in tables, not in memory.

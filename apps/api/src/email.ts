@@ -5,6 +5,9 @@ type EmailBinding = NonNullable<Bindings["EMAIL"]>;
 
 let cfg: { binding?: EmailBinding; from?: string; appUrl: string } = { appUrl: "" };
 
+/** Whether outgoing mail is wired up here; without it messages only reach the server log. */
+export const emailEnabled = () => !!cfg.from && !!(transport || cfg.binding);
+
 /** Public origin of the web app, for links in emails. */
 export const appUrl = () => cfg.appUrl;
 
