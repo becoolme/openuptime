@@ -3,7 +3,7 @@ import { isLang } from "./mail-i18n";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { createAuth, signupDisabled, slugify, turnstile } from "./auth";
+import { createAuth, NATIVE_CALLBACK, signupDisabled, slugify, turnstile } from "./auth";
 import { connectionString, type AppEnv } from "./env";
 import { mountMcp } from "./mcp-route";
 import { requireOrg } from "./middleware";
@@ -109,6 +109,20 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
       if (!ok) return c.json({ error: "Too many attempts, try again later" }, 429);
     }
     await next();
+  });
+  // Start of the native GitHub sign-in. The OAuth state lives in a cookie of whichever browser starts the flow, so the
+  // app must not start it with its own HTTP client: it opens this URL inside ASWebAuthenticationSession, which is
+  // redirected to GitHub with the state cookie set, and back through the callback to openuptime://auth?token=...
+  app.get("/api/auth/native/github", async (c) => {
+    if (!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET)) return c.json({ error: "GitHub sign-in is not configured" }, 404);
+    const ip = clientIp(c);
+    if (ip && !(await allow(c.get("repo"), `auth:ip:${ip}:/api/auth/native/github`, 30, 600))) return c.json({ error: "Too many attempts, try again later" }, 429);
+    const res = await c.get("auth").api.signInSocial({ body: { provider: "github", callbackURL: NATIVE_CALLBACK, errorCallbackURL: NATIVE_CALLBACK, disableRedirect: true }, headers: c.req.raw.headers, asResponse: true });
+    const url = ((await res.json().catch(() => null)) as { url?: string } | null)?.url;
+    if (!res.ok || !url) return c.json({ error: "Could not start GitHub sign-in" }, 502);
+    const headers = new Headers({ location: url, "cache-control": "no-store" });
+    for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
+    return new Response(null, { status: 302, headers });
   });
   app.on(["GET", "POST"], "/api/auth/*", (c) => c.get("auth").handler(c.req.raw));
 

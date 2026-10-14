@@ -46,11 +46,14 @@ describe.skipIf(!url)("GitHub sign-in, linking and native handoff", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   /** Runs the GitHub round trip: start (as `cookie`, if any), then the provider's redirect back. */
-  async function github(callbackURL: string, cookie = "", link = false) {
+  async function github(callbackURL: string, cookie = "", link = false, native = false) {
     stub();
-    const start = await raw(link ? "/api/auth/link-social" : "/api/auth/sign-in/social", json(cookie, { provider: "github", callbackURL, disableRedirect: true }));
-    expect(start.status).toBe(200);
-    const { url: authUrl } = (await start.json()) as { url: string };
+    const start = native
+      ? await raw("/api/auth/native/github", { redirect: "manual" })
+      : await raw(link ? "/api/auth/link-social" : "/api/auth/sign-in/social", json(cookie, { provider: "github", callbackURL, disableRedirect: true }));
+    expect(start.status).toBe(native ? 302 : 200);
+    const authUrl = native ? start.headers.get("location")! : ((await start.json()) as { url: string }).url;
+    expect(authUrl.startsWith("https://github.com/login/oauth/authorize")).toBe(true);
     const state = new URL(authUrl).searchParams.get("state")!;
     const jar1 = jar(start, cookie);
     const back = await raw(`/api/auth/callback/github?code=abc&state=${state}`, { headers: { cookie: jar1 }, redirect: "manual" });
@@ -60,7 +63,7 @@ describe.skipIf(!url)("GitHub sign-in, linking and native handoff", () => {
   it("signs in with GitHub and hands a single-use token to the native callback", async () => {
     await raw("/internal/migrate", { method: "POST", headers: { "x-cron-secret": "cron" } });
     ghUser = { id: Date.now(), login: "octo", email: `octo-${Date.now()}@example.com`, name: "Octo" };
-    const r = await github("openuptime://auth");
+    const r = await github("openuptime://auth", "", false, true);
     expect(r.location.startsWith("openuptime://auth")).toBe(true);
     const token = new URL(r.location).searchParams.get("token");
     expect(token).toBeTruthy();
@@ -125,7 +128,7 @@ describe.skipIf(!url)("GitHub sign-in, linking and native handoff", () => {
 
   it("does not let a GitHub-only account unlink its only provider", async () => {
     ghUser = { id: Date.now() + 2, login: "solo", email: `solo-${Date.now()}@example.com`, name: "Solo" };
-    const r = await github("openuptime://auth");
+    const r = await github("openuptime://auth", "", false, true);
     const token = new URL(r.location).searchParams.get("token");
     const ok = await raw("/api/auth/one-time-token/verify", { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body: JSON.stringify({ token }) });
     const cookie = jar(ok);
