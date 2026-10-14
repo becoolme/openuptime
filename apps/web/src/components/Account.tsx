@@ -10,7 +10,7 @@ import { toast } from "../lib/toast";
 type Me = { name?: string; email?: string; locale?: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null };
 
 /** Email verification, two-step sign-in, data export and account deletion. */
-function Security({ me, reload }: { me: Me; reload: () => void }) {
+function Security({ me, reload, hasPassword }: { me: Me; reload: () => void; hasPassword: boolean }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [pw, setPw] = useState("");
@@ -18,6 +18,7 @@ function Security({ me, reload }: { me: Me; reload: () => void }) {
   const [code, setCode] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [stale, setStale] = useState(false);
   const [sending, setSending] = useState(false);
   const fail = (m?: string) => { const text = m ?? t("Something went wrong"); setErr(text); toast(text, "err"); setBusy(false); };
   const ok = (m: string) => { setMsg(m); toast(m); };
@@ -53,8 +54,17 @@ function Security({ me, reload }: { me: Me; reload: () => void }) {
   async function remove(e: React.SyntheticEvent) {
     e.preventDefault(); reset(); setBusy(true);
     const r = await authClient.deleteUser(pw ? { password: pw } : {});
-    if (r.error) return fail(r.error.message);
+    if (r.error) {
+      // without a password the server asks for a recent sign-in instead
+      if (!pw && r.error.code === "SESSION_EXPIRED") { setStale(true); setBusy(false); return; }
+      return fail(r.error.message);
+    }
     go("/");
+  }
+  async function reauth() {
+    setBusy(true);
+    const r = await authClient.signIn.social({ provider: "github", callbackURL: "/app/account?reauth=1" });
+    if (r.error) fail(r.error.message);
   }
   return (
     <>
@@ -103,12 +113,19 @@ function Security({ me, reload }: { me: Me; reload: () => void }) {
       <div className="card sect">
         <h3 style={{ color: "var(--down)" }}>{t("Delete account")}</h3>
         <p className="muted" style={{ marginBottom: 12 }}>{t("Permanently deletes your account, and any workspace where you are the only member, with its monitors, incidents and status pages. This cannot be undone.")}</p>
-        {!confirmDel ? <div><button className="btn" onClick={() => { reset(); setConfirmDel(true); }}>{t("Delete my account…")}</button></div> : (
+        {!confirmDel ? <div><button className="btn" onClick={() => { reset(); setStale(false); setConfirmDel(true); }}>{t("Delete my account…")}</button></div> : (
           <form onSubmit={remove} className="auth-fields">
-            <label className="fld">{t("Password")}<input className="in" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" /></label>
+            {hasPassword
+              ? <label className="fld">{t("Password")}<input className="in" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" /></label>
+              : <p className="muted">{stale
+                ? t("For your security, sign in with GitHub again, then come back and delete the account.")
+                : t("You have no password, so deleting needs a recent sign-in. If it asks, sign in with GitHub again.")}</p>}
+            {err && <p className="err">{err}</p>}
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn primary" style={{ background: "var(--down)" }} disabled={busy}>{t("Delete permanently")}</button>
-              <button type="button" className="btn" onClick={() => { setConfirmDel(false); setPw(""); }}>{t("Cancel")}</button>
+              {stale
+                ? <button type="button" className="btn primary" disabled={busy} onClick={reauth}>{t("Sign in with GitHub again")}</button>
+                : <button className="btn primary" style={{ background: "var(--down)" }} disabled={busy}>{t("Delete permanently")}</button>}
+              <button type="button" className="btn" onClick={() => { setConfirmDel(false); setStale(false); setPw(""); }}>{t("Cancel")}</button>
             </div>
           </form>
         )}
@@ -122,16 +139,13 @@ type Linked = { id: string; providerId: string };
 type GithubProfile = { login?: string; name?: string; email?: string | null; image?: string };
 
 /** GitHub (when the server has it configured) as a second way to sign in, never the only way removed. */
-function ConnectedAccounts() {
+function ConnectedAccounts({ accounts, load }: { accounts: Linked[] | null; load: () => void }) {
   const [github, setGithub] = useState(false);
-  const [accounts, setAccounts] = useState<Linked[] | null>(null);
   const [profile, setProfile] = useState<GithubProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const load = () => authClient.listAccounts().then((r) => setAccounts((r.data as Linked[] | null) ?? [])).catch(() => setAccounts([]));
   useEffect(() => {
     fetch("/api/auth-providers").then((r) => r.json()).then((d: { github?: boolean }) => setGithub(!!d.github)).catch(() => {});
-    load();
     const q = new URLSearchParams(location.search);
     if (q.has("link_error")) setErr(t("GitHub could not be connected. It may already be linked to another account."));
     if (q.has("linked")) toast(t("GitHub connected."));
@@ -184,6 +198,11 @@ function ConnectedAccounts() {
           ? <button className="btn" disabled={busy || onlyWay} onClick={disconnect}>{t("Disconnect")}</button>
           : <button className="btn" disabled={busy} onClick={connect}>{t("Connect")}</button>}
       </div>
+      {accounts.length > 0 && !accounts.some((a) => a.providerId === "credential") && (
+        <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>
+          {t("You have not set a password. Use the forgot-password email to set one.")} <a href="/forgot-password">{t("Set a password")}</a>
+        </p>
+      )}
       {linked && onlyWay && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("GitHub is your only way to sign in, so it cannot be disconnected.")}</p>}
       {err && <p className="err" style={{ marginTop: 10 }}>{err}</p>}
     </div>
@@ -195,7 +214,9 @@ export default function Account() {
   const [me, setMe] = useState<Me | null>(null);
   const [saved, setSaved] = useState(false);
   const load = () => api.me().then((m) => setMe(m.user)).catch(() => {});
-  useEffect(() => { load(); }, []);
+  const [accounts, setAccounts] = useState<Linked[] | null>(null);
+  const loadAccounts = () => authClient.listAccounts().then((r) => setAccounts((r.data as Linked[] | null) ?? [])).catch(() => setAccounts([]));
+  useEffect(() => { load(); loadAccounts(); }, []);
   const current: Locale = me?.locale === "zh-CN" ? "zh-CN" : me?.locale === "en" ? "en" : document.documentElement.lang === "zh-CN" ? "zh-CN" : "en";
   async function pick(l: Locale) {
     setSaved(false);
@@ -228,8 +249,8 @@ export default function Account() {
             {saved && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Saved")}</p>}
           </div>
         )}
-        {me && <ConnectedAccounts />}
-        {me && <Security me={me} reload={load} />}
+        {me && <ConnectedAccounts accounts={accounts} load={loadAccounts} />}
+        {me && <Security me={me} reload={load} hasPassword={!accounts || accounts.length === 0 || accounts.some((a) => a.providerId === "credential")} />}
       </div>
     </>
   );

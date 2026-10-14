@@ -178,6 +178,7 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <pre><code is:raw>curl https://status.example.com/api/config
 # "auth": { ..., "github": true, ... }</code></pre>
     <p>Both variables must be set; with only one, <code>github</code> stays <code>false</code>. Signed-in users can then connect or disconnect GitHub under <strong>Account → Connected accounts</strong>, even when the GitHub email differs from the account email. A GitHub login is only matched to an existing account by email when GitHub reports that address as verified, and an account always keeps at least one way to sign in. <code>DISABLE_SIGNUP</code> also applies to first-time GitHub sign-ins.</p>
+    <p>A first GitHub sign-in creates the account and its personal workspace; it has no password. To add one, use <em>Forgot password</em> with the GitHub email (this needs outgoing email to be configured). Deleting such an account needs a recent sign-in instead of a password.</p>
     <p>The mobile app uses the same provider: it reads <code>auth.github</code> from <code>/api/config</code> and opens the same OAuth App through <code>/api/auth/native/github</code>, so there is nothing extra to register (see <a href="/docs/api#native-signin">native sign-in</a>).</p>
     <h3>Troubleshooting</h3>
     <ul>
@@ -370,6 +371,7 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <pre><code is:raw>curl https://status.example.com/api/config
 # "auth": { ..., "github": true, ... }</code></pre>
     <p>两个变量必须同时设置，只设一个时 <code>github</code> 仍为 <code>false</code>。之后已登录的用户可以在 <strong>账号 → 已关联的账号</strong> 中关联或取消关联 GitHub，GitHub 邮箱可以与账号邮箱不同。只有 GitHub 报告该邮箱已验证时，GitHub 登录才会按邮箱匹配已有账号；账号始终至少保留一种登录方式。<code>DISABLE_SIGNUP</code> 同样适用于首次 GitHub 登录。</p>
+    <p>首次 GitHub 登录会创建账号和个人工作区，此时没有密码。需要密码时，用 GitHub 邮箱走“忘记密码”即可设置（需要已配置发信）。这类账号删除时不需要密码，只要求最近登录过。</p>
     <p>移动应用使用同一个提供方：它从 <code>/api/config</code> 读取 <code>auth.github</code>，并通过 <code>/api/auth/native/github</code> 走同一个 OAuth App，无需额外注册（见<a href="/docs/api#native-signin-zh">原生登录</a>）。</p>
     <h3>排错</h3>
     <ul>
