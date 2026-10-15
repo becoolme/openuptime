@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "ios-app-page",
+    date: "2026-10-14",
+    edition: "community",
+    title: { en: "iOS app page", zh: "iOS 应用页面" },
+    summary: {
+      en: "The website now has a page for the OpenUptime iOS app, linked from the footer.",
+      zh: "网站新增 iOS 应用页面，并在页脚提供入口。",
+    },
+    points: [
+      { en: "The page says what the app does and shows where to install it, or that it is coming soon.", zh: "页面介绍应用的功能，并给出安装入口；尚未发布时显示“即将上线”。" },
+    ],
+    link: { href: "/ios", label: { en: "See the iOS app page", zh: "查看 iOS 应用页面" } },
+  },
+  {
     id: "push-notifications-ios",
     date: "2026-10-14",
     edition: "community",

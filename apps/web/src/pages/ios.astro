@@ -1,0 +1,47 @@
+---
+import Doc from "../layouts/Doc.astro";
+import { iosInstall } from "../lib/ios";
+const install = iosInstall();
+---
+<Doc description="The OpenUptime iOS app: see your monitors and incidents, get push alerts and acknowledge an incident from your phone." title="iOS app" updated="2026-10-14">
+  <div lang="en">
+    <h1>OpenUptime for iOS</h1>
+    <p class="lede">Your monitors, incidents and status in your pocket. Get a push alert the moment a monitor goes down and acknowledge the incident without opening a laptop.</p>
+    {install.kind === "soon" && <p><strong>Coming soon.</strong> The app is not public yet. Follow the <a href="/changelog">changelog</a> to hear when it is available.</p>}
+    {install.kind === "testflight" && <p><a class="btn" href={install.url}><strong>Join the beta on TestFlight</strong></a></p>}
+    {install.kind === "appstore" && <p><a class="btn" href={install.url}><strong>Download on the App Store</strong></a></p>}
+    <h2>What you can do</h2>
+    <ul>
+      <li>See every monitor and its current status, and open incidents at a glance.</li>
+      <li>Receive push alerts for down and recovery events, in your own language.</li>
+      <li>Acknowledge an incident from the notification or the incident list.</li>
+      <li>Sign in with your account, with two-factor authentication and a trusted device that stays trusted for 30 days.</li>
+    </ul>
+    <h2>Requirements</h2>
+    <ul>
+      <li>An OpenUptime account on <a href="/signup">openuptime.app</a>, or your own self-hosted server.</li>
+      <li>An iPhone running a current version of iOS.</li>
+    </ul>
+    <p>Questions or problems? Open an issue on <a href="https://github.com/becoolme/openuptime">GitHub</a>. See also our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms</a>.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>OpenUptime iOS 应用</h1>
+    <p class="lede">监控、故障和状态尽在手机。监控一旦宕机立刻收到推送，不必打开电脑就能确认故障。</p>
+    {install.kind === "soon" && <p><strong>即将上线。</strong>应用暂未公开发布，可关注<a href="/changelog">更新日志</a>获取上线消息。</p>}
+    {install.kind === "testflight" && <p><a class="btn" href={install.url}><strong>通过 TestFlight 加入测试</strong></a></p>}
+    {install.kind === "appstore" && <p><a class="btn" href={install.url}><strong>在 App Store 下载</strong></a></p>}
+    <h2>你可以做什么</h2>
+    <ul>
+      <li>一眼查看所有监控的当前状态和未解决的故障。</li>
+      <li>接收宕机与恢复的推送告警，并使用你自己的语言。</li>
+      <li>在通知或故障列表中直接确认故障。</li>
+      <li>使用账号登录，支持两步验证，受信任设备 30 天内无需再次输入验证码。</li>
+    </ul>
+    <h2>使用要求</h2>
+    <ul>
+      <li>在 <a href="/signup">openuptime.app</a> 注册的账号，或你自己部署的服务器。</li>
+      <li>运行较新 iOS 版本的 iPhone。</li>
+    </ul>
+    <p>有问题？欢迎在 <a href="https://github.com/becoolme/openuptime">GitHub</a> 提 issue。另见<a href="/privacy">隐私政策</a>和<a href="/terms">服务条款</a>。</p>
+  </div>
+</Doc>
