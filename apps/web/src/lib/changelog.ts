@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "verify-bar-no-resend",
+    date: "2026-10-15",
+    edition: "community",
+    title: { en: "No duplicate verification emails", zh: "不再重复发送验证邮件" },
+    summary: {
+      en: "The email verification banner no longer offers a resend button right after sign-up.",
+      zh: "注册后的邮箱验证提示条不再显示“发送验证邮件”按钮。",
+    },
+    points: [
+      { en: "The verification email is sent automatically at sign-up, so the banner only tells you where it went. You can still request a new one from the Account page.", zh: "验证邮件会在注册时自动发送，提示条只告知发送到哪个邮箱，避免重复点击多发一封；仍可在“账号”页重新发送。" },
+    ],
+  },
+  {
     id: "ios-app-page",
     date: "2026-10-14",
     edition: "community",
