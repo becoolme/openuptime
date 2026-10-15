@@ -25,7 +25,7 @@ const tools: Tool[] = [
   { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
 ];
 ---
-<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-12" toc>
+<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-15" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>
@@ -88,6 +88,23 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       {tools.map((t) => <li><code>{t.name}</code>: {t.en}</li>)}
     </ul>
     <p>Creating projects and workspaces is limited as described above; <code>create_workspace</code> is capped at 10 owned workspaces per account.</p>
+    <h2 id="examples">Example prompts</h2>
+    <ul>
+      <li>“Add an HTTP monitor for https://api.example.com/health that checks every minute, and put it on a new status page.”</li>
+      <li>“Which monitors are down right now, and what was the last check result for each?”</li>
+      <li>“Open an incident for the checkout monitor, then post an update that we are investigating.”</li>
+      <li>“Pause the staging monitors during tonight's maintenance, then resume them.”</li>
+    </ul>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <ul>
+      <li><strong>401 or “authorization required”</strong>: the client has no valid token yet. Authenticate again from the client (for example <code>/mcp</code> in Claude Code), or check that an API key is sent as <code>Authorization: Bearer ou_...</code>.</li>
+      <li><strong>The agent sees no workspaces or projects</strong>: the grant did not include them. Revoke the agent under <strong>API keys → Authorized agents</strong> and authorize again with the right scope.</li>
+      <li><strong>Write tools fail but read tools work</strong>: the grant only has <code>mcp:read</code>, or the role in that workspace is read-only.</li>
+      <li><strong>Self-hosted and the client rejects the token</strong>: tokens are issued for <code>&lt;BETTER_AUTH_URL&gt;/api/mcp</code>. The URL you give the client must match <code>BETTER_AUTH_URL</code> exactly, including the scheme.</li>
+      <li><strong>Client only supports stdio</strong>: use <code>npx mcp-remote</code> as shown above.</li>
+    </ul>
+    <h2 id="registry">MCP Registry</h2>
+    <p>The hosted server is listed in the official MCP Registry as <code>app.openuptime/mcp</code>. Self-hosted servers use the same tools; point the client at your own <code>/api/mcp</code> URL.</p>
   </div>
   <div lang="zh-CN">
     <h1>MCP 服务</h1>
@@ -151,5 +168,22 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       {tools.map((t) => <li><code>{t.name}</code>：{t.zh}</li>)}
     </ul>
     <p>创建项目和工作区受上述授权范围限制；<code>create_workspace</code> 每个账号最多拥有 10 个工作区。</p>
+    <h2 id="examples-zh">示例提示词</h2>
+    <ul>
+      <li>“给 https://api.example.com/health 加一个 HTTP 监控，每分钟检测一次，并放到一个新的状态页上。”</li>
+      <li>“现在有哪些监控是挂的？每个最近一次检测结果是什么？”</li>
+      <li>“为 checkout 监控创建一个事件，然后发布一条‘正在排查’的更新。”</li>
+      <li>“今晚维护期间暂停 staging 的监控，结束后再恢复。”</li>
+    </ul>
+    <h2 id="troubleshooting-zh">排错</h2>
+    <ul>
+      <li><strong>401 或“需要授权”</strong>：客户端还没有有效令牌。在客户端里重新授权（例如 Claude Code 里的 <code>/mcp</code>），或检查 API 密钥是否以 <code>Authorization: Bearer ou_...</code> 发送。</li>
+      <li><strong>Agent 看不到工作区或项目</strong>：授权范围没有包含它们。到 <strong>API 密钥 → 已授权的 Agent</strong> 撤销后，用正确的范围重新授权。</li>
+      <li><strong>读工具可用、写工具失败</strong>：授权只包含 <code>mcp:read</code>，或你在该工作区的角色是只读。</li>
+      <li><strong>自托管时客户端拒绝令牌</strong>：令牌签发给 <code>&lt;BETTER_AUTH_URL&gt;/api/mcp</code>，填给客户端的地址必须与 <code>BETTER_AUTH_URL</code> 完全一致，包括协议。</li>
+      <li><strong>客户端只支持 stdio</strong>：按上文用 <code>npx mcp-remote</code> 中转。</li>
+    </ul>
+    <h2 id="registry-zh">MCP Registry</h2>
+    <p>托管服务已收录在官方 MCP Registry，名称为 <code>app.openuptime/mcp</code>。自托管服务的工具相同，把客户端指向你自己的 <code>/api/mcp</code> 地址即可。</p>
   </div>
 </Doc>

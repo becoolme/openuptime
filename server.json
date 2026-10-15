@@ -1,0 +1,9 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "app.openuptime/mcp",
+  "description": "Manage uptime monitors, incidents and status pages from any MCP client.",
+  "repository": { "url": "https://github.com/becoolme/openuptime", "source": "github" },
+  "version": "1.0.0",
+  "websiteUrl": "https://openuptime.app/docs/mcp",
+  "remotes": [{ "type": "streamable-http", "url": "https://openuptime.app/api/mcp" }]
+}

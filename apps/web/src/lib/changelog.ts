@@ -27,6 +27,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "mcp-registry",
+    date: "2026-10-15",
+    edition: "community",
+    title: { en: "Listed in the MCP Registry", zh: "收录到 MCP Registry" },
+    summary: {
+      en: "The OpenUptime MCP server can now be found in the official MCP Registry as app.openuptime/mcp.",
+      zh: "OpenUptime 的 MCP 服务现在可以在官方 MCP Registry 中以 app.openuptime/mcp 找到。",
+    },
+    points: [
+      { en: "The MCP docs gain example prompts and a troubleshooting section for authorization and scope problems.", zh: "MCP 文档新增示例提示词，以及授权和范围问题的排错说明。" },
+      { en: "The repository ships a server.json describing the server, and the README explains how to connect.", zh: "仓库新增描述该服务的 server.json，README 也补充了接入方式。" },
+    ],
+    link: { href: "/docs/mcp", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
+  },
+  {
     id: "verify-bar-no-resend",
     date: "2026-10-15",
     edition: "community",
