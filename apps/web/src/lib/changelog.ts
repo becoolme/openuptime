@@ -37,6 +37,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       { en: "The MCP docs gain example prompts and a troubleshooting section for authorization and scope problems.", zh: "MCP 文档新增示例提示词，以及授权和范围问题的排错说明。" },
+      { en: "An agent skill for the common workflows installs with npx skills add becoolme/openuptime.", zh: "常见流程的 Agent 技能可用 npx skills add becoolme/openuptime 安装。" },
       { en: "The repository ships a server.json describing the server, and the README explains how to connect.", zh: "仓库新增描述该服务的 server.json，README 也补充了接入方式。" },
     ],
     link: { href: "/docs/mcp", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },

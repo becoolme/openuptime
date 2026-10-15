@@ -103,6 +103,9 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><strong>Self-hosted and the client rejects the token</strong>: tokens are issued for <code>&lt;BETTER_AUTH_URL&gt;/api/mcp</code>. The URL you give the client must match <code>BETTER_AUTH_URL</code> exactly, including the scheme.</li>
       <li><strong>Client only supports stdio</strong>: use <code>npx mcp-remote</code> as shown above.</li>
     </ul>
+    <h2 id="skill">Agent skill</h2>
+    <p>Install the OpenUptime skill so your coding agent knows the usual workflows (adding monitors, handling incidents, pausing for maintenance, building status pages):</p>
+    <pre><code>npx skills add becoolme/openuptime</code></pre>
     <h2 id="registry">MCP Registry</h2>
     <p>The hosted server is listed in the official MCP Registry as <code>app.openuptime/mcp</code>. Self-hosted servers use the same tools; point the client at your own <code>/api/mcp</code> URL.</p>
   </div>
@@ -183,6 +186,9 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><strong>自托管时客户端拒绝令牌</strong>：令牌签发给 <code>&lt;BETTER_AUTH_URL&gt;/api/mcp</code>，填给客户端的地址必须与 <code>BETTER_AUTH_URL</code> 完全一致，包括协议。</li>
       <li><strong>客户端只支持 stdio</strong>：按上文用 <code>npx mcp-remote</code> 中转。</li>
     </ul>
+    <h2 id="skill-zh">Agent 技能</h2>
+    <p>安装 OpenUptime 技能，让编码 Agent 熟悉常见流程（添加监控、处理事件、维护期暂停、创建状态页）：</p>
+    <pre><code>npx skills add becoolme/openuptime</code></pre>
     <h2 id="registry-zh">MCP Registry</h2>
     <p>托管服务已收录在官方 MCP Registry，名称为 <code>app.openuptime/mcp</code>。自托管服务的工具相同，把客户端指向你自己的 <code>/api/mcp</code> 地址即可。</p>
   </div>
