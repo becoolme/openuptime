@@ -8,18 +8,25 @@ export const prerender = false;
 const { locale, rest } = Astro.params;
 const known = ["zh-Hans", "ja", "es"];
 const tail = rest ? `/${rest}` : "/";
-if (!locale || !known.includes(locale)) return new Response("Not found", { status: 404 });
+if (!locale) return new Response("Not found", { status: 404 });
+
+const assets = import.meta.env.PROD ? (env as { ASSETS?: { fetch: typeof fetch } }).ASSETS : undefined;
+// Docker: the public origin is not reachable from inside the container, the same process answers on loopback
+const loopback = typeof process !== "undefined" ? process.env.API_ORIGIN : undefined;
+const get = (path: string) => (assets ? assets.fetch(new URL(path, Astro.url)) : fetch(new URL(path, loopback && !import.meta.env.DEV ? loopback : Astro.url)));
+
+if (!known.includes(locale)) {
+  // not a language prefix: any unknown address ends up here, so answer with the 404 page
+  const page = await get("/404").catch(() => undefined);
+  if (page?.ok) return new Response(page.body, { status: 404, headers: { "content-type": "text/html; charset=utf-8", vary: "Cookie" } });
+  return new Response("Not found", { status: 404 });
+}
 
 // ja / es exist for the landing page only
 if (locale !== "zh-Hans" && tail !== "/") return Astro.redirect(tail, 302);
 if (Astro.url.pathname.length > 1 && Astro.url.pathname.endsWith("/")) {
   return Astro.redirect(Astro.url.pathname.replace(/\/+$/, "") + Astro.url.search, 301);
 }
-
-const assets = import.meta.env.PROD ? (env as { ASSETS?: { fetch: typeof fetch } }).ASSETS : undefined;
-// Docker: the public origin is not reachable from inside the container, the same process answers on loopback
-const loopback = typeof process !== "undefined" ? process.env.API_ORIGIN : undefined;
-const get = (path: string) => (assets ? assets.fetch(new URL(path, Astro.url)) : fetch(new URL(path, loopback && !import.meta.env.DEV ? loopback : Astro.url)));
 
 // the landing page of each language is its own pre-rendered file
 const file = tail === "/" ? `/${locale}.html` : tail;
