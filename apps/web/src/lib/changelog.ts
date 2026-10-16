@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "not-found-page",
+    date: "2026-10-16",
+    edition: "community",
+    title: { en: "A friendlier 404 page", zh: "更友好的 404 页面" },
+    summary: {
+      en: "A link that leads nowhere now shows a short page styled like a status board, with a way back.",
+      zh: "打不开的链接现在会显示一个状态板风格的简短页面，并给出返回的路径。",
+    },
+    points: [
+      { en: "The page shows the address that was not found and links back to the home page and to the services list.", zh: "页面会显示未找到的地址，并提供回到首页和服务列表的链接。" },
+    ],
+  },
+  {
     id: "faster-status-pages",
     date: "2026-10-16",
     edition: "community",

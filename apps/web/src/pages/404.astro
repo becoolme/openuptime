@@ -1,0 +1,57 @@
+---
+import Base from "../layouts/Base.astro";
+// Unknown URLs. The page is static, so the missing path is filled in by a small script.
+const days = Array.from({ length: 90 }, (_, i) => i === 89);
+---
+<Base title="Page not found · OpenUptime" router={false} noindex>
+  <header class="nf-top">
+    <a href="/" class="doc-brand">
+      <span class="doc-mk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>
+      <b>OpenUptime</b>
+    </a>
+  </header>
+  <main class="nf">
+    <span class="nf-pill"><i></i>Outage · 404</span>
+    <h1>
+      <span lang="en">This page is down.<br /><em>It never was up.</em></span>
+      <span lang="zh-CN">这个页面宕机了。<br /><em>其实它从没上线过。</em></span>
+    </h1>
+    <div class="nf-bar" role="img" aria-label="90 days with no data, then one day of outage today">
+      {days.map((down) => <i class={down ? "down" : ""}></i>)}
+    </div>
+    <div class="nf-axis"><span lang="en">90 days ago</span><span lang="zh-CN">90 天前</span><span>0.00% uptime</span></div>
+    <p class="nf-msg">
+      <span lang="en">Nothing lives at <code id="nf-path">this address</code>. Everything else is operational.</span>
+      <span lang="zh-CN">这个地址（<code id="nf-path-zh">此链接</code>）下没有内容，其他一切运行正常。</span>
+    </p>
+    <div class="nf-cta">
+      <a class="nf-btn" href="/"><span lang="en">Back to a working page</span><span lang="zh-CN">回到能打开的页面</span></a>
+      <a class="nf-btn ghost" href="/services"><span lang="en">Check if a service is down</span><span lang="zh-CN">查看服务是否宕机</span></a>
+    </div>
+  </main>
+  <script is:inline>
+    var p = location.pathname.replace(/^\/zh-Hans(?=\/|$)/, "") || "/";
+    if (p.length > 60) p = p.slice(0, 57) + "...";
+    ["nf-path", "nf-path-zh"].forEach(function (id) { var e = document.getElementById(id); if (e) e.textContent = p; });
+  </script>
+</Base>
+
+<style>
+  .nf-top { padding: 22px 40px; }
+  .nf { max-width: 720px; margin: 0 auto; padding: 8vh 24px 96px; display: flex; flex-direction: column; gap: 28px; }
+  .nf-pill { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; background: var(--down-weak); color: var(--down); font-size: 14px; font-weight: 600; }
+  .nf-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--down); }
+  h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(48px, 11vw, 96px); line-height: 1; letter-spacing: -2px; }
+  h1 em { font-style: normal; color: var(--faint); }
+  :global(html[lang="zh-CN"]) h1 { letter-spacing: 0; line-height: 1.15; }
+  .nf-bar { display: flex; gap: 3px; }
+  .nf-bar i { flex: 1 1 0; min-width: 2px; height: 40px; border-radius: 3px; background: var(--line); }
+  .nf-bar i.down { background: var(--down); }
+  .nf-axis { display: flex; justify-content: space-between; margin-top: -18px; font-family: ui-monospace, "Geist Mono", monospace; font-size: 13px; color: var(--muted); }
+  .nf-msg { margin: 0; font-size: 19px; line-height: 1.55; color: var(--muted); }
+  .nf-msg code { font-family: ui-monospace, "Geist Mono", monospace; font-size: 16px; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; word-break: break-all; }
+  .nf-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .nf-btn { display: inline-flex; align-items: center; min-height: 48px; padding: 0 24px; border-radius: 12px; background: var(--ink); color: var(--bg); text-decoration: none; font-size: 16px; font-weight: 600; }
+  .nf-btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); font-weight: 500; }
+  @media (max-width: 600px) { .nf-top { padding: 18px 20px; } .nf-bar i { height: 32px; } }
+</style>
