@@ -55,3 +55,8 @@ const days = Array.from({ length: 90 }, (_, i) => i === 89);
   .nf-btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); font-weight: 500; }
   @media (max-width: 600px) { .nf-top { padding: 18px 20px; } .nf-bar i { height: 32px; } }
 </style>
+<style is:global>
+  html:not([lang="zh-CN"]) .nf [lang="zh-CN"], html[lang="zh-CN"] .nf [lang="en"] { display: none !important; }
+  .nf-top .doc-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-size: 17px; font-weight: 600; text-decoration: none; }
+  .nf-top .doc-mk { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, #0f9d58, #0a5c34); display: grid; place-items: center; flex: none; }
+</style>
