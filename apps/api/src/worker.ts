@@ -7,6 +7,7 @@ import { configureNetGuard } from "./netguard";
 import { configureProbes } from "./probes";
 import { community, type Edition } from "./edition";
 import { connectionString, type Bindings } from "./env";
+import { cloudflareEdgeCache, useEdgeCache } from "./sharedcache";
 import { processCheckMessage, runDueChecks, type CheckMessage } from "./scheduler";
 
 // the one place that picks the storage backend
@@ -14,6 +15,8 @@ const open: OpenDatabase = openDatabase;
 
 /** A Worker for an edition. This file runs the open-source one; the hosted entry point calls this with its own. */
 export function createWorker(edition: Edition = community) {
+  // the data centre's cache is shared by every isolate in it; the Docker server never registers one and uses memory only
+  useEdgeCache(cloudflareEdgeCache());
   const app = createApp(open, { edition });
   return {
     fetch: app.fetch,

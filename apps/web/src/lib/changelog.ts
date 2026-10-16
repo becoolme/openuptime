@@ -37,12 +37,12 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       {
-        en: "A status page and its incident history are now read at the same time, and a page is served from a short-lived copy kept in memory instead of being worked out again on every visit.",
-        zh: "状态页与事件历史现在同时读取，页面内容会在内存中短暂保留一份副本，不必每次访问都重新计算。",
+        en: "A status page and its incident history are now read at the same time, and a page is served from a short-lived copy instead of being worked out again on every visit. The copy lives in memory, and on Cloudflare Workers it is also shared through the data centre's cache.",
+        zh: "状态页与事件历史现在同时读取，页面内容会短暂保留一份副本，不必每次访问都重新计算。副本保存在内存中；在 Cloudflare Workers 上还会通过机房缓存共享。",
       },
       {
-        en: "Changes you make to a status page show up on the public page within 30 seconds, and at once on the instance that saved them.",
-        zh: "对状态页的修改会在 30 秒内显示到公开页面上，保存修改的那个实例上则立即生效。",
+        en: "Changes you make to a status page show up on the public page within 30 seconds.",
+        zh: "对状态页的修改会在 30 秒内显示到公开页面上。",
       },
     ],
   },
