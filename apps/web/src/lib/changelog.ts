@@ -27,6 +27,26 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "faster-status-pages",
+    date: "2026-10-16",
+    edition: "community",
+    title: { en: "Faster public status pages", zh: "更快的公开状态页" },
+    summary: {
+      en: "Public status pages load faster, including when you self-host with Docker.",
+      zh: "公开状态页加载更快，自托管（Docker）部署同样适用。",
+    },
+    points: [
+      {
+        en: "A status page and its incident history are now read at the same time, and a page is served from a short-lived copy kept in memory instead of being worked out again on every visit.",
+        zh: "状态页与事件历史现在同时读取，页面内容会在内存中短暂保留一份副本，不必每次访问都重新计算。",
+      },
+      {
+        en: "Changes you make to a status page show up on the public page within 30 seconds, and at once on the instance that saved them.",
+        zh: "对状态页的修改会在 30 秒内显示到公开页面上，保存修改的那个实例上则立即生效。",
+      },
+    ],
+  },
+  {
     id: "mcp-registry",
     date: "2026-10-15",
     edition: "community",

@@ -8,6 +8,7 @@ import type { AppEnv } from "../env";
 import type { Plan } from "../entitlements";
 import { requireManager, uuidParams } from "../middleware";
 import { clientIp } from "../ratelimit";
+import { ttlCache } from "../ttlcache";
 
 // optional link to the owner's own website; "" clears it
 const externalUrl = z
@@ -49,6 +50,14 @@ async function brandingProblem(c: Context<AppEnv>, hide: boolean | undefined) {
 
 /** Management API for status pages (authenticated). */
 export const statusPages = new Hono<AppEnv>()
+  // an edit made through the API shows on the public page at once (on this instance; others catch up within the TTL)
+  .use("*", async (c, next) => {
+    await next();
+    if (c.req.method !== "GET" && c.res.ok) {
+      boardCache.clear();
+      historyCache.clear();
+    }
+  })
   .get("/", async (c) => c.json(await c.get("repo").listStatusPages(c.get("orgId"), c.get("projectId"))))
   .post(
     "/",
@@ -123,6 +132,12 @@ const toPublic = (i: IncidentWithUpdates) => ({
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
 const MAX_SUBSCRIBERS = 5000;
 const HISTORY_PAGE = 15;
+// Public pages are read far more often than they change, and each read aggregates 90 days of rollups: serve a short-lived copy.
+// A page edit or an incident update shows up within this long. Only found pages are kept.
+// Tests read a page right after changing it, so they run without the cache.
+const PUBLIC_TTL_MS = typeof process !== "undefined" && process.env?.VITEST ? 0 : 30_000;
+const boardCache = ttlCache<unknown>(PUBLIC_TTL_MS);
+const historyCache = ttlCache<unknown>(PUBLIC_TTL_MS);
 
 type Overall = "operational" | "degraded" | "outage";
 const LABELS: Record<Overall, { en: string; zh: string }> = {
@@ -171,15 +186,20 @@ export const publicStatus = new Hono<AppEnv>()
   })
   // incident history, newest first, cursor = startedAt of the last item of the previous page
   .get("/:slug/incidents", async (c) => {
+    const before = c.req.query("before");
+    const key = `${c.req.param("slug")}|${before ?? ""}`;
+    const hit = historyCache.get(key);
+    if (hit) return c.json(hit);
     const repo = c.get("repo");
     const page = await repo.statusPageBySlug(c.req.param("slug"));
     if (!page) return c.json({ error: "Not found" }, 404);
-    const before = c.req.query("before");
     const cursor = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : undefined;
     const rows = await repo.pageIncidents(page, { limit: HISTORY_PAGE + 1, before: cursor });
     const more = rows.length > HISTORY_PAGE;
     const items = rows.slice(0, HISTORY_PAGE).map(toPublic);
-    return c.json({ items, next: more ? items[items.length - 1].startedAt : null });
+    const body = { items, next: more ? items[items.length - 1].startedAt : null };
+    historyCache.set(key, body);
+    return c.json(body);
   })
   .get("/:slug/rss", async (c) => {
     const repo = c.get("repo");
@@ -241,16 +261,21 @@ ${items
     return c.redirect(slug ? `${appUrl()}/status/${slug}?unsubscribed=1` : `${appUrl()}/`);
   })
   .get("/:slug", async (c) => {
+    const slug = c.req.param("slug");
+    const hit = boardCache.get(slug);
+    if (hit) return c.json(hit);
     const repo = c.get("repo");
-    const page = await repo.statusPageBySlug(c.req.param("slug"));
+    const page = await repo.statusPageBySlug(slug);
     if (!page) return c.json({ error: "Not found" }, 404);
     const board = await repo.statusBoard(page);
     const overall = overallOf(board.components.map((x) => x.status));
-    return c.json({
+    const body = {
       page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page) },
       overall,
       bucket: board.bucket,
       components: board.components,
       incidents: board.incidents.map(toPublic),
-    });
+    };
+    boardCache.set(slug, body);
+    return c.json(body);
   });

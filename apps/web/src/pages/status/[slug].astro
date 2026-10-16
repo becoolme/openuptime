@@ -13,12 +13,14 @@ type Status = {
   incidents: { id: string; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
 };
 const { slug } = Astro.params;
-const { status, data } = await apiFetch<Status>(`/api/public/status/${slug}`);
-if (status === 404 || !data) return new Response("Not found", { status: 404 });
-
 type History = { items: { id: string; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
 const before = Astro.url.searchParams.get("before");
-const hist = await apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`);
+// the two reads do not depend on each other
+const [{ status, data }, hist] = await Promise.all([
+  apiFetch<Status>(`/api/public/status/${slug}`),
+  apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`),
+]);
+if (status === 404 || !data) return new Response("Not found", { status: 404 });
 const history = hist.data ?? { items: [], next: null };
 const activeIds = new Set(data.incidents.map((i) => i.id));
 history.items = history.items.filter((i) => !activeIds.has(i.id));
