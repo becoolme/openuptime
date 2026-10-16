@@ -57,6 +57,10 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
         en: "Changes you make to a status page show up on the public page within 30 seconds.",
         zh: "对状态页的修改会在 30 秒内显示到公开页面上。",
       },
+      {
+        en: "A page that is not in the cache is built with fewer database round trips, so the first visit is quicker, and the days in each uptime bar now always come in date order.",
+        zh: "缓存未命中的页面减少了数据库往返次数，首次访问更快；每条可用率柱状图中的日期现在始终按时间排序。",
+      },
     ],
   },
   {

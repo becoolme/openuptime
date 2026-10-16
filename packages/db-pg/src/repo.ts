@@ -889,43 +889,47 @@ export function createRepo(db: Db): Repo {
       return page ?? null;
     },
     async statusBoard(page) {
-      const comps = await db
-        .select({ c: schema.statusPageComponent, m: schema.monitor })
+      // Everything below selects the page's monitors itself, so the reads run together instead of one after another.
+      const shown = db
+        .select({ id: schema.statusPageComponent.monitorId })
         .from(schema.statusPageComponent)
-        .innerJoin(schema.monitor, eq(schema.monitor.id, schema.statusPageComponent.monitorId))
-        .where(and(eq(schema.statusPageComponent.statusPageId, page.id), eq(schema.statusPageComponent.visible, true)))
-        .orderBy(asc(schema.statusPageComponent.position));
-      const ids = comps.map((x) => x.m.id);
+        .where(and(eq(schema.statusPageComponent.statusPageId, page.id), eq(schema.statusPageComponent.visible, true)));
+      const mine = inArray(schema.checkRollup.monitorId, shown);
 
       // 90 buckets: daily for the last 90 days, or hourly while the history is still short
       // (otherwise one bad day at launch paints the whole bar red even after recovery)
-      const first = ids.length
-        ? (await db
-            .select({ at: sql<string | null>`min(${schema.checkRollup.bucket})` })
-            .from(schema.checkRollup)
-            .where(inArray(schema.checkRollup.monitorId, ids)))[0]?.at
-        : null;
+      const series = (unit: "hour" | "day", since: Date) =>
+        db
+          .select({
+            monitorId: schema.checkRollup.monitorId,
+            day: sql<string>`to_char(date_trunc(${sql.raw(`'${unit}'`)}, ${schema.checkRollup.bucket}), ${sql.raw(unit === "hour" ? `'YYYY-MM-DD"T"HH24'` : `'YYYY-MM-DD'`)})`,
+            total: sql<number>`sum(${schema.checkRollup.total})::int`,
+            ok: sql<number>`sum(${schema.checkRollup.ok})::int`,
+          })
+          .from(schema.checkRollup)
+          .where(and(mine, gte(schema.checkRollup.bucket, since)))
+          .groupBy(schema.checkRollup.monitorId, sql`date_trunc(${sql.raw(`'${unit}'`)}, ${schema.checkRollup.bucket})`)
+          .orderBy(sql`date_trunc(${sql.raw(`'${unit}'`)}, ${schema.checkRollup.bucket})`);
+      const [comps, firstRows, hourlyDays, dailyDays, open] = await Promise.all([
+        db
+          .select({ c: schema.statusPageComponent, m: schema.monitor })
+          .from(schema.statusPageComponent)
+          .innerJoin(schema.monitor, eq(schema.monitor.id, schema.statusPageComponent.monitorId))
+          .where(and(eq(schema.statusPageComponent.statusPageId, page.id), eq(schema.statusPageComponent.visible, true)))
+          .orderBy(asc(schema.statusPageComponent.position)),
+        db.select({ at: sql<string | null>`min(${schema.checkRollup.bucket})` }).from(schema.checkRollup).where(mine),
+        series("hour", new Date(Date.now() - 90 * 36e5)),
+        series("day", new Date(Date.now() - 90 * 864e5)),
+        db
+          .select()
+          .from(schema.incident)
+          .where(and(eq(schema.incident.organizationId, page.organizationId), or(isNull(schema.incident.monitorId), inArray(schema.incident.monitorId, shown)), isNull(schema.incident.resolvedAt)))
+          .orderBy(desc(schema.incident.startedAt)),
+      ]);
+      const first = firstRows[0]?.at;
       const hourly = !first || Date.now() - new Date(first).getTime() < 4 * 864e5;
       const unit = hourly ? "hour" : "day";
-      const since = new Date(Date.now() - 90 * (hourly ? 36e5 : 864e5));
-      const days = ids.length
-        ? await db
-            .select({
-              monitorId: schema.checkRollup.monitorId,
-              day: sql<string>`to_char(date_trunc(${sql.raw(`'${unit}'`)}, ${schema.checkRollup.bucket}), ${sql.raw(hourly ? `'YYYY-MM-DD"T"HH24'` : `'YYYY-MM-DD'`)})`,
-              total: sql<number>`sum(${schema.checkRollup.total})::int`,
-              ok: sql<number>`sum(${schema.checkRollup.ok})::int`,
-            })
-            .from(schema.checkRollup)
-            .where(and(inArray(schema.checkRollup.monitorId, ids), gte(schema.checkRollup.bucket, since)))
-            .groupBy(schema.checkRollup.monitorId, sql`date_trunc(${sql.raw(`'${unit}'`)}, ${schema.checkRollup.bucket})`)
-        : [];
-
-      const open = await db
-        .select()
-        .from(schema.incident)
-        .where(and(pageScope(page.organizationId, ids), isNull(schema.incident.resolvedAt)))
-        .orderBy(desc(schema.incident.startedAt));
+      const days = hourly ? hourlyDays : dailyDays;
 
       return {
         bucket: unit,
