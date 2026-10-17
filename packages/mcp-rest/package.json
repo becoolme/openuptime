@@ -1,0 +1,17 @@
+{
+  "name": "@openuptime/mcp-rest",
+  "version": "0.1.0",
+  "description": "Expose a REST API as a remote MCP server (Streamable HTTP, stateless): tools are thin REST calls made with the caller's own credentials.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./hono": "./src/hono.ts",
+    "./oauth": "./src/oauth.ts"
+  },
+  "scripts": { "typecheck": "tsc -p .", "test": "vitest run" },
+  "peerDependencies": { "hono": "^4", "jose": "^6", "zod": "^4" },
+  "peerDependenciesMeta": { "hono": { "optional": true }, "jose": { "optional": true } },
+  "devDependencies": { "hono": "^4.13.13", "jose": "6.2.12", "typescript": "^5.9.0", "vitest": "^5.0.3", "zod": "^4.6.5" }
+}

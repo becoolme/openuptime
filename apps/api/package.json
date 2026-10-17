@@ -18,6 +18,7 @@
     "@hono/node-server": "^2.1.4",
     "@hono/zod-validator": "^0.9.1",
     "@openuptime/db-pg": "workspace:*",
+    "@openuptime/mcp-rest": "workspace:*",
     "@openuptime/repo": "workspace:*",
     "better-auth": "^1.7.7",
     "hono": "^4.13.13",
