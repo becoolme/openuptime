@@ -73,6 +73,13 @@ it, build the web app and open `/changelog`.
 - **UI strings** go through `t()` with a Chinese translation in `apps/web/src/lib/zh.ts`. Docs pages carry both
   languages in the markup.
 - **Tests** sit next to the code they cover. Run the checks listed in CONTRIBUTING before committing.
+- **A rule that has bitten us gets a test.** When a mistake slips through (an undocumented variable, a stale embedded
+  migration, hosted code on `main`), add a check for it rather than a reminder here. Repo-wide checks live in
+  `apps/api/src/guards/`.
+- **Environment variables** are documented in `.env.example`, `.env.docker.example` and `docker-compose.yml`; the guard
+  tests fail when they and the code disagree.
+- **Hosted-edition code** (`apps/api/src/cloud/`, `worker.cloud.ts`, `wrangler.cloud.jsonc`, `apps/web/edge/`) never
+  appears on `main`; nothing there may import from it.
 - **Migrations**: change the schema in `packages/db-pg/src/`, run `pnpm db:generate`, then
   `node scripts/gen-migrations.mjs`.
 - **Commits**: an imperative subject that says what the change does, a body that says why when it is not obvious. Do not
