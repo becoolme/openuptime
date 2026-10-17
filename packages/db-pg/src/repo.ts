@@ -558,7 +558,7 @@ export function createRepo(db: Db): Repo {
       return db.transaction(async (tx) => {
         const [row] = await tx
           .insert(schema.incident)
-          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: inc.auto, assigneeId: inc.assigneeId })
+          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: inc.auto, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
           .returning();
         if (firstUpdate) await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId });
         return row;
@@ -568,7 +568,7 @@ export function createRepo(db: Db): Repo {
       return db.transaction(async (tx) => {
         const [row] = await tx
           .insert(schema.incident)
-          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId })
+          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
           .onConflictDoNothing()
           .returning();
         if (!row) return null;
@@ -611,6 +611,26 @@ export function createRepo(db: Db): Repo {
         .where(and(eq(schema.incident.monitorId, monitorId), gte(schema.incident.startedAt, since), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`))
         .limit(1);
       return !!r;
+    },
+    async reopenIncident(monitorId, since, body, evaluationNote) {
+      return db.transaction(async (tx) => {
+        const [last] = await tx
+          .select({ id: schema.incident.id })
+          .from(schema.incident)
+          .where(and(eq(schema.incident.monitorId, monitorId), eq(schema.incident.auto, true), eq(schema.incident.severity, "major"), gte(schema.incident.resolvedAt, since)))
+          .orderBy(desc(schema.incident.resolvedAt))
+          .limit(1);
+        if (!last) return null;
+        // the unique index on open automatic incidents makes a concurrent reopen (or open) lose here instead of duplicating
+        const [row] = await tx
+          .update(schema.incident)
+          .set({ status: "investigating", resolvedAt: null, evaluationNote })
+          .where(and(eq(schema.incident.id, last.id), sql`${schema.incident.resolvedAt} is not null`))
+          .returning();
+        if (!row) return null;
+        await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: "investigating", body });
+        return row;
+      });
     },
     openIncidents(monitorId, slow) {
       const isSlow = sql`(${schema.incident.auto} and ${schema.incident.severity} = 'minor')`;

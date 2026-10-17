@@ -87,12 +87,20 @@ describe("nextAfter", () => {
 });
 
 /** A tiny in-memory repo: just what one failed heartbeat check touches. */
-function fakeRepo(opts: { failCreate?: () => boolean } = {}) {
-  const incidents: { id: string; title: string; auto: boolean; severity: string; resolved: boolean }[] = [];
+function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean } = {}) {
+  const incidents: { id: string; title: string; auto: boolean; severity: string; resolved: boolean; note?: string | null }[] = [];
+  const reopened: string[] = [];
   const states: Record<string, unknown>[] = [];
   const repo = {
-    underMaintenance: async () => false,
+    underMaintenance: async () => !!opts.maintenance,
+    monitorsByIds: async (ids: string[]) => (opts.monitors ?? []).filter((m) => ids.includes(m.id)),
+    reopenIncident: async (_id: string, _since: Date, _body: string, note: string) => {
+      if (!opts.reopenable) return null;
+      reopened.push(note);
+      return { id: "old" };
+    },
     recordCheck: async () => {},
+    recordRegionResults: async () => {},
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
     hasOpenIncident: async (_id: string, slow: boolean) => incidents.some((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
     openIncidents: async (_id: string, slow: boolean) => incidents.filter((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
@@ -104,9 +112,9 @@ function fakeRepo(opts: { failCreate?: () => boolean } = {}) {
       return true;
     },
     incidentMuted: async () => false,
-    openAutoIncident: async (inc: { title: string; auto?: boolean; severity?: string }) => {
+    openAutoIncident: async (inc: { title: string; auto?: boolean; severity?: string; evaluationNote?: string | null }) => {
       if (opts.failCreate?.()) throw new Error("db down");
-      const row = { id: crypto.randomUUID(), title: inc.title, auto: !!inc.auto, severity: inc.severity ?? "major", resolved: false };
+      const row = { id: crypto.randomUUID(), title: inc.title, auto: !!inc.auto, severity: inc.severity ?? "major", resolved: false, note: inc.evaluationNote };
       incidents.push(row);
       return { ...row, startedAt: new Date(), resolvedAt: null };
     },
@@ -114,7 +122,7 @@ function fakeRepo(opts: { failCreate?: () => boolean } = {}) {
     subscribersFor: async () => [],
     logDeliveries: async () => {},
   } as unknown as Repo;
-  return { repo, incidents, states };
+  return { repo, incidents, states, reopened };
 }
 
 const hb = (over: Partial<Monitor> = {}) =>
@@ -148,6 +156,62 @@ describe("checkOne", () => {
     // a heartbeat gets a due time from the grace period; nothing else sets one here
     await checkOne(repo, hb());
     expect(states[0]).toHaveProperty("nextCheckAt");
+  });
+});
+
+describe("checkOne noise rules", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens nothing during maintenance, keeps the status, and still resolves an open incident when the check passes", async () => {
+    const quiet = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { repo, incidents, states } = fakeRepo({ maintenance: true });
+    await checkOne(repo, hb());
+    expect(incidents).toHaveLength(0);
+    expect(states.every((s) => !("status" in s))).toBe(true);
+    expect(quiet).toHaveBeenCalledWith(expect.stringContaining("suppressed: maintenance"));
+  });
+
+  const parent = (status: Monitor["status"]) => ({ id: "parent", status, organizationId: "o", projectId: "p" }) as Monitor;
+
+  it("records the child as down but opens no incident while its dependency is down", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { repo, incidents, states } = fakeRepo({ monitors: [parent("down")] });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent" }));
+    expect(incidents).toHaveLength(0);
+    expect(states.at(-1)).toMatchObject({ status: "down" });
+  });
+
+  it("opens the incident when the dependency is up", async () => {
+    const { repo, incidents } = fakeRepo({ monitors: [parent("up")] });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent" }));
+    expect(incidents.map((i) => i.title)).toEqual(["API is down"]);
+  });
+
+  it("opens the incident late when the dependency recovered but the child is still down", async () => {
+    const { repo, incidents } = fakeRepo({ monitors: [parent("up")] });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent", status: "down", consecutiveFailures: 5 }));
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].note).toContain("depends on recovered");
+  });
+
+  it("does not open it late while the dependency is still down", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { repo, incidents } = fakeRepo({ monitors: [parent("down")] });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent", status: "down", consecutiveFailures: 5 }));
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("reopens a just-resolved outage instead of opening and alerting a second incident", async () => {
+    const { repo, incidents, reopened } = fakeRepo({ reopenable: true });
+    await checkOne(repo, hb());
+    expect(incidents).toHaveLength(0);
+    expect(reopened[0]).toContain("reopened");
+  });
+
+  it("stores why an incident opened", async () => {
+    const { repo, incidents } = fakeRepo();
+    await checkOne(repo, hb({ failureThreshold: 1 }));
+    expect(incidents[0].note).toBe("1 consecutive failed checks");
   });
 });
 
@@ -194,6 +258,48 @@ describe("checkOne across regions", () => {
     await checkOne(repo, web());
     expect(recorded.many[0].summary.ok).toBe(false);
     expect(incidents.map((i) => i.title)).toEqual(["API is down"]);
+  });
+
+  it("does not open a latency incident during maintenance, and resolves the outage once checks pass", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const slow = fakeRepo({ maintenance: true });
+    await checkOne(slow.repo, web({ slowAlertAfter: 1, slowThresholdMs: 1 }));
+    expect(slow.incidents).toHaveLength(0);
+    // the same check outside maintenance does trip it
+    const loud = fakeRepo();
+    await checkOne(loud.repo, web({ slowAlertAfter: 1, slowThresholdMs: 1 }));
+    expect(loud.incidents.map((i) => i.severity)).toEqual(["minor"]);
+    // passing checks resolve an open outage even inside a window
+    const { repo, incidents } = fakeRepo({ maintenance: true });
+    incidents.push({ id: "out", title: "API is down", auto: true, severity: "major", resolved: false });
+    await checkOne(repo, web({ status: "down" }));
+    expect(incidents[0].resolved).toBe(true);
+  });
+
+  it("goes down on a single failing region when the monitor asks for one", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: false } });
+    const { repo, incidents } = repoWithRecords();
+    await checkOne(repo, web({ minRegionsFailing: 1 }));
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].note).toBe("1 consecutive failed checks; 1 of 3 regions failed");
+  });
+
+  it("waits for the agreed number of regions and says so", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    probes({ "us-east": { ok: true }, "eu-central": { ok: false }, "ap-southeast": { ok: false } });
+    const { repo, incidents } = repoWithRecords();
+    await checkOne(repo, web({ minRegionsFailing: 3 }));
+    expect(incidents).toHaveLength(0);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("2 of 3 regions failed, 3 needed"));
+    info.mockRestore();
+  });
+
+  it("caps the agreed number by the regions that answered, so a dead region cannot block an alert", async () => {
+    probes({ "us-east": "down", "eu-central": { ok: false }, "ap-southeast": { ok: false } });
+    const { repo, incidents } = repoWithRecords();
+    await checkOne(repo, web({ minRegionsFailing: 3 }));
+    expect(incidents).toHaveLength(1);
   });
 
   it("does not take unreachable probes for an outage", async () => {

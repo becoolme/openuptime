@@ -207,7 +207,11 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
     regions: monitor?.regions?.length ? monitor.regions : ["auto"],
+    dependsOnMonitorId: monitor?.dependsOnMonitorId ?? (null as string | null), minRegionsFailing: monitor?.minRegionsFailing ?? 0,
   });
+  // the project's other monitors, to pick the one this depends on
+  const [others, setOthers] = useState<Monitor[]>([]);
+  useEffect(() => { api.monitors().then((l) => setOthers(l.filter((x) => x.id !== monitor?.id))).catch(() => {}); }, []);
   const [tagText, setTagText] = useState((monitor?.tags ?? []).join(", "));
   const [hdrs, setHdrs] = useState<{ k: string; v: string }[]>(Object.entries(monitor?.headers ?? {}).map(([k, v]) => ({ k, v })));
   const setHdr = (i: number, p: Partial<{ k: string; v: string }>) => setHdrs((h) => h.map((r, j) => (j === i ? { ...r, ...p } : r)));
@@ -354,6 +358,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <Select className="in" value={f.graceSec} onChange={(v) => set("graceSec", v)} options={[{ value: 0, label: t("None") }, { value: 60, label: t("1 minute") }, { value: 300, label: t("5 minutes") }, { value: 900, label: t("15 minutes") }]} />
           </label>
         )}
+        {others.length > 0 && (
+          <label className="fld">{t("Depends on")}
+            <Select className="in" value={f.dependsOnMonitorId ?? ""} onChange={(v) => set("dependsOnMonitorId", v || null)}
+              options={[{ value: "", label: t("Nothing") }, ...others.map((o) => ({ value: o.id, label: o.name }))]} />
+            <small className="faint">{t("While that monitor is down, this one opens no incidents and sends no alerts.")}</small>
+          </label>
+        )}
         {channels.length > 0 && (
           <div className="fld">{t("Alert")} <span className="faint">({t("none selected = all channels")})</span>
             {channels.map((c) => {
@@ -368,6 +379,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
               );
             })}
           </div>
+        )}
+        {(f.type === "http" || f.type === "tcp") && places.length > 1 && f.regions.length > 1 && (
+          <label className="fld">{t("Go down when")}
+            <Select className="in" value={Math.min(f.minRegionsFailing, f.regions.length)} onChange={(v) => set("minRegionsFailing", v)}
+              options={[{ value: 0, label: t("Most regions fail") }, ...Array.from({ length: f.regions.length }, (_, i) => ({ value: i + 1, label: t(i === 0 ? "Any region fails" : "{n} regions fail").replace("{n}", String(i + 1)) }))]} />
+            <small className="faint">{t("Fewer failing regions are recorded but do not open an incident.")}</small>
+          </label>
         )}
         {(f.type === "http" || f.type === "tcp") && places.length > 1 && (
           <div className="fld region-fld">{t("Check from")} {Number.isFinite(maxRegions) && <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))})</span>}

@@ -53,6 +53,10 @@ export interface Monitor {
   slowThresholdMs: number;
   slowAlertAfter: number;
   consecutiveSlow: number;
+  /** while that monitor is down, this one opens no incidents and sends no alerts */
+  dependsOnMonitorId: string | null;
+  /** several regions: how many must fail before the monitor goes down; 0 = a majority of those that answered */
+  minRegionsFailing: number;
   createdAt: Date;
 }
 
@@ -61,6 +65,7 @@ export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
   | "keyword" | "keywordMode" | "headers" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCheckAt?: Date };
 /** Only named fields change; the type is immutable. */
@@ -120,6 +125,8 @@ export interface Incident {
   startedAt: Date;
   acknowledgedAt: Date | null;
   resolvedAt: Date | null;
+  /** why an automatic incident opened or was reopened, in a few words */
+  evaluationNote: string | null;
 }
 export interface IncidentUpdate {
   id: string;
@@ -136,6 +143,7 @@ export type NewIncident = {
   severity?: IncidentSeverity;
   auto?: boolean;
   assigneeId?: string | null;
+  evaluationNote?: string | null;
 };
 export type NewIncidentUpdate = { status: IncidentStatus; body: string; authorId?: string | null };
 export type IncidentWithMonitor = Incident & { monitorName: string | null };
@@ -407,6 +415,11 @@ export interface Repo {
   /** An unresolved incident of the monitor: an automatic latency one with `slow`, otherwise any other (outage or manual) one. */
   hasOpenIncident(monitorId: string, slow: boolean): Promise<boolean>;
   hadIncidentSince(monitorId: string, since: Date): Promise<boolean>;
+  /**
+   * Reopens the monitor's automatic outage incident that was resolved at or after `since` (the latest one), appending
+   * `body` as an update and replacing its evaluation note. Null when there is none, or when another check reopened it first.
+   */
+  reopenIncident(monitorId: string, since: Date, body: string, evaluationNote: string): Promise<Incident | null>;
   /** Unresolved incidents of the monitor: its outage ones, or with `slow` only the automatic latency ones. */
   openIncidents(monitorId: string, slow: boolean): Promise<Incident[]>;
   /** Resolves an open incident; false when it was already resolved (another check got there first). */

@@ -42,6 +42,24 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     link: { href: "/docs/backup", label: { en: "Read the backup guide", zh: "阅读备份指南" } },
   },
   {
+    id: "quieter-incidents",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Fewer noisy incidents", zh: "减少噪音事件" },
+    summary: {
+      en: "Monitors can now depend on each other, wait for several regions to agree, and reopen a just-resolved incident instead of paging again.",
+      zh: "监控项现在可以相互依赖、等待多个区域一致失败,并在刚恢复的事件上重新打开,而不是再次告警。",
+    },
+    points: [
+      { en: "A monitor can depend on another monitor of the same project: while that one is down, this one still records its status but opens no incident and sends no alert.", zh: "监控项可以依赖同一项目中的另一个监控项:被依赖的监控项故障期间,它仍会记录自己的状态,但不会创建事件,也不会发送告警。" },
+      { en: "With several regions, choose how many must fail before a monitor goes down; the number never exceeds the regions that answered, so a region that is itself down cannot block an alert.", zh: "使用多个区域时,可以选择需要多少个区域失败才判定为故障;该数量不会超过实际应答的区域数,因此某个区域自身故障不会阻止告警。" },
+      { en: "A failure within 10 minutes of an outage resolving reopens that incident instead of opening a second one and alerting again.", zh: "故障恢复后 10 分钟内再次失败,会重新打开原来的事件,而不是创建新事件并再次告警。" },
+      { en: "Slow-response incidents are no longer opened during a maintenance window.", zh: "维护窗口期间不再创建响应变慢的事件。" },
+      { en: "Automatic incidents now show why they opened, for example how many regions failed.", zh: "自动创建的事件现在会显示创建原因,例如有几个区域失败。" },
+    ],
+    link: { href: "/docs/regions", label: { en: "Read the multi-region docs", zh: "阅读多区域检测文档" } },
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

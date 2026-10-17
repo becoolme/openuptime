@@ -137,10 +137,12 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
 
 export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
   // a due heartbeat monitor means no ping arrived in time
-  const { out, results } =
+  const { out, results, note: regionNote } =
     m.type === "heartbeat"
-      ? { out: { ok: false, error: "Heartbeat missed" } as { ok: boolean; statusCode?: number; latencyMs?: number; error?: string }, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }] }
+      ? { out: { ok: false, error: "Heartbeat missed" } as { ok: boolean; statusCode?: number; latencyMs?: number; error?: string }, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }], note: undefined as string | undefined }
       : await measure(m);
+  // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
+  if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
   const inMaintenance = await repo.underMaintenance(m);
   // one region is one row; several are rows per region that count as a single run in the rollup
   if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
@@ -150,6 +152,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const next = m.type === "heartbeat" ? { nextCheckAt: nextAfter(m) } : {};
   // during maintenance keep recording results but leave status, failure count and incidents alone
   if (inMaintenance && !out.ok) {
+    console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE}`);
     await repo.setMonitorState(m.id, { lastCheckedAt: new Date(), ...next });
     return;
   }
@@ -160,14 +163,22 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const status = out.ok ? (slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.status;
   const goingDown = status === "down" && m.status !== "down";
   const recovering = out.ok && m.status === "down";
-  const slowTrips = slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
+  // a slow streak inside a maintenance window or under a down dependency opens nothing, however long it gets
+  const wantsSlowIncident = slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
+  const parentDown = (goingDown || wantsSlowIncident || (!out.ok && status === "down")) && (await dependencyDown(repo, m));
+  if (wantsSlowIncident && inMaintenance) console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE} (latency incident)`);
+  if ((goingDown || wantsSlowIncident) && parentDown) console.info(`monitor ${m.id}: ${SUPPRESSED_DEPENDENCY}`);
+  const slowTrips = wantsSlowIncident && !inMaintenance && !parentDown;
   const slowClears = out.ok && !slow && m.consecutiveSlow > 0;
   // An outage ends any latency incident, so the count starts over.
   const finalSlow = status === "down" ? 0 : slowCount;
   // A change that has to open or resolve an incident is committed only after that worked: if the incident step fails,
   // the stored state still reads as before and the next check takes the same transition again, instead of the outage
   // being recorded in the status but never alerted.
-  const pending = goingDown || recovering || slowTrips || slowClears;
+  const opensOutage = goingDown && !parentDown;
+  // still failing and down since a dependency's outage muted it, and the dependency is back: nobody was told yet
+  const lateOpen = !out.ok && !goingDown && status === "down" && m.status === "down" && !!m.dependsOnMonitorId && !parentDown && !(await repo.hasOpenIncident(m.id, false));
+  const pending = opensOutage || recovering || slowTrips || slowClears;
   await repo.setMonitorState(m.id, {
     consecutiveFailures: failures,
     ...(pending ? {} : { status, consecutiveSlow: finalSlow }),
@@ -175,7 +186,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
     ...next,
   });
 
-  if (goingDown) await openIncident(repo, m, out.error ?? "Check failed", entitlements);
+  if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements);
   if (recovering) await resolveIncident(repo, m, false, entitlements);
   if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements);
   if (slowClears) await resolveIncident(repo, m, true, entitlements);
@@ -186,21 +197,43 @@ async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entit
   if (await repo.hasOpenIncident(m.id, true)) return;
   const reason = `${m.slowAlertAfter} consecutive checks slower than ${m.slowThresholdMs} ms (latest ${latencyMs} ms).`;
   const inc = await repo.openAutoIncident(
-    { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is responding slowly`, auto: true, severity: "minor" },
+    { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is responding slowly`, auto: true, severity: "minor", evaluationNote: `${m.slowAlertAfter} consecutive slow checks` },
     { status: "investigating", body: reason },
   );
   if (!inc) return; // a concurrent check opened it
   await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
 }
 
-async function openIncident(repo: Repo, m: Monitor, reason: string, entitlements: Entitlements) {
+const SUPPRESSED_MAINTENANCE = "suppressed: maintenance";
+const SUPPRESSED_DEPENDENCY = "suppressed: the monitor it depends on is down";
+
+/** Is the monitor this one depends on down right now? */
+async function dependencyDown(repo: Repo, m: Monitor) {
+  if (!m.dependsOnMonitorId) return false;
+  const [parent] = await repo.monitorsByIds([m.dependsOnMonitorId]);
+  return parent?.status === "down";
+}
+
+/** The short "why did this open" line stored on an incident. */
+function evaluation(m: Monitor, regionNote: string | undefined, lateOpen: boolean) {
+  const base = lateOpen ? "still failing after the monitor it depends on recovered" : `${consecutive(m)} consecutive failed checks`;
+  return regionNote ? `${base}; ${regionNote}` : base;
+}
+
+/** An outage that resolved this recently is reopened by a new failure instead of becoming a second incident. */
+export const REOPEN_WINDOW_MS = 10 * 60_000;
+
+async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNote: string, entitlements: Entitlements) {
   // an outage is not blocked by a latency incident: that one is superseded (resolved without a recovery alert)
   for (const slow of await repo.openIncidents(m.id, true)) await repo.resolveIncident(slow.id, "Superseded: the monitor is down.");
   if (await repo.hasOpenIncident(m.id, false)) return;
+  // failing again right after a recovery is the same outage: reopen it, without paging a second time
+  const reopened = await repo.reopenIncident(m.id, new Date(Date.now() - REOPEN_WINDOW_MS), `Failing again. ${reason}`, `reopened: failed again within ${REOPEN_WINDOW_MS / 60_000} minutes of resolving; ${evaluationNote}`);
+  if (reopened) return;
   // a monitor that flaps (down, up, down…) gets one down alert per window, not one per flip
   const recent = await repo.hadIncidentSince(m.id, new Date(Date.now() - FLAP_WINDOW_MS));
   const inc = await repo.openAutoIncident(
-    { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is down`, auto: true },
+    { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is down`, auto: true, evaluationNote },
     { status: "investigating", body: `${consecutive(m)} consecutive failed checks. ${reason}` },
   );
   if (!inc) return; // a concurrent check opened it

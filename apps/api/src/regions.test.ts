@@ -70,6 +70,17 @@ describe("combine", () => {
     // a tie is not a majority
     expect(combine([run("a", true), run("b", false)])!.out.ok).toBe(true);
   });
+  it("honours the number of failing regions a monitor asks for, capped by those that answered", () => {
+    const mixed = [run("a", true), run("b", false), run("c", false)];
+    expect(combine(mixed, 3)!.out.ok).toBe(true);
+    expect(combine(mixed, 3)!.note).toBe("2 of 3 regions failed, 3 needed");
+    expect(combine(mixed, 2)!.out.ok).toBe(false);
+    expect(combine([run("a", true), run("b", false), run("c", true)], 1)!.note).toBe("1 of 3 regions failed");
+    // one region unreachable: 3 are asked for, only 2 answered, and both failed
+    expect(combine([{ region: "a", unreachable: "x" }, run("b", false), run("c", false)], 3)!.out.ok).toBe(false);
+    // 0 keeps the majority rule
+    expect(combine(mixed, 0)!.out.ok).toBe(false);
+  });
   it("leaves unreachable probes out of the vote and the record", () => {
     const r = combine([run("a", false, 10, "boom"), { region: "b", unreachable: "probe down" }, { region: "c", unreachable: "probe down" }])!;
     expect(r.out.ok).toBe(false);

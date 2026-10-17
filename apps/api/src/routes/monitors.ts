@@ -30,6 +30,10 @@ const fields = {
   tags: z.array(z.string().trim().min(1).max(32)).max(20),
   slowThresholdMs: z.number().int().min(100).max(60000),
   slowAlertAfter: z.number().int().min(0).max(20),
+  // another monitor of the same project; while it is down this one opens no incidents and sends no alerts
+  dependsOnMonitorId: z.string().uuid().nullable(),
+  // several regions: how many must fail before the monitor goes down; 0 = a majority of the regions that answered
+  minRegionsFailing: z.number().int().min(0).max(20),
 };
 
 /** Create: omitted fields take defaults. */
@@ -51,6 +55,8 @@ const body = z.object({
   tags: fields.tags.default([]),
   slowThresholdMs: fields.slowThresholdMs.default(1500),
   slowAlertAfter: fields.slowAlertAfter.default(0),
+  dependsOnMonitorId: fields.dependsOnMonitorId.default(null),
+  minRegionsFailing: fields.minRegionsFailing.default(0),
 });
 
 const IMPORT_MAX = 500;
@@ -71,8 +77,9 @@ function normaliseImport(raw: unknown): unknown {
   const o: Record<string, unknown> = {};
   for (const k of FIELD_KEYS) if (r[k] !== undefined && r[k] !== null) o[k] = r[k];
   if (r.keyword === null) o.keyword = null;
-  // a new monitor never carries over ids, so a bad channel reference cannot slip in
+  // a new monitor never carries over ids, so a bad channel or dependency reference cannot slip in
   delete o.channelIds;
+  delete o.dependsOnMonitorId;
   // an export taken by a non-manager carries placeholders instead of header values: they are not real values
   if (o.headers && typeof o.headers === "object" && !Array.isArray(o.headers)) {
     o.headers = Object.fromEntries(Object.entries(o.headers as Record<string, unknown>).filter(([, v]) => v !== MASK));
@@ -140,6 +147,33 @@ async function regionProblem(c: Context<AppEnv>, type: string, regions: string[]
   return null;
 }
 
+/** How far up a chain of dependencies is followed; a longer one is refused as well. */
+const MAX_DEPENDENCY_DEPTH = 10;
+
+/**
+ * HTTP 400 when `parentId` cannot be the parent of monitor `selfId` (null when creating): it must be another monitor of the
+ * same project, and following the chain upwards must neither lead back to the monitor nor go on for ever.
+ */
+async function dependencyProblem(c: Context<AppEnv>, projectId: string | null, selfId: string | null, parentId: string | null) {
+  if (parentId === null) return null;
+  const refuse = (error: string, code: string) => c.json({ error, code }, 400);
+  if (parentId === selfId) return refuse("A monitor cannot depend on itself", "dependency_self");
+  const repo = c.get("repo");
+  const parent = (await repo.monitorsByIds([parentId]))[0];
+  if (!parent || parent.organizationId !== c.get("orgId") || parent.projectId !== projectId) {
+    return refuse("The monitor it depends on must be another monitor of the same project", "dependency_not_found");
+  }
+  let at = parent;
+  for (let depth = 0; depth < MAX_DEPENDENCY_DEPTH; depth++) {
+    if (at.dependsOnMonitorId === null) return null;
+    if (at.dependsOnMonitorId === selfId) return refuse("That would make the monitors depend on each other", "dependency_cycle");
+    const next = (await repo.monitorsByIds([at.dependsOnMonitorId]))[0];
+    if (!next) return null;
+    at = next;
+  }
+  return refuse("Dependencies are nested too deeply", "dependency_cycle");
+}
+
 /** HTTP 400 for a target that points at a private address (unless the deployment allows those), or null. */
 async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
   const error = await targetProblem(type, target);
@@ -159,6 +193,8 @@ export const monitors = new Hono<AppEnv>()
     if (blocked) return blocked;
     const badRegion = await regionProblem(c, v.type, v.regions);
     if (badRegion) return badRegion;
+    const badParent = await dependencyProblem(c, c.get("projectId"), null, v.dependsOnMonitorId);
+    if (badParent) return badParent;
     const refused = await overPlan(c, { add: 1, intervalSec: v.type === "heartbeat" ? undefined : v.intervalSec });
     if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
@@ -167,7 +203,7 @@ export const monitors = new Hono<AppEnv>()
   // JSON backup of this project's monitors; feed it back to POST /import (here or in another workspace)
   .get("/export", async (c) => {
     const rows = await c.get("repo").exportMonitors(c.get("orgId"), c.get("projectId"));
-    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds").map((k) => [k, (m as unknown as Record<string, unknown>)[k]])));
+    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]])));
     c.header("content-disposition", 'attachment; filename="openuptime-monitors.json"');
     return c.json({ version: 1, exportedAt: new Date().toISOString(), monitors });
   })
@@ -233,6 +269,12 @@ export const monitors = new Hono<AppEnv>()
       if (!current) return c.json({ error: "Not found" }, 404);
       const badRegion = await regionProblem(c, current.type, v.regions);
       if (badRegion) return badRegion;
+    }
+    if (v.dependsOnMonitorId !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      const badParent = await dependencyProblem(c, current.projectId, current.id, v.dependsOnMonitorId);
+      if (badParent) return badParent;
     }
     if (v.intervalSec !== undefined || v.paused === false) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));

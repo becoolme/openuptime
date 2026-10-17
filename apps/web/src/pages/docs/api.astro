@@ -20,7 +20,9 @@ graceSec       integer 0-86400, heartbeat grace period       (default 0)
 channelIds     uuid[], max 50                                (default [])
 tags           string[], max 20 items of up to 32 chars      (default [])
 slowThresholdMs integer 100-60000, latency above this marks the monitor "degraded" (default 1500)
-slowAlertAfter integer 0-20, open a latency incident after this many consecutive slow checks; 0 = never (default 0)`;
+slowAlertAfter integer 0-20, open a latency incident after this many consecutive slow checks; 0 = never (default 0)
+dependsOnMonitorId uuid | null, another monitor of the same project; while it is down this one opens no incidents and sends no alerts (default null; never itself or a cycle)
+minRegionsFailing integer 0-20, several regions: how many must fail before the monitor goes down; 0 = a majority of those that answered (default 0)`;
 
 const groups: Group[] = [
   {

@@ -67,7 +67,7 @@ export default function Incidents() {
           <div className="tr th"><span>{t("Incident")}</span><span>{t("Status")}</span><span>{t("Started")}</span><span>{t("Duration")}</span><span>{t("Affected")}</span></div>
           {shown.map((i) => (
             <a className="tr" key={i.id} href={`/app/incidents/${i.id}`}>
-              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small>#{i.id.slice(0, 6)}{i.auto ? ` · ${t("auto")}` : ""}</small></div></div>
+              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small title={i.evaluationNote ?? undefined}>#{i.id.slice(0, 6)}{i.auto ? ` · ${t("auto")}` : ""}{i.evaluationNote ? ` · ${i.evaluationNote}` : ""}</small></div></div>
               <span><span className={`pill ${i.status === "resolved" ? "resolved" : "down"}`}>{t(i.status)}</span></span>
               <span className="muted">{ago(i.startedAt)}</span>
               <span className="num mono">{i.resolvedAt || i.status !== "resolved" ? dur(i.startedAt, i.resolvedAt) : "—"}</span>

@@ -134,6 +134,13 @@
       "when": 1791998395225,
       "tag": "0018_careless_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792281274599,
+      "tag": "0019_flat_molten_man",
+      "breakpoints": true
     }
   ]
 }

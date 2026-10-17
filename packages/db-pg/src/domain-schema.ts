@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   index,
@@ -76,6 +77,10 @@ export const monitor = pgTable(
     /** open a "slow" incident after this many consecutive slow checks; 0 = never alert on latency */
     slowAlertAfter: integer("slow_alert_after").notNull().default(0),
     consecutiveSlow: integer("consecutive_slow").notNull().default(0),
+    /** while this monitor is down, a failure of this one opens no incident and sends no alert (same project, never a cycle) */
+    dependsOnMonitorId: uuid("depends_on_monitor_id").references((): AnyPgColumn => monitor.id, { onDelete: "set null" }),
+    /** several regions: this many must fail before the monitor goes down; 0 = a majority of the regions that answered */
+    minRegionsFailing: integer("min_regions_failing").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("monitor_org_idx").on(t.organizationId), index("monitor_due_idx").on(t.nextCheckAt)],
@@ -124,6 +129,8 @@ export const incident = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** short human-readable reason an automatic incident opened or was reopened ("3 of 3 regions failed") */
+    evaluationNote: text("evaluation_note"),
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),

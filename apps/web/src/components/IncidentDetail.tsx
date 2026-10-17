@@ -67,7 +67,7 @@ export default function IncidentDetail({ id }: { id: string }) {
                 </div>
               ))}
               {inc.acknowledgedAt && <div className="ev"><b>{t("Acknowledged")}</b><time>{utc(inc.acknowledgedAt)}</time>{inc.assignee && <p>{inc.assignee.name || inc.assignee.email}</p>}</div>}
-              <div className="ev"><b>{t("Incident opened")}</b><time>{utc(inc.startedAt)}</time><p>{inc.auto ? t("Consecutive failed checks confirmed.") : t("Declared manually.")}</p></div>
+              <div className="ev"><b>{t("Incident opened")}</b><time>{utc(inc.startedAt)}</time><p>{inc.auto ? t("Consecutive failed checks confirmed.") : t("Declared manually.")}</p>{inc.evaluationNote && <p className="faint">{t("Why")}: {inc.evaluationNote}</p>}</div>
             </div>
           </div>
 
