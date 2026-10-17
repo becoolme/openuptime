@@ -56,7 +56,7 @@ docker compose up -d --build</code></pre>
     <h3>Operate</h3>
     <ul>
       <li><strong>Upgrade</strong>: with the published image, change the tag in <code>OPENUPTIME_IMAGE</code> if you pinned one, then <code>docker compose pull &amp;&amp; docker compose up -d</code>. Built from source: pull the new code, then <code>docker compose up -d --build</code>. Migrations run on start.</li>
-      <li><strong>Backup</strong>: <code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>.</li>
+      <li><strong>Backup</strong>: <code>docker compose exec -T postgres pg_dump -U openuptime -Fc openuptime &gt; openuptime.dump</code>. Restore steps are in <a href="/docs/backup">Backup and restore</a>.</li>
       <li><strong>Several containers</strong>: checks are leased with <code>FOR UPDATE SKIP LOCKED</code>, so more containers can share one database without duplicating checks.</li>
       <li><strong>Logs</strong>: <code>docker compose logs -f openuptime</code>. A health endpoint is at <code>/health</code>.</li>
     </ul>
@@ -273,7 +273,7 @@ docker compose up -d --build</code></pre>
     <h3>运维</h3>
     <ul>
       <li><strong>升级</strong>：使用发布镜像时，若固定了版本就修改 <code>OPENUPTIME_IMAGE</code> 的标签，再执行 <code>docker compose pull &amp;&amp; docker compose up -d</code>；从源码构建时拉取新代码后执行 <code>docker compose up -d --build</code>。迁移在启动时自动运行。</li>
-      <li><strong>备份</strong>：<code>docker compose exec postgres pg_dump -U openuptime openuptime &gt; backup.sql</code>。</li>
+      <li><strong>备份</strong>：<code>docker compose exec -T postgres pg_dump -U openuptime -Fc openuptime &gt; openuptime.dump</code>。恢复步骤见<a href="/docs/backup">备份与恢复</a>。</li>
       <li><strong>多个容器</strong>：检测通过 <code>FOR UPDATE SKIP LOCKED</code> 加租约，多个容器共用一个数据库也不会重复检测。</li>
       <li><strong>日志</strong>：<code>docker compose logs -f openuptime</code>。健康检查接口为 <code>/health</code>。</li>
     </ul>

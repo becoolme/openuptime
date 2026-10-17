@@ -1,0 +1,75 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc description="Back up and restore the Postgres database of a Docker deployment of OpenUptime with pg_dump and pg_restore, and check a backup before you rely on it." title="Backup and restore" updated="2026-10-17" toc>
+  <div lang="en">
+    <h1>Backup and restore</h1>
+    <p class="lede">Everything OpenUptime stores lives in one Postgres database. Back that up, keep your <code>.env</code> next to it, and practise a restore before you need one. The commands below are for the Docker deployment from <a href="/docs/self-host">Self-host</a>; the service is called <code>postgres</code> and the database, user and name are all <code>openuptime</code>.</p>
+    <h2 id="backup">Back up</h2>
+    <pre><code>docker compose exec -T postgres pg_dump -U openuptime -Fc openuptime &gt; openuptime-$(date +%F).dump</code></pre>
+    <ul>
+      <li><code>-Fc</code> writes the compressed custom format, which <code>pg_restore</code> can restore selectively. <code>-T</code> keeps Docker from adding terminal characters to the file.</li>
+      <li>Check that the file is readable: <code>pg_restore --list openuptime-2026-10-17.dump | head</code> (or run it through <code>docker compose exec -T postgres pg_restore --list &lt; file</code> if you have no local Postgres tools).</li>
+      <li>Copy the file off the machine. A backup on the same disk does not survive the disk.</li>
+      <li>Keep <code>.env</code> as well, in a safe place. <code>BETTER_AUTH_SECRET</code> must be the same after a restore, or signed-in sessions and API keys stop working.</li>
+      <li>Schedule it, for example a daily cron job that runs the command above and deletes dumps older than you need.</li>
+    </ul>
+    <h2 id="restore">Restore</h2>
+    <p>A restore replaces data. Work through it in order, and stop if a step does not give the result described.</p>
+    <ol>
+      <li><strong>Try it on a scratch database first.</strong> This proves the dump is good without touching live data:
+        <pre><code>docker compose exec postgres createdb -U openuptime openuptime_check
+docker compose exec -T postgres pg_restore -U openuptime -d openuptime_check --no-owner &lt; openuptime-2026-10-17.dump
+docker compose exec postgres psql -U openuptime -d openuptime_check -c 'select count(*) from monitor'
+docker compose exec postgres dropdb -U openuptime openuptime_check</code></pre></li>
+      <li><strong>Stop the app</strong> so nothing writes while you restore: <code>docker compose stop openuptime</code>. Postgres keeps running.</li>
+      <li><strong>Take one more dump of the current state</strong> with the backup command, under another file name. If the restore was a mistake, this is the way back.</li>
+      <li><strong>Restore over the live database.</strong> <code>--clean --if-exists</code> drops each object before recreating it, so this overwrites what is there:
+        <pre><code>docker compose exec -T postgres pg_restore -U openuptime -d openuptime --clean --if-exists --no-owner &lt; openuptime-2026-10-17.dump</code></pre></li>
+      <li><strong>Start the app</strong> with <code>docker compose start openuptime</code>. Migrations newer than the dump are applied on start. Sign in and check your monitors and recent check history.</li>
+    </ol>
+    <h3 id="new-server">On a new server</h3>
+    <p>Install Docker, copy your <code>.env</code> and <code>docker-compose.yml</code>, then <code>docker compose up -d postgres</code> and wait until it is healthy (<code>docker compose ps</code>). Restore with the command in step 4, then <code>docker compose up -d</code>. The empty database already exists, so <code>--clean --if-exists</code> is harmless there.</p>
+    <h2 id="notes">Good to know</h2>
+    <ul>
+      <li>A restore returns the database to the moment of the dump. Checks that ran since then are not in it, and incidents opened or resolved since then are lost.</li>
+      <li>Use a <code>pg_restore</code> of the same major Postgres version as the server, or newer. The Docker image pins the version, so using the container's own tools, as above, is always right.</li>
+      <li>On a hosted Postgres (Neon, Supabase, RDS) use the provider's backups or point-in-time recovery; the same <code>pg_dump -Fc</code> works against its connection string.</li>
+    </ul>
+  </div>
+  <div lang="zh-CN">
+    <h1>备份与恢复</h1>
+    <p class="lede">OpenUptime 的所有数据都存放在一个 Postgres 数据库里。请备份它，把 <code>.env</code> 一并保存，并在真正需要之前演练一次恢复。下面的命令适用于<a href="/docs/self-host">自托管指南</a>里的 Docker 部署：服务名为 <code>postgres</code>，数据库、用户名和库名都是 <code>openuptime</code>。</p>
+    <h2 id="backup-zh">备份</h2>
+    <pre><code>docker compose exec -T postgres pg_dump -U openuptime -Fc openuptime &gt; openuptime-$(date +%F).dump</code></pre>
+    <ul>
+      <li><code>-Fc</code> 生成压缩的 custom 格式，<code>pg_restore</code> 可以按需恢复。<code>-T</code> 避免 Docker 往文件里混入终端字符。</li>
+      <li>确认文件可读：<code>pg_restore --list openuptime-2026-10-17.dump | head</code>（本机没有 Postgres 工具时，可用 <code>docker compose exec -T postgres pg_restore --list &lt; 文件</code>）。</li>
+      <li>把文件拷贝到机器之外。放在同一块磁盘上的备份挡不住磁盘损坏。</li>
+      <li>同时妥善保存 <code>.env</code>。恢复后 <code>BETTER_AUTH_SECRET</code> 必须保持不变，否则已登录的会话和 API 密钥会失效。</li>
+      <li>设为定时任务，例如每天用 cron 执行上面的命令，并删除过旧的备份。</li>
+    </ul>
+    <h2 id="restore-zh">恢复</h2>
+    <p>恢复会覆盖数据。请按顺序操作，任何一步结果与描述不符就先停下。</p>
+    <ol>
+      <li><strong>先在临时数据库里试一次。</strong>这样不碰线上数据也能证明备份可用：
+        <pre><code>docker compose exec postgres createdb -U openuptime openuptime_check
+docker compose exec -T postgres pg_restore -U openuptime -d openuptime_check --no-owner &lt; openuptime-2026-10-17.dump
+docker compose exec postgres psql -U openuptime -d openuptime_check -c 'select count(*) from monitor'
+docker compose exec postgres dropdb -U openuptime openuptime_check</code></pre></li>
+      <li><strong>停止应用</strong>，避免恢复期间有写入：<code>docker compose stop openuptime</code>。Postgres 继续运行。</li>
+      <li><strong>再备份一次当前状态</strong>，用另一个文件名。如果恢复是个错误，可以靠它退回。</li>
+      <li><strong>恢复到线上数据库。</strong><code>--clean --if-exists</code> 会先删除每个对象再重建，所以会覆盖现有数据：
+        <pre><code>docker compose exec -T postgres pg_restore -U openuptime -d openuptime --clean --if-exists --no-owner &lt; openuptime-2026-10-17.dump</code></pre></li>
+      <li><strong>启动应用</strong>：<code>docker compose start openuptime</code>。比备份更新的迁移会在启动时自动执行。登录后检查监控项和最近的检测记录。</li>
+    </ol>
+    <h3 id="new-server-zh">恢复到新服务器</h3>
+    <p>安装 Docker，复制 <code>.env</code> 和 <code>docker-compose.yml</code>，运行 <code>docker compose up -d postgres</code> 并等它变为 healthy（<code>docker compose ps</code>）。用第 4 步的命令恢复，再 <code>docker compose up -d</code>。空数据库已经存在，此时 <code>--clean --if-exists</code> 不会有副作用。</p>
+    <h2 id="notes-zh">需要了解</h2>
+    <ul>
+      <li>恢复会把数据库退回到备份那一刻：之后产生的检测记录不在其中，之后开启或解决的事件会丢失。</li>
+      <li><code>pg_restore</code> 的主版本要不低于服务器的 Postgres 版本。Docker 镜像固定了版本，所以像上面那样使用容器自带的工具总是正确的。</li>
+      <li>使用托管 Postgres（Neon、Supabase、RDS）时，请用服务商自己的备份或时间点恢复；同样的 <code>pg_dump -Fc</code> 也可以对它的连接串使用。</li>
+    </ul>
+  </div>
+</Doc>
