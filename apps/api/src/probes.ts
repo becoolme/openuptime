@@ -112,14 +112,16 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
 }
 
 /** One run of a monitor: what each answering region saw, and the single outcome the state machine works with. */
-export type Measured = { out: CheckOutcome; results: RegionResult[] };
+export type Measured = { out: CheckOutcome; results: RegionResult[]; note?: string };
 
 /**
- * Fold the answers of several regions into one run. The run fails when a strict majority of the regions that answered
- * failed, so one region's bad route or outage does not page anyone. Regions that could not be asked are left out: that
- * is our problem, not the target's. `null` when nobody answered.
+ * Fold the answers of several regions into one run. With `minFailing` 0 the run fails when a strict majority of the
+ * regions that answered failed; otherwise when at least that many did, never asking for more than the regions that
+ * answered (so a region that is down itself cannot keep a real outage from alerting). One region's bad route or outage
+ * therefore pages nobody unless the monitor asks for it. Regions that could not be asked are left out: that is our
+ * problem, not the target's. `null` when nobody answered. `note` says in a few words how the regions voted.
  */
-export function combine(runs: RegionRun[]): Measured | null {
+export function combine(runs: RegionRun[], minFailing = 0): Measured | null {
   const answered = runs.flatMap((r) => ("outcome" in r ? [{ region: r.region, ...r.outcome }] : []));
   if (!answered.length) return null;
   const results: RegionResult[] = answered.map((a) => ({ region: a.region, ok: a.ok, statusCode: a.statusCode, latencyMs: a.latencyMs, error: a.error }));
@@ -128,18 +130,24 @@ export function combine(runs: RegionRun[]): Measured | null {
     return { out, results };
   }
   const failed = answered.filter((a) => !a.ok);
-  if (failed.length * 2 > answered.length) {
+  const needed = minFailing > 0 ? Math.min(minFailing, answered.length) : Math.floor(answered.length / 2) + 1;
+  if (failed.length >= needed) {
     const first = failed[0];
     const why = first.error ?? (first.statusCode ? `HTTP ${first.statusCode}` : "Check failed");
     return {
       out: { ok: false, statusCode: first.statusCode, latencyMs: first.latencyMs, error: `Failed from ${failed.length} of ${answered.length} regions (${first.region}: ${why})` },
       results,
+      note: `${failed.length} of ${answered.length} regions failed`,
     };
   }
   const lat = answered.filter((a) => a.ok && a.latencyMs != null).map((a) => a.latencyMs!);
   const latencyMs = lat.length ? Math.round(lat.reduce((n, v) => n + v, 0) / lat.length) : undefined;
   const best = answered.find((a) => a.ok)!;
-  return { out: { ok: true, statusCode: best.statusCode, latencyMs }, results };
+  return {
+    out: { ok: true, statusCode: best.statusCode, latencyMs },
+    results,
+    ...(failed.length ? { note: `${failed.length} of ${answered.length} regions failed, ${needed} needed` } : {}),
+  };
 }
 
 /**
@@ -155,7 +163,7 @@ export async function measure(m: Monitor): Promise<Measured> {
   const runs = await Promise.all(regions.map((r) => runInRegion(r, m)));
   const lost = runs.flatMap((r) => ("unreachable" in r ? [`${r.region}: ${r.unreachable}`] : []));
   if (lost.length) console.warn(`probes unavailable for ${m.id}: ${lost.join("; ")}`);
-  const combined = combine(runs);
+  const combined = combine(runs, m.minRegionsFailing);
   if (combined) return combined;
   const out = await runCheck(m);
   return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
