@@ -11,6 +11,10 @@ export type Monitor = {
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;
   /** where checks run from: `auto` (this deployment) or ids from `api.regions()` */
   regions?: string[];
+  /** another monitor of the project; while it is down this one opens no incidents and sends no alerts */
+  dependsOnMonitorId?: string | null;
+  /** several regions: how many must fail before it goes down; 0 = a majority of those that answered */
+  minRegionsFailing?: number;
 };
 export type Project = { id: string; name: string };
 export type Subscriber = { id: string; email: string; confirmedAt: string | null; createdAt: string };
@@ -27,6 +31,8 @@ export type Incident = {
   severity: string; startedAt: string; resolvedAt: string | null; acknowledgedAt: string | null; monitorName?: string | null;
   updates?: { id: string; status: Incident["status"]; body: string; createdAt: string }[];
   auto?: boolean;
+  /** why an automatic incident opened, e.g. "3 consecutive failed checks; 3 of 3 regions failed" */
+  evaluationNote?: string | null;
   monitorId?: string | null;
   monitor?: { id: string; name: string; status: string; target: string; type: string } | null;
   assignee?: { name: string; email: string } | null;

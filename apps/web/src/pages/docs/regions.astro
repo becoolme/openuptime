@@ -23,6 +23,7 @@ import Doc from "../../layouts/Doc.astro";
     <p>A monitor has one status, so the results from its regions are folded into one result per run:</p>
     <ul>
       <li>The run <strong>fails</strong> when a strict majority of the regions that answered failed. With three regions, two failures fail the run and one does not. A tie counts as up, so one region's bad route does not open an incident.</li>
+      <li>With several regions selected, <strong>Go down when</strong> on the monitor form (<code>minRegionsFailing</code> in the API) sets how many must fail instead: 1 means any region, 2 means at least two, and the default <code>0</code> keeps the majority rule. The number is capped by the regions that answered, so a region that is itself down can never keep a real outage from alerting. When fewer regions fail than required, the results are still recorded but the monitor stays as it was.</li>
       <li>The run's latency is the mean of the regions that succeeded.</li>
       <li>The usual failure threshold and alert rules then apply to that single result, the same as for any other monitor.</li>
       <li>When the run fails, the incident reads <em>Failed from 2 of 3 regions (eu-central: connection timed out)</em>, so you can see where it broke.</li>
@@ -105,6 +106,7 @@ PROBE_REGIONS={
     <p>一个监控项只有一个状态，因此各区域的结果会合并成每轮的一个结果：</p>
     <ul>
       <li>当<strong>多数</strong>（严格多于一半）应答的区域失败时，这一轮才判定失败。三个区域时，两个失败即失败，一个失败不算。平局算正常，所以单个区域的线路问题不会产生事件。</li>
+      <li>选择多个区域后，可以在监控项表单的「判定为故障的条件」（API 字段 <code>minRegionsFailing</code>）中改为指定失败区域数：1 表示任一区域失败，2 表示至少两个，默认值 <code>0</code> 沿用多数规则。该数字不会超过实际应答的区域数，所以某个区域自身故障也不会让真正的故障无法告警。失败区域数不足时，结果仍会记录，但监控状态保持不变。</li>
       <li>这一轮的延迟取成功区域的平均值。</li>
       <li>之后照常应用失败阈值和告警规则，与其他监控项一样。</li>
       <li>失败时，事件原因类似<em>Failed from 2 of 3 regions (eu-central: connection timed out)</em>，能看出是哪里出了问题。</li>
