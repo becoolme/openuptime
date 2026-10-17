@@ -141,4 +141,38 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     // once resolved, a new outage may open
     expect(await open("down again")).not.toBeNull();
   });
+
+  it("reopens an outage resolved a moment ago, once, and leaves older and latency incidents alone", async () => {
+    const [m] = await seed(1);
+    const open = (title: string, severity?: "minor") => repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title, auto: true, severity, evaluationNote: "first" }, { status: "investigating", body: "x" });
+    const since = new Date(Date.now() - 600_000);
+    // nothing resolved yet
+    expect(await repo.reopenIncident(m.id, since, "again", "n")).toBeNull();
+    const down = (await open("down"))!;
+    expect(down.evaluationNote).toBe("first");
+    await repo.resolveIncident(down.id, "ok");
+    const again = await Promise.all([repo.reopenIncident(m.id, since, "Failing again", "reopened"), repo.reopenIncident(m.id, since, "Failing again", "reopened")]);
+    expect(again.filter(Boolean)).toHaveLength(1);
+    const row = again.find(Boolean)!;
+    expect(row).toMatchObject({ id: down.id, status: "investigating", resolvedAt: null, evaluationNote: "reopened" });
+    const detail = await repo.incidentDetail(orgId, down.id);
+    expect(detail!.updates.map((u) => u.body)).toEqual(["x", "ok", "Failing again"]);
+    // resolved before the window: not reopened
+    await repo.resolveIncident(down.id, "ok");
+    expect(await repo.reopenIncident(m.id, new Date(Date.now() + 1000), "late", "n")).toBeNull();
+    // a latency incident is never reopened
+    const slow = (await open("slow", "minor"))!;
+    await repo.resolveIncident(slow.id, "ok");
+    await db.update(schema.incident).set({ resolvedAt: new Date(Date.now() - 800_000) }).where(eq(schema.incident.id, down.id));
+    expect(await repo.reopenIncident(m.id, since, "x", "n")).toBeNull();
+  });
+
+  it("clears a dependency when the monitor it points at is deleted", async () => {
+    const [parent, child] = await seed(2);
+    await db.update(schema.monitor).set({ dependsOnMonitorId: parent.id }).where(eq(schema.monitor.id, child.id));
+    await db.delete(schema.monitor).where(eq(schema.monitor.id, parent.id));
+    const [row] = await db.select().from(schema.monitor).where(eq(schema.monitor.id, child.id));
+    expect(row.dependsOnMonitorId).toBeNull();
+    expect(row.minRegionsFailing).toBe(0);
+  });
 });
