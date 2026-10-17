@@ -38,6 +38,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "HTTP checks and webhook alerts connect to the verified address on every redirect hop, while the certificate is still checked against the hostname.", zh: "HTTP 检测和 Webhook 告警在每一次跳转时都连接到已验证的地址,证书仍然按主机名校验。" },
       { en: "A hostname that cannot be resolved is reported as unresolvable instead of being tried anyway.", zh: "无法解析的主机名会直接报告为无法解析,不再继续尝试连接。" },
+      { en: "Keyword checks read at most 1 MB of a response, and a Lark webhook reply is read up to 64 KB, so a huge response cannot be pulled in.", zh: "关键字检测最多读取响应的 1 MB,Lark Webhook 的回复最多读取 64 KB,过大的响应不会被完整下载。" },
       { en: "Private addresses are still refused by default; ALLOW_PRIVATE_TARGETS=true keeps working as before.", zh: "默认仍然拒绝私有地址;ALLOW_PRIVATE_TARGETS=true 的行为不变。" },
     ],
   },

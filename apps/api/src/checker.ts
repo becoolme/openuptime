@@ -1,4 +1,4 @@
-import { checkUserAgent, guardHost, guardedFetch, hostBlocked, hostPort } from "./netguard";
+import { checkUserAgent, guardHost, guardedFetch, hostBlocked, hostPort, readCapped } from "./netguard";
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
 
 export type CheckInput = {
@@ -19,6 +19,9 @@ export type CheckOutcome = {
   /** The check could not be carried out from here (the prober itself is offline): nothing to record about the target. */
   inconclusive?: boolean;
 };
+
+/** How much of a response is read when looking for a keyword. A larger body is not downloaded further. */
+export const MAX_BODY_BYTES = 1_000_000;
 
 export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
   const started = Date.now();
@@ -75,7 +78,7 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     const latencyMs = Date.now() - started;
     return { ok: statusOk, statusCode: res.status, latencyMs, error: statusOk ? undefined : `Expected ${m.expectedStatus}, got ${res.status}${where}` };
   }
-  const body = await readCapped(res, 1_000_000);
+  const body = await readCapped(res, MAX_BODY_BYTES);
   const latencyMs = Date.now() - started;
   if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
   const found = body.includes(m.keyword);
@@ -85,23 +88,6 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     ok, statusCode: res.status, latencyMs,
     error: ok ? undefined : wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response`,
   };
-}
-
-/** Reads at most `max` bytes of the body as text, then drops the rest. */
-async function readCapped(res: Response, max: number): Promise<string> {
-  if (!res.body) return "";
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let out = "";
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    out += decoder.decode(value, { stream: true });
-    if (size >= max) { await reader.cancel(); break; }
-  }
-  return out;
 }
 
 // DNS-over-HTTPS keeps this runnable on Workers, where there is no raw resolver.
