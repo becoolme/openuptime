@@ -27,6 +27,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "backup-restore-docs",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Backup and restore guide", zh: "备份与恢复指南" },
+    summary: {
+      en: "A new docs page explains how to back up and restore the database of a Docker deployment.",
+      zh: "新的文档页说明如何备份和恢复 Docker 部署的数据库。",
+    },
+    points: [
+      { en: "Back up with pg_dump in the compressed custom format, then try the dump on a scratch database before relying on it.", zh: "用 pg_dump 的压缩 custom 格式备份,并先在临时数据库里试恢复,确认可用。" },
+      { en: "The restore steps stop the app, take a safety dump, restore with pg_restore and start the app again; a section covers moving to a new server.", zh: "恢复步骤依次为停止应用、先做一份安全备份、用 pg_restore 恢复、再启动应用;另有一节说明如何迁到新服务器。" },
+    ],
+    link: { href: "/docs/backup", label: { en: "Read the backup guide", zh: "阅读备份指南" } },
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

@@ -4,6 +4,7 @@ import Doc from "../../layouts/Doc.astro";
 type Entry = { href: string; en: string; zh: string; descEn: string; descZh: string };
 const guides: Entry[] = [
   { href: "/docs/self-host", en: "Self-host", zh: "自托管", descEn: "Run your own copy on Cloudflare Workers or in Docker, with a Postgres database you control.", descZh: "在 Cloudflare Workers 或 Docker 上运行你自己的实例，数据库由你自己掌控。" },
+  { href: "/docs/backup", en: "Backup and restore", zh: "备份与恢复", descEn: "Back up the Postgres database of a Docker deployment with pg_dump, and restore it step by step.", descZh: "用 pg_dump 备份 Docker 部署的 Postgres 数据库，并逐步恢复。" },
   { href: "/docs/regions", en: "Multi-region checks", zh: "多区域检测", descEn: "Check a monitor from several places in the world, and run your own probes in Docker, on Node or on Vercel.", descZh: "让监控项从世界各地发起检测，并用 Docker、Node 或 Vercel 运行你自己的探针。" },
   { href: "/docs/api", en: "API reference", zh: "API 参考", descEn: "Manage monitors, incidents, alert channels and status pages programmatically. JSON over HTTPS.", descZh: "通过程序管理监控项、事件、告警渠道和状态页。基于 HTTPS 与 JSON。" },
   { href: "/docs/mcp", en: "MCP server", zh: "MCP 服务", descEn: "Let an AI agent such as Claude or Cursor manage your monitors, incidents and status pages.", descZh: "让 Claude、Cursor 等 AI Agent 管理你的监控、事件和状态页。" },
