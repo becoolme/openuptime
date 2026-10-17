@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -206,6 +207,10 @@ export const workspaceSetting = pgTable("workspace_setting", {
   alertLogRetentionDays: integer("alert_log_retention_days").notNull().default(30),
   /** raw check results older than this are deleted (hourly rollups are kept for a year regardless) */
   checkRetentionDays: integer("check_retention_days").notNull().default(90),
+  /** opt-in: email the owners a summary of the previous month on the first days of each month */
+  monthlyReport: boolean("monthly_report").notNull().default(false),
+  /** the month (YYYY-MM) a report was last claimed for, so each month is sent once */
+  lastReportMonth: text("last_report_month"),
 });
 
 /** While a window is active, monitors it covers keep being checked but open no incidents and send no alerts. */
@@ -238,6 +243,13 @@ export const statusPage = pgTable(
     showLatency: boolean("show_latency").notNull().default(true),
     externalUrl: text("external_url"),
     hideBranding: boolean("hide_branding").notNull().default(false),
+    /** uptime bars are green at or above this percentage, amber at or above `uptimeWarnPct`, red below */
+    uptimeOkPct: doublePrecision("uptime_ok_pct").notNull().default(99.9),
+    uptimeWarnPct: doublePrecision("uptime_warn_pct").notNull().default(98),
+    /** whether the public MCP tools may serve this page */
+    mcpEnabled: boolean("mcp_enabled").notNull().default(true),
+    /** subscribers get a reminder this many hours before maintenance starts; 0 turns it off */
+    maintenanceReminderHours: integer("maintenance_reminder_hours").notNull().default(24),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("status_page_slug_idx").on(t.slug)],
@@ -261,9 +273,22 @@ export const statusSubscriber = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     /** language of the subscribe request, used for the emails they get */
     locale: text("locale"),
+    /** components (monitors) the subscriber wants mail about; empty = all of the page */
+    monitorIds: uuid("monitor_ids").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("status_subscriber_page_email_idx").on(t.statusPageId, t.email), uniqueIndex("status_subscriber_token_idx").on(t.token)],
+);
+
+/** One row per maintenance window and status page whose subscribers were reminded; inserting it first is the claim. */
+export const maintenanceReminder = pgTable(
+  "maintenance_reminder",
+  {
+    maintenanceId: uuid("maintenance_id").notNull().references(() => maintenanceWindow.id, { onDelete: "cascade" }),
+    statusPageId: uuid("status_page_id").notNull().references(() => statusPage.id, { onDelete: "cascade" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.maintenanceId, t.statusPageId] })],
 );
 
 export const statusPageComponent = pgTable("status_page_component", {
