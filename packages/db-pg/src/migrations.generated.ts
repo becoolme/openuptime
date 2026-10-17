@@ -94,5 +94,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0018_careless_tomorrow_man",
     "when": 1791998395225,
     "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'push';--> statement-breakpoint\nCREATE TABLE \"push_device\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"token\" text NOT NULL,\n\t\"platform\" text DEFAULT 'ios' NOT NULL,\n\t\"environment\" text DEFAULT 'production' NOT NULL,\n\t\"locale\" text,\n\t\"name\" text,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"last_seen_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"push_device\" ADD CONSTRAINT \"push_device_user_id_user_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"user\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nCREATE UNIQUE INDEX \"push_device_token_idx\" ON \"push_device\" USING btree (\"token\");--> statement-breakpoint\nCREATE INDEX \"push_device_user_idx\" ON \"push_device\" USING btree (\"user_id\");"
+  },
+  {
+    "tag": "0019_flat_molten_man",
+    "when": 1792281274599,
+    "sql": "ALTER TABLE \"incident\" ADD COLUMN \"evaluation_note\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"depends_on_monitor_id\" uuid;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"min_regions_failing\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD CONSTRAINT \"monitor_depends_on_monitor_id_monitor_id_fk\" FOREIGN KEY (\"depends_on_monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE set null ON UPDATE no action;"
   }
 ];
