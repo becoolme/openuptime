@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "ios-testflight-beta",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "iOS app in public beta", zh: "iOS 应用公开测试" },
+    summary: {
+      en: "The OpenUptime iOS app is in public beta on TestFlight.",
+      zh: "OpenUptime iOS 应用现已通过 TestFlight 公开测试。",
+    },
+    points: [
+      { en: "Join the beta from the iOS page with one tap on TestFlight.", zh: "在 iOS 页面点一下即可通过 TestFlight 加入测试。" },
+    ],
+    link: { href: "/ios", label: { en: "Join the iOS beta", zh: "加入 iOS 测试" } },
+  },
+  {
     id: "not-found-page",
     date: "2026-10-16",
     edition: "community",
