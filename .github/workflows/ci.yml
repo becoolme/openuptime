@@ -27,6 +27,7 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm --filter @openuptime/web exec astro build
       - run: pnpm --filter @openuptime/web test
+      - run: pnpm --filter @openuptime/mcp-rest test
       - run: pnpm --filter @openuptime/probe test
       - run: pnpm db:migrate
       - run: pnpm --filter @openuptime/db-pg test
