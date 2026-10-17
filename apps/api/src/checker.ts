@@ -1,4 +1,5 @@
-import { checkUserAgent, guardHost, guardedFetch, hostPort } from "./netguard";
+import { checkUserAgent, guardHost, guardedFetch, hostBlocked, hostPort } from "./netguard";
+import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
 
 export type CheckInput = {
   type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
@@ -10,7 +11,14 @@ export type CheckInput = {
   keywordMode?: string;
   headers?: Record<string, string>;
 };
-export type CheckOutcome = { ok: boolean; statusCode?: number; latencyMs?: number; error?: string };
+export type CheckOutcome = {
+  ok: boolean;
+  statusCode?: number;
+  latencyMs?: number;
+  error?: string;
+  /** The check could not be carried out from here (the prober itself is offline): nothing to record about the target. */
+  inconclusive?: boolean;
+};
 
 export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
   const started = Date.now();
@@ -25,8 +33,32 @@ export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
       default: return { ok: true };
     }
   } catch (e) {
-    return { ok: false, latencyMs: Date.now() - started, error: describe(e) };
+    const failed: CheckOutcome = { ok: false, latencyMs: Date.now() - started, error: describe(e) };
+    return (await proberFault(m, e)) ? { ...failed, inconclusive: true } : failed;
   }
+}
+
+/** The host a check dials, or null when it has none of its own (dns checks ask a public resolver, not the target). */
+function dialedHost(m: CheckInput): string | null {
+  try {
+    if (m.type === "http") return new URL(m.target).hostname;
+    if (m.type === "dns" || m.type === "heartbeat") return null;
+    return hostPort(m.target, 1)?.hostname ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a thrown failure is the prober's fault: its own network stack refused (no IPv6 route…), or it cannot reach any
+ * well-known site. Internal targets are never doubted this way: a private network can be fine while the internet is not.
+ */
+async function proberFault(m: CheckInput, e: unknown): Promise<boolean> {
+  if (!networkLevelError(e)) return false;
+  if (proberSideError(e)) return true;
+  const host = dialedHost(m);
+  if (host && hostBlocked(host)) return false;
+  return !(await proberOnline());
 }
 
 async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {

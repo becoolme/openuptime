@@ -82,7 +82,10 @@ const outcomeOf = (v: unknown): CheckOutcome | null => {
  * nothing about the target, so callers must not count it as a failed check.
  */
 export async function runInRegion(region: string, input: CheckInput): Promise<RegionRun> {
-  if (region === AUTO) return { region, outcome: await runCheck(input) };
+  if (region === AUTO) {
+    const outcome = await runCheck(input);
+    return outcome.inconclusive ? { region, unreachable: "This location is offline" } : { region, outcome };
+  }
   const probe = regions.get(region);
   if (!probe) return { region, unreachable: "Region is not configured on this deployment" };
   const body = JSON.stringify({
@@ -103,7 +106,10 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
       await res.body?.cancel();
       return { region, unreachable: `Probe answered ${res.status}` };
     }
-    const outcome = outcomeOf(await res.json().catch(() => null));
+    const answer = await res.json().catch(() => null);
+    // the probe could not even reach the internet: that says nothing about the target, same as a probe we cannot reach
+    if ((answer as { inconclusive?: unknown } | null)?.inconclusive === true) return { region, unreachable: "Probe is offline" };
+    const outcome = outcomeOf(answer);
     return outcome ? { region, outcome } : { region, unreachable: "Probe answered with something that is not a result" };
   } catch (e) {
     const err = e as Error;
@@ -113,6 +119,9 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
 
 /** One run of a monitor: what each answering region saw, and the single outcome the state machine works with. */
 export type Measured = { out: CheckOutcome; results: RegionResult[] };
+
+/** A run that could not be carried out from here at all: nothing is recorded for it. */
+const inconclusive = (out: CheckOutcome): Measured => ({ out, results: [] });
 
 /**
  * Fold the answers of several regions into one run. The run fails when a strict majority of the regions that answered
@@ -150,6 +159,7 @@ export async function measure(m: Monitor): Promise<Measured> {
   const regions = effectiveRegions(m);
   if (regions.length === 1 && regions[0] === AUTO) {
     const out = await runCheck(m);
+    if (out.inconclusive) return inconclusive(out);
     return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
   }
   const runs = await Promise.all(regions.map((r) => runInRegion(r, m)));
@@ -158,5 +168,6 @@ export async function measure(m: Monitor): Promise<Measured> {
   const combined = combine(runs);
   if (combined) return combined;
   const out = await runCheck(m);
+  if (out.inconclusive) return inconclusive(out);
   return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
 }

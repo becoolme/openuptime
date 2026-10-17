@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "prober-self-check",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "No false outages when the checker is offline", zh: "检测端断网时不再误报故障" },
+    summary: {
+      en: "When a check fails to connect, OpenUptime first makes sure the machine running it can reach the internet, and discards the result if it cannot.",
+      zh: "检测连接失败时,OpenUptime 会先确认执行检测的机器自身能上网;如果不能,就丢弃这次结果。",
+    },
+    points: [
+      { en: "A network failure on the checker's side no longer counts as a failed check, opens an incident or sends an alert.", zh: "检测端自身的网络故障不再计为失败检测,也不会创建事件或发送告警。" },
+      { en: "A region whose probe is offline is left out of the run instead of voting the monitor down.", zh: "探测节点自身离线时,该区域不再参与表决,不会把监控判为故障。" },
+      { en: "Errors that only the checker's own network can cause, such as a missing IPv6 route, are no longer blamed on your service.", zh: "只可能由检测端自身网络引起的错误(例如没有 IPv6 路由)不再算到你的服务头上。" },
+      { en: "Monitors on private addresses are not affected, since they do not depend on the public internet.", zh: "监控内网地址的监控项不受影响,因为它们不依赖公网。" },
+    ],
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

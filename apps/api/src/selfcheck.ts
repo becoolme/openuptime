@@ -1,0 +1,77 @@
+/**
+ * Is it the target that is down, or is it us? A check that fails at the network level (DNS, connect, timeout) says
+ * nothing about the target when the machine running it has lost its own connection. Before such a failure is recorded
+ * the prober therefore fetches a few well-known public URLs; if none answers, the result is discarded as inconclusive
+ * instead of opening an outage.
+ */
+
+export const REFERENCE_URLS = [
+  "https://www.cloudflare.com/cdn-cgi/trace",
+  "https://www.gstatic.com/generate_204",
+  "https://www.apple.com/library/test/success.html",
+];
+const REFERENCE_TIMEOUT_MS = 2500;
+/** A verdict is shared for this long, so a burst of failing checks asks the network once. */
+const VERDICT_TTL_MS = 5000;
+
+type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
+
+/** Sequential on purpose: the usual case is one request, and a Worker has few subrequests to spare. */
+async function probeReferences(urls: string[], doFetch: Fetcher): Promise<boolean> {
+  for (const url of urls) {
+    try {
+      const res = await doFetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(REFERENCE_TIMEOUT_MS) });
+      await res.body?.cancel().catch(() => {});
+      return true; // any HTTP answer proves DNS, routing and TLS work from here
+    } catch { /* try the next one */ }
+  }
+  return false;
+}
+
+let inflight: Promise<boolean> | undefined;
+let last: { at: number; online: boolean } | undefined;
+
+/** Resolves true when this machine can reach the internet. Concurrent callers share one verdict. */
+export function proberOnline(opts: { urls?: string[]; fetch?: Fetcher; now?: () => number } = {}): Promise<boolean> {
+  const now = (opts.now ?? Date.now)();
+  if (last && now - last.at < VERDICT_TTL_MS) return Promise.resolve(last.online);
+  if (inflight) return inflight;
+  const run = probeReferences(opts.urls ?? REFERENCE_URLS, opts.fetch ?? ((u, i) => fetch(u, i)))
+    .then((online) => {
+      last = { at: now, online };
+      return online;
+    })
+    .finally(() => { inflight = undefined; });
+  inflight = run;
+  return run;
+}
+
+/** Forgets the shared verdict (tests). */
+export function resetSelfCheck() {
+  inflight = undefined;
+  last = undefined;
+}
+
+// ---- classifying errors --------------------------------------------------------------------------------------------
+
+/** Errors that come from this machine's own network stack, whatever the target is: no route, no address family. */
+const PROBER_SIDE = new Set(["EADDRNOTAVAIL", "ENETUNREACH", "ENETDOWN", "EAFNOSUPPORT"]);
+
+function codesOf(e: unknown, depth = 0): string[] {
+  if (!e || typeof e !== "object" || depth > 3) return [];
+  const o = e as { code?: unknown; cause?: unknown; errors?: unknown };
+  const own = typeof o.code === "string" ? [o.code] : [];
+  const nested = Array.isArray(o.errors) ? o.errors.flatMap((x) => codesOf(x, depth + 1)) : [];
+  return [...own, ...nested, ...codesOf(o.cause, depth + 1)];
+}
+
+/** True when every error code found is one only the prober's own network can cause (e.g. IPv6 requested, no IPv6 route). */
+export function proberSideError(e: unknown): boolean {
+  const codes = codesOf(e);
+  return codes.length > 0 && codes.every((c) => PROBER_SIDE.has(c));
+}
+
+/** A failure that happened while reaching the target (as opposed to a refused target or a bad answer). */
+export function networkLevelError(e: unknown): boolean {
+  return !(e instanceof Error && e.name === "BlockedTarget");
+}

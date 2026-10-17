@@ -1,6 +1,7 @@
 import type { Monitor, Repo } from "@openuptime/repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureProbes } from "./probes";
+import { resetSelfCheck } from "./selfcheck";
 import { unmetered, type Entitlements } from "./entitlements";
 import { MESSAGE_SIZE, checkOne, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 
@@ -212,5 +213,27 @@ describe("checkOne across regions", () => {
     // a closed local port: the fallback check itself fails, which is what a real outage would look like
     await checkOne(repo, web({ type: "tcp", target: "127.0.0.1:1", failureThreshold: 3 }));
     expect(recorded.single).toMatchObject([{ region: "auto", ok: false }]);
+  });
+  it("records nothing when the prober itself is offline, here or in a region", async () => {
+    // every fetch fails: the probes cannot be asked, and the local fallback cannot reach the reference sites either
+    configureProbes({ PROBE_REGIONS: JSON.stringify({ "us-east": url("us-east") }), PROBE_SECRET: "s" });
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause: { code: "ENOTFOUND" } }); });
+    resetSelfCheck();
+    const { repo, incidents, recorded, states } = repoWithRecords();
+    await checkOne(repo, web({ target: "https://93.184.216.34/", regions: ["us-east"], failureThreshold: 1 }));
+    expect(recorded.single).toHaveLength(0);
+    expect(recorded.many).toHaveLength(0);
+    expect(states).toHaveLength(0);
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("treats a probe that reports itself offline as unreachable", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    vi.stubGlobal("fetch", async (u: string) =>
+      new Response(JSON.stringify(u.endsWith("ap-southeast") ? { ok: false, inconclusive: true, error: "ENOTFOUND" } : { ok: true, latencyMs: 50 })));
+    const { repo, incidents, recorded } = repoWithRecords();
+    await checkOne(repo, web());
+    expect(recorded.many[0].results.map((r) => r.region).sort()).toEqual(["eu-central", "us-east"]);
+    expect(incidents).toHaveLength(0);
   });
 });
