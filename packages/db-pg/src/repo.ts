@@ -1,8 +1,12 @@
 import {
   DEFAULT_ALERT_LOG_DAYS,
   DEFAULT_CHECK_RETENTION_DAYS,
+  MAX_REMINDERS,
   ROLLUP_RETENTION_DAYS,
+  type AlertDelivery,
   type DeliveryRetry,
+  type EscalationDue,
+  type ReminderDue,
   type IncidentWithUpdates,
   type PushDevice,
   type Repo,
@@ -579,7 +583,7 @@ export function createRepo(db: Db): Repo {
     async postIncidentUpdate(orgId, id, u) {
       const [incident] = await db
         .update(schema.incident)
-        .set({ status: u.status, resolvedAt: u.status === "resolved" ? new Date() : null })
+        .set({ status: u.status, resolvedAt: u.status === "resolved" ? new Date() : null, ...(u.status === "resolved" ? { nextReminderAt: null, nextEscalationAt: null } : {}) })
         .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId)))
         .returning();
       if (!incident) return null;
@@ -589,9 +593,11 @@ export function createRepo(db: Db): Repo {
     async acknowledgeIncident(orgId, id, userId) {
       const [inc] = await db
         .update(schema.incident)
-        .set({ acknowledgedAt: new Date(), assigneeId: userId })
+        .set({ acknowledgedAt: new Date(), assigneeId: userId, nextReminderAt: null, nextEscalationAt: null })
         .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId)))
         .returning();
+      // the alerts that went out before the acknowledgement are marked as seen
+      if (inc) await db.update(schema.alertDelivery).set({ acknowledgedAt: inc.acknowledgedAt }).where(and(eq(schema.alertDelivery.incidentId, id), isNull(schema.alertDelivery.acknowledgedAt), inArray(schema.alertDelivery.kind, ["incident.opened", "incident.reminder", "incident.escalated"])));
       return inc ?? null;
     },
     async hasOpenIncident(monitorId, slow) {
@@ -623,7 +629,7 @@ export function createRepo(db: Db): Repo {
       // only the caller that flips it from open to resolved gets true (and so sends the recovery alert)
       const [done] = await db
         .update(schema.incident)
-        .set({ status: "resolved", resolvedAt: new Date() })
+        .set({ status: "resolved", resolvedAt: new Date(), nextReminderAt: null, nextEscalationAt: null })
         .where(and(eq(schema.incident.id, id), isNull(schema.incident.resolvedAt)))
         .returning({ id: schema.incident.id });
       if (!done) return false;
@@ -730,50 +736,178 @@ export function createRepo(db: Db): Repo {
         .where(
           and(
             eq(schema.alertChannel.organizationId, orgId),
-            eq(schema.alertChannel.enabled, true),
+            o.withDisabled ? undefined : eq(schema.alertChannel.enabled, true),
             o.channelIds.length ? inArray(schema.alertChannel.id, o.channelIds) : undefined,
             // without an explicit list, only the monitor's own project (plus any workspace-wide legacy channel) is alerted
             !o.channelIds.length && o.projectId ? or(eq(schema.alertChannel.projectId, o.projectId), isNull(schema.alertChannel.projectId)) : undefined,
           ),
         ),
+    channelsByIds: (orgId, ids) =>
+      ids.length ? db.select().from(schema.alertChannel).where(and(eq(schema.alertChannel.organizationId, orgId), inArray(schema.alertChannel.id, ids))) : Promise.resolve([]),
     async logDeliveries(list) {
       if (!list.length) return;
       // best effort: a failure to write the log must never break alerting
-      // a failed incident alert is queued for another attempt a minute later
-      const values = list.map((r) => ({
-        ...r,
-        nextAttemptAt: !r.ok && r.channelId && (r.kind === "incident.opened" || r.kind === "incident.resolved") ? sql`now() + interval '60 seconds'` : null,
-      }));
+      const values = list.map((r) => ({ ...r, status: r.status ?? (r.ok ? ("sent" as const) : ("failed" as const)), nextAttemptAt: null }));
       await db.insert(schema.alertDelivery).values(values).catch((e) => console.error("alert log write failed", e));
     },
-    async claimRetries(limit) {
-      const t = schema.alertDelivery;
-      const leased = await db
-        .update(t)
-        .set({ nextAttemptAt: null })
-        .where(inArray(t.id, sql`(select id from alert_delivery where ok = false and next_attempt_at <= now() order by next_attempt_at limit ${limit} for update skip locked)`))
-        .returning();
-      const out: DeliveryRetry[] = [];
-      for (const delivery of leased) {
-        const [incident] = delivery.incidentId ? await db.select().from(schema.incident).where(eq(schema.incident.id, delivery.incidentId)) : [];
-        const [monitor] = incident?.monitorId ? await db.select().from(schema.monitor).where(eq(schema.monitor.id, incident.monitorId)) : [];
-        const [channel] = delivery.channelId ? await db.select().from(schema.alertChannel).where(eq(schema.alertChannel.id, delivery.channelId)) : [];
-        // the incident, monitor or channel is gone (or the channel was switched off): nothing left to deliver
-        if (incident && monitor && channel?.enabled) out.push({ delivery, incident, monitor, channel });
+    async queueDeliveries(list) {
+      if (!list.length) return [];
+      try {
+        return (await db.insert(schema.alertDelivery).values(list.map((r) => ({ ...r, ok: false, status: "pending" as const, attempts: 0 }))).returning()) as AlertDelivery[];
+      } catch (e) {
+        console.error("alert log write failed", e);
+        return [];
       }
-      return out;
     },
-    async finishRetry(id, r) {
+    async claimDelivery(id) {
       const t = schema.alertDelivery;
+      // a row that waits for a retry is claimable only once its time has come
+      const [row] = await db
+        .update(t)
+        .set({ status: "sending", claimedAt: sql`now()` })
+        .where(and(eq(t.id, id), eq(t.status, "pending"), or(isNull(t.nextAttemptAt), lte(t.nextAttemptAt, sql`now()`))))
+        .returning();
+      return (row as AlertDelivery) ?? null;
+    },
+    async finishDelivery(id, r) {
+      const t = schema.alertDelivery;
+      const again = r.status === "failed" && r.retryInSec != null;
       await db
         .update(t)
         .set({
-          ok: r.ok,
+          status: again ? "pending" : r.status,
+          ok: r.status === "sent",
           error: r.error,
-          attempts: sql`${t.attempts} + 1`,
-          nextAttemptAt: r.ok || r.retryInSec == null ? null : sql`now() + make_interval(secs => ${r.retryInSec})`,
+          statusMessage: r.message,
+          // a skip is not an attempt
+          attempts: r.status === "skipped" ? t.attempts : sql`${t.attempts} + 1`,
+          nextAttemptAt: again ? sql`now() + make_interval(secs => ${r.retryInSec})` : null,
         })
-        .where(eq(t.id, id));
+        .where(and(eq(t.id, id), eq(t.status, "sending")));
+    },
+    async claimRetries(limit) {
+      const t = schema.alertDelivery;
+      // rows from before delivery states existed count as pending when they failed and wait for a retry
+      const due = sql`(${t.status} = 'pending' or (${t.status} is null and ${t.ok} = false)) and ${t.nextAttemptAt} <= now()`;
+      const claimed = await db
+        .update(t)
+        .set({ status: "sending", claimedAt: sql`now()`, nextAttemptAt: null })
+        .where(inArray(t.id, sql`(select id from alert_delivery where ${due} order by next_attempt_at limit ${limit} for update skip locked)`))
+        .returning();
+      const out: DeliveryRetry[] = [];
+      for (const delivery of claimed as AlertDelivery[]) {
+        const [incident] = delivery.incidentId ? await db.select().from(schema.incident).where(eq(schema.incident.id, delivery.incidentId)) : [];
+        const [monitor] = incident?.monitorId ? await db.select().from(schema.monitor).where(eq(schema.monitor.id, incident.monitorId)) : [];
+        const [channel] = delivery.channelId ? await db.select().from(schema.alertChannel).where(eq(schema.alertChannel.id, delivery.channelId)) : [];
+        if (incident && monitor && channel?.enabled) out.push({ delivery, incident, monitor, channel });
+        else {
+          // nothing left to deliver: say why instead of leaving the row hanging
+          const why = !incident || !monitor ? "skipped: the incident or monitor was removed" : !channel ? "skipped: the channel was removed" : "skipped: channel disabled";
+          await db.update(t).set({ status: "skipped", ok: false, statusMessage: why, error: why }).where(and(eq(t.id, delivery.id), eq(t.status, "sending")));
+        }
+      }
+      return out;
+    },
+    async sweepStuckDeliveries(o) {
+      const t = schema.alertDelivery;
+      // an interrupted attempt counts as an attempt: after the last one the row is failed for good
+      const gaveUp = await db
+        .update(t)
+        .set({ status: "failed", ok: false, attempts: sql`${t.attempts} + 1`, error: "The worker stopped before the alert was confirmed", statusMessage: "failed: the worker stopped before the alert was confirmed" })
+        .where(and(eq(t.status, "sending"), lt(t.claimedAt, sql`now() - make_interval(secs => ${o.stuckSec})`), sql`${t.attempts} + 1 >= ${o.maxAttempts}`))
+        .returning({ id: t.id });
+      const back = await db
+        .update(t)
+        .set({ status: "pending", attempts: sql`${t.attempts} + 1`, nextAttemptAt: sql`now()`, statusMessage: "retrying: the worker stopped before the alert was confirmed" })
+        .where(and(eq(t.status, "sending"), lt(t.claimedAt, sql`now() - make_interval(secs => ${o.stuckSec})`)))
+        .returning({ id: t.id });
+      // rows queued but never claimed (the dispatcher died in between) become retries too
+      const orphans = await db
+        .update(t)
+        .set({ nextAttemptAt: sql`now()` })
+        .where(and(eq(t.status, "pending"), isNull(t.nextAttemptAt), lt(t.createdAt, sql`now() - make_interval(secs => ${o.stuckSec})`)))
+        .returning({ id: t.id });
+      return gaveUp.length + back.length + orphans.length;
+    },
+    incidentDeliveries: (orgId, incidentId) =>
+      db
+        .select()
+        .from(schema.alertDelivery)
+        .where(and(eq(schema.alertDelivery.organizationId, orgId), eq(schema.alertDelivery.incidentId, incidentId)))
+        .orderBy(asc(schema.alertDelivery.createdAt)) as unknown as Promise<AlertDelivery[]>,
+
+    async scheduleFollowUps(inc, projectId) {
+      if (!projectId) return;
+      const [p] = await db.select().from(schema.project).where(eq(schema.project.id, projectId));
+      if (!p) return;
+      const first = p.escalation[0];
+      const set: Partial<typeof schema.incident.$inferInsert> = {};
+      if (p.reminderIntervalMin) set.nextReminderAt = new Date(Date.now() + p.reminderIntervalMin * 60_000);
+      if (first) set.nextEscalationAt = new Date(inc.startedAt.getTime() + first.escalateAfterMin * 60_000);
+      if (Object.keys(set).length) await db.update(schema.incident).set(set).where(and(eq(schema.incident.id, inc.id), isNull(schema.incident.resolvedAt), isNull(schema.incident.acknowledgedAt)));
+    },
+    async claimReminders(limit) {
+      const i = schema.incident;
+      const candidates = await db
+        .select({ incident: i, monitor: schema.monitor, project: schema.project })
+        .from(i)
+        .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
+        .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
+        .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+        .orderBy(asc(i.nextReminderAt))
+        .limit(limit);
+      const out: ReminderDue[] = [];
+      for (const c of candidates) {
+        const interval = c.project.reminderIntervalMin;
+        const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
+        // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
+        // second worker sees no row. The next repeat is counted from now, which folds any missed intervals into this one.
+        const [won] = await db
+          .update(i)
+          .set(
+            interval
+              ? { reminderCount: sql`${i.reminderCount} + 1`, nextReminderAt: last ? null : sql`now() + make_interval(mins => ${interval})` }
+              : { nextReminderAt: null },
+          )
+          .where(and(eq(i.id, c.incident.id), eq(i.reminderCount, c.incident.reminderCount), lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+          .returning();
+        // repeats switched off since the incident opened: the clock is simply cleared
+        if (won && interval) out.push({ incident: won, monitor: c.monitor, project: { reminderIntervalMin: interval, reminderEmail: c.project.reminderEmail, escalation: c.project.escalation }, number: won.reminderCount });
+      }
+      return out as unknown as ReminderDue[];
+    },
+    async claimEscalations(limit) {
+      const i = schema.incident;
+      const candidates = await db
+        .select({ incident: i, monitor: schema.monitor, project: schema.project })
+        .from(i)
+        .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
+        .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
+        .where(and(lte(i.nextEscalationAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+        .orderBy(asc(i.nextEscalationAt))
+        .limit(limit);
+      const out: EscalationDue[] = [];
+      for (const c of candidates) {
+        const steps = c.project.escalation;
+        const step = steps[c.incident.escalationLevel];
+        const after = steps[c.incident.escalationLevel + 1];
+        const [won] = await db
+          .update(i)
+          .set({ escalationLevel: sql`${i.escalationLevel} + 1`, nextEscalationAt: after ? new Date(c.incident.startedAt.getTime() + after.escalateAfterMin * 60_000) : null })
+          .where(and(eq(i.id, c.incident.id), eq(i.escalationLevel, c.incident.escalationLevel), lte(i.nextEscalationAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+          .returning();
+        // the step list was shortened since: nothing to send, the clock is cleared above
+        if (won && step) out.push({ incident: won, monitor: c.monitor, step, level: won.escalationLevel });
+      }
+      return out;
+    },
+    async getProjectAlerting(orgId, projectId) {
+      const [p] = await db.select().from(schema.project).where(and(eq(schema.project.id, projectId), eq(schema.project.organizationId, orgId)));
+      return p ? { reminderIntervalMin: p.reminderIntervalMin, reminderEmail: p.reminderEmail, escalation: p.escalation } : null;
+    },
+    async saveProjectAlerting(orgId, projectId, v) {
+      const [p] = await db.update(schema.project).set(v).where(and(eq(schema.project.id, projectId), eq(schema.project.organizationId, orgId))).returning();
+      return p ? { reminderIntervalMin: p.reminderIntervalMin, reminderEmail: p.reminderEmail, escalation: p.escalation } : null;
     },
     listDeliveries: (orgId, projectId, o) =>
       db

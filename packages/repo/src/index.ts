@@ -23,7 +23,19 @@ export interface Project {
   organizationId: string;
   name: string;
   createdAt: Date;
+  reminderIntervalMin: number | null;
+  reminderEmail: boolean;
+  escalation: EscalationStep[];
 }
+/** One escalation level: these channels are alerted when the incident is still unacknowledged `escalateAfterMin` minutes after it started. */
+export interface EscalationStep {
+  channelIds: string[];
+  escalateAfterMin: number;
+}
+export type ProjectAlerting = Pick<Project, "reminderIntervalMin" | "reminderEmail" | "escalation">;
+/** Repeats stop after this many, whatever the interval. */
+export const MAX_REMINDERS = 10;
+export const REMINDER_INTERVALS = [5, 10, 15, 30, 60] as const;
 
 export interface Monitor {
   id: string;
@@ -120,6 +132,10 @@ export interface Incident {
   startedAt: Date;
   acknowledgedAt: Date | null;
   resolvedAt: Date | null;
+  nextReminderAt: Date | null;
+  reminderCount: number;
+  escalationLevel: number;
+  nextEscalationAt: Date | null;
 }
 export interface IncidentUpdate {
   id: string;
@@ -171,18 +187,42 @@ export interface AlertDelivery {
   channelId: string | null;
   channelName: string;
   channelType: string;
-  /** incident.opened | incident.resolved | incident.muted | test | subscribers */
+  /** incident.opened | incident.resolved | incident.reminder | incident.escalated | incident.muted | test | subscribers */
   kind: string;
   incidentId: string | null;
   monitorName: string | null;
   ok: boolean;
   error: string | null;
+  /** null on rows written before delivery states existed; read those through `ok` */
+  status: DeliveryStatus | null;
+  /** the reason in words, e.g. "failed: HTTP 500", "skipped: channel disabled" */
+  statusMessage: string | null;
+  claimedAt: Date | null;
+  /** when the incident was acknowledged after this alert went out */
+  acknowledgedAt: Date | null;
   /** how many times delivery was tried (failed incident alerts are retried a few times) */
   attempts: number;
   createdAt: Date;
 }
-export type NewDelivery = Omit<AlertDelivery, "id" | "createdAt" | "attempts" | "projectId" | "channelId" | "incidentId" | "monitorName" | "error"> &
-  Partial<Pick<AlertDelivery, "projectId" | "channelId" | "incidentId" | "monitorName" | "error">>;
+export type DeliveryStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
+export type NewDelivery = Omit<AlertDelivery, "id" | "createdAt" | "attempts" | "projectId" | "channelId" | "incidentId" | "monitorName" | "error" | "status" | "statusMessage" | "claimedAt" | "acknowledgedAt"> &
+  Partial<Pick<AlertDelivery, "projectId" | "channelId" | "incidentId" | "monitorName" | "error" | "status" | "statusMessage">>;
+
+/** A repeat alert whose claim this worker won: the incident, its monitor and the project's settings. */
+export interface ReminderDue {
+  incident: Incident;
+  monitor: Monitor;
+  project: ProjectAlerting;
+  /** which repeat this is, starting at 1 */
+  number: number;
+}
+export interface EscalationDue {
+  incident: Incident;
+  monitor: Monitor;
+  step: EscalationStep;
+  /** which level this is, starting at 1 */
+  level: number;
+}
 
 export interface DeliveryRetry {
   delivery: AlertDelivery;
@@ -437,12 +477,33 @@ export interface Repo {
   deletePushDeviceByToken(token: string): Promise<void>;
   /** Workspaces where the user is owner or admin and that have no push channel yet. */
   managedOrgsWithoutPushChannel(userId: string): Promise<string[]>;
-  channelsToAlert(orgId: string, o: { channelIds: string[]; projectId?: string | null }): Promise<AlertChannel[]>;
+  /** Channels to alert; with `withDisabled` the switched-off ones are listed too, so the skip can be recorded. */
+  channelsToAlert(orgId: string, o: { channelIds: string[]; projectId?: string | null; withDisabled?: boolean }): Promise<AlertChannel[]>;
+  /** Write rows that are already final (skipped, muted, test). Best effort. */
   logDeliveries(rows: NewDelivery[]): Promise<void>;
-  /** Lease failed incident alerts that are due a retry (a few attempts, with backoff). */
+  /** Write rows as `pending`, ready to be claimed; returns the rows that were stored (none when the log is unavailable). */
+  queueDeliveries(rows: NewDelivery[]): Promise<AlertDelivery[]>;
+  /** One conditional UPDATE: pending -> sending. Null when another worker holds the row or it is not due. */
+  claimDelivery(id: string): Promise<AlertDelivery | null>;
+  /**
+   * Close a claimed row. `retryInSec` puts a failed row back to pending for another attempt; null leaves it failed.
+   * Only a row still in `sending` is touched, so a late finisher cannot overwrite a sweep's decision.
+   */
+  finishDelivery(id: string, r: { status: "sent" | "failed" | "skipped"; error: string | null; message: string | null; retryInSec?: number | null }): Promise<void>;
+  /** Claim failed incident alerts that are due a retry (a few attempts, with backoff). */
   claimRetries(limit: number): Promise<DeliveryRetry[]>;
-  /** Record a retry's outcome; `retryInSec` schedules another attempt (null = give up). */
-  finishRetry(id: string, r: { ok: boolean; error: string | null; retryInSec: number | null }): Promise<void>;
+  /** Housekeeping: hand rows stuck in `sending` back to pending, or fail them after `maxAttempts`. Returns how many moved. */
+  sweepStuckDeliveries(o: { stuckSec: number; maxAttempts: number }): Promise<number>;
+  /** All alerts of one incident, oldest first. */
+  incidentDeliveries(orgId: string, incidentId: string): Promise<AlertDelivery[]>;
+  channelsByIds(orgId: string, ids: string[]): Promise<AlertChannel[]>;
+  /** Start the incident's repeat and escalation clocks from the project's settings. */
+  scheduleFollowUps(incident: Pick<Incident, "id" | "startedAt">, projectId: string | null): Promise<void>;
+  /** Claim up to `limit` repeats that are due; each is returned to exactly one caller, and only the latest missed one is sent. */
+  claimReminders(limit: number): Promise<ReminderDue[]>;
+  claimEscalations(limit: number): Promise<EscalationDue[]>;
+  getProjectAlerting(orgId: string, projectId: string): Promise<ProjectAlerting | null>;
+  saveProjectAlerting(orgId: string, projectId: string, v: ProjectAlerting): Promise<ProjectAlerting | null>;
   /** Deliveries of the project (and workspace-wide ones), newest first. */
   listDeliveries(orgId: string, projectId: string, o: { limit: number; before?: Date }): Promise<AlertDelivery[]>;
   /** Confirmed subscribers of the pages showing this monitor (every page of the workspace when `monitorId` is null). */
