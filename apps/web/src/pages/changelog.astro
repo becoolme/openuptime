@@ -5,12 +5,10 @@ import { CLOUD_ENTRIES } from "../lib/changelog-cloud";
 
 // With no cloud-only entries (the community build) the edition filter would only repeat "All", so it is left out.
 const hasCloud = CLOUD_ENTRIES.length > 0;
-const latest = ENTRIES[0]?.date;
 ---
 <Doc
   title="Changelog"
   description="What changed in OpenUptime, newest first, for the open-source Community edition and the hosted Cloud edition."
-  updated={latest}
 >
   <div class="cl">
     <div lang="en">
@@ -79,26 +77,53 @@ const latest = ENTRIES[0]?.date;
         </article>
       ))}
     </section>
+    <div class="cl-more" id="cl-more" hidden>
+      <button type="button"><span lang="en">Show older entries</span><span lang="zh-CN">显示更早的更新</span></button>
+    </div>
   </div>
 </Doc>
 
 <script is:inline>
-  // Edition filter: hides the entries that do not belong to the chosen edition.
+  // Edition filter plus paging: every entry stays in the HTML (search engines, anchors); the page shows the newest ones first.
   (function () {
-    var bar = document.querySelector(".cl-bar");
-    if (!bar) return;
+    var PAGE = 15;
     var items = [].slice.call(document.querySelectorAll(".cl-e"));
-    bar.addEventListener("click", function (ev) {
+    var more = document.getElementById("cl-more");
+    var filter = "all";
+    var shown = PAGE;
+    function render() {
+      var n = 0, rest = 0;
+      items.forEach(function (el) {
+        var ok = filter === "all" || el.getAttribute("data-ed") === filter;
+        var vis = ok && n < shown;
+        if (ok) n++;
+        if (ok && !vis) rest++;
+        el.hidden = !vis;
+      });
+      if (more) more.hidden = rest === 0;
+    }
+    function reveal() {
+      var id = decodeURIComponent(location.hash.slice(1));
+      var el = id && document.getElementById(id);
+      if (el && el.hidden) { shown = items.length; render(); el.scrollIntoView(); }
+    }
+    var bar = document.querySelector(".cl-bar");
+    if (bar) bar.addEventListener("click", function (ev) {
       var b = ev.target.closest("button[data-f]");
       if (!b) return;
-      var f = b.getAttribute("data-f");
+      filter = b.getAttribute("data-f");
+      shown = PAGE;
       [].forEach.call(bar.querySelectorAll("button"), function (x) {
         var on = x === b;
         x.classList.toggle("on", on);
         x.setAttribute("aria-pressed", String(on));
       });
-      items.forEach(function (el) { el.hidden = f !== "all" && el.getAttribute("data-ed") !== f; });
+      render();
     });
+    if (more) more.addEventListener("click", function () { shown += PAGE; render(); });
+    window.addEventListener("hashchange", reveal);
+    render();
+    reveal();
   })();
 </script>
 
@@ -119,6 +144,10 @@ const latest = ENTRIES[0]?.date;
   .cl-list { margin-top: 24px; border-top: 1px solid var(--line); }
   .cl-e { display: flex; flex-wrap: wrap; gap: 12px 40px; padding: 28px 0; border-bottom: 1px solid var(--line); }
   .cl-e[hidden] { display: none; }
+  .cl-more { margin: 28px 0 0; text-align: center; }
+  .cl-more[hidden] { display: none; }
+  .cl-more button { height: 40px; padding: 0 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 500 14.5px var(--sans); cursor: pointer; }
+  .cl-more button:hover { background: var(--surface-2); }
   .cl-d { flex: 0 0 110px; padding-top: 3px; }
   .cl-d time { font: 500 13.5px var(--mono); color: var(--ink); }
   .cl-b { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
