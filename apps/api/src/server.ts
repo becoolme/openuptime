@@ -141,21 +141,33 @@ for (let attempt = 1; ; attempt++) {
 
 server.listen(port, () => console.log(`openuptime → ${env.WEB_ORIGIN} (listening on :${port})`));
 
-let ticking = false;
+// A tick normally takes well under a second, and a failing one (database down) ends quickly with an error. One that
+// never ends is a hung database call: it would block every later tick while /health keeps answering. Nothing else can
+// recover that, so exit and let the container's restart policy bring the process back. State lives in Postgres.
+const TICK_STUCK_MS = 5 * 60_000;
+let tickStartedAt = 0; // 0 = no tick running
 const tick = setInterval(async () => {
-  if (ticking) return; // a long tick must not overlap the next one
-  ticking = true;
+  if (tickStartedAt) return; // a long tick must not overlap the next one
+  tickStartedAt = Date.now();
   try {
     await runDueChecks(database.repo, queue, entitlements);
   } catch (e) {
     console.error("scheduler", e);
   } finally {
-    ticking = false;
+    tickStartedAt = 0;
   }
 }, 30_000);
+const watchdog = setInterval(() => {
+  if (tickStartedAt && Date.now() - tickStartedAt > TICK_STUCK_MS) {
+    console.error(`scheduler: a tick has been running for over ${TICK_STUCK_MS / 60_000} minutes; exiting so the container restarts`);
+    process.exit(1);
+  }
+}, 30_000);
+watchdog.unref();
 
 const stop = () => {
   clearInterval(tick);
+  clearInterval(watchdog);
   server.close();
   database.close(5).finally(() => process.exit(0));
   setTimeout(() => process.exit(0), 8000).unref();

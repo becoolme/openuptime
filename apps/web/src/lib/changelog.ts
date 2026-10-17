@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "docker-scheduler-watchdog",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Self-hosted restarts a stuck scheduler", zh: "自托管调度卡死时自动重启" },
+    summary: {
+      en: "A self-hosted container now restarts itself if the check scheduler hangs, instead of silently stopping checks.",
+      zh: "自托管容器在检测调度卡死时会自动重启,不再悄悄停止检测。",
+    },
+    points: [
+      { en: "If one scheduling round runs for more than five minutes, for example on a hung database call, the process exits and Docker's restart policy starts it again.", zh: "如果某一轮调度运行超过五分钟(例如数据库调用卡住),进程会退出,由 Docker 的重启策略重新拉起。" },
+      { en: "Rounds that fail quickly, such as during a database outage, are unaffected and retry on the next round.", zh: "快速失败的调度(例如数据库故障期间)不受影响,下一轮会重试。" },
+    ],
+  },
+  {
     id: "ios-testflight-beta",
     date: "2026-10-17",
     edition: "community",
