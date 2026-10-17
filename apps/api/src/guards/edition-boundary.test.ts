@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ROOT, read, walk } from "./helpers";
@@ -25,7 +26,19 @@ const specifiers = (src: string) =>
   [...src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm)].map((m) => m[1]);
 const hostedSpecifier = /(^|\/)(cloud|edge)(\/|$)|worker\.cloud|wrangler\.(cloud|edge)|changelog-cloud/;
 
-describe("community build", () => {
+/** The hosted branch merges `main` and legitimately holds the hosted files, so these checks only apply on `main` and its pull requests. */
+const branch = () => {
+  const target = process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME;
+  if (target) return target;
+  try {
+    return execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return "";
+  }
+};
+const hosted = /^cloud/.test(branch());
+
+describe.skipIf(hosted)("community build", () => {
   it("has no hosted-only files", () => {
     expect(CLOUD_ONLY_PATHS.filter((p) => existsSync(join(ROOT, p)))).toEqual([]);
   });
