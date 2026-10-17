@@ -27,6 +27,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "target-address-pinning",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Safer checks against private addresses", zh: "更安全的内网地址防护" },
+    summary: {
+      en: "A check now connects to the exact address that was verified as public, so a hostname cannot switch to an internal address in between.",
+      zh: "检测现在会连接到已验证为公网的那个地址,主机名无法在验证之后改指向内网地址。",
+    },
+    points: [
+      { en: "HTTP checks and webhook alerts connect to the verified address on every redirect hop, while the certificate is still checked against the hostname.", zh: "HTTP 检测和 Webhook 告警在每一次跳转时都连接到已验证的地址,证书仍然按主机名校验。" },
+      { en: "A hostname that cannot be resolved is reported as unresolvable instead of being tried anyway.", zh: "无法解析的主机名会直接报告为无法解析,不再继续尝试连接。" },
+      { en: "Private addresses are still refused by default; ALLOW_PRIVATE_TARGETS=true keeps working as before.", zh: "默认仍然拒绝私有地址;ALLOW_PRIVATE_TARGETS=true 的行为不变。" },
+    ],
+  },
+  {
     id: "prober-self-check",
     date: "2026-10-17",
     edition: "community",
