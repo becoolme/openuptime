@@ -29,6 +29,12 @@ export const project = pgTable(
     organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Repeat a push alert every N minutes until the incident is acknowledged or resolved; null = off. */
+    reminderIntervalMin: integer("reminder_interval_min"),
+    /** Whether repeats also go to email channels (push channels always get them when repeats are on). */
+    reminderEmail: boolean("reminder_email").notNull().default(false),
+    /** Ordered escalation steps: [{ channelIds, escalateAfterMin }], minutes counted from the start of the incident. */
+    escalation: jsonb("escalation").$type<{ channelIds: string[]; escalateAfterMin: number }[]>().notNull().default([]),
   },
   (t) => [index("project_org_idx").on(t.organizationId)],
 );
@@ -124,6 +130,12 @@ export const incident = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** When the next repeat alert is due; null once acknowledged, resolved, capped or when repeats are off. */
+    nextReminderAt: timestamp("next_reminder_at", { withTimezone: true }),
+    reminderCount: integer("reminder_count").notNull().default(0),
+    /** How many escalation steps have fired, and when the next one is due (null = none left). */
+    escalationLevel: integer("escalation_level").notNull().default(0),
+    nextEscalationAt: timestamp("next_escalation_at", { withTimezone: true }),
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),
@@ -192,12 +204,20 @@ export const alertDelivery = pgTable(
     monitorName: text("monitor_name"),
     ok: boolean("ok").notNull(),
     error: text("error"),
+    /** pending | sending | sent | failed | skipped; null on rows written before delivery states existed */
+    status: text("status").$type<"pending" | "sending" | "sent" | "failed" | "skipped">(),
+    /** human reason shown next to the status, e.g. "failed: HTTP 500" or "skipped: channel disabled" */
+    statusMessage: text("status_message"),
+    /** set when a worker took the row (pending -> sending); a row stuck in sending is handed back after a few minutes */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    /** set when the incident was acknowledged after this alert went out */
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(1),
     /** set while a failed incident alert is waiting for another attempt */
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("alert_delivery_org_time_idx").on(t.organizationId, t.createdAt), index("alert_delivery_retry_idx").on(t.nextAttemptAt)],
+  (t) => [index("alert_delivery_org_time_idx").on(t.organizationId, t.createdAt), index("alert_delivery_retry_idx").on(t.nextAttemptAt), index("alert_delivery_status_idx").on(t.status, t.claimedAt), index("alert_delivery_incident_idx").on(t.incidentId)],
 );
 
 /** Per-workspace preferences; a missing row means defaults. */
