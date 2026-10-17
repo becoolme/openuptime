@@ -194,6 +194,8 @@ export interface DeliveryRetry {
 export interface WorkspaceSettings {
   alertLogRetentionDays: number;
   checkRetentionDays: number;
+  /** email the owners a summary of the previous month */
+  monthlyReport: boolean;
 }
 
 export interface MaintenanceWindow {
@@ -222,10 +224,17 @@ export interface StatusPage {
   externalUrl: string | null;
   /** the owner asked to leave OpenUptime's name and mark off the page and its mails (only honoured where the plan allows it) */
   hideBranding: boolean;
+  /** uptime bars: green at or above `uptimeOkPct`, amber at or above `uptimeWarnPct`, red below (percent) */
+  uptimeOkPct: number;
+  uptimeWarnPct: number;
+  /** the public MCP tools may serve this page */
+  mcpEnabled: boolean;
+  /** hours before maintenance starts that subscribers are reminded; 0 = never */
+  maintenanceReminderHours: number;
   createdAt: Date;
 }
 export type NewStatusPage = { slug: string; title: string; theme?: string; showLatency?: boolean; externalUrl?: string | null; hideBranding?: boolean };
-export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding">>;
+export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding" | "uptimeOkPct" | "uptimeWarnPct" | "mcpEnabled" | "maintenanceReminderHours">>;
 export type PageComponentInput = { monitorId: string; groupName?: string };
 export interface Subscriber {
   id: string;
@@ -241,6 +250,24 @@ export interface SubscriberTarget {
   title: string;
   /** the page asks to hide OpenUptime's branding; the plan decides whether that is honoured */
   hideBranding: boolean;
+  /** components the subscriber chose; empty = everything on the page */
+  monitorIds: string[];
+}
+
+/** A maintenance window whose subscribers are due a reminder; the reminder was claimed for the caller alone. */
+export interface MaintenanceReminder {
+  window: MaintenanceWindow;
+  page: StatusPage;
+  subscribers: SubscriberTarget[];
+}
+
+/** One component's month, for the monthly report. */
+export interface MonthlyComponent {
+  name: string;
+  /** percent, null when nothing was checked */
+  uptime: number | null;
+  downtimeMinutes: number;
+  incidents: number;
 }
 export interface StatusBoard {
   /** granularity of each component's `days` */
@@ -473,8 +500,21 @@ export interface Repo {
   /** Incidents shown on a page (its monitors' plus workspace-level ones), newest first. */
   pageIncidents(page: StatusPage, o: { limit: number; before?: Date }): Promise<IncidentWithUpdates[]>;
   subscriberCount(pageId: string): Promise<number>;
-  /** Returns the new row's locale, or null when the address was already subscribed. */
-  addSubscriber(s: { pageId: string; email: string; token: string; locale: string }): Promise<{ locale: string | null } | null>;
+  /**
+   * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row);
+   * a pending row takes the new locale and component choice, a confirmed one is left alone.
+   */
+  addSubscriber(s: { pageId: string; email: string; token: string; locale: string; monitorIds?: string[] }): Promise<{ locale: string | null; token: string; confirmed: boolean; created: boolean }>;
+  /** Maintenance windows touching the page (its monitors', plus workspace-wide ones) that end after `since`, newest start first. */
+  pageMaintenance(page: StatusPage, o: { since?: Date; limit: number }): Promise<MaintenanceWindow[]>;
+  /** Windows that start within their page's reminder lead time, each claimed once per page; claimed rows come back with their subscribers. */
+  claimMaintenanceReminders(limit: number): Promise<MaintenanceReminder[]>;
+  /** Workspaces that want a report for `month` (YYYY-MM) and had none yet; each is claimed once. */
+  claimMonthlyReports(month: string, limit: number): Promise<string[]>;
+  /** Per-component uptime, downtime and incident count between the two instants. */
+  monthlyReport(orgId: string, from: Date, to: Date): Promise<MonthlyComponent[]>;
+  /** Emails and locales of the workspace owners. */
+  ownerContacts(orgId: string): Promise<{ email: string; locale: string | null }[]>;
   /** Marks the token confirmed; returns the page slug it belongs to (null for unknown tokens). */
   confirmSubscriber(token: string): Promise<string | null>;
   removeSubscriber(token: string): Promise<string | null>;
