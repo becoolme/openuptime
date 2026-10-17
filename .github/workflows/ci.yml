@@ -29,7 +29,19 @@ jobs:
       - run: pnpm --filter @openuptime/web test
       - run: pnpm --filter @openuptime/mcp-rest test
       - run: pnpm --filter @openuptime/probe test
+      # the migrations must apply to an empty database
       - run: pnpm db:migrate
+      # schema drift: the schema in packages/db-pg/src must not need a migration that was not committed
+      - name: Schema matches the committed migrations
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::pnpm db:generate produced a new migration: commit it (then run node scripts/gen-migrations.mjs)"
+            git status --short
+            exit 1
+          fi
+      - name: Embedded migrations match the generated SQL
+        run: node scripts/gen-migrations.mjs --check
       - run: pnpm --filter @openuptime/db-pg test
       # the OAuth/MCP end-to-end test needs its own empty database (it applies the migrations itself)
       - run: PGPASSWORD=ci psql -h localhost -U ci -d openuptime -c 'create database openuptime_oauth_e2e'
