@@ -637,7 +637,7 @@ export function createRepo(db: Db): Repo {
     async postIncidentUpdate(orgId, id, u) {
       const [incident] = await db
         .update(schema.incident)
-        .set({ status: u.status, resolvedAt: u.status === "resolved" ? new Date() : null, ...(u.status === "resolved" ? { nextReminderAt: null, nextEscalationAt: null } : {}) })
+        .set({ status: u.status, resolvedAt: u.status === "resolved" ? new Date() : null, ...(u.status === "resolved" ? { nextReminderAt: null, nextEscalationAt: null } : { postmortemPublishedAt: sql`case when ${schema.incident.resolvedAt} is not null then null else ${schema.incident.postmortemPublishedAt} end` }) })
         .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId)))
         .returning();
       if (!incident) return null;
