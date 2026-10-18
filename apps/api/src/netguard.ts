@@ -178,22 +178,40 @@ export function forgetResolved(host: string) {
   resolved.delete(normaliseHost(host));
 }
 
+/** Shortest slice an address gets while time remains: a slow but working address still has room to answer. */
+const MIN_SLICE_MS = 3000;
+
 /**
  * Runs `connect` against each validated address of `host` in turn and returns the first success. When every address
  * failed, the cached lookup is dropped and the whole list is tried once more from a fresh lookup (the name may have
  * moved). The error thrown lists every failure (`errors`), so callers can tell a prober-side problem from a target one.
- * `until` (epoch ms) stops further attempts once a check's time is up.
+ * `until` (epoch ms) bounds the whole dial: each address gets its own slice of the time that is left (an equal share, at
+ * least 3 seconds), so one blackholed address cannot use up the deadline of the others. `connect` receives a signal that
+ * aborts when its slice ends; a connection that still succeeds after that is handed to `discard` so it is not leaked.
  */
-export async function dialEach<T>(host: string, connect: (address: string) => Promise<T>, until = Infinity): Promise<T> {
+export async function dialEach<T>(host: string, connect: (address: string, signal: AbortSignal) => Promise<T>, until = Infinity, discard?: (value: T) => void): Promise<T> {
   const failures: unknown[] = [];
   for (let pass = 0; pass < 2; pass++) {
     const addrs = await guardHosts(host);
-    for (const a of addrs) {
-      if (Date.now() > until) break;
+    for (let i = 0; i < addrs.length; i++) {
+      const remaining = until - Date.now();
+      if (remaining <= 0) break;
+      const slice = Number.isFinite(remaining) ? Math.min(remaining, Math.max(remaining / (addrs.length - i), MIN_SLICE_MS)) : Infinity;
+      const ctl = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let lost = false;
+      const attempt = connect(addrs[i], ctl.signal);
       try {
-        return await connect(a);
+        if (!Number.isFinite(slice)) return await attempt;
+        return await Promise.race([
+          attempt,
+          new Promise<never>((_, reject) => { timer = setTimeout(() => { lost = true; ctl.abort(); reject(new Error("Connection timed out")); }, slice); }),
+        ]);
       } catch (e) {
         failures.push(e);
+        if (lost) attempt.then((v) => discard?.(v), () => {});
+      } finally {
+        clearTimeout(timer);
       }
     }
     // a literal or a Workers host has no lookup to repeat
@@ -207,16 +225,16 @@ export async function dialEach<T>(host: string, connect: (address: string) => Pr
 }
 
 /**
- * Is the host private as far as the prober can tell: a private literal or internal name, a name that resolves to a private
- * address, or (with ALLOW_PRIVATE_TARGETS) anything that is not a public IP literal. Such a target says nothing about the
- * prober's internet access. A name that cannot be resolved is not private.
+ * Is the host private as far as the prober can tell: a private literal or internal name, or a name that resolves to a
+ * private address (also with ALLOW_PRIVATE_TARGETS, where public names stay usable for the prober's own connectivity
+ * check). Such a target says nothing about the prober's internet access. A name that cannot be resolved is not private.
  */
 export async function targetIsPrivate(host: string): Promise<boolean> {
   const h = normaliseHost(host);
-  if (isLiteral(h)) return allowPrivate ? addressBlocked(h) : hostBlocked(h);
-  if (allowPrivate) return true;
-  if (hostBlocked(h)) return true;
-  if (isWorkers()) return false;
+  if (isLiteral(h)) return addressBlocked(h);
+  // with private targets allowed an internal-looking name may still be public: only its addresses decide
+  if (!allowPrivate && hostBlocked(h)) return true;
+  if (isWorkers()) return allowPrivate ? hostBlocked(h) : false;
   try {
     return (await resolveAll(h)).some(addressBlocked);
   } catch {
@@ -270,6 +288,20 @@ export async function urlProblem(url: string): Promise<string | null> {
 
 const MAX_REDIRECTS = 5;
 const CONNECT_FAILURES = new Set(["ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EADDRNOTAVAIL", "ENOTFOUND", "EAI_AGAIN"]);
+
+/** Error codes of a failure, including those of the attempts inside an AggregateError (several addresses tried). */
+function errorCodes(e: unknown): string[] {
+  const out: string[] = [];
+  const walk = (x: unknown, depth: number) => {
+    if (!x || typeof x !== "object" || depth > 3) return;
+    const { code, cause, errors } = x as { code?: unknown; cause?: unknown; errors?: unknown };
+    if (typeof code === "string") out.push(code);
+    walk(cause, depth + 1);
+    if (Array.isArray(errors)) for (const i of errors) walk(i, depth + 1);
+  };
+  walk(e, 0);
+  return out;
+}
 const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
 
 /**
@@ -293,11 +325,13 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
     } catch (e) {
       // The cached lookup may be stale (the name moved): forget it and try once more on a fresh, re-validated one.
       // (connect-phase errors only: a request that may have reached the server is never sent twice)
-      const code = (e as { cause?: { code?: string } }).cause?.code ?? "";
-      if (!addresses || init.signal?.aborted || !CONNECT_FAILURES.has(code)) throw e;
+      if (!addresses || init.signal?.aborted || !errorCodes(e).some((c) => CONNECT_FAILURES.has(c))) throw e;
+      // only worth repeating when the name now points somewhere else
+      const before = new Set(addresses);
       forgetResolved(u.hostname);
-      ({ addresses } = await guardAddresses(u.hostname));
-      res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
+      const fresh = (await guardAddresses(u.hostname)).addresses;
+      if (!fresh || (fresh.length === before.size && fresh.every((a) => before.has(a)))) throw e;
+      res = await pinnedFetch(current, req, fresh);
     }
     const location = res.headers.get("location");
     if (res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };

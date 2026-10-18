@@ -111,10 +111,11 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const { port } = hp;
   const until = Date.now() + m.timeoutMs;
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs));
-  const once = async (hostname: string) => {
+  const once = async (hostname: string, signal: AbortSignal) => {
     const cf = await workerSockets();
     if (cf) {
       const socket = cf.connect({ hostname, port });
+      signal.addEventListener("abort", () => { void socket.close().catch(() => {}); }, { once: true });
       await socket.opened;
       await socket.close();
       return;
@@ -124,6 +125,8 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
     await new Promise<void>((resolve, reject) => {
       const s = net.connect({ host: hostname, port }, () => { s.end(); resolve(); });
       s.on("error", reject);
+      // the address's slice of the time is over: stop dialling instead of leaving the socket to linger
+      signal.addEventListener("abort", () => { s.destroy(); reject(new Error("Connection timed out")); }, { once: true });
     });
   };
   // every validated address is tried in turn: the check is up when any of them answers
@@ -138,10 +141,11 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
 
 type Conn = { write(b: Uint8Array): Promise<void>; read(): Promise<Uint8Array | null>; close(): void };
 
-async function open(hostname: string, port: number): Promise<Conn> {
+async function open(hostname: string, port: number, signal?: AbortSignal): Promise<Conn> {
   const cf = await workerSockets();
   if (cf) {
     const socket = cf.connect({ hostname, port });
+    signal?.addEventListener("abort", () => { void socket.close().catch(() => {}); }, { once: true });
     await socket.opened;
     const w = socket.writable.getWriter();
     const r = socket.readable.getReader();
@@ -156,6 +160,7 @@ async function open(hostname: string, port: number): Promise<Conn> {
   const sock = await new Promise<import("node:net").Socket>((resolve, reject) => {
     const s = net.connect({ host: hostname, port }, () => resolve(s));
     s.once("error", reject);
+    signal?.addEventListener("abort", () => { s.destroy(); reject(new Error("Connection timed out")); }, { once: true });
   });
   const queue: Uint8Array[] = [];
   let ended = false;
@@ -179,10 +184,14 @@ async function exchange(m: CheckInput, port: number, send: Uint8Array | null, do
   if (!hp) throw new Error("Target must be host or host:port");
   const until = Date.now() + m.timeoutMs;
   let conn: Conn | undefined;
+  let finished = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs); });
   const run = async () => {
-    conn = await dialEach(hp.hostname, (hostname) => open(hostname, hp.port), until);
+    // a connection that comes up after the exchange is over (or after its address's slice) is closed, not leaked
+    const dialled = await dialEach(hp.hostname, (hostname, signal) => open(hostname, hp.port, signal), until, (late) => late.close());
+    if (finished) { dialled.close(); throw new Error("Connection timed out"); }
+    conn = dialled;
     if (send) await conn.write(send);
     let buf = new Uint8Array(0);
     while (!done(buf)) {
@@ -197,6 +206,7 @@ async function exchange(m: CheckInput, port: number, send: Uint8Array | null, do
   try {
     return await Promise.race([run(), timeout]);
   } finally {
+    finished = true;
     clearTimeout(timer);
     try { conn?.close(); } catch { /* already closed */ }
   }
