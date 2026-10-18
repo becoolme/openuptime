@@ -4,6 +4,7 @@ import { z } from "zod";
 import { notifyIncidentUpdate } from "../alerts";
 import type { AppEnv } from "../env";
 import { uuidParams } from "../middleware";
+import { purgePublicStatus } from "./status";
 
 const visibility = z.enum(["public", "internal"]);
 /** Limits for the write-up fields: a short cause and a longer postmortem. */
@@ -37,6 +38,7 @@ export const incidents = new Hono<AppEnv>()
         { organizationId: c.get("orgId"), monitorId: v.monitorId ?? null, projectId: c.get("projectId"), title: v.title, severity: v.severity, auto: false, assigneeId: c.get("userId") },
         v.body ? { status: "investigating", body: v.body, authorId: c.get("userId"), visibility: v.visibility } : undefined,
       );
+      purgePublicStatus();
       return c.json(inc, 201);
     },
   )
@@ -62,6 +64,8 @@ export const incidents = new Hono<AppEnv>()
       // an empty string clears the field, like null
       const blank = (x: string | null | undefined) => (x === undefined ? undefined : x?.trim() ? x : null);
       const inc = await repo.updateIncidentWriteUp(c.get("orgId"), id, { rootCause: blank(v.rootCause), postmortem: blank(v.postmortem), publish: v.publishPostmortem });
+      // publishing or taking down a postmortem changes the public page at once
+      purgePublicStatus();
       return inc ? c.json(inc) : c.json({ error: "Not found" }, 404);
     },
   )
@@ -78,6 +82,7 @@ export const incidents = new Hono<AppEnv>()
       if (v.status === "resolved" && v.visibility === "internal") return c.json({ error: "A resolved update must be public" }, 400);
       const r = await repo.postIncidentUpdate(c.get("orgId"), id, { ...v, authorId: c.get("userId") });
       if (!r) return c.json({ error: "Not found" }, 404);
+      purgePublicStatus();
       // internal updates stay inside the team: no subscriber email
       if (r.update.visibility === "public") await notifyIncidentUpdate(repo, r.incident, v, c.get("entitlements"));
       return c.json(r.update, 201);

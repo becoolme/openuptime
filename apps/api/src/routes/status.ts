@@ -65,8 +65,7 @@ export const statusPages = new Hono<AppEnv>()
   .use("*", async (c, next) => {
     await next();
     if (c.req.method !== "GET" && c.res.ok) {
-      boardCache.clear();
-      historyCache.clear();
+      purgePublicStatus();
     }
   })
   .get("/", async (c) => c.json(await c.get("repo").listStatusPages(c.get("orgId"), c.get("projectId"))))
@@ -158,6 +157,16 @@ const HISTORY_PAGE = 15;
 const PUBLIC_TTL_MS = typeof process !== "undefined" && process.env?.VITEST ? 0 : 30_000;
 const boardCache = sharedCache<unknown>("status-board", PUBLIC_TTL_MS);
 const historyCache = sharedCache<unknown>("status-history", PUBLIC_TTL_MS);
+
+/**
+ * Drops this instance's copies of the public board and history, so a change made through the API (an incident update, a
+ * postmortem published or taken down) shows on the next read here. Other instances and the data centre's shared copy
+ * catch up within PUBLIC_TTL_MS; the responses themselves carry no shared-cache lifetime beyond that.
+ */
+export function purgePublicStatus() {
+  boardCache.clear();
+  historyCache.clear();
+}
 
 type Overall = "operational" | "degraded" | "outage";
 const LABELS: Record<Overall, { en: string; zh: string }> = {

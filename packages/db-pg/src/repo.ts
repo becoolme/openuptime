@@ -1225,18 +1225,28 @@ export function createRepo(db: Db): Repo {
         .select()
         .from(schema.statusSubscriber)
         .where(and(eq(schema.statusSubscriber.statusPageId, s.pageId), eq(schema.statusSubscriber.email, s.email)));
-      // anyone can type any address: asking again never changes the locale or component choice of a pending or confirmed row
+      // A pending row takes the newest language and component choice: the confirmation mail is the consent, and the
+      // person who asked again is the one holding the link. A confirmed row is never touched by a form anyone can submit.
+      if (!old.confirmedAt) {
+        const [fresh] = await db
+          .update(schema.statusSubscriber)
+          .set({ locale: s.locale, monitorIds })
+          .where(and(eq(schema.statusSubscriber.id, old.id), isNull(schema.statusSubscriber.confirmedAt)))
+          .returning();
+        if (fresh) return { locale: fresh.locale, token: fresh.token, confirmed: false, created: false };
+      }
       return { locale: old.locale, token: old.token, confirmed: !!old.confirmedAt, created: false };
     },
     async pageMaintenance(page, o) {
       const ids = await pageMonitorIds(page.id);
+      const projectId = await pageProjectId(page);
       return db
         .select()
         .from(schema.maintenanceWindow)
         .where(
           and(
             eq(schema.maintenanceWindow.organizationId, page.organizationId),
-            page.projectId ? or(isNull(schema.maintenanceWindow.projectId), eq(schema.maintenanceWindow.projectId, page.projectId)) : isNull(schema.maintenanceWindow.projectId),
+            projectId ? or(isNull(schema.maintenanceWindow.projectId), eq(schema.maintenanceWindow.projectId, projectId)) : isNull(schema.maintenanceWindow.projectId),
             o.since ? gte(schema.maintenanceWindow.endsAt, o.since) : undefined,
             ids.length
               ? or(sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`, sql`${schema.maintenanceWindow.monitorIds} && ${sql.raw("array[")}${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)}${sql.raw("]")}`)
@@ -1255,7 +1265,11 @@ export function createRepo(db: Db): Repo {
           schema.statusPage,
           and(
             eq(schema.statusPage.organizationId, schema.maintenanceWindow.organizationId),
-            or(isNull(schema.maintenanceWindow.projectId), eq(schema.maintenanceWindow.projectId, schema.statusPage.projectId)),
+            or(
+              isNull(schema.maintenanceWindow.projectId),
+              // a page without a project belongs to the workspace's oldest one, as everywhere else
+              eq(schema.maintenanceWindow.projectId, sql`coalesce(${schema.statusPage.projectId}, (select p.id from project p where p.organization_id = ${schema.statusPage.organizationId} order by p.created_at, p.id limit 1))`),
+            ),
           ),
         )
         .where(
@@ -1264,8 +1278,17 @@ export function createRepo(db: Db): Repo {
             gte(schema.maintenanceWindow.startsAt, now),
             sql`${schema.maintenanceWindow.startsAt} <= now() + ${schema.statusPage.maintenanceReminderHours} * interval '1 hour'`,
             sql`not exists (select 1 from maintenance_reminder r where r.maintenance_id = ${schema.maintenanceWindow.id} and r.status_page_id = ${schema.statusPage.id})`,
-            // nobody to remind: leave the window unclaimed, so a subscriber who joins later still hears about it
-            sql`exists (select 1 from status_subscriber s where s.status_page_id = ${schema.statusPage.id} and s.confirmed_at is not null)`,
+            // nobody to remind: leave the window unclaimed, so a subscriber who joins later still hears about it. Tested here, not
+            // after the limit, so windows nobody follows cannot crowd out ones somebody does.
+            sql`exists (
+              select 1 from status_subscriber s
+              where s.status_page_id = ${schema.statusPage.id} and s.confirmed_at is not null
+                and (cardinality(s.monitor_ids) = 0 or exists (
+                  select 1 from status_page_component c
+                  where c.status_page_id = ${schema.statusPage.id} and c.visible and c.monitor_id = any(s.monitor_ids)
+                    and (cardinality(${schema.maintenanceWindow.monitorIds}) = 0 or c.monitor_id = any(${schema.maintenanceWindow.monitorIds}))
+                ))
+            )`,
             or(
               sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
               sql`exists (select 1 from status_page_component c where c.status_page_id = ${schema.statusPage.id} and c.visible and c.monitor_id = any(${schema.maintenanceWindow.monitorIds}))`,

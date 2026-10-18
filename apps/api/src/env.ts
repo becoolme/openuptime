@@ -17,7 +17,7 @@ export type Bindings = {
   /** Cloudflare Queue the cron fans checks out to. Unset locally: checks then run inline. */
   CHECK_QUEUE?: CheckQueue;
   /** Cloudflare Email Service `send_email` binding. Unset (local dev): emails are logged instead of sent. */
-  EMAIL?: { send(msg: { from: string | { email: string; name: string }; to: string; subject: string; html?: string; text?: string }): Promise<{ messageId?: string }> };
+  EMAIL?: { send(msg: { from: string | { email: string; name: string }; to: string; subject: string; html?: string; text?: string; headers?: Record<string, string> }): Promise<{ messageId?: string }> };
   /** Sender address on a domain onboarded to Email Sending, e.g. "alerts@example.com". */
   EMAIL_FROM?: string;
   /** Node/Docker only: SMTP connection URL, e.g. smtps://user:pass@smtp.example.com. With EMAIL_FROM it enables outgoing mail. */
