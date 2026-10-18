@@ -6,7 +6,7 @@ import { translate } from "../../lib/i18n";
 import { siteLogo } from "../../lib/brand";
 
 type Status = {
-  page: { title: string; slug: string; externalUrl?: string | null; hideBranding?: boolean };
+  page: { title: string; slug: string; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number };
   bucket?: "hour" | "day";
   overall: "operational" | "degraded" | "outage";
   components: { id: string; name: string; group?: string | null; status: string; uptime90d: number | null; days: { day: string; uptime: number }[] }[];
@@ -49,7 +49,10 @@ const avgUp = withUp.length ? withUp.reduce((a, c) => a + (c.uptime90d as number
 const opCount = data.components.filter((c) => c.status === "up" || c.status === "operational").length;
 const fmtDay = (d: string) => new Date(d).toLocaleDateString((Astro.locals.lang ?? "en") === "zh-CN" ? "zh-CN" : "en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const stageCls = (st: string) => (st === "resolved" ? "ok" : st === "monitoring" ? "mon" : "");
-const dayClass = (u: number) => (u >= 0.999 ? "" : u >= 0.98 ? "w" : "d");
+// the page owner picks where green ends and amber ends (percent); a bad pair falls back to the defaults
+const okAt = (data.page.uptimeOkPct ?? 99.9) / 100;
+const warnAt = (data.page.uptimeWarnPct ?? 99) / 100;
+const dayClass = (u: number) => (u >= okAt ? "" : u >= warnAt ? "w" : "d");
 const hideBrand = !!data.page.hideBranding;
 // without OpenUptime's mark the header shows the website's own logo, or just the title when there is no link
 const logo = hideBrand ? siteLogo(data.page.externalUrl) : null;
@@ -58,6 +61,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
 <Base title={`${data.page.title} · Status`}>
   <Fragment slot="head">
     <link rel="canonical" href={canon} />
+    <link rel="alternate" type="application/rss+xml" title={`${data.page.title} status`} href={`${base}/api/public/status/${slug}/rss.xml`} />
     <link rel="alternate" hreflang="en" href={`${base}/status/${slug}`} />
     <link rel="alternate" hreflang="zh-Hans" href={`${base}/zh-Hans/status/${slug}`} />
     <link rel="alternate" hreflang="x-default" href={`${base}/status/${slug}`} />
@@ -153,10 +157,19 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
             <p class="muted">{t("We’ll email you when something breaks and when it’s fixed.")}</p>
             <form id="sub">
               <input class="in" type="email" name="email" required placeholder="you@example.com" aria-label="Email" />
+              {data.components.length > 1 && (
+                <fieldset class="pub-pick">
+                  <legend class="muted">{t("Only these components (all if none are ticked)")}</legend>
+                  {data.components.map((c) => <label><input type="checkbox" name="monitorId" value={c.id} /> {c.name}</label>)}
+                </fieldset>
+              )}
               <button class="btn primary" type="submit">{t("Subscribe")}</button>
             </form>
             <p id="sub-msg" class="muted" role="status"></p>
-            <a href={`/api/public/status/${slug}/rss`} class="pub-rss">RSS</a>
+            <p class="faint" style="font-size:13px">{t("Lost your link? Enter your address again and we’ll send a new one.")}</p>
+            <a href={`/api/public/status/${slug}/rss.xml`} class="pub-rss">RSS</a>
+            <a href={`/api/public/status/${slug}/maintenance.ics`} class="pub-rss">{t("Maintenance calendar")}</a>
+            <a href={`/api/public/status/${slug}/llms.txt`} class="pub-rss">llms.txt</a>
           </section>
         </aside>
       </div>
@@ -175,7 +188,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
         btn.textContent = sending;
         msg.textContent = "";
         try {
-          const r = await fetch(`/api/public/status/${slug}/subscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: e.target.email.value }) });
+          const r = await fetch(`/api/public/status/${slug}/subscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: e.target.email.value, monitorIds: [...e.target.querySelectorAll("input[name=monitorId]:checked")].map((x) => x.value) }) });
           msg.textContent = r.ok ? ok : r.status === 429 ? slow : bad;
           if (r.ok) e.target.reset();
         } catch { msg.textContent = bad; }
