@@ -152,6 +152,8 @@ export interface Incident {
   nextEscalationAt: Date | null;
   rootCause: string | null;
   postmortem: string | null;
+  /** When a person published the root cause and postmortem on the status page; null keeps them private. */
+  postmortemPublishedAt: Date | null;
 }
 export interface IncidentUpdate {
   id: string;
@@ -174,7 +176,7 @@ export type NewIncident = {
   evaluationNote?: string | null;
 };
 export type NewIncidentUpdate = { status: IncidentStatus; body: string; authorId?: string | null; visibility?: UpdateVisibility };
-export type IncidentWriteUp = { rootCause?: string | null; postmortem?: string | null };
+export type IncidentWriteUp = { rootCause?: string | null; postmortem?: string | null; /** true publishes the write-up on the status page (once resolved), false takes it back */ publish?: boolean };
 export type IncidentWithMonitor = Incident & { monitorName: string | null };
 export type IncidentWithUpdates = Incident & { updates: IncidentUpdate[] };
 export interface IncidentDetail {
@@ -564,8 +566,11 @@ export interface Repo {
   saveProjectAlerting(orgId: string, projectId: string, v: ProjectAlerting): Promise<ProjectAlerting | null>;
   /** Deliveries of the project (and workspace-wide ones), newest first. */
   listDeliveries(orgId: string, projectId: string, o: { limit: number; before?: Date }): Promise<AlertDelivery[]>;
-  /** Confirmed subscribers of the pages showing this monitor (every page of the workspace when `monitorId` is null). */
-  subscribersFor(orgId: string, monitorId: string | null | undefined): Promise<SubscriberTarget[]>;
+  /**
+   * Confirmed subscribers of the pages showing this monitor. For an incident without a monitor (`monitorId` null) they are
+   * those of the pages of `projectId` (a page without a project counts as the workspace's oldest project's).
+   */
+  subscribersFor(orgId: string, monitorId: string | null | undefined, projectId?: string | null): Promise<SubscriberTarget[]>;
   getSettings(orgId: string): Promise<WorkspaceSettings>;
   saveSettings(orgId: string, patch: Partial<WorkspaceSettings>): Promise<WorkspaceSettings>;
 
@@ -594,13 +599,15 @@ export interface Repo {
   subscriberCount(pageId: string): Promise<number>;
   /**
    * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row);
-   * a pending row takes the new locale and component choice, a confirmed one is left alone.
+   * an existing row (pending or confirmed) keeps its own locale and component choice, whoever asks again.
    */
   addSubscriber(s: { pageId: string; email: string; token: string; locale: string; monitorIds?: string[] }): Promise<{ locale: string | null; token: string; confirmed: boolean; created: boolean }>;
   /** Maintenance windows touching the page (its monitors', plus workspace-wide ones) that end after `since`, newest start first. */
   pageMaintenance(page: StatusPage, o: { since?: Date; limit: number }): Promise<MaintenanceWindow[]>;
   /** Windows that start within their page's reminder lead time, each claimed once per page; claimed rows come back with their subscribers. */
   claimMaintenanceReminders(limit: number): Promise<MaintenanceReminder[]>;
+  /** Gives a claim back, so the next tick sends the reminder again (nothing could be sent). */
+  releaseMaintenanceReminder(maintenanceId: string, statusPageId: string): Promise<void>;
   /** Workspaces that want a report for `month` (YYYY-MM) and had none yet; each is claimed once. */
   claimMonthlyReports(month: string, limit: number): Promise<string[]>;
   /** Per-component uptime, downtime and incident count between the two instants. */

@@ -151,10 +151,12 @@ export const incident = pgTable(
     /** How many escalation steps have fired, and when the next one is due (null = none left). */
     escalationLevel: integer("escalation_level").notNull().default(0),
     nextEscalationAt: timestamp("next_escalation_at", { withTimezone: true }),
-    /** Short cause, written once it is known. Public once the incident is resolved. */
+    /** Short cause, written once it is known. Public once the incident is resolved and the write-up is published. */
     rootCause: text("root_cause"),
-    /** Longer write-up (markdown or plain text). Public once the incident is resolved. */
+    /** Longer write-up (markdown or plain text). Public once the incident is resolved and the write-up is published. */
     postmortem: text("postmortem"),
+    /** When a person chose to show the root cause and postmortem on the status page; null keeps them private. */
+    postmortemPublishedAt: timestamp("postmortem_published_at", { withTimezone: true }),
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),

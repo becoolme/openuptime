@@ -20,12 +20,13 @@ export default function IncidentDetail({ id }: { id: string }) {
   const [internal, setInternal] = useState(false);
   const [rootCause, setRootCause] = useState("");
   const [postmortem, setPostmortem] = useState("");
+  const [publish, setPublish] = useState(false);
   const [saving, save] = useBusy();
   const [saved, setSaved] = useState(false);
   const [busy, run] = useBusy();
   const [acking, ack] = useBusy();
   const [err, setErr] = useState("");
-  const load = () => api.incident(id).then((i) => { setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); });
+  const load = () => api.incident(id).then((i) => { setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); setPublish(!!i.postmortemPublishedAt); });
   useEffect(() => { load(); }, [id]);
   if (!inc) return <p className="muted">{t("Loading…")}</p>;
 
@@ -35,6 +36,8 @@ export default function IncidentDetail({ id }: { id: string }) {
       setErr("");
       try { await api.postUpdate(id, { status: s, body: text, visibility: hidden ? "internal" : "public" }); setBody(""); setInternal(false); await load(); } catch (x) { setErr((x as Error).message); }
     });
+  // a resolution is what subscribers are mailed about, so it is always public
+  const hidden = internal && status !== "resolved";
   const events = [...(inc.updates ?? [])].reverse();
 
   return (
@@ -58,11 +61,11 @@ export default function IncidentDetail({ id }: { id: string }) {
 
       <div className="cols">
         <div className="col">
-          <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body, internal); }}>
-            <div className="cc-h"><h3>{t("Post an update")}</h3><span className="faint" style={{ fontSize: 13 }}>{internal ? t("Visible to your team only") : t("Sent to status page subscribers")}</span></div>
+          <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body, hidden); }}>
+            <div className="cc-h"><h3>{t("Post an update")}</h3><span className="faint" style={{ fontSize: 13 }}>{hidden ? t("Visible to your team only") : t("Sent to status page subscribers")}</span></div>
             <div className="seg">{STATES.map((s) => <i key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>{t(s)}</i>)}</div>
             <div className="seg" style={{ marginTop: 14 }}>
-              {(["public", "internal"] as const).map((v) => <i key={v} className={(internal ? "internal" : "public") === v ? "on" : ""} onClick={() => setInternal(v === "internal")}>{t(v === "public" ? "Public update" : "Internal note")}</i>)}
+              {(["public", "internal"] as const).map((v) => <i key={v} className={(hidden ? "internal" : "public") === v ? "on" : ""} onClick={() => setInternal(v === "internal")}>{t(v === "public" ? "Public update" : "Internal note")}</i>)}
             </div>
             <textarea className="in" style={{ height: 96, padding: 12, marginTop: 14 }} required value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("What do customers need to know?")} />
             <div className="formact"><button className="btn primary sm" disabled={busy}>{busy ? t("Publishing…") : t("Publish update")}</button></div>
@@ -86,12 +89,14 @@ export default function IncidentDetail({ id }: { id: string }) {
             e.preventDefault();
             setSaved(false);
             save(async () => {
-              try { await api.saveWriteUp(id, { rootCause: rootCause.trim() || null, postmortem: postmortem.trim() || null }); setSaved(true); await load(); } catch (x) { setErr((x as Error).message); }
+              try { await api.saveWriteUp(id, { rootCause: rootCause.trim() || null, postmortem: postmortem.trim() || null, publishPostmortem: publish }); setSaved(true); await load(); } catch (x) { setErr((x as Error).message); }
             });
           }}>
-            <div className="cc-h"><h3>{t("Root cause and postmortem")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Shown on the status page once the incident is resolved")}</span></div>
+            <div className="cc-h"><h3>{t("Root cause and postmortem")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Private until you publish it")}</span></div>
             <label className="fld">{t("Root cause")}<input className="in" maxLength={500} value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder={t("One sentence on what went wrong")} /></label>
             <label className="fld">{t("Postmortem")}<textarea className="in" style={{ height: 160, padding: 12 }} maxLength={20000} value={postmortem} onChange={(e) => setPostmortem(e.target.value)} placeholder={t("What happened, the impact, and what we will change")} /></label>
+            <label className="fld" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} />{t("Publish to the status page")}</label>
+            <small className="faint">{t("Shown on the status page once the incident is resolved. Resolving alone, automatic recovery included, never publishes it.")}</small>
             <div className="formact">{saved && <span className="faint" style={{ fontSize: 13 }}>{t("Saved")}</span>}<button className="btn primary sm" disabled={saving}>{saving ? t("Saving…") : t("Save")}</button></div>
           </form>
 

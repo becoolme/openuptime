@@ -169,6 +169,13 @@
       "when": 1792282260548,
       "tag": "0023_lucky_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792282747914,
+      "tag": "0024_smooth_spiral",
+      "breakpoints": true
     }
   ]
 }

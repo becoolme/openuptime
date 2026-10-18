@@ -32,6 +32,8 @@ export type Incident = {
   number?: number | null;
   rootCause?: string | null;
   postmortem?: string | null;
+  /** set once a person published the write-up to the status page */
+  postmortemPublishedAt?: string | null;
   severity: string; startedAt: string; resolvedAt: string | null; acknowledgedAt: string | null; monitorName?: string | null;
   updates?: { id: string; status: Incident["status"]; body: string; visibility?: "public" | "internal"; createdAt: string }[];
   auto?: boolean;
@@ -225,7 +227,7 @@ export const api = {
   incident: (id: string) => req<Incident>(`/incidents/${id}`),
   postUpdate: (id: string, b: { status: Incident["status"]; body: string; visibility?: "public" | "internal" }) =>
     req(`/incidents/${id}/updates`, { method: "POST", body: JSON.stringify(b) }),
-  saveWriteUp: (id: string, b: { rootCause?: string | null; postmortem?: string | null }) =>
+  saveWriteUp: (id: string, b: { rootCause?: string | null; postmortem?: string | null; publishPostmortem?: boolean }) =>
     req<Incident>(`/incidents/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   ack: (id: string) => req(`/incidents/${id}/ack`, { method: "POST" }),
 };
