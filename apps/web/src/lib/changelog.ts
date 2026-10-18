@@ -43,6 +43,21 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Status pages list upcoming and running maintenance windows, and documentation pages are included in the sitemap.", zh: "状态页会显示即将开始和进行中的维护窗口，文档页面也已加入站点地图。" },
     ],
     link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+    id: "reliability-fixes-2",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "More reliable incidents and checks", zh: "事件与检测更可靠" },
+    summary: {
+      en: "A reopened incident now tells you it is back, a person's resolution stands, and TCP and database checks try every address of a name.",
+      zh: "重新打开的事件现在会通知你,人工解决的事件不会被自动重开,TCP 与数据库检测会依次尝试域名的所有地址。",
+    },
+    points: [
+      { en: "When a monitor fails again within 10 minutes of recovering, the reopened incident is unacknowledged again, restarts its reminders and escalation, and sends a \"down again\" alert.", zh: "监控项在恢复后 10 分钟内再次失败时,重新打开的事件会回到未确认状态,重新开始提醒和升级,并发送\"再次故障\"告警。" },
+      { en: "An incident that a person resolved is never reopened by a later failure, and a monitor whose outage was muted by a dependency does not open an incident after a person resolved one meanwhile.", zh: "人工解决的事件不会被之后的失败重新打开;因依赖而被静音的监控项,在期间有人工解决事件后,也不会再补开事件。" },
+      { en: "A queued alert retry is skipped when the incident has since been resolved (for a down alert) or reopened (for a recovery alert), and a reminder no longer uses up one of its repeats while a maintenance window silences it.", zh: "排队重试的告警在事件已解决(故障告警)或已重新打开(恢复告警)时会被跳过;维护窗口内被静音的提醒也不再消耗提醒次数。" },
+      { en: "TCP and database checks try every address a name resolves to, IPv4 first, and report a failure from the checker's own network only when no address connected; a lookup that went stale is refreshed once after a failed connection.", zh: "TCP 与数据库检测会依次尝试域名解析出的所有地址(IPv4 优先),只有所有地址都无法连接时才会把检测端自身的网络故障判为无效结果;连接失败后会重新解析一次过期的 DNS 结果。" },
+      { en: "Set SELFCHECK_URLS to choose the URLs used to tell a down target from an offline checker (empty turns it off); targets that resolve to private addresses skip it, and gzip or Brotli answers to pinned requests are decompressed.", zh: "可通过 SELFCHECK_URLS 指定用于区分目标故障与检测端断网的网址(留空则关闭);解析到内网地址的目标会跳过该检查,固定地址请求收到的 gzip 或 Brotli 响应也会被正确解压。" },
+    ],
   },
   {
     id: "comparison-and-use-case-pages",
@@ -110,13 +125,13 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     edition: "community",
     title: { en: "Fewer noisy incidents", zh: "减少噪音事件" },
     summary: {
-      en: "Monitors can now depend on each other, wait for several regions to agree, and reopen a just-resolved incident instead of paging again.",
-      zh: "监控项现在可以相互依赖、等待多个区域一致失败,并在刚恢复的事件上重新打开,而不是再次告警。",
+      en: "Monitors can now depend on each other, wait for several regions to agree, and reopen a just-resolved incident instead of opening a second one.",
+      zh: "监控项现在可以相互依赖、等待多个区域一致失败,并在刚恢复的事件上重新打开,而不是新建事件。",
     },
     points: [
       { en: "A monitor can depend on another monitor of the same project: while that one is down, this one still records its status but opens no incident and sends no alert.", zh: "监控项可以依赖同一项目中的另一个监控项:被依赖的监控项故障期间,它仍会记录自己的状态,但不会创建事件,也不会发送告警。" },
       { en: "With several regions, choose how many must fail before a monitor goes down; the number never exceeds the regions that answered, so a region that is itself down cannot block an alert.", zh: "使用多个区域时,可以选择需要多少个区域失败才判定为故障;该数量不会超过实际应答的区域数,因此某个区域自身故障不会阻止告警。" },
-      { en: "A failure within 10 minutes of an outage resolving reopens that incident instead of opening a second one and alerting again.", zh: "故障恢复后 10 分钟内再次失败,会重新打开原来的事件,而不是创建新事件并再次告警。" },
+      { en: "A failure within 10 minutes of an outage resolving reopens that incident instead of opening a second one, unless a person resolved it.", zh: "故障恢复后 10 分钟内再次失败,会重新打开原来的事件,而不是创建新事件(人工解决的事件除外)。" },
       { en: "Slow-response incidents are no longer opened during a maintenance window.", zh: "维护窗口期间不再创建响应变慢的事件。" },
       { en: "Automatic incidents now show why they opened, for example how many regions failed.", zh: "自动创建的事件现在会显示创建原因,例如有几个区域失败。" },
     ],
@@ -151,7 +166,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "A network failure on the checker's side no longer counts as a failed check, opens an incident or sends an alert.", zh: "检测端自身的网络故障不再计为失败检测,也不会创建事件或发送告警。" },
       { en: "A region whose probe is offline is left out of the run instead of voting the monitor down.", zh: "探测节点自身离线时,该区域不再参与表决,不会把监控判为故障。" },
       { en: "Errors that only the checker's own network can cause, such as a missing IPv6 route, are no longer blamed on your service.", zh: "只可能由检测端自身网络引起的错误(例如没有 IPv6 路由)不再算到你的服务头上。" },
-      { en: "Monitors on private addresses are not affected, since they do not depend on the public internet.", zh: "监控内网地址的监控项不受影响,因为它们不依赖公网。" },
+      { en: "Monitors on private addresses, including names that resolve to one, are not affected, since they do not depend on the public internet.", zh: "监控内网地址(包括解析到内网地址的域名)的监控项不受影响,因为它们不依赖公网。" },
     ],
   },
   {

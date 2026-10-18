@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
+import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import { pinnedFetch } from "./pinnedfetch";
 
 describe("pinnedFetch", () => {
@@ -19,6 +20,22 @@ describe("pinnedFetch", () => {
     const res = await pinnedFetch(`http://pinned.test:${port}/path?q=1`, { headers: { "x-a": "b" }, signal: AbortSignal.timeout(3000) }, ["127.0.0.1"]);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ host: `pinned.test:${port}`, url: "/path?q=1", enc: "identity", x: "b" });
+  });
+
+  it("always asks for an uncompressed body, whatever the caller says, and decodes one anyway", async () => {
+    const seen: (string | undefined)[] = [];
+    const encoders: Record<string, (b: Buffer) => Buffer> = { gzip: gzipSync, deflate: deflateSync, br: brotliCompressSync };
+    for (const [enc, fn] of Object.entries(encoders)) {
+      const port = await serve((req, res) => {
+        seen.push(req.headers["accept-encoding"] as string | undefined);
+        res.writeHead(200, { "content-encoding": enc, "content-type": "text/plain" });
+        res.end(fn(Buffer.from(`hello ${enc}`)));
+      });
+      const res = await pinnedFetch(`http://pinned.test:${port}/`, { headers: { "accept-encoding": "gzip, br" } }, ["127.0.0.1"]);
+      expect(await res.text()).toBe(`hello ${enc}`);
+      expect(res.headers.get("content-encoding")).toBeNull();
+    }
+    expect(seen).toEqual(["identity", "identity", "identity"]);
   });
 
   it("sends a string body and reads status and repeated headers", async () => {

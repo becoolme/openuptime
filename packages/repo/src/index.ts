@@ -504,9 +504,12 @@ export interface Repo {
   hadIncidentSince(monitorId: string, since: Date): Promise<boolean>;
   /**
    * Reopens the monitor's automatic outage incident that was resolved at or after `since` (the latest one), appending
-   * `body` as an update and replacing its evaluation note. Null when there is none, or when another check reopened it first.
+   * `body` as an update and replacing its evaluation note; acknowledgement, reminders and escalation start over. Incidents a
+   * person resolved are left alone. Null when there is none, or when another check reopened it first.
    */
   reopenIncident(monitorId: string, since: Date, body: string, evaluationNote: string): Promise<Incident | null>;
+  /** Did a person resolve one of the monitor's outage incidents during its current failing streak (since the last passing check)? */
+  outageHandledByPerson(monitorId: string): Promise<boolean>;
   /** Unresolved incidents of the monitor: its outage ones, or with `slow` only the automatic latency ones. */
   openIncidents(monitorId: string, slow: boolean): Promise<Incident[]>;
   /** Resolves an open incident; false when it was already resolved (another check got there first). */
@@ -559,8 +562,8 @@ export interface Repo {
   channelsByIds(orgId: string, ids: string[]): Promise<AlertChannel[]>;
   /** Start the incident's repeat and escalation clocks from the project's settings. */
   scheduleFollowUps(incident: Pick<Incident, "id" | "startedAt">, projectId: string | null): Promise<void>;
-  /** Claim up to `limit` repeats that are due; each is returned to exactly one caller, and only the latest missed one is sent. */
-  claimReminders(limit: number): Promise<ReminderDue[]>;
+  /** Claim up to `limit` repeats that are due; each is returned to exactly one caller, and only the latest missed one is sent. Monitors for which `skip` answers true are left unclaimed (and uncounted). */
+  claimReminders(limit: number, skip?: (monitor: Monitor) => Promise<boolean>): Promise<ReminderDue[]>;
   claimEscalations(limit: number): Promise<EscalationDue[]>;
   getProjectAlerting(orgId: string, projectId: string): Promise<ProjectAlerting | null>;
   saveProjectAlerting(orgId: string, projectId: string, v: ProjectAlerting): Promise<ProjectAlerting | null>;

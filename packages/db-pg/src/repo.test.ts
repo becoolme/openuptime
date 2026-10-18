@@ -171,6 +171,44 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     expect(await repo.reopenIncident(m.id, since, "x", "n")).toBeNull();
   });
 
+  it("starts a reopened incident over: unacknowledged, with fresh reminder and escalation clocks", async () => {
+    const [m] = await seed(1);
+    const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await db.update(schema.incident).set({ acknowledgedAt: new Date(), reminderCount: 3, escalationLevel: 2, nextReminderAt: new Date(), nextEscalationAt: new Date() }).where(eq(schema.incident.id, down.id));
+    await repo.resolveIncident(down.id, "ok");
+    const row = (await repo.reopenIncident(m.id, new Date(Date.now() - 600_000), "again", "n"))!;
+    expect(row).toMatchObject({ id: down.id, acknowledgedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null });
+  });
+
+  it("leaves an incident a person resolved alone, and says when a person handled the current outage", async () => {
+    const [m] = await seed(1);
+    const userId = `u-${crypto.randomUUID()}`;
+    await db.insert(schema.user).values({ id: userId, name: "T", email: `${userId}@example.test` });
+    try {
+      const since = new Date(Date.now() - 600_000);
+      const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+      expect(await repo.outageHandledByPerson(m.id)).toBe(false);
+      await repo.postIncidentUpdate(orgId, down.id, { status: "resolved", body: "fixed by hand", authorId: userId });
+      expect(await repo.reopenIncident(m.id, since, "again", "n")).toBeNull();
+      expect(await repo.outageHandledByPerson(m.id)).toBe(true);
+      // a passing check afterwards ends that outage: a later one is a new story
+      await repo.recordCheck({ monitorId: m.id, region: "auto", ok: true });
+      expect(await repo.outageHandledByPerson(m.id)).toBe(false);
+    } finally {
+      await db.delete(schema.user).where(eq(schema.user.id, userId));
+    }
+  });
+
+  it("returns null instead of throwing when another incident is already open for the monitor", async () => {
+    const [m] = await seed(1);
+    const first = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.resolveIncident(first.id, "ok");
+    const second = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down again", auto: true }, { status: "investigating", body: "x" }))!;
+    // the resolved one cannot come back while the second is open (unique index on open automatic incidents)
+    expect(await repo.reopenIncident(m.id, new Date(Date.now() - 600_000), "again", "n")).toBeNull();
+    expect((await repo.openIncidents(m.id, false)).map((i) => i.id)).toEqual([second.id]);
+  });
+
   it("clears a dependency when the monitor it points at is deleted", async () => {
     const [parent, child] = await seed(2);
     await db.update(schema.monitor).set({ dependsOnMonitorId: parent.id }).where(eq(schema.monitor.id, child.id));
@@ -391,6 +429,15 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
       db.update(schema.incident).set({ nextReminderAt: ago(1), ...patch }).where(eq(schema.incident.id, id));
     const claim = async (id: string, n = 5) => (await Promise.all(Array.from({ length: n }, () => repo.claimReminders(100)))).flat().filter((r) => r.incident.id === id);
     const get = async (id: string) => (await db.select().from(schema.incident).where(eq(schema.incident.id, id)))[0];
+
+    it("leaves a skipped monitor's repeat unclaimed and uncounted", async () => {
+      const inc = await incident();
+      await due(inc.id);
+      const skipped = await repo.claimReminders(100, async (m) => m.id === inc.monitorId);
+      expect(skipped.filter((r) => r.incident.id === inc.id)).toHaveLength(0);
+      expect(await get(inc.id)).toMatchObject({ reminderCount: 0 });
+      expect((await repo.claimReminders(100)).filter((r) => r.incident.id === inc.id)).toHaveLength(1);
+    });
 
     it("starts the clock when an incident opens, and sends each repeat once however many workers run", async () => {
       const inc = await incident();

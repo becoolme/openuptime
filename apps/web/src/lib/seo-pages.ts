@@ -478,8 +478,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("Fewer pages for the same outage", "同一次故障，少一些告警"),
         body: l(
-          "Make the monitors of services behind your API depend on the API monitor: while it is down they keep recording but open no incident and send no alert. A failure within ten minutes of recovery reopens the previous incident instead of opening a new one.",
-          "让 API 背后的各服务监控依赖于 API 监控：它故障期间，这些监控仍会记录状态，但不创建事件也不发送告警。恢复后十分钟内再次失败，会重新打开上一个事件，而不是新建一个。",
+          "Make the monitors of services behind your API depend on the API monitor: while it is down they keep recording but open no incident and send no alert. A failure within ten minutes of recovery reopens the previous incident (and sends a short \"down again\" alert) instead of opening a new one.",
+          "让 API 背后的各服务监控依赖于 API 监控：它故障期间，这些监控仍会记录状态，但不创建事件也不发送告警。恢复后十分钟内再次失败，会重新打开上一个事件（并发送简短的“再次故障”告警），而不是新建一个。",
         ),
         uses: [l("dependencies", "依赖").en],
       },
@@ -719,8 +719,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("One root cause, one page", "一个根因，一次告警"),
         body: l(
-          "Make dependent monitors point at the monitor they rely on, for example every service behind a gateway. While the parent is down, the children keep recording but open no incident and send no alert. A failure within ten minutes of a resolution reopens the incident instead of paging again.",
-          "让依赖型监控指向它所依赖的监控项，例如网关背后的每个服务。父监控故障期间，子监控仍会记录，但不创建事件也不发送告警。恢复后十分钟内再次失败，会重新打开该事件，而不是再次告警。",
+          "Make dependent monitors point at the monitor they rely on, for example every service behind a gateway. While the parent is down, the children keep recording but open no incident and send no alert. A failure within ten minutes of a resolution reopens the incident and sends a short \"down again\" alert instead of a full new page.",
+          "让依赖型监控指向它所依赖的监控项，例如网关背后的每个服务。父监控故障期间，子监控仍会记录，但不创建事件也不发送告警。恢复后十分钟内再次失败，会重新打开该事件并发送简短的“再次故障”告警，而不是新建事件。",
         ),
         uses: [l("dependencies", "依赖").en, l("incident reopening", "事件重新打开").en],
       },

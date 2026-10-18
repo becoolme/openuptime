@@ -94,9 +94,11 @@ describe("nextAfter", () => {
 });
 
 /** A tiny in-memory repo: just what one failed heartbeat check touches. */
-function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean } = {}) {
+function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean; handled?: boolean; reopenedMuted?: boolean } = {}) {
   const incidents: { id: string; title: string; auto: boolean; severity: string; resolved: boolean; note?: string | null }[] = [];
   const reopened: string[] = [];
+  /** what happened, in order: follow-up clocks set ("schedule") and alert fan-out begun ("alert") */
+  const order: string[] = [];
   const states: Record<string, unknown>[] = [];
   const repo = {
     underMaintenance: async () => !!opts.maintenance,
@@ -104,8 +106,9 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
     reopenIncident: async (_id: string, _since: Date, _body: string, note: string) => {
       if (!opts.reopenable) return null;
       reopened.push(note);
-      return { id: "old" };
+      return { id: "old", startedAt: new Date(Date.now() - 3_600_000), resolvedAt: null, title: "API is down" };
     },
+    outageHandledByPerson: async () => !!opts.handled,
     recordCheck: async () => {},
     recordRegionResults: async () => {},
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
@@ -118,20 +121,20 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       i.resolved = true;
       return true;
     },
-    incidentMuted: async () => false,
+    incidentMuted: async () => !!opts.reopenedMuted,
     openAutoIncident: async (inc: { title: string; auto?: boolean; severity?: string; evaluationNote?: string | null }) => {
       if (opts.failCreate?.()) throw new Error("db down");
       const row = { id: crypto.randomUUID(), title: inc.title, auto: !!inc.auto, severity: inc.severity ?? "major", resolved: false, note: inc.evaluationNote };
       incidents.push(row);
       return { ...row, startedAt: new Date(), resolvedAt: null };
     },
-    channelsToAlert: async () => [],
+    channelsToAlert: async () => (order.push("alert"), []),
     queueDeliveries: async () => [],
-    scheduleFollowUps: async () => {},
+    scheduleFollowUps: async (inc: { startedAt: Date }) => void order.push("schedule", `at:${inc.startedAt.getTime() > Date.now() - 60_000}`),
     subscribersFor: async () => [],
     logDeliveries: async () => {},
   } as unknown as Repo;
-  return { repo, incidents, states, reopened };
+  return { repo, incidents, states, reopened, order };
 }
 
 const hb = (over: Partial<Monitor> = {}) =>
@@ -215,6 +218,32 @@ describe("checkOne noise rules", () => {
     await checkOne(repo, hb());
     expect(incidents).toHaveLength(0);
     expect(reopened[0]).toContain("reopened");
+  });
+
+  it("tells people a reopened incident is back, and restarts its reminder clocks first", async () => {
+    const { repo, reopened, order } = fakeRepo({ reopenable: true });
+    await checkOne(repo, hb());
+    expect(reopened).toHaveLength(1);
+    // clocks are counted from now, not from the original start; they are set before the alert goes out
+    expect(order).toEqual(["schedule", "at:true", "alert"]);
+  });
+
+  it("does not alert for a reopened incident that was muted as flapping", async () => {
+    const { repo, order } = fakeRepo({ reopenable: true, reopenedMuted: true });
+    await checkOne(repo, hb());
+    expect(order).toEqual([]);
+  });
+
+  it("sets the follow-up clocks before it alerts a new outage", async () => {
+    const down = fakeRepo();
+    await checkOne(down.repo, hb());
+    expect(down.order.filter((o) => !o.startsWith("at:"))).toEqual(["schedule", "alert"]);
+  });
+
+  it("does not open late after a person resolved an incident during the outage", async () => {
+    const { repo, incidents } = fakeRepo({ monitors: [parent("up")], handled: true });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent", status: "down", consecutiveFailures: 5 }));
+    expect(incidents).toHaveLength(0);
   });
 
   it("stores why an incident opened", async () => {

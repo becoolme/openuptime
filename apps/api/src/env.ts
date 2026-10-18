@@ -45,6 +45,8 @@ export type Bindings = {
   ALLOW_PRIVATE_TARGETS?: string;
   /** User-Agent of HTTP checks. Default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime). */
   CHECK_USER_AGENT?: string;
+  /** Comma-separated URLs a failed network-level check fetches to tell "the target is down" from "this machine is offline". Unset: three well-known public URLs; empty: no self-check. */
+  SELFCHECK_URLS?: string;
   /** Shared secret that lets an external cron hit POST /internal/run-checks. */
   CRON_SECRET?: string;
   /**

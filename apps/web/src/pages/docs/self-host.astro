@@ -47,6 +47,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CRON_SECRET</code></td><td>Optional. Lets an external scheduler call <code>POST /internal/run-checks</code>; unset leaves <code>/internal/*</code> closed.</td></tr>
         <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>Set to <code>true</code> to monitor internal services. By default monitors and alert webhooks pointing at private, loopback or link-local addresses (and single-label names such as compose service names) are refused, so a signed-up user cannot probe your network.</td></tr>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>Optional. User-Agent of HTTP checks.</td></tr>
+        <tr><td><code>SELFCHECK_URLS</code></td><td>Optional. Comma-separated URLs a failed check fetches to tell a down target from an offline server. Unset uses three public sites; empty turns it off.</td></tr>
         <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>Optional. Remote probes for <a href="#regions">multi-region checks</a>. Unset, every check runs from this deployment.</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ one transport</td><td>Optional outgoing email. Transport is <code>RESEND_API_KEY</code>, <code>SMTP_URL</code> (<code>smtps://user:pass@host:465</code>) or <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code> (<code>SMTP_SECURE=true</code> for port 465). Without it emails are written to the container log.</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>Optional "Sign in with GitHub". <a href="#github">Setup and troubleshooting</a>.</td></tr>
@@ -264,6 +265,7 @@ docker compose up -d --build</code></pre>
         <tr><td><code>CRON_SECRET</code></td><td>可选。允许外部调度器调用 <code>POST /internal/run-checks</code>；不设置则 <code>/internal/*</code> 保持关闭。</td></tr>
         <tr><td><code>ALLOW_PRIVATE_TARGETS</code></td><td>设为 <code>true</code> 以监控内网服务。默认拒绝指向私有、回环、链路本地地址（以及 compose 服务名这类单段主机名）的监控项和告警 Webhook，避免已注册用户探测你的内网。</td></tr>
         <tr><td><code>CHECK_USER_AGENT</code></td><td>可选。HTTP 检查使用的 User-Agent。</td></tr>
+        <tr><td><code>SELFCHECK_URLS</code></td><td>可选。检查失败时用来区分“目标故障”与“服务器断网”的网址，逗号分隔。不设置则使用三个公共站点；留空则关闭。</td></tr>
         <tr><td><code>PROBE_REGIONS</code><br><code>PROBE_SECRET</code></td><td>可选。用于<a href="#regions-zh">多区域检测</a>的远程探针。不设置时，所有检测都从本部署发起。</td></tr>
         <tr><td><code>EMAIL_FROM</code><br>+ 一种发信方式</td><td>可选的发信配置。方式为 <code>RESEND_API_KEY</code>、<code>SMTP_URL</code>（<code>smtps://user:pass@host:465</code>）或 <code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>（465 端口加 <code>SMTP_SECURE=true</code>）。不配置时邮件只写入容器日志。</td></tr>
         <tr><td><code>GITHUB_CLIENT_ID</code><br><code>GITHUB_CLIENT_SECRET</code></td><td>可选，启用 GitHub 登录。<a href="#github-zh">配置与排错</a>。</td></tr>

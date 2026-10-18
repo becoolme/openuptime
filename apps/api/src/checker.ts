@@ -1,4 +1,4 @@
-import { checkUserAgent, guardHost, guardedFetch, hostBlocked, hostPort, readCapped } from "./netguard";
+import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsPrivate } from "./netguard";
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
 
 export type CheckInput = {
@@ -53,14 +53,15 @@ function dialedHost(m: CheckInput): string | null {
 }
 
 /**
- * Whether a thrown failure is the prober's fault: its own network stack refused (no IPv6 route…), or it cannot reach any
- * well-known site. Internal targets are never doubted this way: a private network can be fine while the internet is not.
+ * Whether a thrown failure is the prober's fault: its own network stack refused on every address tried (no IPv6 route…),
+ * or it cannot reach any well-known site. Internal targets, judged by the addresses they resolve to, are never doubted
+ * this way: a private network can be fine while the internet is not.
  */
 async function proberFault(m: CheckInput, e: unknown): Promise<boolean> {
   if (!networkLevelError(e)) return false;
   if (proberSideError(e)) return true;
   const host = dialedHost(m);
-  if (host && hostBlocked(host)) return false;
+  if (host && (await targetIsPrivate(host))) return false;
   return !(await proberOnline());
 }
 
@@ -108,9 +109,9 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const hp = hostPort(m.target, 0);
   if (!hp) return { ok: false, error: "Target must be host:port" };
   const { port } = hp;
-  const hostname = await guardHost(hp.hostname);
+  const until = Date.now() + m.timeoutMs;
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs));
-  const connect = async () => {
+  const once = async (hostname: string) => {
     const cf = await workerSockets();
     if (cf) {
       const socket = cf.connect({ hostname, port });
@@ -125,7 +126,8 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
       s.on("error", reject);
     });
   };
-  await Promise.race([connect(), timeout]);
+  // every validated address is tried in turn: the check is up when any of them answers
+  await Promise.race([dialEach(hp.hostname, once, until), timeout]);
   return { ok: true, latencyMs: Date.now() - started };
 }
 
@@ -175,12 +177,12 @@ async function open(hostname: string, port: number): Promise<Conn> {
 async function exchange(m: CheckInput, port: number, send: Uint8Array | null, done: (b: Uint8Array) => boolean): Promise<Uint8Array> {
   const hp = hostPort(m.target, port);
   if (!hp) throw new Error("Target must be host or host:port");
-  const hostname = await guardHost(hp.hostname);
+  const until = Date.now() + m.timeoutMs;
   let conn: Conn | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs); });
   const run = async () => {
-    conn = await open(hostname, hp.port);
+    conn = await dialEach(hp.hostname, (hostname) => open(hostname, hp.port), until);
     if (send) await conn.write(send);
     let buf = new Uint8Array(0);
     while (!done(buf)) {

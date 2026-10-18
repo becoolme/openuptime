@@ -679,24 +679,45 @@ export function createRepo(db: Db): Repo {
       return !!r;
     },
     async reopenIncident(monitorId, since, body, evaluationNote) {
-      return db.transaction(async (tx) => {
-        const [last] = await tx
-          .select({ id: schema.incident.id })
-          .from(schema.incident)
-          .where(and(eq(schema.incident.monitorId, monitorId), eq(schema.incident.auto, true), eq(schema.incident.severity, "major"), gte(schema.incident.resolvedAt, since)))
-          .orderBy(desc(schema.incident.resolvedAt))
-          .limit(1);
-        if (!last) return null;
-        // the unique index on open automatic incidents makes a concurrent reopen (or open) lose here instead of duplicating
-        const [row] = await tx
-          .update(schema.incident)
-          .set({ status: "investigating", resolvedAt: null, evaluationNote })
-          .where(and(eq(schema.incident.id, last.id), sql`${schema.incident.resolvedAt} is not null`))
-          .returning();
-        if (!row) return null;
-        await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: "investigating", body });
-        return row;
-      });
+      try {
+        return await db.transaction(async (tx) => {
+          // a person's resolution stands: only an incident the checks resolved themselves (no author on its last "resolved" update) is reopened
+          const byPerson = sql`(select u.author_id from incident_update u where u.incident_id = ${schema.incident.id} and u.status = 'resolved' order by u.created_at desc limit 1) is not null`;
+          const [last] = await tx
+            .select({ id: schema.incident.id })
+            .from(schema.incident)
+            .where(and(eq(schema.incident.monitorId, monitorId), eq(schema.incident.auto, true), eq(schema.incident.severity, "major"), gte(schema.incident.resolvedAt, since), sql`not ${byPerson}`))
+            .orderBy(desc(schema.incident.resolvedAt))
+            .limit(1);
+          if (!last) return null;
+          // the unique index on open automatic incidents makes a concurrent reopen (or open) lose here instead of duplicating;
+          // the follow-up clocks start over, as for a new incident
+          const [row] = await tx
+            .update(schema.incident)
+            .set({ status: "investigating", resolvedAt: null, evaluationNote, acknowledgedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null })
+            .where(and(eq(schema.incident.id, last.id), sql`${schema.incident.resolvedAt} is not null`))
+            .returning();
+          if (!row) return null;
+          await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: "investigating", body });
+          return row;
+        });
+      } catch (e) {
+        // a unique violation: another check opened (or reopened) an incident for this monitor first
+        const code = (e as { code?: string; cause?: { code?: string } });
+        if (code?.code === "23505" || code?.cause?.code === "23505") return null;
+        throw e;
+      }
+    },
+    async outageHandledByPerson(monitorId) {
+      // the current failing streak started after the last passing check; a person resolved an outage incident since then
+      const res = await db.execute(sql`
+        select exists (
+          select 1 from incident i
+          where i.monitor_id = ${monitorId} and not (i.auto and i.severity = 'minor') and i.resolved_at is not null
+            and i.resolved_at > coalesce((select max(c.checked_at) from check_result c where c.monitor_id = ${monitorId} and c.ok), 'epoch'::timestamptz)
+            and (select u.author_id from incident_update u where u.incident_id = i.id and u.status = 'resolved' order by u.created_at desc limit 1) is not null
+        ) as handled`);
+      return !!(res as unknown as { handled: boolean }[])[0]?.handled;
     },
     openIncidents(monitorId, slow) {
       const isSlow = sql`(${schema.incident.auto} and ${schema.incident.severity} = 'minor')`;
@@ -926,7 +947,7 @@ export function createRepo(db: Db): Repo {
       if (first) set.nextEscalationAt = new Date(inc.startedAt.getTime() + first.escalateAfterMin * 60_000);
       if (Object.keys(set).length) await db.update(schema.incident).set(set).where(and(eq(schema.incident.id, inc.id), isNull(schema.incident.resolvedAt), isNull(schema.incident.acknowledgedAt)));
     },
-    async claimReminders(limit) {
+    async claimReminders(limit, skip) {
       const i = schema.incident;
       const candidates = await db
         .select({ incident: i, monitor: schema.monitor, project: schema.project })
@@ -935,9 +956,12 @@ export function createRepo(db: Db): Repo {
         .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
         .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
         .orderBy(asc(i.nextReminderAt))
-        .limit(limit);
+        // skipped monitors stay due, so look further than `limit` to not let them crowd out the rest
+        .limit(skip ? limit * 5 : limit);
       const out: ReminderDue[] = [];
       for (const c of candidates) {
+        if (out.length >= limit) break;
+        if (skip && (await skip(c.monitor))) continue;
         const interval = c.project.reminderIntervalMin;
         const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
         // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
