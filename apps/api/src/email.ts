@@ -40,12 +40,15 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
     await cfg.binding.send(base);
     return;
   }
-  // Extra headers (List-Unsubscribe) are not guaranteed to be accepted by every version of the binding. If it refuses the
-  // message with them, send it without: a mail without the one-click link beats no mail at all.
+  // Extra headers (List-Unsubscribe) are not guaranteed to be accepted by every version of the binding. If it says it
+  // refused the headers, send the mail without them: a mail without the one-click link beats no mail at all. Any other
+  // error is not retried, since the first attempt may have gone out and a second one would deliver the mail twice.
   try {
     await cfg.binding.send({ ...base, headers: msg.headers });
   } catch (e) {
-    console.warn("email binding refused custom headers, sending without them", e instanceof Error ? e.message : e);
+    const why = e instanceof Error ? e.message : String(e);
+    if (!/\bheaders?\b/i.test(why)) throw e;
+    console.warn("email binding refused custom headers, sending without them", why);
     await cfg.binding.send(base);
   }
 }

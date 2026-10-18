@@ -82,7 +82,7 @@ describe("retryDeliveries", () => {
 describe("retry of a reopened incident", () => {
   const base = new Date("2026-10-17T10:00:00Z");
   const at = (min: number) => new Date(base.getTime() + min * 60_000);
-  const run = async (self: Date, others: { createdAt: Date }[]) => {
+  const run = async (self: Date, others: { createdAt: Date; status?: string; channelId?: string }[]) => {
     const done: Record<string, unknown>[] = [];
     const bodies: unknown[] = [];
     const repo = {
@@ -92,7 +92,7 @@ describe("retry of a reopened incident", () => {
         monitor: { id: "m1", projectId: null, name: "API", target: "https://x" },
         channel: { id: "c1", organizationId: "o", type: "slack", name: "s", config: { url: "https://hooks.example/x" }, enabled: true },
       }],
-      incidentDeliveries: async () => others.map((o, i) => ({ id: `d${i}`, kind: "incident.opened", channelId: "c1", ...o })),
+      incidentDeliveries: async () => others.map((o, i) => ({ id: `d${i}`, kind: "incident.opened", channelId: "c1", status: "sent", ...o })),
       finishDelivery: async (_id: string, r: Record<string, unknown>) => void done.push(r),
     };
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response("", { status: 200 })));
@@ -111,6 +111,14 @@ describe("retry of a reopened incident", () => {
     const r = await run(at(0), [{ createdAt: at(20) }]);
     expect(r.done).toMatchObject({ status: "skipped", message: expect.stringMatching(/reopened/) });
     expect(r.bodies).toEqual([]);
+  });
+
+  it("still sends the original when the later alert was skipped or failed, or went to another channel", async () => {
+    for (const later of [{ status: "skipped" }, { status: "failed" }, { channelId: "c2" }]) {
+      const r = await run(at(0), [{ createdAt: at(20), ...later }]);
+      expect(r.done, JSON.stringify(later)).toMatchObject({ status: "sent" });
+      vi.restoreAllMocks();
+    }
   });
 });
 
