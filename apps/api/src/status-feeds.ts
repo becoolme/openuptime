@@ -12,7 +12,7 @@ export const xmlEscape = (s: string) =>
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "")
     .replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]!);
 
-export type FeedIncident = { id: string; title: string; status: string; startedAt: Date | string; updates: { body: string; status: string }[] };
+export type FeedIncident = { id: string; title: string; status: string; startedAt: Date | string; rootCause?: string | null; updates: { body: string; status: string }[] };
 export type FeedWindow = { id: string; name: string; startsAt: Date; endsAt: Date };
 
 const iso = (d: Date | string) => new Date(d).toISOString();
@@ -26,7 +26,7 @@ export function buildRss(o: { title: string; link: string; incidents: FeedIncide
       at: new Date(i.startedAt),
       guid: `incident-${i.id}`,
       title: `[Incident] ${i.title} (${i.status})`,
-      description: i.updates.map((u) => `[${u.status}] ${u.body}`).join("\n") || i.title,
+      description: [...i.updates.map((u) => `[${u.status}] ${u.body}`), ...(i.rootCause ? [`Root cause: ${i.rootCause}`] : [])].join("\n") || i.title,
     })),
     ...o.maintenance.map((w) => ({
       at: w.startsAt,

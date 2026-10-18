@@ -28,8 +28,12 @@ export type RegionList = { regions: { id: string; name: string }[]; types: strin
 export type SpotCheck = { ok: true; region?: string; result?: { ok: boolean; statusCode?: number; latencyMs?: number; error?: string } };
 export type Incident = {
   id: string; title: string; status: "investigating" | "identified" | "monitoring" | "resolved";
+  /** sequential inside the project, shown as INC-<number> */
+  number?: number | null;
+  rootCause?: string | null;
+  postmortem?: string | null;
   severity: string; startedAt: string; resolvedAt: string | null; acknowledgedAt: string | null; monitorName?: string | null;
-  updates?: { id: string; status: Incident["status"]; body: string; createdAt: string }[];
+  updates?: { id: string; status: Incident["status"]; body: string; visibility?: "public" | "internal"; createdAt: string }[];
   auto?: boolean;
   /** why an automatic incident opened, e.g. "3 consecutive failed checks; 3 of 3 regions failed" */
   evaluationNote?: string | null;
@@ -216,11 +220,13 @@ export const api = {
   updateStatusPage: (id: string, b: Partial<StatusPage>) => req(`/status-pages/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteStatusPage: (id: string) => req<void>(`/status-pages/${id}`, { method: "DELETE" }),
   incidents: () => req<Incident[]>("/incidents"),
-  declareIncident: (b: { title: string; body?: string; severity?: "minor" | "major"; monitorId?: string | null }) =>
+  declareIncident: (b: { title: string; body?: string; severity?: "minor" | "major"; monitorId?: string | null; visibility?: "public" | "internal" }) =>
     req<Incident>("/incidents", { method: "POST", body: JSON.stringify(b) }),
   incident: (id: string) => req<Incident>(`/incidents/${id}`),
-  postUpdate: (id: string, b: { status: Incident["status"]; body: string }) =>
+  postUpdate: (id: string, b: { status: Incident["status"]; body: string; visibility?: "public" | "internal" }) =>
     req(`/incidents/${id}/updates`, { method: "POST", body: JSON.stringify(b) }),
+  saveWriteUp: (id: string, b: { rootCause?: string | null; postmortem?: string | null }) =>
+    req<Incident>(`/incidents/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   ack: (id: string) => req(`/incidents/${id}/ack`, { method: "POST" }),
 };
 

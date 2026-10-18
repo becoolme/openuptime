@@ -52,12 +52,13 @@ const groups: Group[] = [
   {
     id: "incidents", en: "Incidents", zh: "事件",
     eps: [
-      { m: "GET", p: "/incidents", en: "The latest 100 incidents of the project (plus workspace-level incidents not tied to a monitor), newest first.", zh: "当前项目最新的 100 个事件（含未关联监控项的工作区级事件），按时间倒序。",
-        res: `[{ id, monitorId, title, status, severity, auto, assigneeId, startedAt, acknowledgedAt, resolvedAt, monitorName }]` },
-      { m: "POST", p: "/incidents", en: "Open an incident manually. Returns 201.", zh: "手动创建事件。返回 201。", req: `title      string, 1-200 (required)\nbody       string, max 4000   first update, optional\nseverity   "minor" | "major"   (default "major")\nmonitorId  uuid | null        optional` },
-      { m: "GET", p: "/incidents/:id", en: "An incident with its updates, monitor, assignee and up to 8 failing checks.", zh: "获取事件详情，含更新记录、监控项、负责人和最多 8 条失败检测。",
-        res: `{ ...incident, updates: [{ id, status, body, authorId, createdAt }], monitor, assignee, checks }` },
-      { m: "POST", p: "/incidents/:id/updates", en: "Post an update and set the incident status. Subscribers and alert channels are notified. Status \"resolved\" closes the incident. Returns 201.", zh: "发布更新并设置事件状态，并通知订阅者和告警渠道。状态为 \"resolved\" 时事件关闭。返回 201。", req: `status  "investigating" | "identified" | "monitoring" | "resolved"\nbody    string, 1-4000` },
+      { m: "GET", p: "/incidents", en: "The latest 100 incidents of the project, newest first. Pass q to filter by incident number (INC-12 or 12) or by a word in the title.", zh: "当前项目最新的 100 个事件，按时间倒序。传入 q 可按事件编号（INC-12 或 12）或标题关键词过滤。",
+        res: `[{ id, number, monitorId, title, status, severity, auto, assigneeId, startedAt, acknowledgedAt, resolvedAt, rootCause, postmortem, monitorName }]\nnumber is sequential inside the project: INC-<number>` },
+      { m: "POST", p: "/incidents", en: "Open an incident manually. Returns 201.", zh: "手动创建事件。返回 201。", req: `title      string, 1-200 (required)\nbody       string, max 4000   first update, optional\nseverity   "minor" | "major"   (default "major")\nmonitorId  uuid | null        optional\nvisibility "public" | "internal"   of the first update (default "public")` },
+      { m: "GET", p: "/incidents/:id", en: "An incident with its updates (internal ones included), monitor, assignee and up to 8 failing checks.", zh: "获取事件详情，含更新记录（包括内部更新）、监控项、负责人和最多 8 条失败检测。",
+        res: `{ ...incident, updates: [{ id, status, body, visibility, authorId, createdAt }], monitor, assignee, checks }` },
+      { m: "PATCH", p: "/incidents/:id", en: "Set or clear the root cause and the postmortem. A field left out stays as it is; null or an empty string clears it. Both are shown on the public status page once the incident is resolved. Returns the incident.", zh: "设置或清除根因和复盘。未传的字段保持不变，传 null 或空字符串则清除。事件解决后，两者会显示在公开状态页上。返回该事件。", req: `rootCause   string | null, max 500    short cause\npostmortem  string | null, max 20000  markdown or plain text` },
+      { m: "POST", p: "/incidents/:id/updates", en: "Post an update and set the incident status. A public update shows on status pages and is emailed to subscribers; an internal one is visible to your team only and sends nothing. Status \"resolved\" closes the incident. Returns 201.", zh: "发布更新并设置事件状态。公开更新会显示在状态页并邮件通知订阅者；内部更新仅团队可见，不会发送任何通知。状态为 \"resolved\" 时事件关闭。返回 201。", req: `status      "investigating" | "identified" | "monitoring" | "resolved"\nbody        string, 1-4000\nvisibility  "public" | "internal"   (default "public")` },
       { m: "POST", p: "/incidents/:id/ack", en: "Acknowledge an incident and assign it to the caller. Returns the incident.", zh: "确认事件并指派给调用者。返回该事件。" },
     ],
   },
@@ -131,7 +132,7 @@ const groups: Group[] = [
   },
 ];
 ---
-<Doc description="REST API reference: authentication, monitors, incidents, alert channels, status pages and heartbeats." title="API Reference" updated="2026-10-12" toc>
+<Doc description="REST API reference: authentication, monitors, incidents, alert channels, status pages and heartbeats." title="API Reference" updated="2026-10-17" toc>
   <div lang="en">
     <h1>API reference</h1>
     <p class="lede">Manage monitors, incidents, alert channels and status pages programmatically. The API is JSON over HTTPS.</p>
@@ -286,12 +287,13 @@ DELETE /api/push/devices/:token    204</code></pre>
   overall: "operational" | "degraded" | "outage",
   bucket: "day" | "hour",
   components: [{ id, name, group, status, uptime90d, days: [{ day, uptime }] }],
-  incidents: [{ id, title, status, severity, startedAt, resolvedAt,
+  incidents: [{ id, number, title, status, severity, startedAt, resolvedAt,
                 updates: [{ id, body, status, createdAt }] }] }</code></pre>
+    <p><span lang="en">Only public updates are listed; internal updates never appear here, in the history, in the RSS feed or in subscriber emails. <code>rootCause</code> and <code>postmortem</code> are added to an incident once it is resolved and only when set.</span><span lang="zh-CN">这里只列出公开更新；内部更新不会出现在此处、事件历史、RSS 订阅源或订阅者邮件中。事件解决后，若已填写，则会附带 <code>rootCause</code> 和 <code>postmortem</code>。</span></p>
 
     <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/incidents?before=&lt;ISO date&gt;</code></div>
     <p><span lang="en">Incident history, newest first, 15 per page. Pass the returned <code>next</code> as <code>before</code> to continue; <code>next</code> is null on the last page.</span><span lang="zh-CN">事件历史，按时间倒序，每页 15 条。将返回的 <code>next</code> 作为 <code>before</code> 传入即可翻页；最后一页 <code>next</code> 为 null。</span></p>
-    <pre><code is:raw>{ items: [{ id, title, status, severity, startedAt, resolvedAt, updates: [...] }], next }</code></pre>
+    <pre><code is:raw>{ items: [{ id, number, title, status, severity, startedAt, resolvedAt, rootCause?, postmortem?, updates: [...] }], next }</code></pre>
 
     <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/rss.xml</code></div>
     <p><span lang="en">RSS 2.0 feed of the latest 50 incidents and maintenance windows together (<code>application/rss+xml</code>); titles start with <code>[Incident]</code> or <code>[Maintenance]</code>. <code>/rss</code> is the same feed.</span><span lang="zh-CN">最近 50 条事件和维护窗口合并的 RSS 2.0 订阅源（<code>application/rss+xml</code>），标题以 <code>[Incident]</code> 或 <code>[Maintenance]</code> 开头。<code>/rss</code> 是同一个订阅源。</span></p>

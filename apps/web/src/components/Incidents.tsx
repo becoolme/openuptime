@@ -16,6 +16,7 @@ const fmtMin = (v: number | null) => (v == null ? "—" : v < 60 ? <>{v < 10 ? v
 export default function Incidents() {
   const [items, setItems] = useState<Incident[] | null>(null);
   const [tab, setTab] = useState<"all" | "open" | "resolved">("all");
+  const [q, setQ] = useState("");
   const [declaring, setDeclaring] = useState(false);
   const load = () => api.incidents().then(setItems);
   useEffect(() => { load(); }, []);
@@ -28,7 +29,10 @@ export default function Incidents() {
   const prev = all.filter((i) => { const a = now - new Date(i.startedAt).getTime(); return a >= 90 * DAY && a < 180 * DAY; });
   const mtta = avgMin(cur.filter((i) => i.acknowledgedAt).map((i) => new Date(i.acknowledgedAt!).getTime() - new Date(i.startedAt).getTime()));
   const mttr = avgMin(cur.filter((i) => i.resolvedAt).map((i) => new Date(i.resolvedAt!).getTime() - new Date(i.startedAt).getTime()));
-  const shown = tab === "open" ? open : tab === "resolved" ? resolved : all;
+  const byTab = tab === "open" ? open : tab === "resolved" ? resolved : all;
+  const needle = q.trim().toLowerCase();
+  const num = /^(?:inc-?)?(\d+)$/.exec(needle)?.[1];
+  const shown = needle ? byTab.filter((i) => (num != null && String(i.number) === num) || i.title.toLowerCase().includes(needle)) : byTab;
   const delta = prev.length ? cur.length - prev.length : null;
 
   return (
@@ -58,6 +62,7 @@ export default function Incidents() {
             <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(l)} <em>{n}</em></button>
           ))}
         </div>
+        <input className="in" style={{ maxWidth: 220 }} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search or INC-12")} aria-label={t("Search incidents")} />
       </div>
 
       {items && shown.length === 0 ? (
@@ -67,7 +72,7 @@ export default function Incidents() {
           <div className="tr th"><span>{t("Incident")}</span><span>{t("Status")}</span><span>{t("Started")}</span><span>{t("Duration")}</span><span>{t("Affected")}</span></div>
           {shown.map((i) => (
             <a className="tr" key={i.id} href={`/app/incidents/${i.id}`}>
-              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small title={i.evaluationNote ?? undefined}>#{i.id.slice(0, 6)}{i.auto ? ` · ${t("auto")}` : ""}{i.evaluationNote ? ` · ${i.evaluationNote}` : ""}</small></div></div>
+              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small title={i.evaluationNote ?? undefined}>{i.number ? `INC-${i.number}` : `#${i.id.slice(0, 6)}`}{i.auto ? ` · ${t("auto")}` : ""}{i.evaluationNote ? ` · ${i.evaluationNote}` : ""}</small></div></div>
               <span><span className={`pill ${i.status === "resolved" ? "resolved" : "down"}`}>{t(i.status)}</span></span>
               <span className="muted">{ago(i.startedAt)}</span>
               <span className="num mono">{i.resolvedAt || i.status !== "resolved" ? dur(i.startedAt, i.resolvedAt) : "—"}</span>

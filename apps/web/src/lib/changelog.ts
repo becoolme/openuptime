@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "incident-records",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Richer incident records", zh: "更完整的事件记录" },
+    summary: {
+      en: "Incidents now have a number, a root cause and a postmortem, and each update can be kept internal.",
+      zh: "事件现在有编号、根因和复盘，每条更新也可以设为仅内部可见。",
+    },
+    points: [
+      { en: "Every incident gets a number that counts up inside its project (INC-12), shown in the list, on the incident page and in the API; search the list by number or title.", zh: "每个事件在所属项目内获得递增编号（如 INC-12），显示在列表、事件详情页和 API 中；列表可按编号或标题搜索。" },
+      { en: "Write a root cause (up to 500 characters) and a postmortem (up to 20000) on the incident page or with PATCH /incidents/:id; both appear on the public status page once the incident is resolved.", zh: "可在事件页或通过 PATCH /incidents/:id 填写根因（最多 500 字符）和复盘（最多 20000 字符）；事件解决后两者会显示在公开状态页上。" },
+      { en: "Post an update as an internal note: it is visible to your team only and never reaches status pages, the RSS feed or subscriber emails. Updates stay public by default.", zh: "更新可以作为内部备注发布：仅团队可见，不会出现在状态页、RSS 订阅源或订阅者邮件中。更新默认仍为公开。" },
+      { en: "The MCP tools gain an update_incident tool and a visibility option on create_incident and post_incident_update.", zh: "MCP 工具新增 update_incident，create_incident 与 post_incident_update 新增 visibility 选项。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "push-critical-alerts",
     date: "2026-10-17",
     edition: "community",

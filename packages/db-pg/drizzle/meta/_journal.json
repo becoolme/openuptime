@@ -162,6 +162,13 @@
       "when": 1792282025671,
       "tag": "0022_spotty_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792282260548,
+      "tag": "0023_lucky_cloak",
+      "breakpoints": true
     }
   ]
 }

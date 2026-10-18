@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, createRepo, eq, schema } from "./index";
+import { createDb, createRepo, eq, schema, sql } from "./index";
 
 const url = process.env.DATABASE_URL;
 const db = url ? createDb(url, { max: 4 }) : (undefined as never);
@@ -178,6 +178,117 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     const [row] = await db.select().from(schema.monitor).where(eq(schema.monitor.id, child.id));
     expect(row.dependsOnMonitorId).toBeNull();
     expect(row.minRegionsFailing).toBe(0);
+  });
+});
+
+// Incident numbers, internal updates and the migration backfill; needs a migrated Postgres.
+describe.skipIf(!url)("incident numbers and update visibility", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  let projectId: string;
+  let otherProjectId: string;
+
+  beforeAll(async () => {
+    await db.insert(schema.organization).values({ id: orgId, name: "Test", slug: orgId, createdAt: new Date() });
+    [{ id: projectId }] = await db.insert(schema.project).values({ organizationId: orgId, name: "A" }).returning({ id: schema.project.id });
+    [{ id: otherProjectId }] = await db.insert(schema.project).values({ organizationId: orgId, name: "B" }).returning({ id: schema.project.id });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+  });
+
+  const monitorIn = async (project: string) =>
+    (await db.insert(schema.monitor).values({ organizationId: orgId, projectId: project, name: "m", type: "tcp" as const, target: "127.0.0.1:1", intervalSec: 60 }).returning())[0];
+
+  it("hands out gap-free numbers per project, also under concurrency", async () => {
+    const m = await monitorIn(projectId);
+    const made = await Promise.all([
+      ...Array.from({ length: 6 }, (_, k) => repo.createIncident({ organizationId: orgId, projectId, title: `w${k}` })),
+      ...Array.from({ length: 6 }, (_, k) => repo.createIncident({ organizationId: orgId, monitorId: m.id, title: `m${k}` })),
+    ]);
+    expect(made.map((i) => i.number).sort((a, b) => a! - b!)).toEqual(Array.from({ length: 12 }, (_, k) => k + 1));
+    expect(made.every((i) => i.projectId === projectId)).toBe(true);
+    // the other project counts from 1 on its own
+    expect((await repo.createIncident({ organizationId: orgId, projectId: otherProjectId, title: "x" })).number).toBe(1);
+  });
+
+  it("does not use up a number when an automatic incident loses the race", async () => {
+    const m = await monitorIn(otherProjectId);
+    const open = () => repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" });
+    const won = (await Promise.all([open(), open(), open()])).filter(Boolean);
+    expect(won).toHaveLength(1);
+    expect(await open()).toBeNull();
+    const next = await repo.createIncident({ organizationId: orgId, projectId: otherProjectId, title: "after" });
+    expect(next.number).toBe(won[0]!.number! + 1);
+  });
+
+  it("keeps the number and project when the monitor is deleted, and filters the list by project", async () => {
+    const m = await monitorIn(projectId);
+    const inc = await repo.createIncident({ organizationId: orgId, monitorId: m.id, title: "orphan" });
+    await db.delete(schema.monitor).where(eq(schema.monitor.id, m.id));
+    const [row] = await db.select().from(schema.incident).where(eq(schema.incident.id, inc.id));
+    expect(row).toMatchObject({ monitorId: null, projectId, number: inc.number });
+    expect((await repo.listIncidents(orgId, projectId)).some((i) => i.id === inc.id)).toBe(true);
+    expect((await repo.listIncidents(orgId, otherProjectId)).some((i) => i.id === inc.id)).toBe(false);
+    expect(await repo.incidentVisible(orgId, inc.id, [projectId])).toBe(true);
+    expect(await repo.incidentVisible(orgId, inc.id, [otherProjectId])).toBe(false);
+  });
+
+  it("sets and clears the write-up without touching other fields", async () => {
+    const inc = await repo.createIncident({ organizationId: orgId, projectId, title: "wu" });
+    expect(await repo.updateIncidentWriteUp(orgId, inc.id, { rootCause: "disk", postmortem: "text" })).toMatchObject({ rootCause: "disk", postmortem: "text" });
+    expect(await repo.updateIncidentWriteUp(orgId, inc.id, { rootCause: null })).toMatchObject({ rootCause: null, postmortem: "text" });
+    expect(await repo.updateIncidentWriteUp(orgId, inc.id, {})).toMatchObject({ postmortem: "text" });
+    expect(await repo.updateIncidentWriteUp(`${orgId}-other`, inc.id, { rootCause: "x" })).toBeNull();
+  });
+
+  it("keeps internal updates off every public read path but shows them to the team", async () => {
+    const m = await monitorIn(projectId);
+    const [page] = await db.insert(schema.statusPage).values({ organizationId: orgId, projectId, slug: `p${crypto.randomUUID().slice(0, 8)}`, title: "T" }).returning();
+    await db.insert(schema.statusPageComponent).values({ statusPageId: page.id, monitorId: m.id });
+    const inc = await repo.createIncident({ organizationId: orgId, monitorId: m.id, title: "vis" }, { status: "investigating", body: "first-internal", visibility: "internal" });
+    await repo.postIncidentUpdate(orgId, inc.id, { status: "identified", body: "shown" });
+    await repo.postIncidentUpdate(orgId, inc.id, { status: "monitoring", body: "hidden-note", visibility: "internal" });
+
+    const bodies = (list: { updates: { body: string }[] }[]) => list.flatMap((i) => i.updates.map((u) => u.body));
+    const board = await repo.statusBoard(page as never);
+    expect(bodies(board.incidents)).toEqual(["shown"]);
+    expect(bodies(await repo.pageIncidents(page as never, { limit: 10 }))).toEqual(["shown"]);
+    const detail = await repo.incidentDetail(orgId, inc.id);
+    expect(detail!.updates.map((u) => [u.body, u.visibility])).toEqual([["first-internal", "internal"], ["shown", "public"], ["hidden-note", "internal"]]);
+  });
+
+  it("backfills numbers by start time in the migration", async () => {
+    const [p] = await db.insert(schema.project).values({ organizationId: orgId, name: "Legacy" }).returning();
+    const m = await monitorIn(p.id);
+    const at = (min: number) => new Date(Date.now() - min * 60_000);
+    // inserted newest first, without project or number, as they exist before the migration
+    const rows = await db.insert(schema.incident).values([
+      { organizationId: orgId, monitorId: m.id, title: "third", startedAt: at(1) },
+      { organizationId: orgId, monitorId: m.id, title: "first", startedAt: at(30) },
+      { organizationId: orgId, monitorId: m.id, title: "second", startedAt: at(10) },
+    ]).returning();
+    const file = (await import("node:fs")).readFileSync(new URL("../drizzle/0021_curvy_mister_fear.sql", import.meta.url), "utf8");
+    const backfill = file.split("--> statement-breakpoint").map((x) => x.trim()).filter((x) => /UPDATE "(incident|project)"/.test(x));
+    expect(backfill.length).toBeGreaterThan(0);
+    // run in a transaction that is rolled back, so other rows keep their numbers; the unique index is created after the
+    // backfill in the real migration, so it is dropped here
+    const rollback = new Error("rollback");
+    let byTitle: Record<string, number | null> = {};
+    let seq = -1;
+    await db
+      .transaction(async (tx) => {
+        await tx.execute(sql`drop index incident_project_number_idx`);
+        for (const stmt of backfill) await tx.execute(sql.raw(stmt));
+        byTitle = Object.fromEntries((await tx.select().from(schema.incident).where(eq(schema.incident.projectId, p.id))).map((i) => [i.title, i.number]));
+        seq = (await tx.select().from(schema.project).where(eq(schema.project.id, p.id)))[0].incidentSeq;
+        throw rollback;
+      })
+      .catch((e) => {
+        if (e !== rollback) throw e;
+      });
+    expect(byTitle).toEqual({ first: 1, second: 2, third: 3 });
+    expect(seq).toBe(3);
+    expect(rows).toHaveLength(3);
   });
 });
 

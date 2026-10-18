@@ -56,9 +56,40 @@ export function createRepo(db: Db): Repo {
   async function withUpdates(list: (typeof schema.incident.$inferSelect)[]): Promise<IncidentWithUpdates[]> {
     const ids = list.map((i) => i.id);
     const updates = ids.length
-      ? await db.select().from(schema.incidentUpdate).where(inArray(schema.incidentUpdate.incidentId, ids)).orderBy(desc(schema.incidentUpdate.createdAt))
+      ? await db
+          .select()
+          .from(schema.incidentUpdate)
+          // withUpdates feeds public pages, feeds and subscriber mail only: internal updates never go through here
+          .where(and(inArray(schema.incidentUpdate.incidentId, ids), eq(schema.incidentUpdate.visibility, "public")))
+          .orderBy(desc(schema.incidentUpdate.createdAt))
       : [];
     return list.map((i) => ({ ...i, updates: updates.filter((u) => u.incidentId === i.id) }));
+  }
+
+  type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+  /**
+   * Hands out the next incident number of the incident's project. The counter row is bumped with one UPDATE inside the
+   * caller's transaction, so concurrent creators queue on the row lock and never see the same number; a rolled-back
+   * insert rolls the counter back with it.
+   */
+  async function allocateNumber(tx: Tx, inc: { organizationId: string; monitorId?: string | null; projectId?: string | null }) {
+    let projectId = inc.projectId ?? null;
+    if (inc.monitorId) {
+      const [m] = await tx.select({ projectId: schema.monitor.projectId }).from(schema.monitor).where(eq(schema.monitor.id, inc.monitorId));
+      projectId = m?.projectId ?? projectId;
+    }
+    if (!projectId) {
+      const [p] = await tx.select({ id: schema.project.id }).from(schema.project).where(eq(schema.project.organizationId, inc.organizationId)).orderBy(asc(schema.project.createdAt), asc(schema.project.id)).limit(1);
+      projectId = p?.id ?? null;
+    }
+    if (!projectId) return { projectId: null, number: null };
+    const [p] = await tx
+      .update(schema.project)
+      .set({ incidentSeq: sql`${schema.project.incidentSeq} + 1` })
+      .where(and(eq(schema.project.id, projectId), eq(schema.project.organizationId, inc.organizationId)))
+      .returning({ n: schema.project.incidentSeq });
+    return p ? { projectId, number: p.n } : { projectId: null, number: null };
   }
 
   /** Count one run in the monitor's hourly rollup. */
@@ -525,7 +556,8 @@ export function createRepo(db: Db): Repo {
         .select({ i: schema.incident, monitorName: schema.monitor.name })
         .from(schema.incident)
         .leftJoin(schema.monitor, eq(schema.monitor.id, schema.incident.monitorId))
-        .where(and(eq(schema.incident.organizationId, orgId), or(eq(schema.monitor.projectId, projectId), isNull(schema.incident.monitorId))))
+        // an incident belongs to the project that numbered it; one without (it predates numbering) falls back to its monitor
+        .where(and(eq(schema.incident.organizationId, orgId), or(eq(schema.incident.projectId, projectId), and(isNull(schema.incident.projectId), or(eq(schema.monitor.projectId, projectId), isNull(schema.incident.monitorId))))))
         .orderBy(desc(schema.incident.startedAt))
         .limit(100);
       return r.map((x) => ({ ...x.i, monitorName: x.monitorName }));
@@ -536,7 +568,7 @@ export function createRepo(db: Db): Repo {
         .select({ id: schema.incident.id })
         .from(schema.incident)
         .leftJoin(schema.monitor, eq(schema.monitor.id, schema.incident.monitorId))
-        .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId), or(inArray(schema.monitor.projectId, scope), isNull(schema.incident.monitorId))));
+        .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId), or(inArray(schema.incident.projectId, scope), and(isNull(schema.incident.projectId), or(inArray(schema.monitor.projectId, scope), isNull(schema.incident.monitorId))))));
       return !!row;
     },
     async incidentDetail(orgId, id) {
@@ -563,25 +595,34 @@ export function createRepo(db: Db): Repo {
     async createIncident(inc, firstUpdate) {
       // the incident and its first update land together or not at all
       return db.transaction(async (tx) => {
+        const { projectId, number } = await allocateNumber(tx, inc);
         const [row] = await tx
           .insert(schema.incident)
-          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: inc.auto, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
+          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, projectId, number, title: inc.title, severity: inc.severity, auto: inc.auto, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
           .returning();
-        if (firstUpdate) await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId });
+        if (firstUpdate) await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, visibility: firstUpdate.visibility });
         return row;
       });
     },
     async openAutoIncident(inc, firstUpdate) {
-      return db.transaction(async (tx) => {
-        const [row] = await tx
-          .insert(schema.incident)
-          .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
-          .onConflictDoNothing()
-          .returning();
-        if (!row) return null;
-        await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId });
-        return row;
-      });
+      const lost = new Error("incident already open");
+      try {
+        return await db.transaction(async (tx) => {
+          const { projectId, number } = await allocateNumber(tx, inc);
+          const [row] = await tx
+            .insert(schema.incident)
+            .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, projectId, number, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
+            .onConflictDoNothing()
+            .returning();
+          // losing the race to another open incident rolls the transaction back, so the number is not burned
+          if (!row) throw lost;
+          await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, visibility: firstUpdate.visibility });
+          return row;
+        });
+      } catch (e) {
+        if (e === lost) return null;
+        throw e;
+      }
     },
     async postIncidentUpdate(orgId, id, u) {
       const [incident] = await db
@@ -590,8 +631,17 @@ export function createRepo(db: Db): Repo {
         .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId)))
         .returning();
       if (!incident) return null;
-      const [update] = await db.insert(schema.incidentUpdate).values({ incidentId: id, status: u.status, body: u.body, authorId: u.authorId }).returning();
+      const [update] = await db.insert(schema.incidentUpdate).values({ incidentId: id, status: u.status, body: u.body, authorId: u.authorId, visibility: u.visibility }).returning();
       return { incident, update };
+    },
+    async updateIncidentWriteUp(orgId, id, w) {
+      const set: Partial<typeof schema.incident.$inferInsert> = {};
+      if (w.rootCause !== undefined) set.rootCause = w.rootCause;
+      if (w.postmortem !== undefined) set.postmortem = w.postmortem;
+      const where = and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId));
+      if (!Object.keys(set).length) return db.select().from(schema.incident).where(where).then((r) => r[0] ?? null);
+      const [row] = await db.update(schema.incident).set(set).where(where).returning();
+      return row ?? null;
     },
     async acknowledgeIncident(orgId, id, userId) {
       const [inc] = await db

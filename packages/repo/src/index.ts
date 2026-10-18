@@ -15,6 +15,8 @@ export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "m
 export type MonitorStatus = "pending" | "up" | "degraded" | "down" | "paused";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type IncidentSeverity = "minor" | "major";
+/** "internal" incident updates are for the team only and never reach status pages, feeds or subscribers. */
+export type UpdateVisibility = "public" | "internal";
 export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push";
 
 /** Project ids a limited API key may touch; `null` = no limit (sessions and unrestricted keys). */
@@ -131,6 +133,9 @@ export interface Incident {
   id: string;
   organizationId: string;
   monitorId: string | null;
+  projectId: string | null;
+  /** sequential inside the project, shown as INC-<number> */
+  number: number | null;
   title: string;
   status: IncidentStatus;
   severity: IncidentSeverity;
@@ -145,25 +150,31 @@ export interface Incident {
   reminderCount: number;
   escalationLevel: number;
   nextEscalationAt: Date | null;
+  rootCause: string | null;
+  postmortem: string | null;
 }
 export interface IncidentUpdate {
   id: string;
   incidentId: string;
   status: IncidentStatus;
   body: string;
+  visibility: UpdateVisibility;
   authorId: string | null;
   createdAt: Date;
 }
 export type NewIncident = {
   organizationId: string;
   monitorId?: string | null;
+  /** the project that numbers the incident; taken from the monitor when there is one */
+  projectId?: string | null;
   title: string;
   severity?: IncidentSeverity;
   auto?: boolean;
   assigneeId?: string | null;
   evaluationNote?: string | null;
 };
-export type NewIncidentUpdate = { status: IncidentStatus; body: string; authorId?: string | null };
+export type NewIncidentUpdate = { status: IncidentStatus; body: string; authorId?: string | null; visibility?: UpdateVisibility };
+export type IncidentWriteUp = { rootCause?: string | null; postmortem?: string | null };
 export type IncidentWithMonitor = Incident & { monitorName: string | null };
 export type IncidentWithUpdates = Incident & { updates: IncidentUpdate[] };
 export interface IncidentDetail {
@@ -330,7 +341,7 @@ export interface StatusBoard {
     uptime90d: number | null;
     days: { day: string; uptime: number }[];
   }[];
-  /** unresolved incidents of the page, newest first */
+  /** unresolved incidents of the page, newest first; `updates` holds the public ones only */
   incidents: IncidentWithUpdates[];
 }
 
@@ -484,6 +495,8 @@ export interface Repo {
   /** Set the status (stamping `resolvedAt` when resolved) and append an update. */
   postIncidentUpdate(orgId: string, id: string, u: NewIncidentUpdate): Promise<{ incident: Incident; update: IncidentUpdate } | null>;
   acknowledgeIncident(orgId: string, id: string, userId: string): Promise<Incident | null>;
+  /** Sets or clears the root cause and postmortem; fields left out stay as they are. */
+  updateIncidentWriteUp(orgId: string, id: string, w: IncidentWriteUp): Promise<Incident | null>;
   /** An unresolved incident of the monitor: an automatic latency one with `slow`, otherwise any other (outage or manual) one. */
   hasOpenIncident(monitorId: string, slow: boolean): Promise<boolean>;
   hadIncidentSince(monitorId: string, since: Date): Promise<boolean>;

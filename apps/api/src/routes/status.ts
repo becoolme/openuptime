@@ -138,10 +138,15 @@ export function publicBody(u: IncidentUpdate) {
   return u.authorId == null && u.status === "investigating" ? "Automated checks detected a problem. We are investigating." : u.body;
 }
 
-/** Public shape of an incident: no assignee, no organization, sanitised update bodies. */
-const toPublic = (i: IncidentWithUpdates) => ({
-  id: i.id, title: i.title, status: i.status, severity: i.severity, startedAt: i.startedAt, resolvedAt: i.resolvedAt,
-  updates: i.updates.map((u) => ({ id: u.id, body: publicBody(u), status: u.status, createdAt: u.createdAt })),
+/**
+ * Public shape of an incident: no assignee, no organization, sanitised update bodies. Internal updates are dropped here
+ * as well as in the query, so no new read path can leak one. The root cause and postmortem are shown once the incident
+ * is resolved, never while it is still open.
+ */
+export const toPublic = (i: IncidentWithUpdates) => ({
+  id: i.id, number: i.number, title: i.title, status: i.status, severity: i.severity, startedAt: i.startedAt, resolvedAt: i.resolvedAt,
+  ...(i.resolvedAt ? { rootCause: i.rootCause, postmortem: i.postmortem } : {}),
+  updates: i.updates.filter((u) => u.visibility === "public").map((u) => ({ id: u.id, body: publicBody(u), status: u.status, createdAt: u.createdAt })),
 });
 
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
