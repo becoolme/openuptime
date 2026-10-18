@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCheck } from "./checker";
-import { networkLevelError, proberOnline, proberSideError, resetSelfCheck } from "./selfcheck";
+import { configureSelfCheck, networkLevelError, proberOnline, proberSideError, resetSelfCheck } from "./selfcheck";
 
-beforeEach(resetSelfCheck);
+beforeEach(() => { configureSelfCheck(undefined); resetSelfCheck(); });
 afterEach(() => vi.unstubAllGlobals());
 
 const refused = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
@@ -34,6 +34,22 @@ describe("proberOnline", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     await proberOnline({ ...opts, now: () => 9000 });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("configureSelfCheck", () => {
+  it("is always online when the list is emptied", async () => {
+    configureSelfCheck("");
+    const fetch = vi.fn(async () => { throw refused; });
+    expect(await proberOnline({ fetch })).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("uses the configured http(s) URLs only", async () => {
+    configureSelfCheck("https://mine.test/, ftp://nope.test/ ,http://two.test/");
+    const seen: string[] = [];
+    const fetch = async (u: string) => { seen.push(u); throw refused; };
+    expect(await proberOnline({ fetch })).toBe(false);
+    expect(seen.sort()).toEqual(["http://two.test/", "https://mine.test/"]);
   });
 });
 

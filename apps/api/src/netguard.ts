@@ -11,12 +11,14 @@
  */
 
 import { pinnedFetch } from "./pinnedfetch";
+import { configureSelfCheck } from "./selfcheck";
 
 let allowPrivate = false;
 let userAgent = "OpenUptime/0.1 (+https://github.com/becoolme/openuptime)";
 
 /** Env values are constant per deployment, so a module-level config is safe in a Worker isolate. */
-export function configureNetGuard(env: { ALLOW_PRIVATE_TARGETS?: string; CHECK_USER_AGENT?: string }) {
+export function configureNetGuard(env: { ALLOW_PRIVATE_TARGETS?: string; CHECK_USER_AGENT?: string; SELFCHECK_URLS?: string }) {
+  configureSelfCheck(env.SELFCHECK_URLS);
   allowPrivate = env.ALLOW_PRIVATE_TARGETS === "true";
   userAgent = env.CHECK_USER_AGENT?.trim() || "OpenUptime/0.1 (+https://github.com/becoolme/openuptime)";
 }
@@ -161,8 +163,65 @@ export async function guardAddresses(host: string): Promise<{ host: string; addr
 
 /** The address to dial for `host`: the first validated one on Node, otherwise the host unchanged. */
 export async function guardHost(host: string): Promise<string> {
+  return (await guardHosts(host))[0];
+}
+
+/** Every validated address of `host` to dial, IPv4 first (the order the resolver gave otherwise); the host itself when there is nothing to pin. */
+export async function guardHosts(host: string): Promise<string[]> {
   const g = await guardAddresses(host);
-  return g.addresses?.[0] ?? g.host;
+  if (!g.addresses) return [g.host];
+  return [...g.addresses.filter((a) => !a.includes(":")), ...g.addresses.filter((a) => a.includes(":"))];
+}
+
+/** Forget what `host` resolved to, so the next lookup asks the resolver again. */
+export function forgetResolved(host: string) {
+  resolved.delete(normaliseHost(host));
+}
+
+/**
+ * Runs `connect` against each validated address of `host` in turn and returns the first success. When every address
+ * failed, the cached lookup is dropped and the whole list is tried once more from a fresh lookup (the name may have
+ * moved). The error thrown lists every failure (`errors`), so callers can tell a prober-side problem from a target one.
+ * `until` (epoch ms) stops further attempts once a check's time is up.
+ */
+export async function dialEach<T>(host: string, connect: (address: string) => Promise<T>, until = Infinity): Promise<T> {
+  const failures: unknown[] = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const addrs = await guardHosts(host);
+    for (const a of addrs) {
+      if (Date.now() > until) break;
+      try {
+        return await connect(a);
+      } catch (e) {
+        failures.push(e);
+      }
+    }
+    // a literal or a Workers host has no lookup to repeat
+    if (addrs.length === 1 && normaliseHost(addrs[0]) === normaliseHost(host)) break;
+    if (Date.now() > until) break;
+    forgetResolved(host);
+  }
+  if (failures.length === 1) throw failures[0];
+  const last = failures[failures.length - 1] as Error;
+  throw Object.assign(new Error(last?.message ?? "Connection failed", { cause: last }), { errors: failures });
+}
+
+/**
+ * Is the host private as far as the prober can tell: a private literal or internal name, a name that resolves to a private
+ * address, or (with ALLOW_PRIVATE_TARGETS) anything that is not a public IP literal. Such a target says nothing about the
+ * prober's internet access. A name that cannot be resolved is not private.
+ */
+export async function targetIsPrivate(host: string): Promise<boolean> {
+  const h = normaliseHost(host);
+  if (isLiteral(h)) return allowPrivate ? addressBlocked(h) : hostBlocked(h);
+  if (allowPrivate) return true;
+  if (hostBlocked(h)) return true;
+  if (isWorkers()) return false;
+  try {
+    return (await resolveAll(h)).some(addressBlocked);
+  } catch {
+    return false;
+  }
 }
 
 // ---- targets -------------------------------------------------------------------------------------------------------
@@ -210,6 +269,7 @@ export async function urlProblem(url: string): Promise<string | null> {
 // ---- fetch ---------------------------------------------------------------------------------------------------------
 
 const MAX_REDIRECTS = 5;
+const CONNECT_FAILURES = new Set(["ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EADDRNOTAVAIL", "ENOTFOUND", "EAI_AGAIN"]);
 const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
 
 /**
@@ -224,10 +284,21 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
   for (let hop = 0; ; hop++) {
     const u = new URL(current);
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Unsupported protocol ${u.protocol}`);
-    const { addresses } = await guardAddresses(u.hostname);
+    let { addresses } = await guardAddresses(u.hostname);
     const req = { ...init, method, body, headers, redirect: "manual" as const };
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
-    const res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
+    let res: Response;
+    try {
+      res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
+    } catch (e) {
+      // The cached lookup may be stale (the name moved): forget it and try once more on a fresh, re-validated one.
+      // (connect-phase errors only: a request that may have reached the server is never sent twice)
+      const code = (e as { cause?: { code?: string } }).cause?.code ?? "";
+      if (!addresses || init.signal?.aborted || !CONNECT_FAILURES.has(code)) throw e;
+      forgetResolved(u.hostname);
+      ({ addresses } = await guardAddresses(u.hostname));
+      res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
+    }
     const location = res.headers.get("location");
     if (res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
     await res.body?.cancel();

@@ -38,6 +38,8 @@ services:
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
       # User-Agent of HTTP checks (default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime))
       CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
+      # reference URLs of the offline self-check; unset = defaults, set but empty = self-check off (no colon on purpose)
+      SELFCHECK_URLS: ${SELFCHECK_URLS-https://www.cloudflare.com/cdn-cgi/trace,https://www.gstatic.com/generate_204,https://www.apple.com/library/test/success.html}
       # remote probes for multi-region checks (apps/probe): JSON of region id -> URL, and the secret both sides share
       PROBE_REGIONS: ${PROBE_REGIONS:-}
       PROBE_SECRET: ${PROBE_SECRET:-}

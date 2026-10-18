@@ -39,7 +39,9 @@ metadata) and other reserved ranges, names that can only be internal (`localhost
 names such as a compose service) and, on Node, names that resolve to such an address are refused: when a monitor or
 channel is saved (HTTP 400, `target_not_allowed`) and again on every check, including each redirect hop. Set
 `ALLOW_PRIVATE_TARGETS=true` to monitor internal services; do it only when you trust every account on the instance.
-Cloudflare Workers cannot reach private ranges in any case. `CHECK_USER_AGENT` overrides the User-Agent of HTTP checks.
+Cloudflare Workers cannot reach private ranges in any case. `CHECK_USER_AGENT` overrides the User-Agent of HTTP checks. `SELFCHECK_URLS` (comma-separated URLs) replaces the public
+sites a failed check fetches to tell a down target from an offline checker; an empty value turns that check off. Targets
+that resolve to private addresses skip it.
 
 Sign-in, sign-up, two-step and password-reset endpoints are rate limited per client address and per email address. On
 Cloudflare the client address is the edge's; in Docker it is known only with `TRUST_PROXY=true` (exactly one reverse

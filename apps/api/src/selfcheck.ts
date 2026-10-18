@@ -10,6 +10,13 @@ export const REFERENCE_URLS = [
   "https://www.gstatic.com/generate_204",
   "https://www.apple.com/library/test/success.html",
 ];
+let configured: string[] | undefined;
+
+/** `SELFCHECK_URLS`: comma-separated reference URLs; an empty value switches the self-check off; unset keeps the defaults. */
+export function configureSelfCheck(value: string | undefined) {
+  configured = value === undefined ? undefined : value.split(",").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u));
+}
+
 const REFERENCE_TIMEOUT_MS = 2500;
 /** A verdict is shared for this long, so a burst of failing checks asks the network once. */
 const VERDICT_TTL_MS = 5000;
@@ -33,10 +40,13 @@ let last: { at: number; online: boolean } | undefined;
 
 /** Resolves true when this machine can reach the internet. Concurrent callers share one verdict. */
 export function proberOnline(opts: { urls?: string[]; fetch?: Fetcher; now?: () => number } = {}): Promise<boolean> {
+  const urls = opts.urls ?? configured ?? REFERENCE_URLS;
+  // no reference URLs: the self-check is off, every failure counts against the target
+  if (!urls.length) return Promise.resolve(true);
   const now = (opts.now ?? Date.now)();
   if (last && now - last.at < VERDICT_TTL_MS) return Promise.resolve(last.online);
   if (inflight) return inflight;
-  const run = probeReferences(opts.urls ?? REFERENCE_URLS, opts.fetch ?? ((u, i) => fetch(u, i)))
+  const run = probeReferences(urls, opts.fetch ?? ((u, i) => fetch(u, i)))
     .then((online) => {
       last = { at: now, online };
       return online;

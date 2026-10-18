@@ -13,8 +13,10 @@ export async function pinnedFetch(url: string, init: RequestInit, addresses: str
   const u = new URL(url);
   const lib = u.protocol === "https:" ? await import("node:https") : await import("node:http");
   const { Readable } = await import("node:stream");
+  const zlib = await import("node:zlib");
   const headers = new Headers(init.headers);
-  if (!headers.has("accept-encoding")) headers.set("accept-encoding", "identity");
+  // always uncompressed on the wire (a caller's own accept-encoding is overridden), so byte budgets count what is received
+  headers.set("accept-encoding", "identity");
   const body = init.body == null ? undefined : typeof init.body === "string" ? init.body : init.body instanceof Uint8Array ? init.body : null;
   if (body === null) throw new TypeError("pinnedFetch supports string and byte bodies only");
   if (body !== undefined && !headers.has("content-length")) headers.set("content-length", String(typeof body === "string" ? Buffer.byteLength(body) : body.byteLength));
@@ -47,7 +49,19 @@ export async function pinnedFetch(url: string, init: RequestInit, addresses: str
         const out = new Headers();
         for (let i = 0; i < res.rawHeaders.length; i += 2) out.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
         if (noBody) res.resume();
-        resolve(new Response(noBody ? null : (Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>), { status: res.statusCode ?? 502, statusText: res.statusMessage, headers: out }));
+        // a server may compress anyway: undo it, so callers always read the real bytes
+        const encoding = (out.get("content-encoding") ?? "").trim().toLowerCase();
+        const inflate = noBody ? null : encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "deflate" ? zlib.createInflate() : encoding === "br" ? zlib.createBrotliDecompress() : null;
+        let source: import("node:stream").Readable | null = noBody ? null : res;
+        if (inflate && source) {
+          out.delete("content-encoding");
+          out.delete("content-length");
+          res.on("error", (e) => inflate.destroy(e));
+          source = res.pipe(inflate);
+          // dropping the response (a capped read) must stop the download too
+          source.on("close", () => res.destroy());
+        }
+        resolve(new Response(source ? (Readable.toWeb(source) as unknown as ReadableStream<Uint8Array>) : null, { status: res.statusCode ?? 502, statusText: res.statusMessage, headers: out }));
       },
     );
     req.on("error", (err) => reject(signal?.aborted ? signal.reason : new TypeError("fetch failed", { cause: err })));
