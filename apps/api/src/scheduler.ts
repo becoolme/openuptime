@@ -1,5 +1,5 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { dispatchAlert, retryDeliveries } from "./alerts";
+import { dispatchAlert, retryDeliveries, sendEscalations, sendReminders, sweepDeliveries } from "./alerts";
 import type { CheckOutcome } from "./checker";
 import { measure } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
@@ -64,7 +64,7 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
           const unsent = messages.slice(i).flatMap((m) => m.body.ids.map((id) => ({ id, token: claimed.get(id)! }))).filter((r) => r.token);
           await repo.releaseClaims(unsent).catch((err) => console.error("could not release claims", err));
           total -= unsent.length;
-          return housekeeping(repo, queue, total);
+          return housekeeping(repo, queue, total, entitlements);
         }
       }
     } else {
@@ -72,12 +72,22 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
     }
     if (due.length < limit) break;
   }
-  return housekeeping(repo, queue, total);
+  return housekeeping(repo, queue, total, entitlements);
 }
 
-async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0) {
+/** One housekeeping step must not stop the next. */
+const step = async (what: string, run: () => Promise<unknown>) => {
+  try { await run(); } catch (e) { console.error(`${what} failed`, e); }
+};
+
+async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0, entitlements: Entitlements = unmetered) {
+  // alerts a dead worker left half-sent go back in line before the retries are picked up
+  await step("delivery sweep", () => sweepDeliveries(repo));
   // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
-  await retryDeliveries(repo, queue ? 10 : 3).catch((e) => console.error("alert retry failed", e));
+  await step("alert retry", () => retryDeliveries(repo, queue ? 10 : 3));
+  // incidents nobody has acknowledged: repeat the alert, escalate to the next level
+  await step("alert reminders", () => sendReminders(repo, entitlements, queue ? 10 : 3));
+  await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));
   // cheap housekeeping once an hour
   if (new Date().getMinutes() === 0) await repo.purgeExpired();
   return total;
@@ -208,6 +218,7 @@ async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entit
   );
   if (!inc) return; // a concurrent check opened it
   await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
+  await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
 }
 
 const SUPPRESSED_MAINTENANCE = "suppressed: maintenance";
@@ -247,11 +258,13 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
     // remember the incident was muted so its recovery mail is skipped too
     await repo.logDeliveries([{
       organizationId: m.organizationId, projectId: m.projectId ?? null, channelId: null, channelName: "Muted (flapping)", channelType: "none",
-      kind: "incident.muted", incidentId: inc.id, monitorName: m.name, ok: true, error: "Another incident for this monitor started in the last 15 minutes",
+      kind: "incident.muted", incidentId: inc.id, monitorName: m.name, ok: true, status: "skipped", error: "Another incident for this monitor started in the last 15 minutes",
+      statusMessage: "suppressed: flapping, another incident for this monitor started in the last 15 minutes",
     }]);
     return;
   }
   await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
+  await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
 }
 
 const FLAP_WINDOW_MS = 15 * 60_000;

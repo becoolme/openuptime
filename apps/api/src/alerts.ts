@@ -1,4 +1,4 @@
-import type { DeliveryRetry, NewDelivery, Repo, SubscriberTarget } from "@openuptime/repo";
+import { MAX_REMINDERS, type AlertChannel, type AlertDelivery, type DeliveryRetry, type NewDelivery, type Repo, type SubscriberTarget } from "@openuptime/repo";
 import { sendPush } from "./apns";
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
@@ -6,7 +6,10 @@ import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 import { guardedFetch, readCapped } from "./netguard";
 
 type Event = {
-  kind: "incident.opened" | "incident.resolved";
+  /** a reminder or escalation repeats the down alert for an incident nobody has acknowledged */
+  kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";
+  /** which repeat (reminder) or level (escalation) this is */
+  count?: number;
   incident: { id: string; title: string; startedAt?: Date; resolvedAt?: Date | null };
   /** Why the check failed, shown in the down email. */
   reason?: string;
@@ -50,7 +53,7 @@ async function send(url: string, body: unknown) {
 async function post(url: string, body: unknown) {
   const res = await send(url, body);
   await res.body?.cancel().catch(() => {}); // only the status matters; do not hold the connection open for a body
-  if (!res.ok) throw new Error(`${hostOf(url)} responded ${res.status}`);
+  if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
 }
 
 /**
@@ -69,17 +72,22 @@ async function postLark(url: string, text: string, secret?: string) {
   const res = await send(url, body);
   const data = (await readCapped(res, 64 * 1024).then((t) => JSON.parse(t)).catch(() => null)) as { code?: number; StatusCode?: number; msg?: string; StatusMessage?: string } | null;
   const code = data?.code ?? data?.StatusCode ?? 0;
-  if (!res.ok || code !== 0) throw new Error(`Lark responded ${res.status}${code ? ` (${code}: ${data?.msg ?? data?.StatusMessage ?? "rejected"})` : ""}`);
+  if (!res.ok || code !== 0) throw new Error(`Lark responded HTTP ${res.status}${code ? ` (${code}: ${data?.msg ?? data?.StatusMessage ?? "rejected"})` : ""}`);
 }
 
 const alertText = (ev: Event) =>
   ev.kind === "incident.opened"
     ? `${ev.slow ? "🟡" : "🔴"} ${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"} — ${ev.incident.title}`
-    : `✅ ${ev.monitor.name} has recovered`;
+    : ev.kind === "incident.reminder"
+      ? `⏰ ${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — reminder ${ev.count ?? 1}`
+      : ev.kind === "incident.escalated"
+        ? `🚨 ${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — escalated to you`
+        : `✅ ${ev.monitor.name} has recovered`;
 
-/** An alert that was not sent because the workspace's allowance for the period is used up; logged, never retried. */
-class Skipped extends Error {}
+/** The alert is not sent, on purpose, and that is final (an allowance used up, a channel switched off); never retried. The message is the reason shown to people. */
+export class Skipped extends Error {}
 const SKIPPED = "skipped: email allowance used up for this period";
+const RETRIED_KINDS = new Set(["incident.opened", "incident.resolved", "incident.reminder", "incident.escalated"]);
 
 /** Take emails for `subs` from the allowance: who may be mailed and how many were left out. A failing ledger lets them all through. */
 async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: T[]) {
@@ -89,88 +97,185 @@ async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: 
 }
 
 /** Attempts per alert, the first one included. The first retry is queued a minute after the failure, the next five minutes later. */
-const MAX_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_SEC = 300;
+const FIRST_RETRY_DELAY_SEC = 60;
+/** A row that stays in `sending` this long belongs to a worker that died. */
+export const STUCK_SEC = 300;
+
+const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: DeliveryRetry["monitor"], count?: number): Event => ({
+  kind: kind === "incident.resolved" || kind === "incident.reminder" || kind === "incident.escalated" ? kind : "incident.opened",
+  count,
+  incident: { id: incident.id, title: incident.title, startedAt: incident.startedAt, resolvedAt: incident.resolvedAt },
+  monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target },
+  ...(incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
+});
+
+const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) => {
+  const to = (channel.config as { to?: string }).to;
+  return channel.type === "email" && to ? userLang(repo, to, fallback ?? (await orgLang(repo, channel.organizationId))) : (fallback ?? "en");
+};
+
+/**
+ * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
+ * `meter` charges an email against the workspace allowance; retries are not charged again.
+ */
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements) {
+  const attempts = d.attempts + 1;
+  try {
+    if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
+    await deliver(channel, ev, alertText(ev), lang, repo);
+    await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
+    return true;
+  } catch (e) {
+    if (e instanceof Skipped) {
+      await repo.finishDelivery(d.id, { status: "skipped", error: e.message, message: e.message }).catch((x) => console.error("could not record a skipped alert", x));
+      return false;
+    }
+    console.error(`alert via ${channel.name} failed`, e);
+    const why = reason(e);
+    const retryInSec = !RETRIED_KINDS.has(d.kind) || attempts >= MAX_ATTEMPTS ? null : attempts === 1 ? FIRST_RETRY_DELAY_SEC : RETRY_DELAY_SEC;
+    const message = retryInSec == null ? `failed: ${why}${RETRIED_KINDS.has(d.kind) ? ` (gave up after ${attempts} attempts)` : ""}` : `failed: ${why} (attempt ${attempts} of ${MAX_ATTEMPTS}, trying again in ${retryInSec >= 120 ? `${retryInSec / 60} min` : `${retryInSec} s`})`;
+    await repo.finishDelivery(d.id, { status: "failed", error: why, message, retryInSec }).catch((x) => console.error("could not record a failed alert", x));
+    return false;
+  }
+}
 
 /** Try failed incident alerts again. Each channel's own delivery row is updated; nothing here throws. */
 export async function retryDeliveries(repo: Repo, limit = 10) {
   const due: DeliveryRetry[] = await repo.claimRetries(limit);
   for (const { delivery, incident, monitor, channel } of due) {
-    const resolved = delivery.kind === "incident.resolved";
-    const ev: Event = {
-      kind: resolved ? "incident.resolved" : "incident.opened",
-      incident: { id: incident.id, title: incident.title, startedAt: incident.startedAt, resolvedAt: incident.resolvedAt },
-      monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target },
-      ...(incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
-    };
-    const to = (channel.config as { to?: string }).to;
-    const lang = channel.type === "email" && to ? await userLang(repo, to, await orgLang(repo, channel.organizationId)) : "en";
-    const attempts = delivery.attempts + 1;
-    try {
-      await deliver(channel, ev, alertText(ev), lang, repo);
-      await repo.finishRetry(delivery.id, { ok: true, error: null, retryInSec: null });
-    } catch (e) {
-      console.error(`alert retry via ${channel.name} failed`, e);
-      await repo.finishRetry(delivery.id, { ok: false, error: reason(e), retryInSec: attempts >= MAX_ATTEMPTS ? null : RETRY_DELAY_SEC });
+    // a repeat or escalation is pointless once someone has taken the incident
+    if ((delivery.kind === "incident.reminder" || delivery.kind === "incident.escalated") && (incident.acknowledgedAt || incident.resolvedAt)) {
+      const why = incident.resolvedAt ? "skipped: the incident was resolved before this alert could be sent" : "skipped: the incident was acknowledged before this alert could be sent";
+      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+      continue;
     }
+    const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount);
+    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined);
   }
   return due.length;
 }
 
-/** Fan an event out to every enabled channel in the org. Failures are logged, never thrown. */
-export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channelIds: string[] = [], entitlements: Entitlements = unmetered) {
-  const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId });
-  const text = alertText(ev);
-
+/**
+ * Queue one delivery per channel, claim each (one conditional UPDATE, so overlapping runs cannot send the same row twice)
+ * and send it. Switched-off channels get a row that says so. A log that cannot be written must not stop the alert, so the
+ * channels without a row are sent directly.
+ */
+async function fanOut(repo: Repo, orgId: string, ev: Event, channels: AlertChannel[], entitlements: Entitlements, extra: Partial<NewDelivery> = {}) {
   const fallback = channels.some((c) => c.type === "email") ? await orgLang(repo, orgId) : "en";
-  const results = await Promise.allSettled(
-    channels.map(async (c) => {
-      const to = (c.config as { to?: string }).to;
-      // an address that is an account reads in that account's language; any other address in the workspace owner's
-      const lang = c.type === "email" && to ? await userLang(repo, to, fallback) : fallback;
-      if (c.type === "email" && (await withinEmails(entitlements, orgId, [c])).skipped) throw new Skipped(SKIPPED);
-      return deliver(c, ev, text, lang, repo);
+  const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name, ...extra };
+  const live = channels.filter((c) => c.enabled);
+  const off = channels.filter((c) => !c.enabled);
+  await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
+  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false })));
+  await Promise.all(
+    live.map(async (c) => {
+      const lang = await languageFor(repo, c, fallback);
+      const row = rows.find((r) => r.channelId === c.id);
+      if (!row) {
+        // no row to claim: send anyway, only the history is missing
+        await deliver(c, ev, alertText(ev), lang, repo).catch((e) => console.error(`alert via ${c.name} failed`, e));
+        return;
+      }
+      const claimed = await repo.claimDelivery(row.id);
+      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements);
     }),
   );
-  results.forEach((r, i) => r.status === "rejected" && !(r.reason instanceof Skipped) && console.error(`alert via ${channels[i].name} failed`, r.reason));
-  const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name };
-  const rows: NewDelivery[] = channels.map((ch, i) => {
-    const r = results[i];
-    // no channel id for a skipped alert: a retry would only hit the same empty allowance
-    if (r.status === "rejected" && r.reason instanceof Skipped) return { ...base, channelId: null, channelName: ch.name, channelType: ch.type, ok: false, error: SKIPPED };
-    return { ...base, channelId: ch.id, channelName: ch.name, channelType: ch.type, ok: r.status === "fulfilled", error: r.status === "rejected" ? reason(r.reason) : null };
-  });
-  const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch((e) => { console.error("subscriber notify failed", e); return null; });
-  if (subs && subs.total > 0) {
-    rows.push({ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: subs.failed === 0 && subs.skipped === 0,
-      error: subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null });
-  }
-  await repo.logDeliveries(rows);
 }
 
+/** Fan an event out to every enabled channel in the org. Failures are logged, never thrown. */
+export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channelIds: string[] = [], entitlements: Entitlements = unmetered) {
+  const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId, withDisabled: true });
+  await fanOut(repo, orgId, ev, channels, entitlements);
+  const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name };
+  const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch((e) => { console.error("subscriber notify failed", e); return null; });
+  if (subs && subs.total > 0) {
+    const error = subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null;
+    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: !error, error, status: !error ? "sent" : subs.failed ? "failed" : "skipped", statusMessage: error && (subs.failed ? `failed: ${error}` : error) }]);
+  }
+}
+
+const suppressed = (organizationId: string, ev: Event, why: string): NewDelivery => ({
+  organizationId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name,
+  channelId: null, channelName: "Alerts", channelType: "none", ok: false, status: "skipped", error: why, statusMessage: why,
+});
+
+/**
+ * Repeat the down alert for incidents nobody has acknowledged. The repo hands each due repeat to exactly one caller and
+ * counts it, so a repeat is sent once however many workers run; intervals that were missed collapse into this one.
+ */
+export async function sendReminders(repo: Repo, entitlements: Entitlements = unmetered, limit = 10) {
+  const due = await repo.claimReminders(limit);
+  for (const { incident, monitor, project, number } of due) {
+    const ev = eventOf("incident.reminder", incident, monitor, number);
+    if (await repo.underMaintenance(monitor)) {
+      await repo.logDeliveries([suppressed(incident.organizationId, ev, "suppressed: maintenance")]);
+      continue;
+    }
+    const all = await repo.channelsToAlert(incident.organizationId, { channelIds: monitor.channelIds, projectId: monitor.projectId, withDisabled: true });
+    // push is what repeats are for; email only when the project opted in
+    const channels = all.filter((c) => c.type === "push" || (project.reminderEmail && c.type === "email"));
+    if (!channels.length) {
+      await repo.logDeliveries([suppressed(incident.organizationId, ev, "skipped: no push channel to repeat the alert on")]);
+      continue;
+    }
+    await fanOut(repo, incident.organizationId, ev, channels, entitlements);
+  }
+  return due.length;
+}
+
+/** Tell the next escalation level about an incident that is still unacknowledged. Claimed once, like a reminder. */
+export async function sendEscalations(repo: Repo, entitlements: Entitlements = unmetered, limit = 10) {
+  const due = await repo.claimEscalations(limit);
+  for (const { incident, monitor, step, level } of due) {
+    const ev = eventOf("incident.escalated", incident, monitor, level);
+    if (await repo.underMaintenance(monitor)) {
+      await repo.logDeliveries([suppressed(incident.organizationId, ev, "suppressed: maintenance")]);
+      continue;
+    }
+    const channels = await repo.channelsByIds(incident.organizationId, step.channelIds);
+    if (!channels.length) {
+      await repo.logDeliveries([suppressed(incident.organizationId, ev, `skipped: escalation level ${level} has no channel left`)]);
+      continue;
+    }
+    await fanOut(repo, incident.organizationId, ev, channels, entitlements);
+  }
+  return due.length;
+}
+
+/** Housekeeping for deliveries: free rows a dead worker left in `sending`, then the retries that are due. */
+export async function sweepDeliveries(repo: Repo) {
+  return repo.sweepStuckDeliveries({ stuckSec: STUCK_SEC, maxAttempts: MAX_ATTEMPTS });
+}
 
 /** Send one alert to one channel; throws when the provider rejects it. */
 export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo) {
   const L = (k: string, v?: Record<string, string>) => tr(lang, k, v);
-  const opened = ev.kind === "incident.opened";
+  // a repeat or an escalation reads like the down alert
+  const opened = ev.kind !== "incident.resolved";
   const cfg = c.config as Record<string, string | undefined>;
+  const need = (v: unknown, what: string) => { if (!v) throw new Skipped(`skipped: the channel has no ${what}`); };
   switch (c.type) {
     case "slack":
-      if (cfg.url) await post(cfg.url, { text });
+      need(cfg.url, "webhook URL");
+      await post(cfg.url!, { text });
       break;
     case "lark":
-      if (cfg.url) await postLark(cfg.url, text, cfg.secret || undefined);
+      need(cfg.url, "webhook URL");
+      await postLark(cfg.url!, text, cfg.secret || undefined);
       break;
     case "webhook":
-      if (cfg.url) await post(cfg.url, { kind: ev.kind, incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.slow ? { slow: true } : {}) });
+      need(cfg.url, "webhook URL");
+      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.slow ? { slow: true } : {}) });
       break;
     case "telegram":
-      if (cfg.botToken && cfg.chatId)
-        await post(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, { chat_id: cfg.chatId, text });
+      need(cfg.botToken && cfg.chatId, "bot token or chat id");
+      await post(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, { chat_id: cfg.chatId, text });
       break;
     case "pagerduty":
-      if (cfg.routingKey)
-        await post("https://events.pagerduty.com/v2/enqueue", {
+      need(cfg.routingKey, "routing key");
+      await post("https://events.pagerduty.com/v2/enqueue", {
           routing_key: cfg.routingKey,
           event_action: opened ? "trigger" : "resolve",
           dedup_key: ev.incident.id,
@@ -180,10 +285,13 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
     case "push": {
       // devices belong to people: every member of the workspace who registered one is reached, each in their own language
       if (!repo || !c.organizationId) throw new Error("Push channel has no workspace to look devices up in");
-      await sendPush(repo, await repo.pushDevicesForOrganization(c.organizationId), ev, c.organizationId);
+      const devices = await repo.pushDevicesForOrganization(c.organizationId);
+      if (!devices.length) throw new Skipped("skipped: no phone has registered for push alerts");
+      await sendPush(repo, devices, ev, c.organizationId);
       break;
     }
     case "email":
+      need(cfg.to, "email address");
       if (cfg.to) {
         if (ev.test) {
           const t = actionEmail({
@@ -206,9 +314,16 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           rows.push([L("Downtime"), duration(ev.incident.resolvedAt.getTime() - started.getTime(), lang)]);
           rows.push([L("Resolved"), utc(ev.incident.resolvedAt)]);
         }
+        const still = ev.kind === "incident.reminder" || ev.kind === "incident.escalated";
+        const heading = still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered";
+        const intro = ev.kind === "incident.reminder"
+          ? L("Nobody has acknowledged this incident yet. This is reminder {n} of {max}.", { n: String(ev.count ?? 1), max: String(MAX_REMINDERS) })
+          : ev.kind === "incident.escalated"
+            ? L("Nobody acknowledged this incident in time, so it was escalated to this channel.")
+            : L(opened ? (ev.slow ? "The monitor responded slower than its threshold on several checks in a row, so an incident was opened." : "The monitor failed its consecutive checks, so an incident was opened.") : "Checks are passing again and the incident is resolved.");
         const mail = actionEmail({
-          title: L(opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name }),
-          body: L(opened ? (ev.slow ? "The monitor responded slower than its threshold on several checks in a row, so an incident was opened." : "The monitor failed its consecutive checks, so an incident was opened.") : "Checks are passing again and the incident is resolved."),
+          title: L(heading, { name: ev.monitor.name }),
+          body: intro,
           badge: opened ? (ev.slow ? { label: L("Slow"), tone: "warn" } : { label: L("Down"), tone: "down" }) : { label: L("Recovered"), tone: "up" },
           rows,
           cta: L("View incident"),
@@ -217,7 +332,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           footerUrl: { text: L("Manage alerting"), url: `${appUrl()}/app/alerting` },
           lang,
         });
-        await sendEmail({ to: cfg.to, subject: `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${L(opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
+        await sendEmail({ to: cfg.to, subject: `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
       }
       break;
   }

@@ -92,6 +92,22 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: "reliable-alert-delivery",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Reliable, explained alert delivery", zh: "更可靠、可追溯的告警送达" },
+    summary: {
+      en: "Each alert is sent exactly once, every skipped or failed one says why, and unanswered incidents can repeat and escalate.",
+      zh: "每条告警只会发送一次，被跳过或失败的告警会写明原因，无人响应的事件还可以重复提醒并逐级升级。",
+    },
+    points: [
+      { en: "Two servers can no longer send the same alert twice, and alerts left half-sent after a crash are retried or marked failed.", zh: "两台服务器不会再重复发送同一条告警；因崩溃而卡在发送中的告警会被重试或标记为失败。" },
+      { en: "An incident page now lists every notification with its status and, when it was skipped or failed, the reason.", zh: "事件页面现在列出每条通知及其状态；被跳过或失败时会显示原因。" },
+      { en: "Repeat an unacknowledged alert every 5, 10, 15, 30 or 60 minutes, up to 10 times, to the mobile app and optionally email; if several repeats were missed only the latest is sent.", zh: "未确认的告警可每 5、10、15、30 或 60 分钟重复一次（最多 10 次），发送到手机 App，也可选择同时发邮件；错过多次时只发送最近一次。" },
+      { en: "Set up to 3 escalation levels per project: if nobody acknowledges the incident after the delay, the next channels are notified. Acknowledging or resolving stops both.", zh: "每个项目最多设置 3 级升级：超过延迟仍无人确认事件时，通知下一级渠道。确认或恢复事件即停止重复与升级。" },
+    ],
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

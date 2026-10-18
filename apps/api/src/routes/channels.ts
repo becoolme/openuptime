@@ -91,7 +91,7 @@ export const channels = new Hono<AppEnv>()
     const ch = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!ch) return c.json({ error: "Not found" }, 404);
     const log = (error: string | null) =>
-      repo.logDeliveries([{ organizationId: ch.organizationId, projectId: ch.projectId, channelId: ch.id, channelName: ch.name, channelType: ch.type, kind: "test", ok: !error, error }]);
+      repo.logDeliveries([{ organizationId: ch.organizationId, projectId: ch.projectId, channelId: ch.id, channelName: ch.name, channelType: ch.type, kind: "test", ok: !error, error, statusMessage: error && (error.startsWith("skipped:") ? error : `failed: ${error}`), status: !error ? "sent" : error.startsWith("skipped:") ? "skipped" : "failed" }]);
     try {
       await deliver(ch, { kind: "incident.resolved", incident: { id: crypto.randomUUID(), title: "Test alert" }, monitor: { name: "OpenUptime test", target: "" }, test: true }, "🔔 Test alert from OpenUptime — this channel is connected.", "en", repo);
       await log(null);

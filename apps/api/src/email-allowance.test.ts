@@ -16,6 +16,9 @@ function fakeRepo() {
       { email: "a@example.com", locale: "en", token: "t1", slug: "s", title: "S" },
       { email: "b@example.com", locale: "en", token: "t2", slug: "s", title: "S" },
     ],
+    queueDeliveries: async (rows: Record<string, unknown>[]) => rows.map((r, i) => ({ ...r, id: `d${i}`, attempts: 0, status: "pending" })),
+    claimDelivery: async (id: string) => ({ id, kind: "incident.opened", attempts: 0 }),
+    finishDelivery: async (id: string, r: Record<string, unknown>) => void logged.push({ id, ...r }),
     logDeliveries: async (rows: Record<string, unknown>[]) => void logged.push(...rows),
   } as unknown as Repo;
   return { repo, logged };
@@ -24,14 +27,16 @@ function fakeRepo() {
 const ev = { kind: "incident.opened" as const, incident: { id: "i1", title: "Down" }, monitor: { id: "m1", name: "Site", target: "https://example.com" } };
 
 describe("email allowance", () => {
-  it("skips email alerts and subscriber mails once the allowance is used up, and logs them without a retry", async () => {
+  it("skips email alerts and subscriber mails once the allowance is used up, and records why without a retry", async () => {
     const { repo, logged } = fakeRepo();
     const none: Entitlements = { ...unmetered, spendEmails: async () => 0 };
     await dispatchAlert(repo, "org", ev, [], none);
     expect(logged).toHaveLength(2);
     for (const row of logged) {
-      expect(row).toMatchObject({ ok: false, channelId: null, channelType: "email" });
+      expect(row).toMatchObject({ status: "skipped" });
       expect(String(row.error)).toMatch(/^skipped:/);
+      expect(String(row.message ?? row.statusMessage)).toMatch(/^skipped:/);
+      expect(row.retryInSec).toBeUndefined();
     }
   });
 

@@ -141,6 +141,13 @@
       "when": 1792281274599,
       "tag": "0019_flat_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792281783238,
+      "tag": "0020_even_supernaut",
+      "breakpoints": true
     }
   ]
 }

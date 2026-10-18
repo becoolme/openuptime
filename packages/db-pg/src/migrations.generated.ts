@@ -99,5 +99,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0019_flat_molten_man",
     "when": 1792281274599,
     "sql": "ALTER TABLE \"incident\" ADD COLUMN \"evaluation_note\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"depends_on_monitor_id\" uuid;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"min_regions_failing\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD CONSTRAINT \"monitor_depends_on_monitor_id_monitor_id_fk\" FOREIGN KEY (\"depends_on_monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE set null ON UPDATE no action;"
+  },
+  {
+    "tag": "0020_even_supernaut",
+    "when": 1792281783238,
+    "sql": "ALTER TABLE \"alert_delivery\" ADD COLUMN \"status\" text;--> statement-breakpoint\nALTER TABLE \"alert_delivery\" ADD COLUMN \"status_message\" text;--> statement-breakpoint\nALTER TABLE \"alert_delivery\" ADD COLUMN \"claimed_at\" timestamp with time zone;--> statement-breakpoint\nALTER TABLE \"alert_delivery\" ADD COLUMN \"acknowledged_at\" timestamp with time zone;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"next_reminder_at\" timestamp with time zone;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"reminder_count\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"escalation_level\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"next_escalation_at\" timestamp with time zone;--> statement-breakpoint\nALTER TABLE \"project\" ADD COLUMN \"reminder_interval_min\" integer;--> statement-breakpoint\nALTER TABLE \"project\" ADD COLUMN \"reminder_email\" boolean DEFAULT false NOT NULL;--> statement-breakpoint\nALTER TABLE \"project\" ADD COLUMN \"escalation\" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint\nCREATE INDEX \"alert_delivery_status_idx\" ON \"alert_delivery\" USING btree (\"status\",\"claimed_at\");--> statement-breakpoint\nCREATE INDEX \"alert_delivery_incident_idx\" ON \"alert_delivery\" USING btree (\"incident_id\");"
   }
 ];

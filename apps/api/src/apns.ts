@@ -116,7 +116,7 @@ const activeTransport = () => transport ?? (onWorkers ? fetchTransport : http2Tr
 // ---- payload ---------------------------------------------------------------------------------------------------------
 
 export type PushEvent = {
-  kind: "incident.opened" | "incident.resolved";
+  kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";
   incident: { id: string; title: string; startedAt?: Date; resolvedAt?: Date | null };
   reason?: string;
   test?: true;
@@ -135,7 +135,8 @@ const downtime = (ms: number, lang: Lang) => {
 
 /** The notification for one language. Stays far below APNs' 4 KB limit: free text is clipped. */
 export function buildPayload(ev: PushEvent, orgId: string, lang: Lang) {
-  const opened = ev.kind === "incident.opened";
+  const opened = ev.kind !== "incident.resolved";
+  const still = ev.kind === "incident.reminder" || ev.kind === "incident.escalated";
   const name = clip(ev.monitor.name, 100);
   let title: string;
   let body: string;
@@ -143,7 +144,7 @@ export function buildPayload(ev: PushEvent, orgId: string, lang: Lang) {
     title = tr(lang, "Your channel is connected");
     body = tr(lang, "This is a test alert from OpenUptime");
   } else if (opened) {
-    title = tr(lang, ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
+    title = tr(lang, still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
     body = clip(ev.reason || ev.monitor.target || ev.incident.title, 300);
   } else {
     title = tr(lang, "{name} has recovered", { name });

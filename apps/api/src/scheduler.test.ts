@@ -13,6 +13,9 @@ describe("runDueChecks", () => {
       // one lease round returns everything, the next is empty
       claimDue: async () => (first ? ((first = false), due) : []),
       claimRetries: async () => [],
+      sweepStuckDeliveries: async () => 0,
+      claimReminders: async () => [],
+      claimEscalations: async () => [],
       purgeExpired: async () => {},
     } as unknown as Repo;
     const sent: { body: CheckMessage; delaySeconds?: number }[] = [];
@@ -71,6 +74,9 @@ describe("queue delivery", () => {
       claimDue: async () => (first ? ((first = false), due) : []),
       releaseClaims: async (runs: { id: string }[]) => void released.push(...runs.map((r) => r.id)),
       claimRetries: async () => [],
+      sweepStuckDeliveries: async () => 0,
+      claimReminders: async () => [],
+      claimEscalations: async () => [],
       purgeExpired: async () => {},
     } as unknown as Repo;
     const n = await runDueChecks(repo, { sendBatch: async () => { throw new Error("queue down"); } });
@@ -120,6 +126,8 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       return { ...row, startedAt: new Date(), resolvedAt: null };
     },
     channelsToAlert: async () => [],
+    queueDeliveries: async () => [],
+    scheduleFollowUps: async () => {},
     subscribersFor: async () => [],
     logDeliveries: async () => {},
   } as unknown as Repo;
