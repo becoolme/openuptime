@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureProbes } from "./probes";
 import { resetSelfCheck } from "./selfcheck";
 import { unmetered, type Entitlements } from "./entitlements";
-import { MESSAGE_SIZE, checkOne, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
+import { MESSAGE_SIZE, checkOne, resolveIncident, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 
 describe("runDueChecks", () => {
   it("packs due monitors into queue messages, each monitor exactly once", async () => {
@@ -94,12 +94,14 @@ describe("nextAfter", () => {
 });
 
 /** A tiny in-memory repo: just what one failed heartbeat check touches. */
-function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean; handled?: boolean; reopenedMuted?: boolean } = {}) {
+function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean; handled?: boolean; reopenedMuted?: boolean; alertedAgoMin?: number } = {}) {
   const incidents: { id: string; title: string; auto: boolean; severity: string; resolved: boolean; note?: string | null }[] = [];
   const reopened: string[] = [];
   /** what happened, in order: follow-up clocks set ("schedule") and alert fan-out begun ("alert") */
   const order: string[] = [];
   const states: Record<string, unknown>[] = [];
+  const deliveries: { kind: string; createdAt: Date }[] = [];
+  const marked: string[] = [];
   const repo = {
     underMaintenance: async () => !!opts.maintenance,
     monitorsByIds: async (ids: string[]) => (opts.monitors ?? []).filter((m) => ids.includes(m.id)),
@@ -121,7 +123,11 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       i.resolved = true;
       return true;
     },
-    incidentMuted: async () => !!opts.reopenedMuted,
+    incidentDeliveries: async () => [
+      ...(opts.reopenedMuted ? [{ kind: "incident.muted", createdAt: new Date() }] : []),
+      ...(opts.alertedAgoMin !== undefined ? [{ kind: "incident.opened", createdAt: new Date(Date.now() - opts.alertedAgoMin * 60_000) }] : []),
+      ...deliveries,
+    ],
     openAutoIncident: async (inc: { title: string; auto?: boolean; severity?: string; evaluationNote?: string | null }) => {
       if (opts.failCreate?.()) throw new Error("db down");
       const row = { id: crypto.randomUUID(), title: inc.title, auto: !!inc.auto, severity: inc.severity ?? "major", resolved: false, note: inc.evaluationNote };
@@ -132,9 +138,9 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
     queueDeliveries: async () => [],
     scheduleFollowUps: async (inc: { startedAt: Date }) => void order.push("schedule", `at:${inc.startedAt.getTime() > Date.now() - 60_000}`),
     subscribersFor: async () => [],
-    logDeliveries: async () => {},
+    logDeliveries: async (rows: { kind: string }[]) => void rows.forEach((r) => { marked.push(r.kind); deliveries.push({ kind: r.kind, createdAt: new Date() }); }),
   } as unknown as Repo;
-  return { repo, incidents, states, reopened, order };
+  return { repo, incidents, states, reopened, order, marked };
 }
 
 const hb = (over: Partial<Monitor> = {}) =>
@@ -232,6 +238,29 @@ describe("checkOne noise rules", () => {
     const { repo, order } = fakeRepo({ reopenable: true, reopenedMuted: true });
     await checkOne(repo, hb());
     expect(order).toEqual([]);
+  });
+
+  it("keeps follow-ups but skips the \"again\" alert, and mutes the recovery, when the incident alerted a moment ago", async () => {
+    const { repo, order, marked } = fakeRepo({ reopenable: true, alertedAgoMin: 5 });
+    await checkOne(repo, hb());
+    expect(order).toEqual(["schedule", "at:true"]);
+    expect(marked).toEqual(["incident.muted"]);
+  });
+
+  it("skips the recovery alert while the latest word on the incident is a mute, and sends it otherwise", async () => {
+    for (const [reopenedMuted, alerts] of [[true, 0], [false, 1]] as const) {
+      const { repo, incidents, order } = fakeRepo({ reopenedMuted });
+      incidents.push({ id: "i", title: "down", auto: true, severity: "major", resolved: false });
+      await resolveIncident(repo, hb({ status: "down" }));
+      expect(order.filter((o) => o === "alert")).toHaveLength(alerts);
+    }
+  });
+
+  it("alerts a reopened incident again once the flap window has passed, and its recovery then goes out", async () => {
+    const { repo, order, marked } = fakeRepo({ reopenable: true, alertedAgoMin: 20 });
+    await checkOne(repo, hb());
+    expect(order).toEqual(["schedule", "at:true", "alert"]);
+    expect(marked).not.toContain("incident.muted");
   });
 
   it("sets the follow-up clocks before it alerts a new outage", async () => {

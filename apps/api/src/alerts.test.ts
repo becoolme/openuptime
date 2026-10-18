@@ -79,6 +79,70 @@ describe("retryDeliveries", () => {
   });
 });
 
+describe("retry of a reopened incident", () => {
+  const base = new Date("2026-10-17T10:00:00Z");
+  const at = (min: number) => new Date(base.getTime() + min * 60_000);
+  const run = async (self: Date, others: { createdAt: Date }[]) => {
+    const done: Record<string, unknown>[] = [];
+    const bodies: unknown[] = [];
+    const repo = {
+      claimRetries: async () => [{
+        delivery: { id: "d2", kind: "incident.opened", attempts: 1, organizationId: "o", channelId: "c1", createdAt: self },
+        incident: { id: "i1", organizationId: "o", title: "API is down", startedAt: base, resolvedAt: null, acknowledgedAt: null, auto: true, severity: "major", evaluationNote: "reopened: failed again", reminderCount: 0, escalationLevel: 0 },
+        monitor: { id: "m1", projectId: null, name: "API", target: "https://x" },
+        channel: { id: "c1", organizationId: "o", type: "slack", name: "s", config: { url: "https://hooks.example/x" }, enabled: true },
+      }],
+      incidentDeliveries: async () => others.map((o, i) => ({ id: `d${i}`, kind: "incident.opened", channelId: "c1", ...o })),
+      finishDelivery: async (_id: string, r: Record<string, unknown>) => void done.push(r),
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response("", { status: 200 })));
+    await retryDeliveries(repo as never);
+    return { done: done[0], bodies };
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps saying \"again\" when the retried alert is the one sent for the reopen", async () => {
+    const r = await run(at(20), [{ createdAt: at(0) }]);
+    expect(r.done).toMatchObject({ status: "sent" });
+    expect((r.bodies[0] as { text: string }).text).toContain("is down again");
+  });
+
+  it("drops a late retry of the original alert once a reopen alert has gone out", async () => {
+    const r = await run(at(0), [{ createdAt: at(20) }]);
+    expect(r.done).toMatchObject({ status: "skipped", message: expect.stringMatching(/reopened/) });
+    expect(r.bodies).toEqual([]);
+  });
+});
+
+describe("push dedupe across channels", () => {
+  const push = { type: "push", organizationId: "o", config: {} };
+  const devices = [{ id: "dev1" }, { id: "dev2" }];
+  const repo = { pushDevicesForOrganization: async () => devices } as never;
+
+  it("lets a second push channel reach the phones when the first one failed", async () => {
+    const mocked = vi.mocked(sendPush);
+    mocked.mockReset();
+    mocked.mockRejectedValueOnce(new Error("APNs down")).mockResolvedValue(undefined);
+    const pushed = new Map<string, Promise<boolean>>();
+    const a = deliver(push, ev, "t", "en", repo, pushed).catch((e) => e);
+    const b = deliver(push, ev, "t", "en", repo, pushed);
+    expect(await a).toBeInstanceOf(Error);
+    await b;
+    expect(mocked).toHaveBeenCalledTimes(2);
+    expect(mocked.mock.calls[1][1]).toEqual(devices);
+  });
+
+  it("still pushes a phone once when the first channel succeeded", async () => {
+    const mocked = vi.mocked(sendPush);
+    mocked.mockReset();
+    mocked.mockResolvedValue(undefined);
+    const pushed = new Map<string, Promise<boolean>>();
+    await deliver(push, ev, "t", "en", repo, pushed);
+    await expect(deliver(push, ev, "t", "en", repo, pushed)).rejects.toThrow(/already notified/);
+    expect(mocked).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("reminders and escalation", () => {
   const monitor = { id: "m1", organizationId: "o", projectId: "p", name: "API", target: "https://x", channelIds: [] as string[] };
   const incident = { id: "i1", organizationId: "o", title: "API is down", startedAt: new Date(), resolvedAt: null, acknowledgedAt: null, auto: true, severity: "major", reminderCount: 3, escalationLevel: 1 };

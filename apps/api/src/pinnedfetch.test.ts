@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
-import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
+import { brotliCompressSync, deflateRawSync, deflateSync, gzipSync } from "node:zlib";
 import { pinnedFetch } from "./pinnedfetch";
 
 describe("pinnedFetch", () => {
@@ -36,6 +36,22 @@ describe("pinnedFetch", () => {
       expect(res.headers.get("content-encoding")).toBeNull();
     }
     expect(seen).toEqual(["identity", "identity", "identity"]);
+  });
+
+  it("returns an empty body when a compressed response has nothing in it, and reads a raw deflate stream", async () => {
+    for (const enc of ["gzip", "deflate", "br"]) {
+      const port = await serve((_q, res) => { res.writeHead(200, { "content-encoding": enc }); res.end(); });
+      const res = await pinnedFetch(`http://pinned.test:${port}/`, {}, ["127.0.0.1"]);
+      expect(await res.text()).toBe("");
+    }
+    const port = await serve((_q, res) => { res.writeHead(200, { "content-encoding": "deflate" }); res.end(deflateRawSync(Buffer.from("raw hello"))); });
+    expect(await (await pinnedFetch(`http://pinned.test:${port}/`, {}, ["127.0.0.1"])).text()).toBe("raw hello");
+  });
+
+  it("still fails on a corrupt non-empty compressed body", async () => {
+    const port = await serve((_q, res) => { res.writeHead(200, { "content-encoding": "gzip" }); res.end("not gzip at all"); });
+    const res = await pinnedFetch(`http://pinned.test:${port}/`, {}, ["127.0.0.1"]);
+    await expect(res.text()).rejects.toThrow();
   });
 
   it("sends a string body and reads status and repeated headers", async () => {

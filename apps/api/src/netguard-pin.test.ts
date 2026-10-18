@@ -108,6 +108,40 @@ describe("dialing every address", () => {
     expect(r).toBe("8.8.8.8");
   });
 
+  it("gives each address its own slice of the time, so a blackholed one does not use up the deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      answer("93.184.216.34", "8.8.8.8");
+      const signals: AbortSignal[] = [];
+      const run = dialEach(name(), (a, signal) => {
+        signals.push(signal);
+        return a === "93.184.216.34" ? new Promise<string>(() => {}) : Promise.resolve(a);
+      }, Date.now() + 10_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await run).toBe("8.8.8.8");
+      expect(signals[0].aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("hands a connection that arrives after its slice to discard", async () => {
+    vi.useFakeTimers();
+    try {
+      answer("93.184.216.34", "8.8.8.8");
+      const late: string[] = [];
+      let release!: (v: string) => void;
+      const run = dialEach(name(), (a) => (a === "93.184.216.34" ? new Promise<string>((r) => { release = r; }) : Promise.resolve(a)), Date.now() + 10_000, (v) => late.push(v));
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await run).toBe("8.8.8.8");
+      release("slow");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(late).toEqual(["slow"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rethrows a single failure as it is when there is nothing to look up again", async () => {
     const e = new Error("boom");
     await expect(dialEach("93.184.216.34", async () => { throw e; })).rejects.toBe(e);
@@ -124,10 +158,16 @@ describe("targetIsPrivate", () => {
     expect(await targetIsPrivate(name())).toBe(false);
   });
 
-  it("treats every name as private when private targets are allowed, but not public literals", async () => {
+  it("judges a name by its addresses when private targets are allowed, so public names keep the offline self-check", async () => {
     configureNetGuard({ ALLOW_PRIVATE_TARGETS: "true" });
+    answer("93.184.216.34");
+    expect(await targetIsPrivate(name())).toBe(false);
+    answer("10.1.2.3");
     expect(await targetIsPrivate(name())).toBe(true);
+    lookup.mockRejectedValue(Object.assign(new Error("x"), { code: "ENOTFOUND" }));
+    expect(await targetIsPrivate(name())).toBe(false);
     expect(await targetIsPrivate("93.184.216.34")).toBe(false);
+    expect(await targetIsPrivate("10.0.0.1")).toBe(true);
   });
 });
 
@@ -139,6 +179,21 @@ describe("stale resolutions", () => {
     const { res } = await guardedFetch(`https://${h}/`);
     expect(res.status).toBe(200);
     expect(pinned.mock.calls.map((c) => c[2])).toEqual([["93.184.216.34"], ["8.8.8.8"]]);
+  });
+
+  it("does not retry when the fresh lookup returns the same addresses", async () => {
+    answer("93.184.216.34");
+    pinned.mockRejectedValue(new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } }));
+    await expect(guardedFetch(`https://${name()}/`)).rejects.toThrow("fetch failed");
+    expect(pinned).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the codes of an AggregateError's attempts", async () => {
+    const h = name();
+    lookup.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]).mockResolvedValueOnce([{ address: "8.8.8.8", family: 4 }]);
+    const agg = new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("a"), { code: "ETIMEDOUT" })]) });
+    pinned.mockRejectedValueOnce(agg).mockResolvedValueOnce(new Response("ok"));
+    expect((await guardedFetch(`https://${h}/`)).res.status).toBe(200);
   });
 
   it("does not retry other errors", async () => {

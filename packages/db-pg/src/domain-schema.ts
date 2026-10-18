@@ -176,6 +176,8 @@ export const incidentUpdate = pgTable("incident_update", {
   /** "internal" updates are visible to the team only: never on status pages, feeds or subscriber emails. */
   visibility: incidentUpdateVisibility("visibility").notNull().default("public"),
   authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
+  /** Written by a person (session, API key or agent), as opposed to the checks. Survives the author's account being deleted. */
+  byPerson: boolean("by_person").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

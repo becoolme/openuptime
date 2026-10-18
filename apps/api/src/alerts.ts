@@ -91,6 +91,9 @@ export class Skipped extends Error {}
 const SKIPPED = "skipped: email allowance used up for this period";
 const RETRIED_KINDS = new Set(["incident.opened", "incident.resolved", "incident.reminder", "incident.escalated"]);
 
+/** Devices an event is being pushed to, with whether that push worked: a phone is pushed once per event, unless the first push failed. */
+export type PushedDevices = Map<string, Promise<boolean>>;
+
 /** Take emails for `subs` from the allowance: who may be mailed and how many were left out. A failing ledger lets them all through. */
 async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: T[]) {
   if (!subs.length) return { send: subs, skipped: 0 };
@@ -105,12 +108,13 @@ const FIRST_RETRY_DELAY_SEC = 60;
 /** A row that stays in `sending` this long belongs to a worker that died. */
 export const STUCK_SEC = 300;
 
-const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: DeliveryRetry["monitor"], count?: number): Event => ({
+const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: DeliveryRetry["monitor"], count?: number, reopened = false): Event => ({
   kind: kind === "incident.resolved" || kind === "incident.reminder" || kind === "incident.escalated" ? kind : "incident.opened",
   count,
   incident: { id: incident.id, title: incident.title, startedAt: incident.startedAt, resolvedAt: incident.resolvedAt },
   monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target },
   ...(incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
+  ...(reopened ? { reopened: true as const } : {}),
 });
 
 const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) => {
@@ -122,7 +126,7 @@ const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) =
  * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
  * `meter` charges an email against the workspace allowance; retries are not charged again.
  */
-async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: Set<string>) {
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices) {
   const attempts = d.attempts + 1;
   try {
     if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
@@ -159,7 +163,19 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
       await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
       continue;
     }
-    const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount);
+    // A reopened incident alerts again as "down again". Which of its down alerts this is follows from the order they were
+    // queued in: a later one makes this a stale original, an earlier one makes this the "again".
+    let reopened = false;
+    if (delivery.kind === "incident.opened" && incident.evaluationNote?.startsWith("reopened")) {
+      const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)).filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
+      if (opened.some((x) => x.channelId === delivery.channelId && x.createdAt > delivery.createdAt)) {
+        const why = "skipped: the incident was reopened and alerted again before this alert could be sent";
+        await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+        continue;
+      }
+      reopened = opened.some((x) => x.createdAt < delivery.createdAt);
+    }
+    const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened);
     await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined);
   }
   return due.length;
@@ -177,7 +193,7 @@ async function fanOut(repo: Repo, orgId: string, ev: Event, channels: AlertChann
   const off = channels.filter((c) => !c.enabled);
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
   // a phone is pushed once per event, however many push channels reach it
-  const pushed = new Set<string>();
+  const pushed: PushedDevices = new Map();
   const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false })));
   await Promise.all(
     live.map(async (c) => {
@@ -258,7 +274,7 @@ export async function sweepDeliveries(repo: Repo) {
 }
 
 /** Send one alert to one channel; throws when the provider rejects it. */
-export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo, pushed?: Set<string>) {
+export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo, pushed?: PushedDevices) {
   const L = (k: string, v?: Record<string, string>) => tr(lang, k, v);
   // a repeat or an escalation reads like the down alert
   const opened = ev.kind !== "incident.resolved";
@@ -295,10 +311,24 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       if (!repo || !c.organizationId) throw new Error("Push channel has no workspace to look devices up in");
       const devices = await repo.pushDevicesForOrganization(c.organizationId);
       if (!devices.length) throw new Skipped("skipped: no phone has registered for push alerts");
-      const fresh = pushed ? devices.filter((d) => !pushed.has(d.id)) : devices;
-      if (!fresh.length) throw new Skipped("skipped: every phone was already notified through another push channel");
-      fresh.forEach((d) => pushed?.add(d.id));
-      await sendPush(repo, fresh, ev, c.organizationId);
+      // devices another push channel is already handling are claimed by it; they are taken over only if that push fails
+      const mine = pushed ? devices.filter((d) => !pushed.has(d.id)) : devices;
+      const theirs = pushed ? devices.filter((d) => pushed.has(d.id)).map((d) => ({ d, done: pushed.get(d.id)! })) : [];
+      let settle: (ok: boolean) => void = () => {};
+      const mineDone = new Promise<boolean>((r) => { settle = r; });
+      mine.forEach((d) => pushed?.set(d.id, mineDone));
+      try {
+        if (mine.length) await sendPush(repo, mine, ev, c.organizationId);
+        settle(true);
+      } catch (e) {
+        mine.forEach((d) => pushed?.delete(d.id));
+        settle(false);
+        throw e;
+      }
+      const retake = [];
+      for (const { d, done } of theirs) if (!(await done)) retake.push(d);
+      if (!mine.length && !retake.length) throw new Skipped("skipped: every phone was already notified through another push channel");
+      if (retake.length) await sendPush(repo, retake, ev, c.organizationId);
       break;
     }
     case "email":

@@ -13,7 +13,7 @@ import {
   type Repo,
   type Scope,
 } from "@openuptime/repo";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
 
@@ -21,6 +21,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `col in (scope)` for a limited API key, nothing otherwise; spread into `and(...)`. */
 const inScope = (scope: Scope, col: Parameters<typeof inArray>[0]): SQL | undefined => (scope ? inArray(col, scope) : undefined);
+
+/** True when the last "resolved" update of the incident was written by a person (not by the checks); survives the account being deleted. */
+const resolvedByPerson = (incidentId: Parameters<typeof inArray>[0]): SQL =>
+  sql`coalesce((select u.by_person from incident_update u where u.incident_id = ${incidentId} and u.status = 'resolved' order by u.created_at desc limit 1), false)`;
 
 /** Postgres implementation of the storage contract, on drizzle + postgres.js. */
 export function createRepo(db: Db): Repo {
@@ -606,7 +610,7 @@ export function createRepo(db: Db): Repo {
           .insert(schema.incident)
           .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, projectId, number, title: inc.title, severity: inc.severity, auto: inc.auto, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
           .returning();
-        if (firstUpdate) await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, visibility: firstUpdate.visibility });
+        if (firstUpdate) await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, byPerson: !!firstUpdate.authorId, visibility: firstUpdate.visibility });
         return row;
       });
     },
@@ -622,7 +626,7 @@ export function createRepo(db: Db): Repo {
             .returning();
           // losing the race to another open incident rolls the transaction back, so the number is not burned
           if (!row) throw lost;
-          await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, visibility: firstUpdate.visibility });
+          await tx.insert(schema.incidentUpdate).values({ incidentId: row.id, status: firstUpdate.status, body: firstUpdate.body, authorId: firstUpdate.authorId, byPerson: !!firstUpdate.authorId, visibility: firstUpdate.visibility });
           return row;
         });
       } catch (e) {
@@ -637,7 +641,7 @@ export function createRepo(db: Db): Repo {
         .where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId)))
         .returning();
       if (!incident) return null;
-      const [update] = await db.insert(schema.incidentUpdate).values({ incidentId: id, status: u.status, body: u.body, authorId: u.authorId, visibility: u.visibility }).returning();
+      const [update] = await db.insert(schema.incidentUpdate).values({ incidentId: id, status: u.status, body: u.body, authorId: u.authorId, byPerson: !!u.authorId, visibility: u.visibility }).returning();
       return { incident, update };
     },
     async updateIncidentWriteUp(orgId, id, w) {
@@ -674,15 +678,15 @@ export function createRepo(db: Db): Repo {
       const [r] = await db
         .select({ id: schema.incident.id })
         .from(schema.incident)
-        .where(and(eq(schema.incident.monitorId, monitorId), gte(schema.incident.startedAt, since), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`))
+        .where(and(eq(schema.incident.monitorId, monitorId), gte(schema.incident.startedAt, since), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`, sql`not ${resolvedByPerson(schema.incident.id)}`))
         .limit(1);
       return !!r;
     },
     async reopenIncident(monitorId, since, body, evaluationNote) {
       try {
         return await db.transaction(async (tx) => {
-          // a person's resolution stands: only an incident the checks resolved themselves (no author on its last "resolved" update) is reopened
-          const byPerson = sql`(select u.author_id from incident_update u where u.incident_id = ${schema.incident.id} and u.status = 'resolved' order by u.created_at desc limit 1) is not null`;
+          // a person's resolution stands: only an incident the checks resolved themselves is reopened
+          const byPerson = resolvedByPerson(schema.incident.id);
           const [last] = await tx
             .select({ id: schema.incident.id })
             .from(schema.incident)
@@ -694,7 +698,7 @@ export function createRepo(db: Db): Repo {
           // the follow-up clocks start over, as for a new incident
           const [row] = await tx
             .update(schema.incident)
-            .set({ status: "investigating", resolvedAt: null, evaluationNote, acknowledgedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null })
+            .set({ status: "investigating", resolvedAt: null, evaluationNote, acknowledgedAt: null, postmortemPublishedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null })
             .where(and(eq(schema.incident.id, last.id), sql`${schema.incident.resolvedAt} is not null`))
             .returning();
           if (!row) return null;
@@ -714,8 +718,10 @@ export function createRepo(db: Db): Repo {
         select exists (
           select 1 from incident i
           where i.monitor_id = ${monitorId} and not (i.auto and i.severity = 'minor') and i.resolved_at is not null
-            and i.resolved_at > coalesce((select max(c.checked_at) from check_result c where c.monitor_id = ${monitorId} and c.ok), 'epoch'::timestamptz)
-            and (select u.author_id from incident_update u where u.incident_id = i.id and u.status = 'resolved' order by u.created_at desc limit 1) is not null
+            -- a run passed when none of its region rows failed (the rows of one run share a timestamp)
+            and i.resolved_at > coalesce((select max(c.checked_at) from check_result c where c.monitor_id = ${monitorId} and c.ok
+              and not exists (select 1 from check_result f where f.monitor_id = c.monitor_id and f.checked_at = c.checked_at and not f.ok)), 'epoch'::timestamptz)
+            and coalesce((select u.by_person from incident_update u where u.incident_id = i.id and u.status = 'resolved' order by u.created_at desc limit 1), false)
         ) as handled`);
       return !!(res as unknown as { handled: boolean }[])[0]?.handled;
     },
@@ -949,34 +955,45 @@ export function createRepo(db: Db): Repo {
     },
     async claimReminders(limit, skip) {
       const i = schema.incident;
-      const candidates = await db
-        .select({ incident: i, monitor: schema.monitor, project: schema.project })
-        .from(i)
-        .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
-        .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
-        .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
-        .orderBy(asc(i.nextReminderAt))
-        // skipped monitors stay due, so look further than `limit` to not let them crowd out the rest
-        .limit(skip ? limit * 5 : limit);
       const out: ReminderDue[] = [];
-      for (const c of candidates) {
-        if (out.length >= limit) break;
-        if (skip && (await skip(c.monitor))) continue;
-        const interval = c.project.reminderIntervalMin;
-        const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
-        // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
-        // second worker sees no row. The next repeat is counted from now, which folds any missed intervals into this one.
-        const [won] = await db
-          .update(i)
-          .set(
-            interval
-              ? { reminderCount: sql`${i.reminderCount} + 1`, nextReminderAt: last ? null : sql`now() + make_interval(mins => ${interval})` }
-              : { nextReminderAt: null },
-          )
-          .where(and(eq(i.id, c.incident.id), eq(i.reminderCount, c.incident.reminderCount), lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
-          .returning();
-        // repeats switched off since the incident opened: the clock is simply cleared
-        if (won && interval) out.push({ incident: won, monitor: c.monitor, project: { reminderIntervalMin: interval, reminderEmail: c.project.reminderEmail, escalation: c.project.escalation }, number: won.reminderCount });
+      // Skipped monitors (under maintenance) stay due, so a page of candidates can consist of them alone: keep paging past
+      // them until `limit` is filled or nothing is left. The answer is remembered per monitor within the call.
+      const skipped = new Map<string, boolean>();
+      const seen: string[] = [];
+      const pageSize = Math.max(limit, 20);
+      for (let page = 0; page < 20 && out.length < limit; page++) {
+        const candidates = await db
+          .select({ incident: i, monitor: schema.monitor, project: schema.project })
+          .from(i)
+          .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
+          .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
+          .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt), seen.length ? notInArray(i.id, seen) : undefined))
+          .orderBy(asc(i.nextReminderAt))
+          .limit(pageSize);
+        for (const c of candidates) {
+          if (out.length >= limit) break;
+          seen.push(c.incident.id);
+          if (skip) {
+            if (!skipped.has(c.monitor.id)) skipped.set(c.monitor.id, await skip(c.monitor));
+            if (skipped.get(c.monitor.id)) continue;
+          }
+          const interval = c.project.reminderIntervalMin;
+          const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
+          // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
+          // second worker sees no row. The next repeat is counted from now, which folds any missed intervals into this one.
+          const [won] = await db
+            .update(i)
+            .set(
+              interval
+                ? { reminderCount: sql`${i.reminderCount} + 1`, nextReminderAt: last ? null : sql`now() + make_interval(mins => ${interval})` }
+                : { nextReminderAt: null },
+            )
+            .where(and(eq(i.id, c.incident.id), eq(i.reminderCount, c.incident.reminderCount), lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+            .returning();
+          // repeats switched off since the incident opened: the clock is simply cleared
+          if (won && interval) out.push({ incident: won, monitor: c.monitor, project: { reminderIntervalMin: interval, reminderEmail: c.project.reminderEmail, escalation: c.project.escalation }, number: won.reminderCount });
+        }
+        if (candidates.length < pageSize) break;
       }
       return out as unknown as ReminderDue[];
     },
