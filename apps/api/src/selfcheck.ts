@@ -80,18 +80,21 @@ export function resetSelfCheck() {
 /** Errors that come from this machine's own network stack, whatever the target is: no route, no address family. */
 const PROBER_SIDE = new Set(["EADDRNOTAVAIL", "ENETUNREACH", "ENETDOWN", "EAFNOSUPPORT"]);
 
-function codesOf(e: unknown, depth = 0): string[] {
-  if (!e || typeof e !== "object" || depth > 3) return [];
+/**
+ * An aggregate (several addresses tried) is prober-side only when every attempt is: an attempt with no code at all (a
+ * slice that timed out, an abort) may well be the target being slow, and one reachable-but-failing address is the target's.
+ */
+function proberSide(e: unknown, depth = 0): boolean {
+  if (!e || typeof e !== "object" || depth > 3) return false;
   const o = e as { code?: unknown; cause?: unknown; errors?: unknown };
-  const own = typeof o.code === "string" ? [o.code] : [];
-  const nested = Array.isArray(o.errors) ? o.errors.flatMap((x) => codesOf(x, depth + 1)) : [];
-  return [...own, ...nested, ...codesOf(o.cause, depth + 1)];
+  if (Array.isArray(o.errors) && o.errors.length) return o.errors.every((x) => proberSide(x, depth + 1));
+  if (typeof o.code === "string") return PROBER_SIDE.has(o.code);
+  return proberSide(o.cause, depth + 1);
 }
 
-/** True when every error code found is one only the prober's own network can cause (e.g. IPv6 requested, no IPv6 route). */
+/** True when the failure (every attempt of it, for an aggregate) is one only the prober's own network can cause (e.g. IPv6 requested, no IPv6 route). */
 export function proberSideError(e: unknown): boolean {
-  const codes = codesOf(e);
-  return codes.length > 0 && codes.every((c) => PROBER_SIDE.has(c));
+  return proberSide(e);
 }
 
 /** A failure that happened while reaching the target (as opposed to a refused target or a bad answer). */
