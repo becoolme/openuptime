@@ -1,0 +1,42 @@
+---
+import SeoShell from "../../components/SeoShell.astro";
+import { OU, OU_GAPS, TOOLS, type Faq } from "../../lib/seo-pages";
+import type { L } from "../../lib/changelog";
+
+const l = (en: string, zh: string): L => ({ en, zh });
+const faq: Faq[] = [
+  { q: l("What is OpenUptime?", "OpenUptime 是什么？"), a: l("OpenUptime is open-source uptime monitoring with incidents, alerts and public status pages. It runs as a hosted service, in one Docker container with Postgres, or on Cloudflare Workers.", "OpenUptime 是开源的可用性监控，包含事件、告警和公开状态页。它可以作为托管服务使用，也可以用一个 Docker 容器加 Postgres 运行，或部署在 Cloudflare Workers 上。") },
+  { q: l("Which monitor types does OpenUptime support?", "OpenUptime 支持哪些监控类型？"), a: OU.types },
+  { q: l("What is missing from OpenUptime?", "OpenUptime 缺少什么？"), a: l(OU_GAPS.map((g) => g.en).join(" "), OU_GAPS.map((g) => g.zh).join("")) },
+];
+const blurb: Record<string, L> = {
+  uptimerobot: l("Hosted, simple website, keyword and port checks.", "托管服务，简单的网站、关键字与端口检测。"),
+  "better-stack": l("Hosted, uptime plus on-call, incident management and logs.", "托管服务，可用性监控加值班、事件管理与日志。"),
+  pingdom: l("Hosted, with transaction checks and real user monitoring.", "托管服务，含事务检测与真实用户监控。"),
+  statuscake: l("Hosted, uptime with page speed, SSL and domain monitoring.", "托管服务，可用性监控加页面速度、SSL 与域名监控。"),
+  "uptime-kuma": l("Open source and self-hosted, a wide range of monitor types.", "开源、自托管，监控类型丰富。"),
+};
+const langs = [{ attr: "en", k: "en" }, { attr: "zh-CN", k: "zh" }] as const;
+const ui = {
+  en: { h1: "OpenUptime alternatives and comparisons", lede: "Pages for people weighing uptime tools. Each one says what OpenUptime has, what it lacks and who should pick the other product.", pages: "Compare with", how: "How these pages are written", howP: "Every statement about OpenUptime comes from its code and documentation. Statements about other products are general and avoid prices and limits, because those change; check their own sites. If you find a mistake, open an issue on GitHub.", usecases: "By use case", uc: "See monitoring set-ups for SaaS, agencies, e-commerce and DevOps teams.", ucA: "Use cases", faq: "Questions" },
+  zh: { h1: "OpenUptime 替代方案与对比", lede: "写给正在比较可用性监控工具的人。每一页都会说明 OpenUptime 有什么、缺什么，以及什么情况下更适合选另一个产品。", pages: "对比对象", how: "这些页面是怎么写的", howP: "关于 OpenUptime 的每一句话都来自它的代码和文档。关于其他产品的内容只是概括，不写价格和额度，因为这些会变化；请以其官网为准。如发现错误，欢迎在 GitHub 上提 issue。", usecases: "按使用场景", uc: "查看 SaaS、代理机构、电商和 DevOps 团队的监控配置方式。", ucA: "使用场景", faq: "常见问题" },
+} as const;
+---
+<SeoShell title="Uptime monitoring alternatives" description="Compare OpenUptime with UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma: features, gaps and who each fits." path="/alternatives" faq={faq}>
+  {langs.map(({ attr, k }) => (
+    <div lang={attr}>
+      <h1>{ui[k].h1}</h1>
+      <p class="lede">{ui[k].lede}</p>
+      <h2 id="tools">{ui[k].pages}</h2>
+      <div class="docs-grid">
+        {TOOLS.map((t) => (<a class="docs-card" href={`/alternatives/${t.slug}`}><b>{t.name}</b><span>{blurb[t.slug][k]}</span></a>))}
+      </div>
+      <h2 id="use-cases">{ui[k].usecases}</h2>
+      <p>{ui[k].uc} <a href="/for">{ui[k].ucA}</a></p>
+      <h2 id="how">{ui[k].how}</h2>
+      <p>{ui[k].howP}</p>
+      <h2 id="faq">{ui[k].faq}</h2>
+      <div class="faq">{faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}</div>
+    </div>
+  ))}
+</SeoShell>

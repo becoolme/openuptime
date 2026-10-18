@@ -27,6 +27,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "comparison-and-use-case-pages",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Comparison and use-case pages", zh: "对比与使用场景页面" },
+    summary: {
+      en: "New pages compare OpenUptime with other uptime tools and show how SaaS teams, agencies, online stores and DevOps teams set it up.",
+      zh: "新增页面把 OpenUptime 与其他可用性监控工具做对比,并介绍 SaaS 团队、代理机构、电商和 DevOps 团队的配置方式。",
+    },
+    points: [
+      { en: "Alternatives pages for UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma list what OpenUptime has, what it lacks, who each tool suits and how to move monitors over with the JSON import.", zh: "UptimeRobot、Better Stack、Pingdom、StatusCake 和 Uptime Kuma 的对比页,列出 OpenUptime 有什么、缺什么、各自适合谁,以及如何用 JSON 导入迁移监控项。" },
+      { en: "Use-case pages for SaaS, agencies, e-commerce and DevOps teams map concrete monitoring scenarios to monitor types, status pages and alert routing.", zh: "面向 SaaS、代理机构、电商和 DevOps 团队的使用场景页,把具体的监控场景对应到监控类型、状态页和告警路由。" },
+    ],
+    link: { href: "/alternatives", label: { en: "See the comparisons", zh: "查看对比" } },
+  },
+  {
     id: "backup-restore-docs",
     date: "2026-10-17",
     edition: "community",

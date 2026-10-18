@@ -26,6 +26,8 @@ const serviceWorker = {
 };
 
 export default defineConfig({
+  // the public origin of a deployment that has one (the hosted build sets SITE_ORIGIN); canonical links need it
+  site: process.env.SITE_ORIGIN || undefined,
   output: "static",
   adapter: NODE ? node({ mode: "middleware" }) : cloudflare(),
   integrations: [react(), serviceWorker],

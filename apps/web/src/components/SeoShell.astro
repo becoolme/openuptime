@@ -1,0 +1,57 @@
+---
+import Doc from "../layouts/Doc.astro";
+// Wrapper of the comparison and use-case pages: the Doc layout plus canonical / hreflang links (only when the build knows
+// its public origin, like the landing pages) and FAQPage structured data.
+import type { Faq } from "../lib/seo-pages";
+
+const { title, description, path, faq } = Astro.props as { title: string; description: string; path: string; faq: Faq[] };
+const origin = Astro.site ? Astro.site.origin : "";
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q.en, acceptedAnswer: { "@type": "Answer", text: f.a.en } })),
+};
+// "<" never appears raw inside a script element
+const json = JSON.stringify(ld).replace(/</g, "\\u003c");
+---
+<Doc title={title} description={description}>
+  <Fragment slot="head">
+    {origin && <link rel="canonical" href={`${origin}${path}`} />}
+    {origin && <link rel="alternate" hreflang="en" href={`${origin}${path}`} />}
+    {origin && <link rel="alternate" hreflang="zh-Hans" href={`${origin}/zh-Hans${path}`} />}
+    {origin && <link rel="alternate" hreflang="x-default" href={`${origin}${path}`} />}
+    {origin && <meta property="og:url" content={`${origin}${path}`} />}
+    {origin && <meta property="og:image" content={`${origin}/og.png`} />}
+    <script type="application/ld+json" set:html={json} />
+  </Fragment>
+  <slot />
+</Doc>
+
+<style is:global>
+  .docs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+  .doc a.docs-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .15s; }
+  .doc a.docs-card:hover { border-color: var(--accent); }
+  .docs-card b { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .docs-card span { color: var(--muted); font-size: 14px; line-height: 1.55; }
+  @media (max-width: 560px) { .docs-grid { grid-template-columns: 1fr; } }
+  .doc .cmp { display: table; }
+  .doc .cmp td:first-child { font-weight: 500; min-width: 120px; }
+  .doc .cmp td { min-width: 180px; }
+  .doc .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+  .doc .two > div { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 18px; }
+  .doc .two h3 { margin-top: 0; }
+  .doc .two ul { margin-bottom: 0; }
+  .doc .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; list-style: none; }
+  .doc .tags li { margin: 0; font: 12px var(--mono); padding: 1px 8px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--muted); }
+  .doc .faq details { border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .doc .faq summary { cursor: pointer; font-weight: 600; }
+  .doc .faq details p { margin: 8px 0 0; }
+  .doc .cta { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 20px 22px; margin: 36px 0 14px; }
+  .doc .cta h2 { border: 0; margin: 0 0 6px; padding: 0; }
+  .doc .cta p { margin: 0 0 12px; }
+  .doc .cta .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  .doc a.btn-s { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line-2); color: var(--ink); text-decoration: none; font-weight: 500; }
+  .doc a.btn-s.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .doc .related { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
+  @media (max-width: 560px) { .doc .two { grid-template-columns: 1fr; } }
+</style>

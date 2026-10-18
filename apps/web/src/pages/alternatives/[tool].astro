@@ -1,0 +1,72 @@
+---
+import SeoShell from "../../components/SeoShell.astro";
+import { OU_GAPS, TOOLS, type Tool } from "../../lib/seo-pages";
+
+export function getStaticPaths() {
+  return TOOLS.map((tool) => ({ params: { tool: tool.slug }, props: { tool } }));
+}
+const { tool } = Astro.props as { tool: Tool };
+const langs = [
+  { attr: "en", k: "en" },
+  { attr: "zh-CN", k: "zh" },
+] as const;
+const ui = {
+  en: {
+    glance: "At a glance", topic: "Topic", gaps: "What OpenUptime does not do", gapsIntro: "Check this list before you switch. It is short, and it is complete as of this page.",
+    known: `What ${tool.name} is known for that OpenUptime does not do`, who: "Who each is best for", pick: `Pick ${tool.name} if`, pickUs: "Pick OpenUptime if",
+    migrate: `Moving from ${tool.name}`, faq: "Questions", ctaT: "Try OpenUptime", ctaP: "Start on the hosted service, or run it yourself. The source is on GitHub under the MIT license.",
+    start: "Start monitoring", self: "Self-host guide", more: "More", all: "All comparisons", mcp: "MCP server", api: "API reference", regions: "Multi-region checks", embed: "Embed status",
+    h1: `OpenUptime as a ${tool.name} alternative`, aboutT: `About ${tool.name}`,
+    note: "Information about other products is general and may be out of date. Check their own sites for current features and pricing.",
+  },
+  zh: {
+    glance: "对比一览", topic: "项目", gaps: "OpenUptime 没有的功能", gapsIntro: "切换之前请先看这份清单。它不长，截至本页是完整的。",
+    known: `${tool.name} 擅长而 OpenUptime 没有的功能`, who: "各自适合谁", pick: `适合选择 ${tool.name} 的情况`, pickUs: "适合选择 OpenUptime 的情况",
+    migrate: `从 ${tool.name} 迁移`, faq: "常见问题", ctaT: "试用 OpenUptime", ctaP: "可以直接使用托管服务，也可以自己运行。源码在 GitHub，采用 MIT 许可证。",
+    start: "开始监控", self: "自托管指南", more: "更多", all: "全部对比", mcp: "MCP 服务", api: "API 参考", regions: "多区域检测", embed: "嵌入状态",
+    h1: `${tool.name} 的替代方案：OpenUptime`, aboutT: `关于 ${tool.name}`,
+    note: "关于其他产品的信息只是概括，可能已经过时。当前功能和价格请以其官网为准。",
+  },
+} as const;
+---
+<SeoShell title={tool.title.en} description={tool.description.en} path={`/alternatives/${tool.slug}`} faq={tool.faq}>
+  {langs.map(({ attr, k }) => (
+    <div lang={attr}>
+      <h1>{ui[k].h1}</h1>
+      <p class="lede">{tool.lede[k]}</p>
+      <p>{tool.about[k]} {ui[k].note}</p>
+      <h2 id="compare">{ui[k].glance}</h2>
+      <table class="cmp">
+        <thead><tr><th>{ui[k].topic}</th><th>OpenUptime</th><th>{tool.name}</th></tr></thead>
+        <tbody>
+          {tool.rows.map((r) => (<tr><td>{r.topic[k]}</td><td>{r.ou[k]}</td><td>{r.them[k]}</td></tr>))}
+        </tbody>
+      </table>
+      <h2 id="gaps">{ui[k].gaps}</h2>
+      <p>{ui[k].gapsIntro}</p>
+      <ul>{OU_GAPS.map((g) => (<li>{g[k]}</li>))}</ul>
+      {tool.theyHave.length > 0 && (<><h3>{ui[k].known}</h3><ul>{tool.theyHave.map((g) => (<li>{g[k]}</li>))}</ul></>)}
+      <h2 id="who">{ui[k].who}</h2>
+      <div class="two">
+        <div><h3>{ui[k].pick}</h3><ul>{tool.bestThem.map((g) => (<li>{g[k]}</li>))}</ul></div>
+        <div><h3>{ui[k].pickUs}</h3><ul>{tool.bestUs.map((g) => (<li>{g[k]}</li>))}</ul></div>
+      </div>
+      <h2 id="migrate">{ui[k].migrate}</h2>
+      <ol>{tool.migrate.map((g) => (<li>{g[k]}</li>))}</ol>
+      <h2 id="faq">{ui[k].faq}</h2>
+      <div class="faq">
+        {tool.faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}
+      </div>
+      <div class="cta">
+        <h2>{ui[k].ctaT}</h2>
+        <p>{ui[k].ctaP}</p>
+        <div class="btns"><a class="btn-s primary" href="/app">{ui[k].start}</a><a class="btn-s" href="/docs/self-host">{ui[k].self}</a></div>
+      </div>
+      <p class="related">
+        <a href="/alternatives">{ui[k].all}</a>
+        {TOOLS.filter((t) => t.slug !== tool.slug).map((t) => (<a href={`/alternatives/${t.slug}`}>{t.name}</a>))}
+        <a href="/docs/regions">{ui[k].regions}</a><a href="/docs/mcp">{ui[k].mcp}</a><a href="/docs/api">{ui[k].api}</a><a href="/docs/embed">{ui[k].embed}</a>
+      </p>
+    </div>
+  ))}
+</SeoShell>

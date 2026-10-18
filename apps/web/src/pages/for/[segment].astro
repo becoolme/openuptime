@@ -1,0 +1,48 @@
+---
+import SeoShell from "../../components/SeoShell.astro";
+import { SEGMENTS, type Segment } from "../../lib/seo-pages";
+
+export function getStaticPaths() {
+  return SEGMENTS.map((segment) => ({ params: { segment: segment.slug }, props: { segment } }));
+}
+const { segment } = Astro.props as { segment: Segment };
+const langs = [{ attr: "en", k: "en" }, { attr: "zh-CN", k: "zh" }] as const;
+const ui = {
+  en: { scen: "What to monitor", status: "Status page", alerts: "Alert routing", limits: "Limits to know about", faq: "Questions", ctaT: "Set it up in OpenUptime", ctaP: "Start on the hosted service, or run it yourself. The source is on GitHub under the MIT license.", start: "Start monitoring", self: "Self-host guide", all: "All use cases", cmp: "Compare with other tools", regions: "Multi-region checks", mcp: "MCP server", api: "API reference", embed: "Embed status" },
+  zh: { scen: "监控什么", status: "状态页", alerts: "告警路由", limits: "需要了解的限制", faq: "常见问题", ctaT: "在 OpenUptime 中设置", ctaP: "可以直接使用托管服务，也可以自己运行。源码在 GitHub，采用 MIT 许可证。", start: "开始监控", self: "自托管指南", all: "全部使用场景", cmp: "与其他工具对比", regions: "多区域检测", mcp: "MCP 服务", api: "API 参考", embed: "嵌入状态" },
+} as const;
+---
+<SeoShell title={segment.title.en} description={segment.description.en} path={`/for/${segment.slug}`} faq={segment.faq}>
+  {langs.map(({ attr, k }) => (
+    <div lang={attr}>
+      <h1>{segment.title[k]}</h1>
+      <p class="lede">{segment.lede[k]}</p>
+      <h2 id="scenarios">{ui[k].scen}</h2>
+      {segment.scenarios.map((s) => (
+        <>
+          <h3>{s.title[k]}</h3>
+          <p>{s.body[k]}</p>
+          <ul class="tags">{s.uses.map((u) => (<li>{u}</li>))}</ul>
+        </>
+      ))}
+      <h2 id="status-page">{ui[k].status}</h2>
+      <p>{segment.statusPage[k]}</p>
+      <h2 id="alerting">{ui[k].alerts}</h2>
+      <p>{segment.alerting[k]}</p>
+      <h2 id="limits">{ui[k].limits}</h2>
+      <ul>{segment.limits.map((x) => (<li>{x[k]}</li>))}</ul>
+      <h2 id="faq">{ui[k].faq}</h2>
+      <div class="faq">{segment.faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}</div>
+      <div class="cta">
+        <h2>{ui[k].ctaT}</h2>
+        <p>{ui[k].ctaP}</p>
+        <div class="btns"><a class="btn-s primary" href="/app">{ui[k].start}</a><a class="btn-s" href="/docs/self-host">{ui[k].self}</a></div>
+      </div>
+      <p class="related">
+        <a href="/for">{ui[k].all}</a>
+        {SEGMENTS.filter((x) => x.slug !== segment.slug).map((x) => (<a href={`/for/${x.slug}`}>{x.name[k]}</a>))}
+        <a href="/alternatives">{ui[k].cmp}</a><a href="/docs/regions">{ui[k].regions}</a><a href="/docs/mcp">{ui[k].mcp}</a><a href="/docs/api">{ui[k].api}</a><a href="/docs/embed">{ui[k].embed}</a>
+      </p>
+    </div>
+  ))}
+</SeoShell>
