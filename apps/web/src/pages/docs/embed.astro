@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc description="Embed a live OpenUptime status widget, banner or badge on your own site." title="Embed" updated="2026-10-11" toc>
+<Doc description="Embed a live OpenUptime status widget, banner or badge on your own site." title="Embed" updated="2026-10-17" toc>
   <div lang="en">
     <h1>Embed your status</h1>
     <p class="lede">Show the live state of a status page on your own site, in a README or in an email, with one line of code. No API key needed.</p>
@@ -40,7 +40,17 @@ import Doc from "../../layouts/Doc.astro";
   "url": "https://openuptime.app/status/my-page",
   "updatedAt": "2026-10-11T08:00:00.000Z"
 }</code></pre>
-    <p>The full board, with every component and incident, is at <code>/api/public/status/my-page</code>. Incident history is at <code>/api/public/status/my-page/incidents</code> and an RSS feed at <code>/api/public/status/my-page/rss</code>.</p>
+    <p>The full board, with every component and incident, is at <code>/api/public/status/my-page</code>. Incident history is at <code>/api/public/status/my-page/incidents</code> and an RSS feed at <code>/api/public/status/my-page/rss.xml</code>.</p>
+    <h2 id="feeds">Feeds and calendar</h2>
+    <ul>
+      <li><strong>RSS</strong>: <code>/api/public/status/my-page/rss.xml</code> lists the latest 50 incidents and maintenance windows. Titles start with <code>[Incident]</code> or <code>[Maintenance]</code>, and the status page links to the feed so readers can find it.</li>
+      <li><strong>Calendar</strong>: <code>/api/public/status/my-page/maintenance.ics</code> is an iCalendar feed of maintenance windows. Subscribe to it from any calendar app.</li>
+      <li><strong>llms.txt</strong>: <code>/api/public/status/my-page/llms.txt</code> is a short plain-text summary of the page for people and AI agents. See <a href="/docs/mcp#public">MCP</a> for the read-only tools.</li>
+    </ul>
+    <h2 id="subscribers">Subscribers</h2>
+    <p>Visitors subscribe by email and confirm from a link (double opt-in). Every email carries an unsubscribe link. When a page has several components, a subscriber can tick the ones they care about; with none ticked they get everything. Someone who lost their link enters their address again and gets a new one. If you set a reminder in the editor (24 hours by default, 0 to turn off), confirmed subscribers get one email before a maintenance window starts.</p>
+    <h2 id="colors">Uptime bar colors</h2>
+    <p>In the editor, <strong>Uptime and notifications</strong> sets where a day turns from green to amber and from amber to red. The defaults are 99.9% and 99%. The amber value must be lower than the green one.</p>
     <p>The status page editor has an <strong>Embed</strong> card that generates these snippets for you.</p>
   </div>
   <div lang="zh-CN">
@@ -81,7 +91,17 @@ import Doc from "../../layouts/Doc.astro";
   "url": "https://openuptime.app/status/my-page",
   "updatedAt": "2026-10-11T08:00:00.000Z"
 }</code></pre>
-    <p>包含全部组件和事件的完整数据在 <code>/api/public/status/my-page</code>，事件历史在 <code>/api/public/status/my-page/incidents</code>，RSS 在 <code>/api/public/status/my-page/rss</code>。</p>
+    <p>包含全部组件和事件的完整数据在 <code>/api/public/status/my-page</code>，事件历史在 <code>/api/public/status/my-page/incidents</code>，RSS 在 <code>/api/public/status/my-page/rss.xml</code>。</p>
+    <h2 id="feeds-zh">订阅源与日历</h2>
+    <ul>
+      <li><strong>RSS</strong>：<code>/api/public/status/my-page/rss.xml</code> 列出最近 50 条事件和维护窗口，标题以 <code>[Incident]</code> 或 <code>[Maintenance]</code> 开头；状态页的 head 中带有该订阅源的链接，阅读器可自动发现。</li>
+      <li><strong>日历</strong>：<code>/api/public/status/my-page/maintenance.ics</code> 是维护窗口的 iCalendar 订阅源，可在任何日历应用中订阅。</li>
+      <li><strong>llms.txt</strong>：<code>/api/public/status/my-page/llms.txt</code> 是供人和 AI 代理阅读的简短纯文本摘要。只读工具见 <a href="/docs/mcp#public-zh">MCP</a>。</li>
+    </ul>
+    <h2 id="subscribers-zh">订阅者</h2>
+    <p>访客通过邮箱订阅，并在邮件链接中确认（双重确认）。每封邮件都带退订链接。页面有多个组件时，订阅者可以只勾选关心的组件；一个都不勾则接收全部。链接丢失的人再次输入邮箱，就会收到新的链接。如果在编辑界面设置了提醒（默认 24 小时，填 0 关闭），已确认的订阅者会在维护窗口开始前收到一封邮件。</p>
+    <h2 id="colors-zh">可用率条颜色</h2>
+    <p>在编辑界面的 <strong>可用率与通知</strong> 中，可以设置某天从绿色变为琥珀色、再变为红色的阈值，默认分别是 99.9% 和 99%。琥珀色阈值必须低于绿色阈值。</p>
     <p>状态页编辑界面的 <strong>嵌入</strong> 卡片会自动生成这些代码。</p>
   </div>
 </Doc>
