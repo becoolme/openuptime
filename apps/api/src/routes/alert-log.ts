@@ -20,11 +20,11 @@ export const settings = new Hono<AppEnv>()
   .patch(
     "/",
     requireManager,
-    zValidator("json", z.object({ alertLogRetentionDays: z.number().int().min(1).max(365).optional(), checkRetentionDays: z.number().int().min(1).max(365).optional() })),
+    zValidator("json", z.object({ alertLogRetentionDays: z.number().int().min(1).max(365).optional(), checkRetentionDays: z.number().int().min(1).max(365).optional(), monthlyReport: z.boolean().optional() })),
     async (c) => {
       if (c.get("projectScope")) return c.json({ error: "This API key is limited to specific projects" }, 403);
       const v = c.req.valid("json");
-      if (v.alertLogRetentionDays === undefined && v.checkRetentionDays === undefined) return c.json({ error: "No changes" }, 400);
+      if (Object.values(v).every((x) => x === undefined)) return c.json({ error: "No changes" }, 400);
       return c.json(await c.get("repo").saveSettings(c.get("orgId"), v));
     },
   );
