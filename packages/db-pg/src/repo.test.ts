@@ -267,7 +267,7 @@ describe.skipIf(!url)("incident numbers and update visibility", () => {
       { organizationId: orgId, monitorId: m.id, title: "first", startedAt: at(30) },
       { organizationId: orgId, monitorId: m.id, title: "second", startedAt: at(10) },
     ]).returning();
-    const file = (await import("node:fs")).readFileSync(new URL("../drizzle/0021_curvy_mister_fear.sql", import.meta.url), "utf8");
+    const file = (await import("node:fs")).readFileSync(new URL("../drizzle/0023_lucky_cloak.sql", import.meta.url), "utf8");
     const backfill = file.split("--> statement-breakpoint").map((x) => x.trim()).filter((x) => /UPDATE "(incident|project)"/.test(x));
     expect(backfill.length).toBeGreaterThan(0);
     // run in a transaction that is rolled back, so other rows keep their numbers; the unique index is created after the
