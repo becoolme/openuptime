@@ -10,6 +10,8 @@
  * the platform itself refuses private ranges, so only the static checks run there.
  */
 
+import { pinnedFetch } from "./pinnedfetch";
+
 let allowPrivate = false;
 let userAgent = "OpenUptime/0.1 (+https://github.com/becoolme/openuptime)";
 
@@ -127,35 +129,40 @@ export function hostBlocked(host: string): boolean {
 const isWorkers = () => (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers";
 const isLiteral = (h: string) => h.includes(":") || V4.test(h);
 
-const resolved = new Map<string, { at: number; addrs: string[] | null }>();
+const resolved = new Map<string, { at: number; addrs: string[] }>();
 const RESOLVE_TTL_MS = 30_000;
 
-async function resolveAll(host: string): Promise<string[] | null> {
+/** Every address `host` resolves to. Throws the resolver's own error: a name that cannot be resolved is not dialled blind. */
+async function resolveAll(host: string): Promise<string[]> {
   const hit = resolved.get(host);
   if (hit && Date.now() - hit.at < RESOLVE_TTL_MS) return hit.addrs;
-  let addrs: string[] | null = null;
-  try {
-    const dns = await import("node:dns/promises");
-    addrs = (await dns.lookup(host, { all: true })).map((r) => r.address);
-  } catch { /* unresolvable: the request itself will fail with the real reason */ }
+  const dns = await import("node:dns/promises");
+  const addrs = (await dns.lookup(host, { all: true })).map((r) => r.address);
   if (resolved.size > 500) resolved.clear();
   resolved.set(host, { at: Date.now(), addrs });
   return addrs;
 }
 
 /**
- * Refuses a private host (throws BlockedTarget). Returns the address to dial: on Node the first resolved address, so
- * the connection goes where the check looked; otherwise the host unchanged.
+ * Refuses a private host (throws BlockedTarget). On Node, returns the addresses the name resolves to, all of them
+ * validated, so the connection can be pinned to what was checked. Literals and Workers (where the platform refuses
+ * private ranges itself) have nothing to pin: `addresses` is null.
  */
-export async function guardHost(host: string): Promise<string> {
-  if (allowPrivate) return host;
+export async function guardAddresses(host: string): Promise<{ host: string; addresses: string[] | null }> {
+  if (allowPrivate) return { host, addresses: null };
   const h = normaliseHost(host);
   if (hostBlocked(h)) throw new BlockedTarget();
-  if (isLiteral(h) || isWorkers()) return h;
+  if (isLiteral(h) || isWorkers()) return { host: h, addresses: null };
   const addrs = await resolveAll(h);
-  if (!addrs?.length) return h;
+  if (!addrs.length) throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${h}`), { code: "ENOTFOUND" });
   if (addrs.some(addressBlocked)) throw new BlockedTarget();
-  return addrs[0];
+  return { host: h, addresses: addrs };
+}
+
+/** The address to dial for `host`: the first validated one on Node, otherwise the host unchanged. */
+export async function guardHost(host: string): Promise<string> {
+  const g = await guardAddresses(host);
+  return g.addresses?.[0] ?? g.host;
 }
 
 // ---- targets -------------------------------------------------------------------------------------------------------
@@ -191,7 +198,7 @@ export async function targetProblem(type: string, target: string): Promise<strin
     return null;
   } catch (e) {
     if (e instanceof BlockedTarget) return e.message;
-    throw e;
+    return null; // a name that does not resolve is reported by the check itself, as before
   }
 }
 
@@ -217,8 +224,10 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
   for (let hop = 0; ; hop++) {
     const u = new URL(current);
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Unsupported protocol ${u.protocol}`);
-    await guardHost(u.hostname);
-    const res = await fetch(current, { ...init, method, body, headers, redirect: "manual" });
+    const { addresses } = await guardAddresses(u.hostname);
+    const req = { ...init, method, body, headers, redirect: "manual" as const };
+    // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
+    const res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
     const location = res.headers.get("location");
     if (res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
     await res.body?.cancel();
@@ -235,4 +244,23 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
     }
     current = next.toString();
   }
+}
+
+/** Reads at most `max` bytes of a body as text and drops the rest, so a huge or endless response cannot be pulled in. */
+export async function readCapped(res: Response, max: number): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let out = "";
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const room = max - size;
+    const part = value.byteLength > room ? value.subarray(0, room) : value;
+    size += part.byteLength;
+    out += decoder.decode(part, { stream: true });
+    if (size >= max) { await reader.cancel(); break; }
+  }
+  return out + decoder.decode();
 }

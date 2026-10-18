@@ -60,6 +60,38 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     link: { href: "/docs/regions", label: { en: "Read the multi-region docs", zh: "阅读多区域检测文档" } },
   },
   {
+    id: "target-address-pinning",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Safer checks against private addresses", zh: "更安全的内网地址防护" },
+    summary: {
+      en: "A check now connects to the exact address that was verified as public, so a hostname cannot switch to an internal address in between.",
+      zh: "检测现在会连接到已验证为公网的那个地址,主机名无法在验证之后改指向内网地址。",
+    },
+    points: [
+      { en: "HTTP checks and webhook alerts connect to the verified address on every redirect hop, while the certificate is still checked against the hostname.", zh: "HTTP 检测和 Webhook 告警在每一次跳转时都连接到已验证的地址,证书仍然按主机名校验。" },
+      { en: "A hostname that cannot be resolved is reported as unresolvable instead of being tried anyway.", zh: "无法解析的主机名会直接报告为无法解析,不再继续尝试连接。" },
+      { en: "Keyword checks read at most 1 MB of a response, and a Lark webhook reply is read up to 64 KB, so a huge response cannot be pulled in.", zh: "关键字检测最多读取响应的 1 MB,Lark Webhook 的回复最多读取 64 KB,过大的响应不会被完整下载。" },
+      { en: "Private addresses are still refused by default; ALLOW_PRIVATE_TARGETS=true keeps working as before.", zh: "默认仍然拒绝私有地址;ALLOW_PRIVATE_TARGETS=true 的行为不变。" },
+    ],
+  },
+  {
+    id: "prober-self-check",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "No false outages when the checker is offline", zh: "检测端断网时不再误报故障" },
+    summary: {
+      en: "When a check fails to connect, OpenUptime first makes sure the machine running it can reach the internet, and discards the result if it cannot.",
+      zh: "检测连接失败时,OpenUptime 会先确认执行检测的机器自身能上网;如果不能,就丢弃这次结果。",
+    },
+    points: [
+      { en: "A network failure on the checker's side no longer counts as a failed check, opens an incident or sends an alert.", zh: "检测端自身的网络故障不再计为失败检测,也不会创建事件或发送告警。" },
+      { en: "A region whose probe is offline is left out of the run instead of voting the monitor down.", zh: "探测节点自身离线时,该区域不再参与表决,不会把监控判为故障。" },
+      { en: "Errors that only the checker's own network can cause, such as a missing IPv6 route, are no longer blamed on your service.", zh: "只可能由检测端自身网络引起的错误(例如没有 IPv6 路由)不再算到你的服务头上。" },
+      { en: "Monitors on private addresses are not affected, since they do not depend on the public internet.", zh: "监控内网地址的监控项不受影响,因为它们不依赖公网。" },
+    ],
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

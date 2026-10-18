@@ -3,7 +3,7 @@ import { sendPush } from "./apns";
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
-import { guardedFetch } from "./netguard";
+import { guardedFetch, readCapped } from "./netguard";
 
 type Event = {
   kind: "incident.opened" | "incident.resolved";
@@ -49,6 +49,7 @@ async function send(url: string, body: unknown) {
 
 async function post(url: string, body: unknown) {
   const res = await send(url, body);
+  await res.body?.cancel().catch(() => {}); // only the status matters; do not hold the connection open for a body
   if (!res.ok) throw new Error(`${hostOf(url)} responded ${res.status}`);
 }
 
@@ -66,7 +67,7 @@ async function postLark(url: string, text: string, secret?: string) {
     body.sign = btoa(String.fromCharCode(...mac));
   }
   const res = await send(url, body);
-  const data = (await res.json().catch(() => null)) as { code?: number; StatusCode?: number; msg?: string; StatusMessage?: string } | null;
+  const data = (await readCapped(res, 64 * 1024).then((t) => JSON.parse(t)).catch(() => null)) as { code?: number; StatusCode?: number; msg?: string; StatusMessage?: string } | null;
   const code = data?.code ?? data?.StatusCode ?? 0;
   if (!res.ok || code !== 0) throw new Error(`Lark responded ${res.status}${code ? ` (${code}: ${data?.msg ?? data?.StatusMessage ?? "rejected"})` : ""}`);
 }

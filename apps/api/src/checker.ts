@@ -1,4 +1,5 @@
-import { checkUserAgent, guardHost, guardedFetch, hostPort } from "./netguard";
+import { checkUserAgent, guardHost, guardedFetch, hostBlocked, hostPort, readCapped } from "./netguard";
+import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
 
 export type CheckInput = {
   type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
@@ -10,7 +11,17 @@ export type CheckInput = {
   keywordMode?: string;
   headers?: Record<string, string>;
 };
-export type CheckOutcome = { ok: boolean; statusCode?: number; latencyMs?: number; error?: string };
+export type CheckOutcome = {
+  ok: boolean;
+  statusCode?: number;
+  latencyMs?: number;
+  error?: string;
+  /** The check could not be carried out from here (the prober itself is offline): nothing to record about the target. */
+  inconclusive?: boolean;
+};
+
+/** How much of a response is read when looking for a keyword. A larger body is not downloaded further. */
+export const MAX_BODY_BYTES = 1_000_000;
 
 export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
   const started = Date.now();
@@ -25,8 +36,32 @@ export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
       default: return { ok: true };
     }
   } catch (e) {
-    return { ok: false, latencyMs: Date.now() - started, error: describe(e) };
+    const failed: CheckOutcome = { ok: false, latencyMs: Date.now() - started, error: describe(e) };
+    return (await proberFault(m, e)) ? { ...failed, inconclusive: true } : failed;
   }
+}
+
+/** The host a check dials, or null when it has none of its own (dns checks ask a public resolver, not the target). */
+function dialedHost(m: CheckInput): string | null {
+  try {
+    if (m.type === "http") return new URL(m.target).hostname;
+    if (m.type === "dns" || m.type === "heartbeat") return null;
+    return hostPort(m.target, 1)?.hostname ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a thrown failure is the prober's fault: its own network stack refused (no IPv6 route…), or it cannot reach any
+ * well-known site. Internal targets are never doubted this way: a private network can be fine while the internet is not.
+ */
+async function proberFault(m: CheckInput, e: unknown): Promise<boolean> {
+  if (!networkLevelError(e)) return false;
+  if (proberSideError(e)) return true;
+  const host = dialedHost(m);
+  if (host && hostBlocked(host)) return false;
+  return !(await proberOnline());
 }
 
 async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
@@ -43,7 +78,7 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     const latencyMs = Date.now() - started;
     return { ok: statusOk, statusCode: res.status, latencyMs, error: statusOk ? undefined : `Expected ${m.expectedStatus}, got ${res.status}${where}` };
   }
-  const body = await readCapped(res, 1_000_000);
+  const body = await readCapped(res, MAX_BODY_BYTES);
   const latencyMs = Date.now() - started;
   if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
   const found = body.includes(m.keyword);
@@ -53,23 +88,6 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     ok, statusCode: res.status, latencyMs,
     error: ok ? undefined : wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response`,
   };
-}
-
-/** Reads at most `max` bytes of the body as text, then drops the rest. */
-async function readCapped(res: Response, max: number): Promise<string> {
-  if (!res.body) return "";
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let out = "";
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    out += decoder.decode(value, { stream: true });
-    if (size >= max) { await reader.cancel(); break; }
-  }
-  return out;
 }
 
 // DNS-over-HTTPS keeps this runnable on Workers, where there is no raw resolver.

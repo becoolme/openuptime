@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { runCheck, type CheckInput } from "./checker";
+import { MAX_BODY_BYTES, runCheck, type CheckInput } from "./checker";
 import { configureNetGuard } from "./netguard";
 
 // these tests talk to servers on 127.0.0.1; the guard has its own tests in netguard.test.ts
@@ -82,4 +82,31 @@ describe("database probes", () => {
   it("fails when nothing listens", async () => {
     expect((await probe("redis", "127.0.0.1:1")).ok).toBe(false);
   });
+});
+
+describe("response body budget", () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/big") {
+      // 3 MB, with the keyword only after the first megabyte
+      res.write("a".repeat(MAX_BODY_BYTES));
+      res.end("b".repeat(2_000_000) + "needle");
+      return;
+    }
+    if (req.url === "/edge") return res.end("x".repeat(MAX_BODY_BYTES - 6) + "needle");
+    res.end("x");
+  });
+  let base = "";
+  beforeAll(async () => {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(() => void server.close());
+  const check = (path: string, keyword: string) => runCheck({ type: "http", target: base + path, method: "GET", expectedStatus: 200, timeoutMs: 3000, keyword });
+
+  it("does not read past the budget when looking for a keyword", async () => {
+    const r = await check("/big", "needle");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not found/);
+  });
+  it("finds a keyword that ends exactly at the budget", async () => expect((await check("/edge", "needle")).ok).toBe(true));
 });

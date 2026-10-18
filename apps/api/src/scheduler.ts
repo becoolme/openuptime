@@ -1,5 +1,6 @@
 import type { Monitor, Repo } from "@openuptime/repo";
 import { dispatchAlert, retryDeliveries } from "./alerts";
+import type { CheckOutcome } from "./checker";
 import { measure } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
 
@@ -139,8 +140,13 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   // a due heartbeat monitor means no ping arrived in time
   const { out, results, note: regionNote } =
     m.type === "heartbeat"
-      ? { out: { ok: false, error: "Heartbeat missed" } as { ok: boolean; statusCode?: number; latencyMs?: number; error?: string }, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }], note: undefined as string | undefined }
+      ? { out: { ok: false, error: "Heartbeat missed" } as CheckOutcome, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }], note: undefined as string | undefined }
       : await measure(m);
+  // the prober itself had no connectivity: the check says nothing about the monitor, so nothing is recorded or counted
+  if (out.inconclusive) {
+    console.warn(`check for ${m.id} discarded: ${out.error ?? "this location is offline"}`);
+    return;
+  }
   // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
   if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
   const inMaintenance = await repo.underMaintenance(m);
