@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "public-surface-fixes-2",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Status page and subscription fixes", zh: "状态页与订阅修复" },
+    summary: {
+      en: "Publishing or taking down a postmortem shows on the status page right away, and subscription and maintenance reminders are more dependable.",
+      zh: "发布或撤下复盘后状态页会立即更新，订阅与维护提醒也更可靠。",
+    },
+    points: [
+      { en: "Publishing or unpublishing a postmortem, opening an incident or posting an update refreshes the public status page at once on the instance that handled it; other instances catch up within 30 seconds.", zh: "发布或撤下复盘、创建事件、发布更新后，处理该请求的实例上的公开状态页会立即刷新；其他实例会在 30 秒内同步。" },
+      { en: "Subscribing again before you confirm now keeps your newest language and component choice.", zh: "确认之前再次订阅，会保留你最新选择的语言和组件。" },
+      { en: "A maintenance reminder is no longer held back by windows nobody follows, is not retried again and again when the plan's email allowance is used up, and is retried at most three times when every mail fails.", zh: "维护提醒不再被无人关注的维护窗口挤占；套餐邮件额度用完时不会每分钟重试；所有邮件都发送失败时最多重试三次。" },
+      { en: "A status page without a project now lists the maintenance windows of the workspace's oldest project, like its incidents and subscribers.", zh: "未归属项目的状态页，现在与事件和订阅者一样，显示工作区最早项目的维护窗口。" },
+      { en: "On Cloudflare, subscriber emails are still sent if the mail service rejects the unsubscribe headers.", zh: "在 Cloudflare 上，即使邮件服务拒绝退订邮件头，订阅者邮件仍会发出。" },
+    ],
+  },
+  {
     id: "public-surface-fixes",
     date: "2026-10-17",
     edition: "community",
@@ -44,20 +61,21 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
     link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
   },
-  {    id: "reliability-fixes-2",
+  {
+    id: "reliability-fixes-2",
     date: "2026-10-17",
     edition: "community",
     title: { en: "More reliable incidents and checks", zh: "事件与检测更可靠" },
     summary: {
       en: "A reopened incident now tells you it is back, a person's resolution stands, and TCP and database checks try every address of a name.",
-      zh: "重新打开的事件现在会通知你,人工解决的事件不会被自动重开,TCP 与数据库检测会依次尝试域名的所有地址。",
+      zh: "重新打开的事件现在会通知你，人工解决的事件不会被自动重开，TCP 与数据库检测会依次尝试域名的所有地址。",
     },
     points: [
-      { en: "When a monitor fails again within 10 minutes of recovering, the reopened incident is unacknowledged again, restarts its reminders and escalation, and sends a \"down again\" alert.", zh: "监控项在恢复后 10 分钟内再次失败时,重新打开的事件会回到未确认状态,重新开始提醒和升级,并发送\"再次故障\"告警。" },
-      { en: "An incident that a person resolved is never reopened by a later failure, and a monitor whose outage was muted by a dependency does not open an incident after a person resolved one meanwhile.", zh: "人工解决的事件不会被之后的失败重新打开;因依赖而被静音的监控项,在期间有人工解决事件后,也不会再补开事件。" },
-      { en: "A queued alert retry is skipped when the incident has since been resolved (for a down alert) or reopened (for a recovery alert), and a reminder no longer uses up one of its repeats while a maintenance window silences it.", zh: "排队重试的告警在事件已解决(故障告警)或已重新打开(恢复告警)时会被跳过;维护窗口内被静音的提醒也不再消耗提醒次数。" },
-      { en: "TCP and database checks try every address a name resolves to, IPv4 first, and report a failure from the checker's own network only when no address connected; a lookup that went stale is refreshed once after a failed connection.", zh: "TCP 与数据库检测会依次尝试域名解析出的所有地址(IPv4 优先),只有所有地址都无法连接时才会把检测端自身的网络故障判为无效结果;连接失败后会重新解析一次过期的 DNS 结果。" },
-      { en: "Set SELFCHECK_URLS to choose the URLs used to tell a down target from an offline checker (empty turns it off); targets that resolve to private addresses skip it, and gzip or Brotli answers to pinned requests are decompressed.", zh: "可通过 SELFCHECK_URLS 指定用于区分目标故障与检测端断网的网址(留空则关闭);解析到内网地址的目标会跳过该检查,固定地址请求收到的 gzip 或 Brotli 响应也会被正确解压。" },
+      { en: "When a monitor fails again within 10 minutes of recovering, the reopened incident is unacknowledged again, restarts its reminders and escalation, and sends a \"down again\" alert.", zh: "监控项在恢复后 10 分钟内再次失败时，重新打开的事件会回到未确认状态，重新开始提醒和升级，并发送「再次故障」告警。" },
+      { en: "An incident that a person resolved is never reopened by a later failure, and a monitor whose outage was muted by a dependency does not open an incident after a person resolved one meanwhile.", zh: "人工解决的事件不会被之后的失败重新打开；因依赖而被静音的监控项，在期间有人工解决事件后，也不会再补开事件。" },
+      { en: "A queued alert retry is skipped when the incident has since been resolved (for a down alert) or reopened (for a recovery alert), and a reminder no longer uses up one of its repeats while a maintenance window silences it.", zh: "排队重试的告警在事件已解决（故障告警）或已重新打开（恢复告警）时会被跳过；维护窗口内被静音的提醒也不再消耗提醒次数。" },
+      { en: "TCP and database checks try every address a name resolves to, IPv4 first, and report a failure from the checker's own network only when no address connected; a lookup that went stale is refreshed once after a failed connection.", zh: "TCP 与数据库检测会依次尝试域名解析出的所有地址（IPv4 优先），只有所有地址都无法连接时才会把检测端自身的网络故障判为无效结果；连接失败后会重新解析一次过期的 DNS 结果。" },
+      { en: "Set SELFCHECK_URLS to choose the URLs used to tell a down target from an offline checker (empty turns it off); targets that resolve to private addresses skip it, and gzip or Brotli answers to pinned requests are decompressed.", zh: "可通过 SELFCHECK_URLS 指定用于区分目标故障与检测端断网的网址（留空则关闭）；解析到内网地址的目标会跳过该检查，固定地址请求收到的 gzip 或 Brotli 响应也会被正确解压。" },
     ],
   },
   {
