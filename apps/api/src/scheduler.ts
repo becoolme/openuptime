@@ -1,6 +1,7 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { dispatchAlert, retryDeliveries, sendEscalations, sendReminders, sweepDeliveries } from "./alerts";
+import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries } from "./alerts";
 import type { CheckOutcome } from "./checker";
+import { sendMonthlyReports } from "./reports";
 import { measure } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
 
@@ -90,6 +91,11 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
   await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));
   // cheap housekeeping once an hour
   if (new Date().getMinutes() === 0) await repo.purgeExpired();
+  // reminders and reports are claimed in the database before they are sent, so a coarse cadence is enough
+  if (new Date().getMinutes() % 5 === 0) {
+    await sendMaintenanceReminders(repo, entitlements).catch((e) => console.error("maintenance reminders failed", e));
+    await sendMonthlyReports(repo, new Date(), entitlements).catch((e) => console.error("monthly reports failed", e));
+  }
   return total;
 }
 

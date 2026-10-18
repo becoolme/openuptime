@@ -944,7 +944,7 @@ export function createRepo(db: Db): Repo {
         .limit(o.limit),
     async subscribersFor(orgId, monitorId) {
       const base = db
-        .select({ email: schema.statusSubscriber.email, locale: schema.statusSubscriber.locale, token: schema.statusSubscriber.token, slug: schema.statusPage.slug, title: schema.statusPage.title, hideBranding: schema.statusPage.hideBranding })
+        .select({ email: schema.statusSubscriber.email, locale: schema.statusSubscriber.locale, token: schema.statusSubscriber.token, slug: schema.statusPage.slug, title: schema.statusPage.title, hideBranding: schema.statusPage.hideBranding, monitorIds: schema.statusSubscriber.monitorIds })
         .from(schema.statusSubscriber)
         .innerJoin(schema.statusPage, eq(schema.statusPage.id, schema.statusSubscriber.statusPageId));
       if (!monitorId) return base.where(and(eq(schema.statusPage.organizationId, orgId), isNotNull(schema.statusSubscriber.confirmedAt)));
@@ -953,13 +953,20 @@ export function createRepo(db: Db): Repo {
           schema.statusPageComponent,
           and(eq(schema.statusPageComponent.statusPageId, schema.statusPage.id), eq(schema.statusPageComponent.monitorId, monitorId), eq(schema.statusPageComponent.visible, true)),
         )
-        .where(isNotNull(schema.statusSubscriber.confirmedAt));
+        .where(
+          and(
+            isNotNull(schema.statusSubscriber.confirmedAt),
+            // a subscriber who picked components only hears about those
+            or(sql`cardinality(${schema.statusSubscriber.monitorIds}) = 0`, sql`${monitorId} = any(${schema.statusSubscriber.monitorIds})`),
+          ),
+        );
     },
     async getSettings(orgId) {
       const [row] = await db.select().from(schema.workspaceSetting).where(eq(schema.workspaceSetting.organizationId, orgId));
       return {
         alertLogRetentionDays: row?.alertLogRetentionDays ?? DEFAULT_ALERT_LOG_DAYS,
         checkRetentionDays: row?.checkRetentionDays ?? DEFAULT_CHECK_RETENTION_DAYS,
+        monthlyReport: row?.monthlyReport ?? false,
       };
     },
     async saveSettings(orgId, patch) {
@@ -968,7 +975,7 @@ export function createRepo(db: Db): Repo {
         .values({ organizationId: orgId, ...patch })
         .onConflictDoUpdate({ target: schema.workspaceSetting.organizationId, set: patch })
         .returning();
-      return { alertLogRetentionDays: row.alertLogRetentionDays, checkRetentionDays: row.checkRetentionDays };
+      return { alertLogRetentionDays: row.alertLogRetentionDays, checkRetentionDays: row.checkRetentionDays, monthlyReport: row.monthlyReport };
     },
 
     listMaintenance: (orgId, projectId) =>
@@ -1117,12 +1124,121 @@ export function createRepo(db: Db): Repo {
       return r.n;
     },
     async addSubscriber(s) {
+      const monitorIds = s.monitorIds ?? [];
       const [row] = await db
         .insert(schema.statusSubscriber)
-        .values({ statusPageId: s.pageId, email: s.email, token: s.token, locale: s.locale })
+        .values({ statusPageId: s.pageId, email: s.email, token: s.token, locale: s.locale, monitorIds })
         .onConflictDoNothing()
         .returning();
-      return row ? { locale: row.locale } : null;
+      if (row) return { locale: row.locale, token: row.token, confirmed: false, created: true };
+      const [old] = await db
+        .select()
+        .from(schema.statusSubscriber)
+        .where(and(eq(schema.statusSubscriber.statusPageId, s.pageId), eq(schema.statusSubscriber.email, s.email)));
+      // a pending address asking again gets the choices it just made; a confirmed one is not changed by a stranger
+      if (!old.confirmedAt) await db.update(schema.statusSubscriber).set({ locale: s.locale, monitorIds }).where(eq(schema.statusSubscriber.id, old.id));
+      return { locale: old.confirmedAt ? old.locale : s.locale, token: old.token, confirmed: !!old.confirmedAt, created: false };
+    },
+    async pageMaintenance(page, o) {
+      const ids = await pageMonitorIds(page.id);
+      return db
+        .select()
+        .from(schema.maintenanceWindow)
+        .where(
+          and(
+            eq(schema.maintenanceWindow.organizationId, page.organizationId),
+            page.projectId ? or(isNull(schema.maintenanceWindow.projectId), eq(schema.maintenanceWindow.projectId, page.projectId)) : isNull(schema.maintenanceWindow.projectId),
+            o.since ? gte(schema.maintenanceWindow.endsAt, o.since) : undefined,
+            ids.length
+              ? or(sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`, sql`${schema.maintenanceWindow.monitorIds} && ${sql.raw("array[")}${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)}${sql.raw("]")}`)
+              : sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
+          ),
+        )
+        .orderBy(desc(schema.maintenanceWindow.startsAt))
+        .limit(o.limit);
+    },
+    async claimMaintenanceReminders(limit) {
+      const now = new Date();
+      const due = await db
+        .select({ w: schema.maintenanceWindow, p: schema.statusPage })
+        .from(schema.maintenanceWindow)
+        .innerJoin(
+          schema.statusPage,
+          and(
+            eq(schema.statusPage.organizationId, schema.maintenanceWindow.organizationId),
+            or(isNull(schema.maintenanceWindow.projectId), eq(schema.maintenanceWindow.projectId, schema.statusPage.projectId)),
+          ),
+        )
+        .where(
+          and(
+            sql`${schema.statusPage.maintenanceReminderHours} > 0`,
+            gte(schema.maintenanceWindow.startsAt, now),
+            sql`${schema.maintenanceWindow.startsAt} <= now() + ${schema.statusPage.maintenanceReminderHours} * interval '1 hour'`,
+            sql`not exists (select 1 from maintenance_reminder r where r.maintenance_id = ${schema.maintenanceWindow.id} and r.status_page_id = ${schema.statusPage.id})`,
+            or(
+              sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
+              sql`exists (select 1 from status_page_component c where c.status_page_id = ${schema.statusPage.id} and c.visible and c.monitor_id = any(${schema.maintenanceWindow.monitorIds}))`,
+            ),
+          ),
+        )
+        .limit(limit);
+      const out: Awaited<ReturnType<Repo["claimMaintenanceReminders"]>> = [];
+      for (const { w, p } of due) {
+        // inserting the row is the claim: whoever gets it back sends, anyone else skips
+        const claimed = await db.insert(schema.maintenanceReminder).values({ maintenanceId: w.id, statusPageId: p.id }).onConflictDoNothing().returning({ id: schema.maintenanceReminder.maintenanceId });
+        if (!claimed.length) continue;
+        const affected = w.monitorIds.length ? new Set(w.monitorIds) : null;
+        const shown = new Set(await pageMonitorIds(p.id));
+        const subs = await db
+          .select()
+          .from(schema.statusSubscriber)
+          .where(and(eq(schema.statusSubscriber.statusPageId, p.id), isNotNull(schema.statusSubscriber.confirmedAt)));
+        const subscribers = subs
+          .filter((x) => !x.monitorIds.length || x.monitorIds.some((m) => shown.has(m) && (!affected || affected.has(m))))
+          .map((x) => ({ email: x.email, locale: x.locale, token: x.token, slug: p.slug, title: p.title, hideBranding: p.hideBranding, monitorIds: x.monitorIds }));
+        out.push({ window: w, page: p, subscribers });
+      }
+      return out;
+    },
+    async claimMonthlyReports(month, limit) {
+      const rows_ = await rows<{ organization_id: string }>(
+        db.execute(sql`update workspace_setting set last_report_month = ${month}
+          where organization_id in (select organization_id from workspace_setting where monthly_report and last_report_month is distinct from ${month} limit ${limit} for update skip locked)
+          returning organization_id`),
+      );
+      return rows_.map((r) => r.organization_id);
+    },
+    async monthlyReport(orgId, from, to) {
+      const comps = await db.select().from(schema.monitor).where(eq(schema.monitor.organizationId, orgId)).orderBy(asc(schema.monitor.name));
+      if (!comps.length) return [];
+      const ids = comps.map((m) => m.id);
+      const [sums, incs] = await Promise.all([
+        db
+          .select({ monitorId: schema.checkRollup.monitorId, total: sql<number>`sum(${schema.checkRollup.total})::int`, ok: sql<number>`sum(${schema.checkRollup.ok})::int` })
+          .from(schema.checkRollup)
+          .where(and(inArray(schema.checkRollup.monitorId, ids), gte(schema.checkRollup.bucket, from), lt(schema.checkRollup.bucket, to)))
+          .groupBy(schema.checkRollup.monitorId),
+        db
+          .select()
+          .from(schema.incident)
+          .where(and(inArray(schema.incident.monitorId, ids), lt(schema.incident.startedAt, to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, from)))),
+      ]);
+      return comps
+        .map((m) => {
+          const s = sums.find((x) => x.monitorId === m.id);
+          const mine = incs.filter((i) => i.monitorId === m.id);
+          const downMs = mine.reduce((a, i) => a + Math.max(0, Math.min(i.resolvedAt?.getTime() ?? to.getTime(), to.getTime()) - Math.max(i.startedAt.getTime(), from.getTime())), 0);
+          return { name: m.name, uptime: s?.total ? Math.round((s.ok / s.total) * 10000) / 100 : null, downtimeMinutes: Math.round(downMs / 60000), incidents: mine.length, checked: !!s?.total };
+        })
+        .filter((c) => c.checked || c.incidents > 0)
+        .map(({ checked: _c, ...c }) => c);
+    },
+    async ownerContacts(orgId) {
+      return db
+        .select({ email: schema.user.email, locale: schema.user.locale })
+        .from(schema.member)
+        .innerJoin(schema.user, eq(schema.user.id, schema.member.userId))
+        .where(and(eq(schema.member.organizationId, orgId), eq(schema.member.role, "owner")));
     },
     async confirmSubscriber(token) {
       const [r] = await db

@@ -9,6 +9,7 @@ import type { Plan } from "../entitlements";
 import { requireManager, uuidParams } from "../middleware";
 import { clientIp } from "../ratelimit";
 import { sharedCache, waitUntilOf } from "../sharedcache";
+import { buildIcs, buildLlmsTxt, buildRss, FEED_LIMIT, ICS_LIMIT } from "../status-feeds";
 
 // optional link to the owner's own website; "" clears it
 const externalUrl = z
@@ -27,10 +28,20 @@ const pageBody = z.object({
   showLatency: z.boolean().optional(),
   externalUrl,
   hideBranding: z.boolean().optional(),
+  // uptime bars: green from `uptimeOkPct`, amber from `uptimeWarnPct`, red below
+  uptimeOkPct: z.number().min(1).max(100).optional(),
+  uptimeWarnPct: z.number().min(1).max(100).optional(),
+  // public MCP tools may serve this page
+  mcpEnabled: z.boolean().optional(),
+  // hours before maintenance starts that subscribers are reminded; 0 = never
+  maintenanceReminderHours: z.number().int().min(0).max(168).optional(),
   monitorIds: z.array(z.string().uuid()).optional(),
   // ordered, optionally grouped; takes precedence over monitorIds
   components: z.array(z.object({ monitorId: z.string().uuid(), groupName: z.string().trim().min(1).max(60).optional() })).max(200).optional(),
 });
+/** The two uptime thresholds must leave room for amber between them; checked against what the page will hold afterwards. */
+const thresholdsProblem = (c: Context<AppEnv>, ok: number, warn: number) =>
+  warn < ok ? null : c.json({ error: "The amber threshold must be below the green one" }, 400);
 const toComponents = (v: { monitorIds?: string[]; components?: { monitorId: string; groupName?: string }[] }) =>
   v.components ?? (v.monitorIds ?? []).map((monitorId) => ({ monitorId }));
 
@@ -67,6 +78,8 @@ export const statusPages = new Hono<AppEnv>()
       const { monitorIds, components, ...v } = c.req.valid("json");
       const denied = await brandingProblem(c, v.hideBranding);
       if (denied) return denied;
+      const bad = thresholdsProblem(c, v.uptimeOkPct ?? 99.9, v.uptimeWarnPct ?? 98);
+      if (bad) return bad;
       if (await repo.slugTaken(v.slug)) return c.json({ error: "That slug is already taken" }, 409);
       const page = await repo.createStatusPage(c.get("orgId"), c.get("projectId"), v);
       await repo.setPageComponents(page.id, c.get("orgId"), toComponents({ monitorIds, components }), c.get("projectScope"));
@@ -91,6 +104,8 @@ export const statusPages = new Hono<AppEnv>()
     // a page that already hides the brand can still be edited after a downgrade; only turning it on is refused
     const denied = await brandingProblem(c, v.hideBranding && !page.hideBranding ? true : undefined);
     if (denied) return denied;
+    const bad = thresholdsProblem(c, v.uptimeOkPct ?? page.uptimeOkPct, v.uptimeWarnPct ?? page.uptimeWarnPct);
+    if (bad) return bad;
     await repo.updateStatusPage(page.id, v);
     if (monitorIds || components) await repo.setPageComponents(page.id, c.get("orgId"), toComponents({ monitorIds, components }), c.get("projectScope"));
     return c.json({ ok: true });
@@ -155,6 +170,23 @@ const langOf = (c: { req: { query(k: string): string | undefined; header(k: stri
   return /^zh/i.test(q) ? "zh" : "en";
 };
 
+/** The public MCP tools add `via=mcp`; a page whose owner turned that off refuses them (the page itself stays public). */
+async function mcpDenied(c: Context<AppEnv>, slug: string) {
+  if (c.req.query("via") !== "mcp") return null;
+  const page = await c.get("repo").statusPageBySlug(slug);
+  return page && !page.mcpEnabled ? c.json({ error: "The owner of this status page turned off MCP access" }, 403) : null;
+}
+
+async function rssFeed(c: Context<AppEnv>) {
+  const repo = c.get("repo");
+  const page = await repo.statusPageBySlug(c.req.param("slug")!);
+  if (!page) return c.json({ error: "Not found" }, 404);
+  const [incidents, maintenance] = await Promise.all([repo.pageIncidents(page, { limit: FEED_LIMIT }), repo.pageMaintenance(page, { limit: FEED_LIMIT })]);
+  const origin = appUrl() || new URL(c.req.url).origin;
+  const xml = buildRss({ title: page.title, link: `${origin}/status/${page.slug}`, incidents: incidents.map(toPublic), maintenance });
+  return c.body(xml, 200, { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=60" });
+}
+
 export const publicStatus = new Hono<AppEnv>()
   // one-line state for embeds; small and cacheable
   .get("/:slug/summary", async (c) => {
@@ -189,6 +221,8 @@ export const publicStatus = new Hono<AppEnv>()
     const before = c.req.query("before");
     const cursor = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : undefined;
     const slug = c.req.param("slug");
+    const refused = await mcpDenied(c, slug);
+    if (refused) return refused;
     const body = await historyCache.cached(
       `${slug}|${cursor?.toISOString() ?? ""}`,
       async () => {
@@ -203,30 +237,62 @@ export const publicStatus = new Hono<AppEnv>()
     );
     return body ? c.json(body) : c.json({ error: "Not found" }, 404);
   })
-  .get("/:slug/rss", async (c) => {
+  // incidents and maintenance together, newest first; /rss stays as the original address of the same feed
+  .get("/:slug/rss.xml", (c) => rssFeed(c))
+  .get("/:slug/rss", (c) => rssFeed(c))
+  // scheduled maintenance as a calendar subscription
+  .get("/:slug/maintenance.ics", async (c) => {
     const repo = c.get("repo");
     const page = await repo.statusPageBySlug(c.req.param("slug"));
     if (!page) return c.json({ error: "Not found" }, 404);
-    const items = (await repo.pageIncidents(page, { limit: 30 })).map(toPublic);
+    const windows = await repo.pageMaintenance(page, { since: new Date(Date.now() - 30 * 864e5), limit: ICS_LIMIT });
     const origin = appUrl() || new URL(c.req.url).origin;
-    const link = `${origin}/status/${page.slug}`;
-    const x = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]!);
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0"><channel><title>${x(page.title)} status</title><link>${x(link)}</link><description>Incidents for ${x(page.title)}</description>
-${items
-  .map((i) => {
-    const latest = i.updates[0];
-    return `<item><title>${x(`${i.title} — ${i.status}`)}</title><link>${x(link)}</link><guid isPermaLink="false">${i.id}</guid><pubDate>${new Date(i.startedAt).toUTCString()}</pubDate><description>${x(i.updates.map((u) => `[${u.status}] ${u.body}`).join("\n") || latest?.body || i.title)}</description></item>`;
+    const body = buildIcs({ title: page.title, link: `${origin}/status/${page.slug}`, host: new URL(origin).host, windows });
+    return c.body(body, 200, { "content-type": "text/calendar; charset=utf-8", "cache-control": "public, max-age=300" });
   })
-  .join("\n")}
-</channel></rss>`;
-    return c.body(xml, 200, { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=60" });
-  })
-  .post("/:slug/subscribe", zValidator("json", emailSchema), async (c) => {
+  // short, factual page summary for language models and other crawlers
+  .get("/:slug/llms.txt", async (c) => {
     const repo = c.get("repo");
     const page = await repo.statusPageBySlug(c.req.param("slug"));
     if (!page) return c.json({ error: "Not found" }, 404);
-    const { email } = c.req.valid("json");
+    const [board, windows] = await Promise.all([repo.statusBoard(page), repo.pageMaintenance(page, { since: new Date(), limit: 10 })]);
+    const origin = appUrl() || new URL(c.req.url).origin;
+    const body = buildLlmsTxt({
+      title: page.title,
+      link: `${origin}/status/${page.slug}`,
+      api: `${origin}/api/public/status/${page.slug}`,
+      overall: LABELS[overallOf(board.components.map((x) => x.status))].en,
+      components: board.components,
+      incidents: board.incidents,
+      maintenance: [...windows].reverse(),
+      mcp: page.mcpEnabled ? `${origin}/api/mcp/public` : null,
+    });
+    return c.body(body, 200, { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=300" });
+  })
+  // upcoming and recent maintenance as JSON (the public MCP tools read this)
+  .get("/:slug/maintenance", async (c) => {
+    const slug = c.req.param("slug");
+    const refused = await mcpDenied(c, slug);
+    if (refused) return refused;
+    const repo = c.get("repo");
+    const page = await repo.statusPageBySlug(slug);
+    if (!page) return c.json({ error: "Not found" }, 404);
+    const now = Date.now();
+    const rows = await repo.pageMaintenance(page, { since: new Date(now - 7 * 864e5), limit: 50 });
+    const items = rows.reverse().map((w) => ({
+      id: w.id,
+      name: w.name,
+      startsAt: w.startsAt,
+      endsAt: w.endsAt,
+      state: w.startsAt.getTime() > now ? "scheduled" : w.endsAt.getTime() >= now ? "active" : "completed",
+    }));
+    return c.json({ slug: page.slug, items }, 200, { "cache-control": "public, max-age=60" });
+  })
+  .post("/:slug/subscribe", zValidator("json", emailSchema.extend({ monitorIds: z.array(z.string().uuid()).max(200).optional() })), async (c) => {
+    const repo = c.get("repo");
+    const page = await repo.statusPageBySlug(c.req.param("slug"));
+    if (!page) return c.json({ error: "Not found" }, 404);
+    const { email, monitorIds } = c.req.valid("json");
     // Each request can trigger an outbound email, so cap per client, per address and per page.
     const ip = clientIp(c);
     const ok =
@@ -235,23 +301,37 @@ ${items
       (await repo.withinLimit(`sub:page:${page.id}`, 200, 3600));
     if (!ok) return c.json({ error: "Too many requests, try again later" }, 429);
     if ((await repo.subscriberCount(page.id)) >= MAX_SUBSCRIBERS) return c.json({ error: "Subscriber limit reached" }, 409);
+    // only components that are on the page can be chosen
+    const shown = new Set((await repo.pageComponents(page.id)).map((x) => x.monitorId));
+    const chosen = [...new Set(monitorIds ?? [])].filter((id) => shown.has(id));
     const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-    const row = await repo.addSubscriber({ pageId: page.id, email, token, locale: langFromHeader(c.req.header("accept-language")) });
-    // already subscribed (or pending): answer the same way so the endpoint does not reveal who is subscribed
-    if (row) {
-      const lang = row.locale === "zh-CN" ? "zh-CN" : "en";
-      const white = await brandingHidden(c, page);
-      const mail = actionEmail({
-        title: tr(lang, "Confirm your subscription to {title}", { title: page.title }),
-        body: tr(lang, "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed."),
-        footer: tr(lang, white ? "Status updates from {title}." : "Status updates from {title}. Powered by OpenUptime.", { title: page.title }),
-        cta: tr(lang, "Confirm subscription"),
-        url: `${appUrl()}/api/public/status/_/confirm?token=${token}`,
-        lang,
-        brand: white ? page.title : undefined,
-      });
-      await sendEmail({ to: email, subject: tr(lang, "Confirm your subscription to {title}", { title: page.title }), fromName: white ? page.title : "OpenUptime", ...mail }).catch((e) => console.error("confirm email failed", e));
-    }
+    const row = await repo.addSubscriber({ pageId: page.id, email, token, locale: langFromHeader(c.req.header("accept-language")), monitorIds: chosen });
+    // Always the same answer, so the endpoint does not reveal who is subscribed. A pending address gets its confirmation
+    // again (the first link may be lost); a confirmed one gets a mail with its unsubscribe link instead.
+    const lang = row.locale === "zh-CN" ? "zh-CN" : "en";
+    const white = await brandingHidden(c, page);
+    const footer = tr(lang, white ? "Status updates from {title}." : "Status updates from {title}. Powered by OpenUptime.", { title: page.title });
+    const mail = row.confirmed
+      ? actionEmail({
+          title: tr(lang, "You are already subscribed to {title}", { title: page.title }),
+          body: tr(lang, "This address already gets incident emails. Use the button below if you want to stop them."),
+          footer,
+          cta: tr(lang, "Unsubscribe"),
+          url: `${appUrl()}/api/public/status/_/unsubscribe?token=${row.token}`,
+          lang,
+          brand: white ? page.title : undefined,
+        })
+      : actionEmail({
+          title: tr(lang, "Confirm your subscription to {title}", { title: page.title }),
+          body: tr(lang, "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed."),
+          footer,
+          cta: tr(lang, "Confirm subscription"),
+          url: `${appUrl()}/api/public/status/_/confirm?token=${row.token}`,
+          lang,
+          brand: white ? page.title : undefined,
+        });
+    const subject = row.confirmed ? tr(lang, "You are already subscribed to {title}", { title: page.title }) : tr(lang, "Confirm your subscription to {title}", { title: page.title });
+    await sendEmail({ to: email, subject, fromName: white ? page.title : "OpenUptime", ...mail }).catch((e) => console.error("subscription email failed", e));
     return c.json({ ok: true });
   })
   .get("/_/confirm", async (c) => {
@@ -264,6 +344,8 @@ ${items
   })
   .get("/:slug", async (c) => {
     const slug = c.req.param("slug");
+    const refused = await mcpDenied(c, slug);
+    if (refused) return refused;
     const body = await boardCache.cached(
       slug,
       async () => {
@@ -272,7 +354,7 @@ ${items
         if (!page) return undefined;
         const board = await repo.statusBoard(page);
         return {
-          page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page) },
+          page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page), uptimeOkPct: page.uptimeOkPct, uptimeWarnPct: page.uptimeWarnPct },
           overall: overallOf(board.components.map((x) => x.status)),
           bucket: board.bucket,
           components: board.components,

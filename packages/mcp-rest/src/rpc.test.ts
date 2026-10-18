@@ -68,4 +68,22 @@ describe("mcp-rest", () => {
     expect((await rpc(10, "tools/call", { name: "drop_everything" })).error.code).toBe(-32602);
     expect(((await server.handle({ id: 1 } as never, call)) as any).error.code).toBe(-32600);
   });
+
+  it("with publicOnly, lists and runs only tools marked public, without context arguments", async () => {
+    const open = createMcpServer({
+      info: { name: "demo", version: "1" },
+      tools: [
+        defineTool({ name: "open", description: "Open.", schema: z.object({ slug: z.string() }), readOnly: true, public: true, build: (a) => ({ method: "GET", path: `/open/${a.slug}` }) }),
+        defineTool({ name: "private", description: "Private.", schema: z.object({}), build: () => ({ method: "GET", path: "/private" }) }),
+      ],
+      context: { shape: { team: z.string().optional() }, toHeaders: () => ({}) },
+    });
+    const run = (method: string, params?: unknown, publicOnly = true) => open.handle({ jsonrpc: "2.0", id: 1, method, params }, call, { publicOnly }) as Promise<any>;
+    const listed = (await run("tools/list")).result.tools;
+    expect(listed.map((t: any) => t.name)).toEqual(["open"]);
+    expect(Object.keys(listed[0].inputSchema.properties)).toEqual(["slug"]);
+    expect((await run("tools/list", undefined, false)).result.tools.length).toBe(2);
+    expect((await run("tools/call", { name: "private", arguments: {} })).error.code).toBe(-32602);
+    expect((await run("tools/call", { name: "open", arguments: { slug: "a" } })).result.isError).toBeFalsy();
+  });
 });

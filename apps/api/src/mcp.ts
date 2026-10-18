@@ -1,4 +1,4 @@
-import { createMcpServer, type Tool } from "@openuptime/mcp-rest";
+import { createMcpServer, defineTool, type Tool } from "@openuptime/mcp-rest";
 import { z } from "zod";
 import { monitorCreateSchema, monitorPatchSchema } from "./routes/monitors";
 
@@ -105,13 +105,48 @@ export const TOOLS: Tool[] = [
   { name: "list_maintenance", description: "List scheduled maintenance windows.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/maintenance" }) },
 ];
 
+/**
+ * Read-only tools for public status pages, served without credentials at /api/mcp/public (and also listed here, on the
+ * authenticated endpoint, so a signed-in agent can read any published page too). They take the page's slug instead of a
+ * workspace or project, and `via=mcp` lets the owner of a page switch this access off.
+ */
+const slug = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/i).describe("The status page's slug: the last part of its address, /status/<slug>");
+const publicPath = (s: string, rest = "") => `/api/public/status/${encodeURIComponent(s)}${rest}`;
+
+export const PUBLIC_TOOLS: Tool[] = [
+  defineTool({
+    name: "status_page_overview",
+    description: "Current state of a public status page: overall status, each component with its status and 90-day uptime, and active incidents. No credentials needed.",
+    schema: z.object({ slug }),
+    readOnly: true,
+    public: true,
+    build: (a) => ({ method: "GET", path: publicPath(a.slug) + "?via=mcp" }),
+  }),
+  defineTool({
+    name: "status_page_incidents",
+    description: "Recent incidents of a public status page with their updates, newest first. No credentials needed.",
+    schema: z.object({ slug }),
+    readOnly: true,
+    public: true,
+    build: (a) => ({ method: "GET", path: publicPath(a.slug, "/incidents") + "?via=mcp" }),
+  }),
+  defineTool({
+    name: "status_page_maintenance",
+    description: "Scheduled and ongoing maintenance windows of a public status page. No credentials needed.",
+    schema: z.object({ slug }),
+    readOnly: true,
+    public: true,
+    build: (a) => ({ method: "GET", path: publicPath(a.slug, "/maintenance") + "?via=mcp" }),
+  }),
+];
+
 export const SERVER_INFO = { name: "openuptime", version: "1.0.0" };
 
 export const server = createMcpServer({
   info: SERVER_INFO,
   instructions:
     "Manage OpenUptime monitors, incidents and status pages. Ids are uuids returned by the list_* tools. Call list_workspaces to see which workspaces and projects you may use; every tool takes optional `workspace` and `project` ids.",
-  tools: TOOLS,
+  tools: [...TOOLS, ...PUBLIC_TOOLS],
   context: {
     shape: whereShape,
     toHeaders: ({ workspace, project }): Record<string, string> => ({

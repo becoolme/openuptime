@@ -364,3 +364,77 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
     });
   });
 });
+
+describe.skipIf(!url)("status page reminders and monthly reports", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  const hour = 3600_000;
+
+  beforeAll(async () => {
+    await db.insert(schema.organization).values({ id: orgId, name: "Test", slug: orgId, createdAt: new Date() });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+    await db.$client.end();
+  });
+
+  async function page(reminderHours: number) {
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, name: "api", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    const p = await repo.createStatusPage(orgId, (await db.insert(schema.project).values({ organizationId: orgId, name: `P${Math.random()}` }).returning())[0].id, { slug: `s${crypto.randomUUID().slice(0, 8)}`, title: "Acme" });
+    await repo.updateStatusPage(p.id, { maintenanceReminderHours: reminderHours });
+    await db.insert(schema.statusPageComponent).values({ statusPageId: p.id, monitorId: m.id });
+    return { p, m };
+  }
+  const sub = (pageId: string, email: string, confirmed: boolean, monitorIds: string[] = []) =>
+    db.insert(schema.statusSubscriber).values({ statusPageId: pageId, email, token: crypto.randomUUID(), confirmedAt: confirmed ? new Date() : null, monitorIds });
+
+  it("claims each due reminder once, for confirmed subscribers who follow an affected component", async () => {
+    const { p, m } = await page(24);
+    const other = (await db.insert(schema.monitor).values({ organizationId: orgId, name: "other", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning())[0];
+    await sub(p.id, "all@example.com", true);
+    await sub(p.id, "api@example.com", true, [m.id]);
+    await sub(p.id, "other@example.com", true, [other.id]);
+    await sub(p.id, "pending@example.com", false);
+    await db.insert(schema.maintenanceWindow).values({
+      organizationId: orgId, projectId: p.projectId, name: "soon", startsAt: new Date(Date.now() + 10 * hour), endsAt: new Date(Date.now() + 11 * hour), monitorIds: [m.id],
+    });
+    const mine = (r: Awaited<ReturnType<typeof repo.claimMaintenanceReminders>>) => r.filter((x) => x.page.id === p.id);
+    const claims = (await Promise.all([repo.claimMaintenanceReminders(50), repo.claimMaintenanceReminders(50), repo.claimMaintenanceReminders(50)])).flatMap(mine);
+    expect(claims).toHaveLength(1);
+    expect(claims[0].subscribers.map((s) => s.email).sort()).toEqual(["all@example.com", "api@example.com"]);
+    expect(mine(await repo.claimMaintenanceReminders(50))).toHaveLength(0);
+  });
+
+  it("does not remind early, when the page turned reminders off, or after the window started", async () => {
+    const { p } = await page(0);
+    const { p: later } = await page(2);
+    await sub(p.id, "a@example.com", true);
+    await sub(later.id, "b@example.com", true);
+    for (const [name, start] of [["far", 30 * hour], ["past", -hour]] as const) {
+      await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: p.projectId, name, startsAt: new Date(Date.now() + start), endsAt: new Date(Date.now() + start + hour), monitorIds: [] });
+      await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: later.projectId, name, startsAt: new Date(Date.now() + start), endsAt: new Date(Date.now() + start + hour), monitorIds: [] });
+    }
+    // 10h ahead is inside 24h but outside this page's 2h lead
+    await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: later.projectId, name: "mid", startsAt: new Date(Date.now() + 10 * hour), endsAt: new Date(Date.now() + 11 * hour), monitorIds: [] });
+    const got = (await repo.claimMaintenanceReminders(100)).filter((x) => x.page.id === p.id || x.page.id === later.id);
+    expect(got).toHaveLength(0);
+  });
+
+  it("claims a monthly report once per workspace and month", async () => {
+    await db.insert(schema.workspaceSetting).values({ organizationId: orgId, monthlyReport: true }).onConflictDoUpdate({ target: schema.workspaceSetting.organizationId, set: { monthlyReport: true, lastReportMonth: null } });
+    const month = "2026-09";
+    const claims = (await Promise.all([repo.claimMonthlyReports(month, 500), repo.claimMonthlyReports(month, 500)])).flat().filter((id) => id === orgId);
+    expect(claims).toHaveLength(1);
+    expect((await repo.claimMonthlyReports("2026-10", 500)).filter((id) => id === orgId)).toHaveLength(1);
+  });
+
+  it("summarises a month per component: uptime, downtime and incidents", async () => {
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, name: "aaa-report", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    const from = new Date("2026-09-01T00:00:00Z");
+    const to = new Date("2026-10-01T00:00:00Z");
+    await db.insert(schema.checkRollup).values({ monitorId: m.id, bucket: new Date("2026-09-10T00:00:00Z"), total: 1000, ok: 990 } as never);
+    await db.insert(schema.incident).values({ monitorId: m.id, organizationId: orgId, title: "down", status: "resolved", startedAt: new Date("2026-09-10T10:00:00Z"), resolvedAt: new Date("2026-09-10T10:30:00Z") } as never);
+    const row = (await repo.monthlyReport(orgId, from, to)).find((c) => c.name === "aaa-report");
+    expect(row).toEqual({ name: "aaa-report", uptime: 99, downtimeMinutes: 30, incidents: 1 });
+    expect((await repo.ownerContacts(orgId)).length).toBe(0);
+  });
+});

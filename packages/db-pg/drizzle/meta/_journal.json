@@ -148,6 +148,13 @@
       "when": 1792281783238,
       "tag": "0020_even_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792281933814,
+      "tag": "0021_salty_black_cat",
+      "breakpoints": true
     }
   ]
 }

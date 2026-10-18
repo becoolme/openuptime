@@ -76,10 +76,10 @@ const groups: Group[] = [
   {
     id: "status-pages", en: "Status pages", zh: "状态页",
     eps: [
-      { m: "GET", p: "/status-pages", en: "List the project's status pages.", zh: "列出当前项目的状态页。", res: `[{ id, slug, title, theme, showLatency, customDomain, externalUrl, hideBranding, createdAt, projectId }]` },
-      { m: "POST", p: "/status-pages", en: "Create a status page. The slug must be unused (409 otherwise). Returns 201.", zh: "创建状态页。slug 不能被占用（否则 409）。返回 201。", req: `slug         string, /^[a-z0-9-]{3,40}$/ (required)\ntitle        string, 1-120 (required)\nexternalUrl  string | null, http(s) URL up to 2048 (a link shown beside the title, rel=nofollow)\ntheme        "light" | "dark" | "auto"\nshowLatency  boolean\nhideBranding boolean (hide the OpenUptime mark and "Powered by" line; the header shows the logo of externalUrl via favicon.im; 402 branding_not_allowed when the plan does not include it)\nmonitorIds   uuid[]\ncomponents   [{ monitorId: uuid, groupName?: string 1-60 }], max 200 (takes precedence over monitorIds)` },
+      { m: "GET", p: "/status-pages", en: "List the project's status pages.", zh: "列出当前项目的状态页。", res: `[{ id, slug, title, theme, showLatency, customDomain, externalUrl, hideBranding, uptimeOkPct, uptimeWarnPct, mcpEnabled, maintenanceReminderHours, createdAt, projectId }]` },
+      { m: "POST", p: "/status-pages", en: "Create a status page. The slug must be unused (409 otherwise). Returns 201.", zh: "创建状态页。slug 不能被占用（否则 409）。返回 201。", req: `slug         string, /^[a-z0-9-]{3,40}$/ (required)\ntitle        string, 1-120 (required)\nexternalUrl  string | null, http(s) URL up to 2048 (a link shown beside the title, rel=nofollow)\ntheme        "light" | "dark" | "auto"\nshowLatency  boolean\nhideBranding boolean (hide the OpenUptime mark and "Powered by" line; the header shows the logo of externalUrl via favicon.im; 402 branding_not_allowed when the plan does not include it)\nuptimeOkPct  number 1-100, default 99.9 (uptime bars are green from here)\nuptimeWarnPct number 1-100, default 99 (amber from here, red below; must be lower than uptimeOkPct, 400 otherwise)\nmcpEnabled   boolean, default true (public read-only MCP tools and llms.txt may describe the page)\nmaintenanceReminderHours integer 0-168, default 24 (0 = no reminder email before maintenance)\nmonitorIds   uuid[]\ncomponents   [{ monitorId: uuid, groupName?: string 1-60 }], max 200 (takes precedence over monitorIds)` },
       { m: "GET", p: "/status-pages/:id", en: "A status page with its ordered components.", zh: "获取状态页及其有序组件。", res: `{ ...page, monitorIds: uuid[], components: [{ monitorId, groupName }], branding: { allowed, upgradeUrl? } }` },
-      { m: "PATCH", p: "/status-pages/:id", en: "Update title, theme, showLatency or replace the components. Slug cannot be changed. Returns { ok: true }.", zh: "更新标题、主题、延迟显示，或替换组件。slug 不可修改。返回 { ok: true }。", req: `title, theme, showLatency, externalUrl, hideBranding, monitorIds, components   (all optional, as in create)` },
+      { m: "PATCH", p: "/status-pages/:id", en: "Update title, theme, showLatency or replace the components. Slug cannot be changed. Returns { ok: true }.", zh: "更新标题、主题、延迟显示，或替换组件。slug 不可修改。返回 { ok: true }。", req: `title, theme, showLatency, externalUrl, hideBranding, uptimeOkPct, uptimeWarnPct, mcpEnabled, maintenanceReminderHours, monitorIds, components   (all optional, as in create)` },
       { m: "DELETE", p: "/status-pages/:id", en: "Delete a status page. Returns 204.", zh: "删除状态页。返回 204。" },
       { m: "GET", p: "/status-pages/:id/subscribers", en: "Up to 1000 subscribers, newest first.", zh: "最多 1000 位订阅者，按时间倒序。", res: `[{ id, email, confirmedAt, createdAt }]` },
       { m: "DELETE", p: "/status-pages/:id/subscribers/:sid", en: "Remove a subscriber. Returns 204.", zh: "移除订阅者。返回 204。" },
@@ -109,8 +109,8 @@ const groups: Group[] = [
   {
     id: "settings", en: "Settings", zh: "设置",
     eps: [
-      { m: "GET", p: "/settings", en: "Workspace preferences.", zh: "工作区偏好设置。", res: `{ alertLogRetentionDays: 30, checkRetentionDays: 90 }` },
-      { m: "PATCH", p: "/settings", en: "Update preferences. Not available to project-limited keys (403).", zh: "更新偏好设置。受限于项目的密钥不可用（403）。", req: `alertLogRetentionDays  integer 1-365\ncheckRetentionDays     integer 1-365   (raw check results; hourly rollups are kept for a year)` },
+      { m: "GET", p: "/settings", en: "Workspace preferences.", zh: "工作区偏好设置。", res: `{ alertLogRetentionDays: 30, checkRetentionDays: 90, monthlyReport: false }` },
+      { m: "PATCH", p: "/settings", en: "Update preferences. Not available to project-limited keys (403).", zh: "更新偏好设置。受限于项目的密钥不可用（403）。", req: `alertLogRetentionDays  integer 1-365\ncheckRetentionDays     integer 1-365   (raw check results; hourly rollups are kept for a year)\nmonthlyReport          boolean         (email the owners last month\u0027s uptime on the first days of each month)` },
     ],
   },
   {
@@ -291,12 +291,25 @@ DELETE /api/push/devices/:token    204</code></pre>
     <p><span lang="en">Incident history, newest first, 15 per page. Pass the returned <code>next</code> as <code>before</code> to continue; <code>next</code> is null on the last page.</span><span lang="zh-CN">事件历史，按时间倒序，每页 15 条。将返回的 <code>next</code> 作为 <code>before</code> 传入即可翻页；最后一页 <code>next</code> 为 null。</span></p>
     <pre><code is:raw>{ items: [{ id, title, status, severity, startedAt, resolvedAt, updates: [...] }], next }</code></pre>
 
-    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/rss</code></div>
-    <p><span lang="en">RSS 2.0 feed of the latest 30 incidents (<code>application/rss+xml</code>).</span><span lang="zh-CN">最新 30 个事件的 RSS 2.0 订阅源（<code>application/rss+xml</code>）。</span></p>
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/rss.xml</code></div>
+    <p><span lang="en">RSS 2.0 feed of the latest 50 incidents and maintenance windows together (<code>application/rss+xml</code>); titles start with <code>[Incident]</code> or <code>[Maintenance]</code>. <code>/rss</code> is the same feed.</span><span lang="zh-CN">最近 50 条事件和维护窗口合并的 RSS 2.0 订阅源（<code>application/rss+xml</code>），标题以 <code>[Incident]</code> 或 <code>[Maintenance]</code> 开头。<code>/rss</code> 是同一个订阅源。</span></p>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/badge.svg</code></div>
+    <p><span lang="en">SVG badge in the colour of the worst component state, cached for 60 seconds. An unknown or unpublished page gets a grey “unknown” badge. <code>?lang=zh</code> for Chinese.</span><span lang="zh-CN">以最差组件状态着色的 SVG 徽章，缓存 60 秒。不存在或未发布的页面显示灰色“未知”徽章。加 <code>?lang=zh</code> 显示中文。</span></p>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/maintenance</code></div>
+    <p><span lang="en">Upcoming and recent maintenance windows as JSON.</span><span lang="zh-CN">计划中和近期的维护窗口（JSON）。</span></p>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/maintenance.ics</code></div>
+    <p><span lang="en">Maintenance windows as an iCalendar feed (up to 100 events, cached for five minutes).</span><span lang="zh-CN">维护窗口的 iCalendar 订阅源（最多 100 个事件，缓存 5 分钟）。</span></p>
+
+    <div class="ep"><span class="m get">GET</span><code>/api/public/status/&lt;slug&gt;/llms.txt</code></div>
+    <p><span lang="en">A short plain-text summary of the page for language models: overall state, components, active incidents, upcoming maintenance and the machine-readable links.</span><span lang="zh-CN">面向语言模型的简短纯文本摘要：整体状态、组件、进行中的事件、即将到来的维护，以及机器可读的链接。</span></p>
 
     <div class="ep"><span class="m post">POST</span><code>/api/public/status/&lt;slug&gt;/subscribe</code></div>
     <p><span lang="en">Subscribe an email address to incident updates. A confirmation email is sent; the response is <code is:raw>{ "ok": true }</code> either way, so it does not reveal who is subscribed. Limited to 10 requests per hour per client IP, 3 per address per page per hour and 200 per page per hour (429), and 5000 subscribers per page (409).</span><span lang="zh-CN">订阅事件通知邮件。系统会发送确认邮件；无论是否已订阅，响应都是 <code is:raw>{ "ok": true }</code>，不会泄露订阅情况。限流：每个客户端 IP 每小时 10 次、每个邮箱每个状态页每小时 3 次、每个状态页每小时 200 次（429），每个状态页最多 5000 位订阅者（409）。</span></p>
-    <pre><code is:raw>{ "email": "you@example.com" }</code></pre>
+    <p><span lang="en">Optional <code>monitorIds</code> (uuid array) limits the subscription to those components; empty or omitted means the whole page. Asking again with the same address re-sends the confirmation link, or, for a confirmed address, a mail with its unsubscribe link, so lost links can be replaced.</span><span lang="zh-CN">可选的 <code>monitorIds</code>（uuid 数组）把订阅限定在这些组件；留空或不传表示整个页面。用同一邮箱再次请求，会重新发送确认链接；已确认的邮箱则会收到带退订链接的邮件，因此丢失的链接可以补发。</span></p>
+    <pre><code is:raw>{ "email": "you@example.com", "monitorIds": [] }</code></pre>
 
     <div class="ep"><span class="m get">GET</span><code>/api/public/status/_/confirm?token=&lt;token&gt;</code></div>
     <div class="ep"><span class="m get">GET</span><code>/api/public/status/_/unsubscribe?token=&lt;token&gt;</code></div>

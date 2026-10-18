@@ -13,6 +13,12 @@ export type Tool<S extends z.ZodObject = z.ZodObject> = {
   readOnly?: boolean;
   /** Removes data. */
   destructive?: boolean;
+  /**
+   * Safe to serve without credentials: only these tools are listed and callable on an endpoint mounted with
+   * `anonymous: true`. Leave it off for anything that reads or changes private data. Public tools do not take the
+   * `context` arguments, since there is no caller to act as.
+   */
+  public?: boolean;
   /** Turns validated arguments into the REST request. */
   build: (args: z.infer<S>) => RestCall;
 };
@@ -50,9 +56,9 @@ const fail = (id: Rpc["id"], code: number, message: string) => ({ jsonrpc: "2.0"
 export function createMcpServer(options: McpServerOptions) {
   const { info, instructions, tools, context } = options;
   const versions = options.protocolVersions ?? DEFAULT_PROTOCOL_VERSIONS;
-  const withContext = (t: Tool) => (context ? t.schema.extend(context.shape) : t.schema);
+  const withContext = (t: Tool) => (context && !t.public ? t.schema.extend(context.shape) : t.schema);
 
-  const manifest = tools.map((t) => {
+  const describe = (t: Tool) => {
     const { $schema, ...inputSchema } = z.toJSONSchema(withContext(t), { io: "input" }) as Record<string, unknown>;
     return {
       name: t.name,
@@ -60,9 +66,12 @@ export function createMcpServer(options: McpServerOptions) {
       inputSchema,
       annotations: { readOnlyHint: !!t.readOnly, destructiveHint: !!t.destructive, idempotentHint: !!t.readOnly, openWorldHint: false },
     };
-  });
+  };
+  const manifest = tools.map(describe);
+  const publicManifest = tools.filter((t) => t.public).map(describe);
 
-  async function handle(msg: Rpc, call: CallRest) {
+  /** `publicOnly` answers as an endpoint without credentials would: only tools marked `public` exist. */
+  async function handle(msg: Rpc, call: CallRest, o: { publicOnly?: boolean } = {}) {
     if (!msg || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") return fail(msg?.id, -32600, "Invalid request");
     const isNotification = msg.id === undefined;
     switch (msg.method) {
@@ -78,9 +87,9 @@ export function createMcpServer(options: McpServerOptions) {
       case "ping":
         return ok(msg.id, {});
       case "tools/list":
-        return ok(msg.id, { tools: manifest });
+        return ok(msg.id, { tools: o.publicOnly ? publicManifest : manifest });
       case "tools/call": {
-        const tool = tools.find((t) => t.name === msg.params?.name);
+        const tool = tools.find((t) => t.name === msg.params?.name && (!o.publicOnly || t.public));
         if (!tool) return fail(msg.id, -32602, `Unknown tool: ${msg.params?.name}`);
         const parsed = withContext(tool).safeParse(msg.params?.arguments ?? {});
         if (!parsed.success) {
@@ -108,7 +117,7 @@ export function createMcpServer(options: McpServerOptions) {
     }
   }
 
-  return { info, tools, manifest, handle };
+  return { info, tools, manifest, publicManifest, handle };
 }
 
 export type McpServer = ReturnType<typeof createMcpServer>;

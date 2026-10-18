@@ -25,10 +25,12 @@ const tools: Tool[] = [
   { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
 ];
 ---
-<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-15" toc>
+<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-17" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp</code></pre>
+    <p>That is the whole setup for Claude Code; other clients are below. Only want to read a public status page? <a href="#public">No sign-in is needed</a>.</p>
     <h2 id="connect">Connect</h2>
     <p>OpenUptime speaks the Model Context Protocol over Streamable HTTP at <code>https://openuptime.app/api/mcp</code> (use your own domain if you self-host). Every tool calls the REST API with the caller's own credentials, so scopes and project limits apply unchanged. Any client that supports remote MCP servers works; the common ones are below. Each client opens your browser once to authorize with OAuth.</p>
     <h3>Claude Code</h3>
@@ -88,6 +90,15 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       {tools.map((t) => <li><code>{t.name}</code>: {t.en}</li>)}
     </ul>
     <p>Creating projects and workspaces is limited as described above; <code>create_workspace</code> is capped at 10 owned workspaces per account.</p>
+    <h2 id="public">Public status pages, no sign-in</h2>
+    <p>A second endpoint, <code>https://openuptime.app/api/mcp/public</code>, needs no credentials and offers only three read-only tools. They take the slug of a published status page and return what the public page already shows. The tools above still need authorization.</p>
+    <pre><code>claude mcp add --transport http acme-status https://openuptime.app/api/mcp/public</code></pre>
+    <ul>
+      <li><code>status_page_overview</code>: overall state, each component with its status and 90-day uptime, active incidents.</li>
+      <li><code>status_page_incidents</code>: recent incidents with their updates.</li>
+      <li><code>status_page_maintenance</code>: scheduled and ongoing maintenance windows.</li>
+    </ul>
+    <p>The owner of a page can turn this off with <strong>Allow AI agents to read this page</strong> in the status page editor; the page itself stays public. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
     <h2 id="examples">Example prompts</h2>
     <ul>
       <li>“Add an HTTP monitor for https://api.example.com/health that checks every minute, and put it on a new status page.”</li>
@@ -112,6 +123,8 @@ url = "https://openuptime.app/api/mcp"</code></pre>
   <div lang="zh-CN">
     <h1>MCP 服务</h1>
     <p class="lede">让 Claude、Cursor 等任意 MCP 客户端中的 AI Agent 管理你的监控、事件和状态页。</p>
+    <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp</code></pre>
+    <p>Claude Code 只需这一行；其他客户端见下文。只想读取公开状态页？<a href="#public-zh">无需登录</a>。</p>
     <h2 id="connect-zh">接入</h2>
     <p>OpenUptime 通过 Streamable HTTP 提供 Model Context Protocol 服务，地址 <code>https://openuptime.app/api/mcp</code>（自托管请换成你自己的域名）。每个工具都以调用者自己的凭证调用 REST API，因此权限与项目范围保持不变。任何支持远程 MCP 服务的客户端都可以接入，常见的写在下面。每个客户端第一次会打开浏览器，用 OAuth 完成授权。</p>
     <h3>Claude Code</h3>
@@ -171,6 +184,15 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       {tools.map((t) => <li><code>{t.name}</code>：{t.zh}</li>)}
     </ul>
     <p>创建项目和工作区受上述授权范围限制；<code>create_workspace</code> 每个账号最多拥有 10 个工作区。</p>
+    <h2 id="public-zh">公开状态页，无需登录</h2>
+    <p>另有一个端点 <code>https://openuptime.app/api/mcp/public</code>，不需要任何凭证，只提供三个只读工具。它们接收已发布状态页的 slug，返回公开页面本来就显示的内容。上面的其他工具仍然需要授权。</p>
+    <pre><code>claude mcp add --transport http acme-status https://openuptime.app/api/mcp/public</code></pre>
+    <ul>
+      <li><code>status_page_overview</code>：整体状态、各组件的状态与 90 天可用率、进行中的事件。</li>
+      <li><code>status_page_incidents</code>：近期事件及其更新。</li>
+      <li><code>status_page_maintenance</code>：计划中和进行中的维护窗口。</li>
+    </ul>
+    <p>页面所有者可在状态页编辑界面关闭 <strong>允许 AI 代理读取此页面</strong>；页面本身仍然公开。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
     <h2 id="examples-zh">示例提示词</h2>
     <ul>
       <li>“给 https://api.example.com/health 加一个 HTTP 监控，每分钟检测一次，并放到一个新的状态页上。”</li>

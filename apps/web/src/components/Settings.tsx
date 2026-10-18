@@ -20,8 +20,10 @@ export default function Settings() {
   const [cSaved, setCSaved] = useState(false);
   const [cErr, setCErr] = useState("");
   const [cBusy, runC] = useBusy();
+  const [report, setReport] = useState(false);
+  const [reportErr, setReportErr] = useState("");
   useEffect(() => {
-    api.settings().then((s) => { setDays(s.alertLogRetentionDays); setDaysOrig(s.alertLogRetentionDays); setCdays(s.checkRetentionDays); setCdaysOrig(s.checkRetentionDays); }).catch(() => {});
+    api.settings().then((s) => { setReport(s.monthlyReport); setDays(s.alertLogRetentionDays); setDaysOrig(s.alertLogRetentionDays); setCdays(s.checkRetentionDays); setCdaysOrig(s.checkRetentionDays); }).catch(() => {});
     api.me().then((m) => { setName(m.organization.name); setOrig(m.organization.name); });
   }, []);
   async function save(e: React.SyntheticEvent) {
@@ -73,6 +75,21 @@ export default function Settings() {
           {cErr && <p className="err">{cErr}</p>}
           <div><button className="btn primary" disabled={cBusy || cdays === cdaysOrig || !Number.isInteger(cdays) || cdays < 1 || cdays > 365}>{cBusy ? t("Saving…") : cSaved ? t("Saved ✓") : t("Save changes")}</button></div>
         </form>
+        <div className="card sect">
+          <h3>{t("Monthly report")}</h3>
+          <p className="muted">{t("On the first days of each month, email the workspace owners last month's uptime, downtime and incidents for every monitor. Off by default.")}</p>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={report} onChange={async (e) => {
+              const on = e.target.checked;
+              setReportErr("");
+              setReport(on);
+              try { setReport((await api.updateSettings({ monthlyReport: on })).monthlyReport); }
+              catch (x) { setReport(!on); setReportErr((x as Error).message); }
+            }} />
+            {t("Email me a report every month")}
+          </label>
+          {reportErr && <p className="err">{reportErr}</p>}
+        </div>
         <div className="card sect">
           <h3>{t("Runtime")}</h3>
           <div className="kv">

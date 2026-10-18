@@ -160,6 +160,7 @@ Registers `POST <path>` (and answers `405` with `Allow: POST` to `GET` and `DELE
 | `contextHeaders` | none | Other headers to forward, such as a workspace id. |
 | `cookieOrigins` | none | Origins other than the endpoint's own that may use a session cookie (for example your web app). |
 | `probePath` | none | An authenticated `GET` run before the first real call; see below. |
+| `anonymous` | `false` | Serve without credentials: nothing the caller sends is forwarded, and only tools defined with `public: true` are listed or callable. Mount it as a second endpoint (for example `/api/mcp/public`) beside the authenticated one. |
 | `resourceMetadataPath` | `/.well-known/oauth-protected-resource<path>` | Where clients find the protected-resource metadata. |
 
 JSON-RPC batches are supported. A body that contains only notifications is answered with `202`.

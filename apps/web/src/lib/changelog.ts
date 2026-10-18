@@ -108,6 +108,85 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: "public-status-mcp",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Read status pages from AI agents", zh: "AI 代理可读取状态页" },
+    summary: {
+      en: "A public MCP endpoint lets an agent read a status page by its slug without signing in.",
+      zh: "公开的 MCP 端点让 AI 代理无需登录即可按 slug 读取状态页。",
+    },
+    points: [
+      { en: "Three read-only tools, status_page_overview, status_page_incidents and status_page_maintenance, are served at /api/mcp/public; the existing tools still require authorization.", zh: "三个只读工具 status_page_overview、status_page_incidents 和 status_page_maintenance 在 /api/mcp/public 提供;原有工具仍需授权。" },
+      { en: "Each page has a short llms.txt, and /.well-known/mcp.json lists the MCP endpoints.", zh: "每个状态页都有一份简短的 llms.txt,/.well-known/mcp.json 列出 MCP 端点。" },
+      { en: "A page owner can switch this off per page with “Allow AI agents to read this page”; the page itself stays public.", zh: "页面所有者可以用“允许 AI 代理读取此页面”按页关闭;页面本身仍然公开。" },
+      { en: "The MCP docs now start with the one-line claude mcp add command.", zh: "MCP 文档现在以一行 claude mcp add 命令开头。" },
+    ],
+    link: { href: "/docs/mcp#public", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
+  },
+  {
+    id: "monthly-uptime-report",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Monthly uptime report by email", zh: "月度可用率邮件报告" },
+    summary: {
+      en: "Workspace owners can opt in to an email with last month's uptime for every monitor.",
+      zh: "工作区所有者可以选择接收邮件,查看上个月每个监控的可用率。",
+    },
+    points: [
+      { en: "Turn it on under Settings → Monthly report; it is off by default and sent once per month in the first days of the month.", zh: "在 设置 → 月度报告 中开启;默认关闭,每月初发送一次。" },
+      { en: "The report lists uptime, downtime minutes and the number of incidents per monitor.", zh: "报告列出每个监控的可用率、停机分钟数和事件数量。" },
+    ],
+    cloud: { en: "The report email counts toward the plan's monthly email allowance.", zh: "报告邮件计入套餐的每月邮件额度。" },
+  },
+  {
+    id: "maintenance-reminders",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Maintenance calendar and reminders", zh: "维护日历与提醒" },
+    summary: {
+      en: "Scheduled maintenance can be followed in a calendar app, and subscribers get a reminder before it starts.",
+      zh: "可以在日历应用中订阅计划维护,订阅者会在维护开始前收到提醒。",
+    },
+    points: [
+      { en: "Every status page serves its maintenance windows as an iCalendar feed at maintenance.ics.", zh: "每个状态页都以 maintenance.ics 提供维护窗口的 iCalendar 订阅源。" },
+      { en: "Confirmed subscribers get one email before a window starts, 24 hours by default; set the lead time from 0 to 168 hours in the status page editor, where 0 turns it off.", zh: "已确认的订阅者会在维护窗口开始前收到一封邮件,默认提前 24 小时;可在状态页编辑界面设置 0 到 168 小时,0 表示关闭。" },
+    ],
+    cloud: { en: "Reminder emails count toward the plan's monthly email allowance.", zh: "提醒邮件计入套餐的每月邮件额度。" },
+    link: { href: "/docs/embed#feeds", label: { en: "Read about feeds and the calendar", zh: "阅读订阅源与日历文档" } },
+  },
+  {
+    id: "status-page-uptime-colors",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Choose the uptime bar colors", zh: "自定义可用率条颜色" },
+    summary: {
+      en: "Each status page can set where its daily uptime bars turn amber and red.",
+      zh: "每个状态页都可以设置每日可用率条何时变为琥珀色和红色。",
+    },
+    points: [
+      { en: "Set two thresholds under Uptime and notifications in the editor; the defaults are 99.9% for green and 99% for amber.", zh: "在编辑界面的“可用率与通知”中设置两个阈值,默认绿色 99.9%、琥珀色 99%。" },
+      { en: "The amber value must be lower than the green one.", zh: "琥珀色阈值必须低于绿色阈值。" },
+    ],
+  },
+  {
+    id: "status-page-feeds-subscribers",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Better feeds and subscriptions", zh: "更好的订阅源与订阅" },
+    summary: {
+      en: "Status pages get a combined RSS feed and an embeddable Markdown badge, and subscribers get more control.",
+      zh: "状态页新增合并的 RSS 订阅源和可嵌入的 Markdown 徽章,订阅者拥有更多控制。",
+    },
+    points: [
+      { en: "rss.xml lists the latest 50 incidents and maintenance windows, and the status page links to it so feed readers find it.", zh: "rss.xml 列出最近 50 条事件和维护窗口,状态页中带有它的链接,订阅阅读器可自动发现。" },
+      { en: "The editor's Embed card adds a Markdown badge snippet and the feed and calendar addresses.", zh: "编辑界面的“嵌入”卡片新增 Markdown 徽章代码,以及订阅源和日历地址。" },
+      { en: "Visitors can subscribe to only the components they care about.", zh: "访客可以只订阅关心的组件。" },
+      { en: "Entering an address again sends a fresh confirmation or unsubscribe link, so an expired or lost link can be replaced.", zh: "再次输入邮箱会重新发送确认或退订链接,过期或丢失的链接可以补发。" },
+    ],
+    link: { href: "/docs/embed", label: { en: "Read the embed docs", zh: "阅读嵌入文档" } },
+  },
+  {
     id: "docker-scheduler-watchdog",
     date: "2026-10-17",
     edition: "community",

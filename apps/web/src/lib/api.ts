@@ -41,7 +41,8 @@ export type Incident = {
 };
 
 export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
-export type StatusPage = { id: string; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
+export type WorkspaceSettings = { alertLogRetentionDays: number; checkRetentionDays: number; monthlyReport: boolean };
+export type StatusPage = { id: string; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
 
 // Requests started as soon as the page's HTML is parsed (lib/boot.ts), in parallel with the JS bundles loading:
 // the first GET for a path is answered by that in-flight request, so a page load is HTML (static) + one parallel API round.
@@ -198,9 +199,9 @@ export const api = {
   projectAlerting: (projectId: string) => req<ProjectAlerting>(`/projects/${projectId}/alerting`),
   saveProjectAlerting: (projectId: string, b: ProjectAlerting) => req<ProjectAlerting>(`/projects/${projectId}/alerting`, { method: "PUT", body: JSON.stringify(b) }),
   alertLog: (limit = 30) => req<AlertDelivery[]>(`/alert-log?limit=${limit}`),
-  settings: () => req<{ alertLogRetentionDays: number; checkRetentionDays: number }>("/settings"),
-  updateSettings: (b: { alertLogRetentionDays?: number; checkRetentionDays?: number }) =>
-    req<{ alertLogRetentionDays: number; checkRetentionDays: number }>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
+  settings: () => req<WorkspaceSettings>("/settings"),
+  updateSettings: (b: Partial<WorkspaceSettings>) =>
+    req<WorkspaceSettings>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
   createChannel: (b: { type: Channel["type"]; name: string; config: Record<string, string>; autoEnable?: boolean }) =>
     req<Channel>("/channels", { method: "POST", body: JSON.stringify(b) }),
   updateChannel: (id: string, b: { name?: string; enabled?: boolean; autoEnable?: boolean; config?: Record<string, string> }) => req<Channel>(`/channels/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
