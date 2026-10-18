@@ -1,7 +1,8 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
-import { api, ago, type AlertDelivery, type Channel } from "../lib/api";
+import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from "../lib/api";
+import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 
 const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "slack", label: "Slack", desc: "Post to a channel with an incoming webhook." },
@@ -25,6 +26,7 @@ const ICONS: Record<Channel["type"], React.ReactNode> = {
   push: svg(<><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18h2" /></>),
   webhook: svg(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" /></>),
 };
+const REPEATS = [5, 10, 15, 30, 60];
 const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
 
 export default function Alerting() {
@@ -40,9 +42,20 @@ export default function Alerting() {
   const [log, setLog] = useState<AlertDelivery[] | null>(null);
   const [days, setDays] = useState(30);
   const [push, setPush] = useState(false);
+  const [rules, setRules] = useState<ProjectAlerting | null>(null);
+  const [projectId, setProjectId] = useState("");
+  const [rulesErr, setRulesErr] = useState("");
+  const [rulesNote, setRulesNote] = useState("");
+  const [savingRules, saveRulesBusy] = useBusy();
+  const saveRules = () => saveRulesBusy(async () => {
+    setRulesErr(""); setRulesNote("");
+    if (!rules) return;
+    if (rules.escalation.some((x) => !x.channelIds.length)) { setRulesErr(t("Pick at least one channel for each level.")); return; }
+    try { setRules(await api.saveProjectAlerting(projectId, rules)); setRulesNote(t("Saved")); } catch (e) { setRulesErr((e as Error).message); }
+  });
   const loadLog = () => api.alertLog(30).then(setLog).catch(() => setLog([]));
   const load = () => api.channels().then(setItems);
-  useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); }, []);
+  useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", auto: false };
   const openAdd = () => { setErr(""); setEditId(""); setF(blank); setAdding(true); };
@@ -136,20 +149,62 @@ export default function Alerting() {
         </div>
         {log === null && <p className="muted">{t("Loading…")}</p>}
         {log?.length === 0 && <p className="muted">{t("No alerts sent yet.")}</p>}
-        {log?.map((d) => (
-          <div className="route" key={d.id} style={{ alignItems: "flex-start" }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <b style={{ fontWeight: 500 }}>{d.channelName}</b>
-              <small>
-                {d.kind === "test" ? t("Test alert") : d.kind === "incident.opened" ? t("Down alert") : d.kind === "incident.resolved" ? t("Recovery alert") : d.kind === "incident.muted" ? t("Down alert muted") : d.kind}
-                {d.monitorName && d.kind !== "test" ? ` · ${d.monitorName}` : ""} · {ago(d.createdAt)}
-              </small>
-              {d.error && d.kind !== "incident.muted" && <small className="mono" style={{ color: d.error.startsWith("skipped:") ? "var(--muted)" : "var(--down)", wordBreak: "break-word" }}>{d.error.startsWith("skipped:") ? t("Skipped: email allowance used up for this period") : d.error}</small>}
+        {log?.map((d) => {
+          const state = deliveryState(d);
+          const reason = deliveryReason(d);
+          return (
+            <div className="route" key={d.id} style={{ alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <b style={{ fontWeight: 500 }}>{d.channelName}</b>
+                <small>
+                  {d.kind === "test" ? t("Test alert") : d.kind === "incident.opened" ? t("Down alert") : d.kind === "incident.resolved" ? t("Recovery alert") : d.kind === "incident.reminder" ? t("Reminder") : d.kind === "incident.escalated" ? t("Escalation") : d.kind === "incident.muted" ? t("Down alert muted") : d.kind}
+                  {d.monitorName && d.kind !== "test" ? ` · ${d.monitorName}` : ""} · {ago(d.createdAt)}
+                </small>
+                {reason && d.kind !== "incident.muted" && <small className="mono" style={{ color: state === "failed" ? "var(--down)" : "var(--muted)", wordBreak: "break-word" }}>{reason.startsWith("skipped: email allowance") ? t("Skipped: email allowance used up for this period") : reason}</small>}
+              </div>
+              <span className={`pill ${stateClass(state)}`}>{t(state === "sent" ? "Sent" : state === "failed" ? "Failed" : state === "skipped" ? "Skipped" : state === "muted" ? "Muted" : state === "pending" ? "Pending" : "Sending")}</span>
             </div>
-            <span className={`pill ${d.kind === "incident.muted" || d.error?.startsWith("skipped:") ? "" : d.ok ? "up" : "down"}`}>{d.kind === "incident.muted" ? t("Muted") : d.error?.startsWith("skipped:") ? t("Skipped") : d.ok ? t("Sent") : t("Failed")}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {rules && items && (
+        <div className="card cc" style={{ marginTop: 22 }}>
+          <div className="cc-h"><h3>{t("Repeat and escalate")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Until the incident is acknowledged or resolved")}</span></div>
+          <label className="fld">{t("Repeat the alert")}
+            <select className="in" value={rules.reminderIntervalMin ?? ""} onChange={(e) => setRules({ ...rules, reminderIntervalMin: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">{t("Off")}</option>
+              {REPEATS.map((n) => <option key={n} value={n}>{t("Every")} {n} {t("min")}</option>)}
+            </select>
+          </label>
+          <p className="muted" style={{ margin: "0 0 10px" }}>{t("Repeats go to mobile app channels, at most 10 times.")}</p>
+          <button type="button" className="route tog" onClick={() => setRules({ ...rules, reminderEmail: !rules.reminderEmail })}>
+            <div><b style={{ fontWeight: 500 }}>{t("Repeat by email too")}</b><small>{t("Email channels get the repeats as well.")}</small></div>
+            <span className={`tg ${rules.reminderEmail ? "on" : ""}`} />
+          </button>
+          <h4 style={{ margin: "18px 0 6px" }}>{t("Escalation")}</h4>
+          <p className="muted" style={{ margin: "0 0 10px" }}>{t("If nobody has acknowledged the incident after the delay, also notify these channels. Up to 3 levels.")}</p>
+          {rules.escalation.map((st, i) => (
+            <div className="route" key={i} style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span>{t("After")}</span>
+              <input className="in" type="number" min={1} max={1440} style={{ width: 90 }} value={st.escalateAfterMin} onChange={(e) => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, escalateAfterMin: Number(e.target.value) } : x) })} />
+              <span>{t("min, notify")}</span>
+              <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
+                {items.map((c) => (
+                  <button type="button" key={c.id} className={`btn sm ${st.channelIds.includes(c.id) ? "primary" : ""}`} onClick={() => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, channelIds: x.channelIds.includes(c.id) ? x.channelIds.filter((id) => id !== c.id) : [...x.channelIds, c.id] } : x) })}>{c.name}</button>
+                ))}
+              </span>
+              <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: rules.escalation.filter((_, j) => j !== i) })}>{t("Remove")}</button>
+            </div>
+          ))}
+          {rules.escalation.length < 3 && items.length > 0 && (
+            <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: [...rules.escalation, { escalateAfterMin: (rules.escalation.at(-1)?.escalateAfterMin ?? 0) + 15, channelIds: [items[0].id] }] })}>{t("+ Add level")}</button>
+          )}
+          {rulesErr && <p className="err">{rulesErr}</p>}
+          {rulesNote && <p className="ok-note">{rulesNote}</p>}
+          <div className="formact"><button type="button" className="btn primary sm" disabled={savingRules} onClick={saveRules}>{savingRules ? t("Saving…") : t("Save changes")}</button></div>
+        </div>
+      )}
 
       {adding && (
         <div className="modal" onClick={() => setAdding(false)}>

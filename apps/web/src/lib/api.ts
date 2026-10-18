@@ -31,6 +31,7 @@ export type Incident = {
   monitor?: { id: string; name: string; status: string; target: string; type: string } | null;
   assignee?: { name: string; email: string } | null;
   checks?: CheckResult[];
+  deliveries?: AlertDelivery[];
 };
 
 export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
@@ -148,8 +149,20 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type AlertDelivery = {
   id: string; channelId: string | null; channelName: string; channelType: string;
-  kind: "incident.opened" | "incident.resolved" | "test" | string;
+  kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated" | "test" | string;
   monitorName: string | null; ok: boolean; error: string | null; createdAt: string;
+  /** null on rows written before delivery states existed */
+  status?: "pending" | "sending" | "sent" | "failed" | "skipped" | null;
+  /** why a delivery was skipped or failed, in words */
+  statusMessage?: string | null;
+  /** when the incident was acknowledged after this alert went out */
+  acknowledgedAt?: string | null;
+};
+
+export type ProjectAlerting = {
+  reminderIntervalMin: number | null;
+  reminderEmail: boolean;
+  escalation: { channelIds: string[]; escalateAfterMin: number }[];
 };
 
 export const api = {
@@ -176,6 +189,8 @@ export const api = {
   /** What this deployment can do (public). */
   config: () => req<{ push?: { apns: boolean } }>("/config"),
   channels: () => req<Channel[]>("/channels"),
+  projectAlerting: (projectId: string) => req<ProjectAlerting>(`/projects/${projectId}/alerting`),
+  saveProjectAlerting: (projectId: string, b: ProjectAlerting) => req<ProjectAlerting>(`/projects/${projectId}/alerting`, { method: "PUT", body: JSON.stringify(b) }),
   alertLog: (limit = 30) => req<AlertDelivery[]>(`/alert-log?limit=${limit}`),
   settings: () => req<{ alertLogRetentionDays: number; checkRetentionDays: number }>("/settings"),
   updateSettings: (b: { alertLogRetentionDays?: number; checkRetentionDays?: number }) =>

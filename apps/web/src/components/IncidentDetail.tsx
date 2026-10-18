@@ -2,6 +2,9 @@ import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
 import { ago, api, type Incident } from "../lib/api";
+import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
+
+const KIND: Record<string, string> = { "incident.opened": "Down alert", "incident.resolved": "Recovery alert", "incident.reminder": "Reminder", "incident.escalated": "Escalation", "incident.muted": "Down alert muted" };
 
 const STATES: Incident["status"][] = ["investigating", "identified", "monitoring", "resolved"];
 const utc = (iso: string) => new Date(iso).toISOString().slice(11, 16) + " UTC";
@@ -70,6 +73,26 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div className="ev"><b>{t("Incident opened")}</b><time>{utc(inc.startedAt)}</time><p>{inc.auto ? t("Consecutive failed checks confirmed.") : t("Declared manually.")}</p></div>
             </div>
           </div>
+
+          {!!inc.deliveries?.length && (
+            <div className="card cc">
+              <div className="cc-h"><h3>{t("Notifications")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Who was told, and why not")}</span></div>
+              {inc.deliveries.map((d) => {
+                const state = deliveryState(d);
+                const reason = deliveryReason(d);
+                return (
+                  <div className="route" key={d.id} style={{ alignItems: "flex-start" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <b style={{ fontWeight: 500 }}>{d.channelName}</b>
+                      <small>{t(KIND[d.kind] ?? d.kind)} · {ago(d.createdAt)}{d.acknowledgedAt ? ` · ${t("acknowledged")} ${ago(d.acknowledgedAt)}` : ""}</small>
+                      {reason && <small className="mono" style={{ color: state === "failed" ? "var(--down)" : "var(--muted)", wordBreak: "break-word" }}>{reason}</small>}
+                    </div>
+                    <span className={`pill ${stateClass(state)}`}>{t(state === "sent" ? "Sent" : state === "failed" ? "Failed" : state === "skipped" ? "Skipped" : state === "muted" ? "Muted" : "Sending")}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {!!inc.checks?.length && (
             <div className="card cc">
