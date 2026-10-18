@@ -53,6 +53,13 @@ describe("database probes", () => {
   const probe = (type: CheckInput["type"], target: string) =>
     runCheck({ type, target, method: "GET", expectedStatus: 200, timeoutMs: 2000 });
 
+  it("tcp: leaves no timeout timer behind after a quick answer", async () => {
+    const t = await fake((s) => s.end());
+    const before = (process as unknown as { getActiveResourcesInfo(): string[] }).getActiveResourcesInfo().filter((r) => r === "Timeout").length;
+    expect((await probe("tcp", t)).ok).toBe(true);
+    const after = (process as unknown as { getActiveResourcesInfo(): string[] }).getActiveResourcesInfo().filter((r) => r === "Timeout").length;
+    expect(after).toBeLessThanOrEqual(before);
+  });
   it("postgres: answers the SSLRequest", async () => {
     const t = await fake((s) => s.once("data", () => s.end("N")));
     expect((await probe("postgres", t)).ok).toBe(true);
