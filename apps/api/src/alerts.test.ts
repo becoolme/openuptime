@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sendPush } from "./apns";
 import { deliver, retryDeliveries, sendEscalations, sendReminders } from "./alerts";
 
 // these tests stub the global fetch and use made-up host names; the pinned connection would bypass the stub and go to the real network
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
+vi.mock("./apns", () => ({ sendPush: vi.fn(async () => {}) }));
 vi.mock("./pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) }));
 
 const ev = { kind: "incident.opened" as const, incident: { id: "i1", title: "Down" }, monitor: { name: "API", target: "https://x" } };
@@ -59,6 +61,15 @@ describe("retryDeliveries", () => {
     expect(await run(0, 500)).toMatchObject({ retryInSec: 60, message: expect.stringMatching(/^failed: .*HTTP 500.*trying again in 60 s/) });
     expect((await run(2, 503) as { message: string }).message).toMatch(/^failed: .*HTTP 503.*gave up after 3 attempts/);
   });
+  it("does not send a retried down alert for an incident that has recovered, or a recovery for one that was reopened", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    expect(await run(1, 200, { kind: "incident.opened", incident: { resolvedAt: new Date() } })).toMatchObject({ status: "skipped", message: expect.stringMatching(/^skipped: .*resolved/) });
+    expect(await run(1, 200, { kind: "incident.resolved", incident: { resolvedAt: null } })).toMatchObject({ status: "skipped", message: expect.stringMatching(/^skipped: .*reopened/) });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // the matching states still go out
+    expect(await run(1, 200, { kind: "incident.resolved", incident: { resolvedAt: new Date() } })).toMatchObject({ status: "sent" });
+    fetchSpy.mockRestore();
+  });
   it("does not repeat a reminder for an incident that was acknowledged meanwhile", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const r = await run(0, 200, { kind: "incident.reminder", incident: { acknowledgedAt: new Date() } });
@@ -110,10 +121,30 @@ describe("reminders and escalation", () => {
 
   it("records a suppressed repeat during maintenance instead of sending it", async () => {
     const due = [{ incident, monitor, project: { reminderIntervalMin: 5, reminderEmail: false, escalation: [] }, number: 1 }];
-    const f = fake({ claimReminders: async () => due, underMaintenance: async () => true, channelsToAlert: async () => [ch("push1", "push")] });
-    await sendReminders(f.repo);
+    // the repo is asked about maintenance while claiming, so a suppressed repeat is never counted
+    const asked: string[] = [];
+    const f = fake({
+      claimReminders: async (_limit: number, skip?: (m: typeof monitor) => Promise<boolean>) => ((await skip?.(monitor)) ? [] : due),
+      underMaintenance: async (m: { id: string }) => (asked.push(m.id), true),
+      channelsToAlert: async () => [ch("push1", "push")],
+    });
+    expect(await sendReminders(f.repo)).toBe(0);
+    expect(asked).toEqual(["m1"]);
     expect(f.queued).toEqual([]);
-    expect(f.logged[0]).toMatchObject({ status: "skipped", statusMessage: "suppressed: maintenance", kind: "incident.reminder" });
+  });
+
+  it("pushes a phone once per event, however many push channels reach it", async () => {
+    const due = [{ incident, monitor, step: { channelIds: ["p1", "p2"], escalateAfterMin: 15 }, level: 1 }];
+    const f = fake({
+      claimEscalations: async () => due,
+      channelsByIds: async () => [ch("p1", "push"), ch("p2", "push")],
+      pushDevicesForOrganization: async () => [{ id: "d1", token: "t1", userId: "u", platform: "ios", environment: "production", locale: null }, { id: "d2", token: "t2", userId: "u", platform: "ios", environment: "production", locale: null }],
+    });
+    vi.mocked(sendPush).mockClear();
+    await sendEscalations(f.repo);
+    expect(vi.mocked(sendPush).mock.calls.map((c) => c[1].map((d) => d.id))).toEqual([["d1", "d2"]]);
+    expect(f.finished.map((x) => x.status).sort()).toEqual(["sent", "skipped"]);
+    expect(f.finished.find((x) => x.status === "skipped")!.message).toMatch(/already notified/);
   });
 
   it("notifies the channels of the due escalation level and records a switched-off one as skipped", async () => {

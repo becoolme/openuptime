@@ -199,7 +199,8 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   // being recorded in the status but never alerted.
   const opensOutage = goingDown && !parentDown;
   // still failing and down since a dependency's outage muted it, and the dependency is back: nobody was told yet
-  const lateOpen = !out.ok && !goingDown && status === "down" && m.status === "down" && !!m.dependsOnMonitorId && !parentDown && !(await repo.hasOpenIncident(m.id, false));
+  // (not when a person already resolved an incident during this outage)
+  const lateOpen = !out.ok && !goingDown && status === "down" && m.status === "down" && !!m.dependsOnMonitorId && !parentDown && !(await repo.hasOpenIncident(m.id, false)) && !(await repo.outageHandledByPerson(m.id));
   const pending = opensOutage || recovering || slowTrips || slowClears;
   await repo.setMonitorState(m.id, {
     consecutiveFailures: failures,
@@ -223,8 +224,9 @@ async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entit
     { status: "investigating", body: reason },
   );
   if (!inc) return; // a concurrent check opened it
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
+  // the follow-up clocks are set before the alert goes out, so a slow channel cannot delay them
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
+  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
 }
 
 const SUPPRESSED_MAINTENANCE = "suppressed: maintenance";
@@ -250,9 +252,16 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   // an outage is not blocked by a latency incident: that one is superseded (resolved without a recovery alert)
   for (const slow of await repo.openIncidents(m.id, true)) await repo.resolveIncident(slow.id, "Superseded: the monitor is down.");
   if (await repo.hasOpenIncident(m.id, false)) return;
-  // failing again right after a recovery is the same outage: reopen it, without paging a second time
+  // failing again right after a recovery is the same outage: reopen it (an incident a person resolved stays resolved)
   const reopened = await repo.reopenIncident(m.id, new Date(Date.now() - REOPEN_WINDOW_MS), `Failing again. ${reason}`, `reopened: failed again within ${REOPEN_WINDOW_MS / 60_000} minutes of resolving; ${evaluationNote}`);
-  if (reopened) return;
+  if (reopened) {
+    // it starts over as unacknowledged: its reminders and escalation are scheduled again and people are told it is back,
+    // unless the first alert was muted as flapping
+    if (await repo.incidentMuted(reopened.id)) return;
+    await step("reminder schedule", () => repo.scheduleFollowUps({ ...reopened, startedAt: new Date() }, m.projectId ?? null));
+    await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: reopened, monitor: m, reason, reopened: true }, m.channelIds, entitlements);
+    return;
+  }
   // a monitor that flaps (down, up, down…) gets one down alert per window, not one per flip
   const recent = await repo.hadIncidentSince(m.id, new Date(Date.now() - FLAP_WINDOW_MS));
   const inc = await repo.openAutoIncident(
@@ -269,8 +278,8 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
     }]);
     return;
   }
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
+  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
 }
 
 const FLAP_WINDOW_MS = 15 * 60_000;

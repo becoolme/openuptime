@@ -17,6 +17,8 @@ type Event = {
   test?: true;
   /** latency incident rather than an outage */
   slow?: true;
+  /** the monitor failed again soon after recovering, so an earlier incident was reopened */
+  reopened?: true;
   monitor: { id?: string; projectId?: string | null; name: string; target: string };
 };
 
@@ -77,7 +79,7 @@ async function postLark(url: string, text: string, secret?: string) {
 
 const alertText = (ev: Event) =>
   ev.kind === "incident.opened"
-    ? `${ev.slow ? "🟡" : "🔴"} ${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"} — ${ev.incident.title}`
+    ? `${ev.slow ? "🟡" : "🔴"} ${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"}${ev.reopened ? " again" : ""} — ${ev.incident.title}`
     : ev.kind === "incident.reminder"
       ? `⏰ ${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — reminder ${ev.count ?? 1}`
       : ev.kind === "incident.escalated"
@@ -120,11 +122,11 @@ const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) =
  * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
  * `meter` charges an email against the workspace allowance; retries are not charged again.
  */
-async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements) {
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: Set<string>) {
   const attempts = d.attempts + 1;
   try {
     if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
-    await deliver(channel, ev, alertText(ev), lang, repo);
+    await deliver(channel, ev, alertText(ev), lang, repo, pushed);
     await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
     return true;
   } catch (e) {
@@ -151,6 +153,12 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
       await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
       continue;
     }
+    // the incident changed while this alert waited for its retry: a "down" for one that has recovered, or a "recovered" for one that was reopened
+    if ((delivery.kind === "incident.opened" && incident.resolvedAt) || (delivery.kind === "incident.resolved" && !incident.resolvedAt)) {
+      const why = delivery.kind === "incident.opened" ? "skipped: the incident was resolved before this alert could be sent" : "skipped: the incident was reopened before this alert could be sent";
+      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+      continue;
+    }
     const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount);
     await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined);
   }
@@ -168,6 +176,8 @@ async function fanOut(repo: Repo, orgId: string, ev: Event, channels: AlertChann
   const live = channels.filter((c) => c.enabled);
   const off = channels.filter((c) => !c.enabled);
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
+  // a phone is pushed once per event, however many push channels reach it
+  const pushed = new Set<string>();
   const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false })));
   await Promise.all(
     live.map(async (c) => {
@@ -175,11 +185,11 @@ async function fanOut(repo: Repo, orgId: string, ev: Event, channels: AlertChann
       const row = rows.find((r) => r.channelId === c.id);
       if (!row) {
         // no row to claim: send anyway, only the history is missing
-        await deliver(c, ev, alertText(ev), lang, repo).catch((e) => console.error(`alert via ${c.name} failed`, e));
+        await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
         return;
       }
       const claimed = await repo.claimDelivery(row.id);
-      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements);
+      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed);
     }),
   );
 }
@@ -206,13 +216,11 @@ const suppressed = (organizationId: string, ev: Event, why: string): NewDelivery
  * counts it, so a repeat is sent once however many workers run; intervals that were missed collapse into this one.
  */
 export async function sendReminders(repo: Repo, entitlements: Entitlements = unmetered, limit = 10) {
-  const due = await repo.claimReminders(limit);
+  // Monitors under maintenance are not claimed: a suppressed repeat must not use up the incident's repeats, and it goes out
+  // after the window if the incident is still unacknowledged.
+  const due = await repo.claimReminders(limit, (monitor) => repo.underMaintenance(monitor));
   for (const { incident, monitor, project, number } of due) {
     const ev = eventOf("incident.reminder", incident, monitor, number);
-    if (await repo.underMaintenance(monitor)) {
-      await repo.logDeliveries([suppressed(incident.organizationId, ev, "suppressed: maintenance")]);
-      continue;
-    }
     const all = await repo.channelsToAlert(incident.organizationId, { channelIds: monitor.channelIds, projectId: monitor.projectId, withDisabled: true });
     // push is what repeats are for; email only when the project opted in
     const channels = all.filter((c) => c.type === "push" || (project.reminderEmail && c.type === "email"));
@@ -250,7 +258,7 @@ export async function sweepDeliveries(repo: Repo) {
 }
 
 /** Send one alert to one channel; throws when the provider rejects it. */
-export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo) {
+export async function deliver(c: { type: string; name?: string; config: unknown; organizationId?: string }, ev: Event, text: string, lang: Lang = "en", repo?: Repo, pushed?: Set<string>) {
   const L = (k: string, v?: Record<string, string>) => tr(lang, k, v);
   // a repeat or an escalation reads like the down alert
   const opened = ev.kind !== "incident.resolved";
@@ -267,7 +275,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       break;
     case "webhook":
       need(cfg.url, "webhook URL");
-      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.slow ? { slow: true } : {}) });
+      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.slow ? { slow: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
       break;
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
@@ -287,7 +295,10 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       if (!repo || !c.organizationId) throw new Error("Push channel has no workspace to look devices up in");
       const devices = await repo.pushDevicesForOrganization(c.organizationId);
       if (!devices.length) throw new Skipped("skipped: no phone has registered for push alerts");
-      await sendPush(repo, devices, ev, c.organizationId);
+      const fresh = pushed ? devices.filter((d) => !pushed.has(d.id)) : devices;
+      if (!fresh.length) throw new Skipped("skipped: every phone was already notified through another push channel");
+      fresh.forEach((d) => pushed?.add(d.id));
+      await sendPush(repo, fresh, ev, c.organizationId);
       break;
     }
     case "email":
