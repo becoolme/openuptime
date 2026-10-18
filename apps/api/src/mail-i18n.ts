@@ -57,7 +57,6 @@ const zh: Record<string, string> = {
   "Status updates from {title}. Powered by OpenUptime.": "来自 {title} 的状态更新，由 OpenUptime 提供。",
   "Status updates from {title}.": "来自 {title} 的状态更新。",
   "Confirm subscription": "确认订阅",
-  "You are already subscribed to {title}": "你已订阅 {title}",
   "This address already gets incident emails. Use the button below if you want to stop them.": "此邮箱已在接收事件邮件。如果想停止接收，请点击下面的按钮。",
   "Scheduled maintenance: {name}": "计划维护：{name}",
   "Scheduled maintenance for {title} starts soon. Checks keep running, but alerts are paused while it lasts.": "{title} 的计划维护即将开始。检测会继续运行，但维护期间不会发送告警。",

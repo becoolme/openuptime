@@ -601,8 +601,8 @@ export interface Repo {
   pageIncidents(page: StatusPage, o: { limit: number; before?: Date }): Promise<IncidentWithUpdates[]>;
   subscriberCount(pageId: string): Promise<number>;
   /**
-   * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row);
-   * an existing row (pending or confirmed) keeps its own locale and component choice, whoever asks again.
+   * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row).
+   * A pending row takes the newest locale and component choice; a confirmed row is never changed, whoever asks again.
    */
   addSubscriber(s: { pageId: string; email: string; token: string; locale: string; monitorIds?: string[] }): Promise<{ locale: string | null; token: string; confirmed: boolean; created: boolean }>;
   /** Maintenance windows touching the page (its monitors', plus workspace-wide ones) that end after `since`, newest start first. */

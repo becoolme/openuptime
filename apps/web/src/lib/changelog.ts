@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "docs-fixes-3",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Clearer subscription docs and small fixes", zh: "更清晰的订阅文档与小修复" },
+    summary: {
+      en: "The subscribe docs now describe what happens when an address subscribes twice, and a postmortem goes private when a new update reopens its incident.",
+      zh: "订阅文档现在写明同一邮箱重复订阅时的处理方式；新的更新重新打开事件时，已发布的复盘会转为私有。",
+    },
+    points: [
+      { en: "Subscribing again replaces the language and components of a pending address and sends a fresh confirmation link; a confirmed address gets no mail and no change.", zh: "重复订阅时，待确认的邮箱会以最新的语言和组件覆盖原有选择并收到新的确认链接；已确认的邮箱不会收到邮件，也不会有改动。" },
+      { en: "The per-address subscribe limit is shared by everyone, so someone else can delay your confirmation mail by submitting your address repeatedly.", zh: "每个邮箱的订阅限流对所有人共用，他人反复提交你的邮箱，可能会延迟你的确认邮件。" },
+      { en: "Posting a non-resolved update to a resolved incident reopens it and withdraws its published postmortem, the same as an automatic reopen.", zh: "对已解决的事件发布未解决状态的更新会重新打开它，并撤回已发布的复盘，与自动重开的处理一致。" },
+      { en: "On the status page, maintenance times are marked up as dates for browsers and readers.", zh: "状态页上的维护时间现在带有机器可读的日期标记。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "zh-seo-metadata",
     date: "2026-10-17",
     edition: "community",
@@ -68,7 +85,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       { en: "The next outage after you resolve an incident yourself, in the app, with an API key or from an agent, alerts normally instead of being muted as flapping.", zh: "你手动（在应用内、通过 API Key 或智能体）解决事件后，下一次故障会照常告警，不会再被当作抖动静音。" },
-      { en: "A monitor that goes down and up repeatedly sends at most one alert per 15 minutes for the same incident, and a retried alert for a reopened incident still says \"again\".", zh: "监控项反复下线、恢复时，同一事件每 15 分钟最多告警一次；重试发送的重开事件告警仍会写明“再次”。" },
+      { en: "A monitor that goes down and up repeatedly sends at most one alert per 15 minutes for the same incident, and a retried alert for a reopened incident still says \"again\" on chat and webhook channels.", zh: "监控项反复下线、恢复时，同一事件每 15 分钟最多告警一次；重试发送的重开事件告警在聊天和 Webhook 渠道中仍会写明“再次”。" },
       { en: "A published postmortem is withdrawn when its incident is reopened, so it is not republished by the next recovery.", zh: "事件被重新打开时，已发布的复盘会被撤回，不会在下一次恢复时再次公开。" },
       { en: "With ALLOW_PRIVATE_TARGETS on, the check that tells a down target from a prober without internet now still works for public names, and an unusable SELFCHECK_URLS logs a warning and falls back to the defaults.", zh: "开启 ALLOW_PRIVATE_TARGETS 后，用于区分目标故障与探测节点断网的自检对公网域名依然有效；SELFCHECK_URLS 无效时会记录警告并使用默认地址。" },
       { en: "A target with several addresses is no longer reported down only because one address hangs, and repeat alerts are no longer held back by monitors that are under maintenance.", zh: "目标有多个地址时，不再因其中一个地址无响应而被判定为故障；处于维护中的监控项也不再拖延其他监控项的重复提醒。" },
@@ -102,7 +119,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "重新打开的事件现在会通知你，人工解决的事件不会被自动重开，TCP 与数据库检测会依次尝试域名的所有地址。",
     },
     points: [
-      { en: "When a monitor fails again within 10 minutes of recovering, the reopened incident is unacknowledged again, restarts its reminders and escalation, and sends a \"down again\" alert.", zh: "监控项在恢复后 10 分钟内再次失败时，重新打开的事件会回到未确认状态，重新开始提醒和升级，并发送「再次故障」告警。" },
+      { en: "When a monitor fails again within 10 minutes of recovering, the reopened incident is unacknowledged again, restarts its reminders and escalation, and sends a \"down again\" alert to chat and webhook channels (email and push alerts do not say \"again\").", zh: "监控项在恢复后 10 分钟内再次失败时，重新打开的事件会回到未确认状态，重新开始提醒和升级，并向聊天和 Webhook 渠道发送“再次故障”告警（邮件和推送告警不带“再次”字样）。" },
       { en: "An incident that a person resolved is never reopened by a later failure, and a monitor whose outage was muted by a dependency does not open an incident after a person resolved one meanwhile.", zh: "人工解决的事件不会被之后的失败重新打开；因依赖而被静音的监控项，在期间有人工解决事件后，也不会再补开事件。" },
       { en: "A queued alert retry is skipped when the incident has since been resolved (for a down alert) or reopened (for a recovery alert), and a reminder no longer uses up one of its repeats while a maintenance window silences it.", zh: "排队重试的告警在事件已解决（故障告警）或已重新打开（恢复告警）时会被跳过；维护窗口内被静音的提醒也不再消耗提醒次数。" },
       { en: "TCP and database checks try every address a name resolves to, IPv4 first, and report a failure from the checker's own network only when no address connected; a lookup that went stale is refreshed once after a failed connection.", zh: "TCP 与数据库检测会依次尝试域名解析出的所有地址（IPv4 优先），只有所有地址都无法连接时才会把检测端自身的网络故障判为无效结果；连接失败后会重新解析一次过期的 DNS 结果。" },
@@ -116,11 +133,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Comparison and use-case pages", zh: "对比与使用场景页面" },
     summary: {
       en: "New pages compare OpenUptime with other uptime tools and show how SaaS teams, agencies, online stores and DevOps teams set it up.",
-      zh: "新增页面把 OpenUptime 与其他可用性监控工具做对比,并介绍 SaaS 团队、代理机构、电商和 DevOps 团队的配置方式。",
+      zh: "新增页面把 OpenUptime 与其他可用性监控工具做对比，并介绍 SaaS 团队、代理机构、电商和 DevOps 团队的配置方式。",
     },
     points: [
-      { en: "Alternatives pages for UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma list what OpenUptime has, what it lacks, who each tool suits and how to move monitors over with the JSON import.", zh: "UptimeRobot、Better Stack、Pingdom、StatusCake 和 Uptime Kuma 的对比页,列出 OpenUptime 有什么、缺什么、各自适合谁,以及如何用 JSON 导入迁移监控项。" },
-      { en: "Use-case pages for SaaS, agencies, e-commerce and DevOps teams map concrete monitoring scenarios to monitor types, status pages and alert routing.", zh: "面向 SaaS、代理机构、电商和 DevOps 团队的使用场景页,把具体的监控场景对应到监控类型、状态页和告警路由。" },
+      { en: "Alternatives pages for UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma list what OpenUptime has, what it lacks, who each tool suits and how to move monitors over with the JSON import.", zh: "UptimeRobot、Better Stack、Pingdom、StatusCake 和 Uptime Kuma 的对比页，列出 OpenUptime 有什么、缺什么、各自适合谁，以及如何用 JSON 导入迁移监控项。" },
+      { en: "Use-case pages for SaaS, agencies, e-commerce and DevOps teams map concrete monitoring scenarios to monitor types, status pages and alert routing.", zh: "面向 SaaS、代理机构、电商和 DevOps 团队的使用场景页，把具体的监控场景对应到监控类型、状态页和告警路由。" },
     ],
     link: { href: "/alternatives", label: { en: "See the comparisons", zh: "查看对比" } },
   },
@@ -146,10 +163,10 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     date: "2026-10-17",
     edition: "community",
     title: { en: "Critical push alerts and cleaner devices", zh: "紧急推送与设备清理" },
-    summary: { en: "Phones can opt in to critical down alerts, and push notifications stay tidier.", zh: "手机可以选择接收紧急宕机提醒，推送通知也更整洁。" },
+    summary: { en: "Phones can opt in to critical down alerts, and push notifications stay tidier.", zh: "手机可以选择接收紧急故障提醒，推送通知也更整洁。" },
     points: [
-      { en: "Register a device with critical turned on and down alerts can break through Do Not Disturb; recoveries stay quiet.", zh: "注册设备时开启 critical，宕机提醒即可突破勿扰模式，恢复通知仍保持安静。" },
-      { en: "Down alerts without the opt-in are now marked time-sensitive, and reminders for one incident replace the earlier banner.", zh: "未开启时，宕机提醒标记为 time-sensitive，同一事件的提醒会替换之前的横幅。" },
+      { en: "Register a device with critical turned on and down alerts can break through Do Not Disturb; recoveries stay quiet.", zh: "注册设备时开启 critical，故障提醒即可突破勿扰模式，恢复通知仍保持安静。" },
+      { en: "Down alerts without the opt-in are now marked time-sensitive, and reminders for one incident replace the earlier banner.", zh: "未开启时，故障提醒会标记为 time-sensitive，同一事件的提醒会替换之前的横幅。" },
       { en: "Devices that have not registered for 180 days are removed automatically.", zh: "180 天未重新注册的设备会被自动移除。" },
     ],
     link: { href: "/docs/api#push", label: { en: "Read the push API docs", zh: "阅读推送接口文档" } },
@@ -164,8 +181,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "新的文档页说明如何备份和恢复 Docker 部署的数据库。",
     },
     points: [
-      { en: "Back up with pg_dump in the compressed custom format, then try the dump on a scratch database before relying on it.", zh: "用 pg_dump 的压缩 custom 格式备份,并先在临时数据库里试恢复,确认可用。" },
-      { en: "The restore steps stop the app, take a safety dump, restore with pg_restore and start the app again; a section covers moving to a new server.", zh: "恢复步骤依次为停止应用、先做一份安全备份、用 pg_restore 恢复、再启动应用;另有一节说明如何迁到新服务器。" },
+      { en: "Back up with pg_dump in the compressed custom format, then try the dump on a scratch database before relying on it.", zh: "用 pg_dump 的压缩 custom 格式备份，并先在临时数据库里试恢复，确认可用。" },
+      { en: "The restore steps stop the app, take a safety dump, restore with pg_restore and start the app again; a section covers moving to a new server.", zh: "恢复步骤依次为停止应用、先做一份安全备份、用 pg_restore 恢复、再启动应用；另有一节说明如何迁到新服务器。" },
     ],
     link: { href: "/docs/backup", label: { en: "Read the backup guide", zh: "阅读备份指南" } },
   },
@@ -176,14 +193,14 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Fewer noisy incidents", zh: "减少噪音事件" },
     summary: {
       en: "Monitors can now depend on each other, wait for several regions to agree, and reopen a just-resolved incident instead of opening a second one.",
-      zh: "监控项现在可以相互依赖、等待多个区域一致失败,并在刚恢复的事件上重新打开,而不是新建事件。",
+      zh: "监控项现在可以相互依赖、等待多个区域一致失败，并在刚恢复又失败时重新打开原事件，而不是新建事件。",
     },
     points: [
-      { en: "A monitor can depend on another monitor of the same project: while that one is down, this one still records its status but opens no incident and sends no alert.", zh: "监控项可以依赖同一项目中的另一个监控项:被依赖的监控项故障期间,它仍会记录自己的状态,但不会创建事件,也不会发送告警。" },
-      { en: "With several regions, choose how many must fail before a monitor goes down; the number never exceeds the regions that answered, so a region that is itself down cannot block an alert.", zh: "使用多个区域时,可以选择需要多少个区域失败才判定为故障;该数量不会超过实际应答的区域数,因此某个区域自身故障不会阻止告警。" },
-      { en: "A failure within 10 minutes of an outage resolving reopens that incident instead of opening a second one, unless a person resolved it.", zh: "故障恢复后 10 分钟内再次失败,会重新打开原来的事件,而不是创建新事件(人工解决的事件除外)。" },
+      { en: "A monitor can depend on another monitor of the same project: while that one is down, this one still records its status but opens no incident and sends no alert.", zh: "监控项可以依赖同一项目中的另一个监控项：被依赖的监控项故障期间，它仍会记录自己的状态，但不会创建事件，也不会发送告警。" },
+      { en: "With several regions, choose how many must fail before a monitor goes down; the number never exceeds the regions that answered, so a region that is itself down cannot block an alert.", zh: "使用多个区域时，可以选择需要多少个区域失败才判定为故障；该数量不会超过实际应答的区域数，因此某个区域自身故障不会阻止告警。" },
+      { en: "A failure within 10 minutes of an outage resolving reopens that incident instead of opening a second one, unless a person resolved it.", zh: "故障恢复后 10 分钟内再次失败，会重新打开原来的事件，而不是创建新事件（人工解决的事件除外）。" },
       { en: "Slow-response incidents are no longer opened during a maintenance window.", zh: "维护窗口期间不再创建响应变慢的事件。" },
-      { en: "Automatic incidents now show why they opened, for example how many regions failed.", zh: "自动创建的事件现在会显示创建原因,例如有几个区域失败。" },
+      { en: "Automatic incidents now show why they opened, for example how many regions failed.", zh: "自动创建的事件现在会显示创建原因，例如有几个区域失败。" },
     ],
     link: { href: "/docs/regions", label: { en: "Read the multi-region docs", zh: "阅读多区域检测文档" } },
   },
@@ -194,13 +211,13 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Safer checks against private addresses", zh: "更安全的内网地址防护" },
     summary: {
       en: "A check now connects to the exact address that was verified as public, so a hostname cannot switch to an internal address in between.",
-      zh: "检测现在会连接到已验证为公网的那个地址,主机名无法在验证之后改指向内网地址。",
+      zh: "检测现在会连接到已验证为公网的那个地址，主机名无法在验证之后改指向内网地址。",
     },
     points: [
-      { en: "HTTP checks and webhook alerts connect to the verified address on every redirect hop, while the certificate is still checked against the hostname.", zh: "HTTP 检测和 Webhook 告警在每一次跳转时都连接到已验证的地址,证书仍然按主机名校验。" },
-      { en: "A hostname that cannot be resolved is reported as unresolvable instead of being tried anyway.", zh: "无法解析的主机名会直接报告为无法解析,不再继续尝试连接。" },
-      { en: "Keyword checks read at most 1 MB of a response, and a Lark webhook reply is read up to 64 KB, so a huge response cannot be pulled in.", zh: "关键字检测最多读取响应的 1 MB,Lark Webhook 的回复最多读取 64 KB,过大的响应不会被完整下载。" },
-      { en: "Private addresses are still refused by default; ALLOW_PRIVATE_TARGETS=true keeps working as before.", zh: "默认仍然拒绝私有地址;ALLOW_PRIVATE_TARGETS=true 的行为不变。" },
+      { en: "HTTP checks and webhook alerts connect to the verified address on every redirect hop, while the certificate is still checked against the hostname.", zh: "HTTP 检测和 Webhook 告警在每一次跳转时都连接到已验证的地址，证书仍然按主机名校验。" },
+      { en: "A hostname that cannot be resolved is reported as unresolvable instead of being tried anyway.", zh: "无法解析的主机名会直接报告为无法解析，不再继续尝试连接。" },
+      { en: "Keyword checks read at most 1 MB of a response, and a Lark webhook reply is read up to 64 KB, so a huge response cannot be pulled in.", zh: "关键字检测最多读取响应的 1 MB,Lark Webhook 的回复最多读取 64 KB，过大的响应不会被完整下载。" },
+      { en: "Private addresses are still refused by default; ALLOW_PRIVATE_TARGETS=true keeps working as before.", zh: "默认仍然拒绝私有地址；ALLOW_PRIVATE_TARGETS=true 的行为不变。" },
     ],
   },
   {
@@ -210,13 +227,13 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "No false outages when the checker is offline", zh: "检测端断网时不再误报故障" },
     summary: {
       en: "When a check fails to connect, OpenUptime first makes sure the machine running it can reach the internet, and discards the result if it cannot.",
-      zh: "检测连接失败时,OpenUptime 会先确认执行检测的机器自身能上网;如果不能,就丢弃这次结果。",
+      zh: "检测连接失败时，OpenUptime 会先确认执行检测的机器自身能上网；如果不能，就丢弃这次结果。",
     },
     points: [
-      { en: "A network failure on the checker's side no longer counts as a failed check, opens an incident or sends an alert.", zh: "检测端自身的网络故障不再计为失败检测,也不会创建事件或发送告警。" },
-      { en: "A region whose probe is offline is left out of the run instead of voting the monitor down.", zh: "探测节点自身离线时,该区域不再参与表决,不会把监控判为故障。" },
-      { en: "Errors that only the checker's own network can cause, such as a missing IPv6 route, are no longer blamed on your service.", zh: "只可能由检测端自身网络引起的错误(例如没有 IPv6 路由)不再算到你的服务头上。" },
-      { en: "Monitors on private addresses, including names that resolve to one, are not affected, since they do not depend on the public internet.", zh: "监控内网地址(包括解析到内网地址的域名)的监控项不受影响,因为它们不依赖公网。" },
+      { en: "A network failure on the checker's side no longer counts as a failed check, opens an incident or sends an alert.", zh: "检测端自身的网络故障不再计为失败检测，也不会创建事件或发送告警。" },
+      { en: "A region whose probe is offline is left out of the run instead of voting the monitor down.", zh: "探测节点自身离线时，该区域不再参与判定，也不会把监控项判为故障。" },
+      { en: "Errors that only the checker's own network can cause, such as a missing IPv6 route, are no longer blamed on your service.", zh: "只可能由检测端自身网络引起的错误（例如没有 IPv6 路由）不会再被算作你的服务故障。" },
+      { en: "Monitors on private addresses, including names that resolve to one, are not affected, since they do not depend on the public internet.", zh: "监控内网地址（包括解析到内网地址的域名）的监控项不受影响，因为它们不依赖公网。" },
     ],
   },
   {
@@ -232,22 +249,22 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Two servers can no longer send the same alert twice, and alerts left half-sent after a crash are retried or marked failed.", zh: "两台服务器不会再重复发送同一条告警；因崩溃而卡在发送中的告警会被重试或标记为失败。" },
       { en: "An incident page now lists every notification with its status and, when it was skipped or failed, the reason.", zh: "事件页面现在列出每条通知及其状态；被跳过或失败时会显示原因。" },
       { en: "Repeat an unacknowledged alert every 5, 10, 15, 30 or 60 minutes, up to 10 times, to the mobile app and optionally email; if several repeats were missed only the latest is sent.", zh: "未确认的告警可每 5、10、15、30 或 60 分钟重复一次（最多 10 次），发送到手机 App，也可选择同时发邮件；错过多次时只发送最近一次。" },
-      { en: "Set up to 3 escalation levels per project: if nobody acknowledges the incident after the delay, the next channels are notified. Acknowledging or resolving stops both.", zh: "每个项目最多设置 3 级升级：超过延迟仍无人确认事件时，通知下一级渠道。确认或恢复事件即停止重复与升级。" },
+      { en: "Set up to 3 escalation levels per project: if nobody acknowledges the incident after the delay, the next channels are notified. Acknowledging or resolving stops both.", zh: "每个项目最多设置 3 级升级：超过延迟仍无人确认事件时，通知下一级渠道。确认或解决事件后，重复与升级都会停止。" },
     ],
   },
   {
     id: "public-status-mcp",
     date: "2026-10-17",
     edition: "community",
-    title: { en: "Read status pages from AI agents", zh: "AI 代理可读取状态页" },
+    title: { en: "Read status pages from AI agents", zh: "AI 智能体可读取状态页" },
     summary: {
       en: "A public MCP endpoint lets an agent read a status page by its slug without signing in.",
-      zh: "公开的 MCP 端点让 AI 代理无需登录即可按 slug 读取状态页。",
+      zh: "公开的 MCP 端点让 AI 智能体无需登录即可按 slug 读取状态页。",
     },
     points: [
-      { en: "Three read-only tools, status_page_overview, status_page_incidents and status_page_maintenance, are served at /api/mcp/public; the existing tools still require authorization.", zh: "三个只读工具 status_page_overview、status_page_incidents 和 status_page_maintenance 在 /api/mcp/public 提供;原有工具仍需授权。" },
+      { en: "Three read-only tools, status_page_overview, status_page_incidents and status_page_maintenance, are served at /api/mcp/public; the existing tools still require authorization.", zh: "三个只读工具 status_page_overview、status_page_incidents 和 status_page_maintenance 在 /api/mcp/public 提供；原有工具仍需授权。" },
       { en: "Each page has a short llms.txt, and /.well-known/mcp.json lists the MCP endpoints.", zh: "每个状态页都有一份简短的 llms.txt,/.well-known/mcp.json 列出 MCP 端点。" },
-      { en: "A page owner can switch the MCP tools off per page with “Allow the public MCP tools to read this page”; the page, its feeds and llms.txt stay public.", zh: "页面所有者可以用“允许公开的 MCP 工具读取此页面”按页关闭 MCP 工具;页面、订阅源和 llms.txt 仍然公开。" },
+      { en: "A page owner can switch the MCP tools off per page with “Allow the public MCP tools to read this page”; the page, its feeds and llms.txt stay public.", zh: "页面所有者可以用“允许公开的 MCP 工具读取此页面”按页关闭 MCP 工具；页面、订阅源和 llms.txt 仍然公开。" },
       { en: "The MCP docs now start with the one-line claude mcp add command.", zh: "MCP 文档现在以一行 claude mcp add 命令开头。" },
     ],
     link: { href: "/docs/mcp#public", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
@@ -259,11 +276,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Monthly uptime report by email", zh: "月度可用率邮件报告" },
     summary: {
       en: "Workspace owners can opt in to an email with last month's uptime for every monitor.",
-      zh: "工作区所有者可以选择接收邮件,查看上个月每个监控的可用率。",
+      zh: "工作区所有者可以选择接收邮件，查看上个月每个监控项的可用率。",
     },
     points: [
-      { en: "Turn it on under Settings → Monthly report; it is off by default and sent once per month in the first days of the month.", zh: "在 设置 → 月度报告 中开启;默认关闭,每月初发送一次。" },
-      { en: "The report lists uptime, downtime minutes and the number of incidents per monitor.", zh: "报告列出每个监控的可用率、停机分钟数和事件数量。" },
+      { en: "Turn it on under Settings → Monthly report; it is off by default and sent once per month in the first days of the month.", zh: "在“设置 → 月度报告”中开启；默认关闭，每月初发送一次。" },
+      { en: "The report lists uptime, downtime minutes and the number of incidents per monitor.", zh: "报告列出每个监控项的可用率、停机分钟数和事件数量。" },
     ],
     cloud: { en: "The report email counts toward the plan's monthly email allowance.", zh: "报告邮件计入套餐的每月邮件额度。" },
   },
@@ -274,11 +291,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Maintenance calendar and reminders", zh: "维护日历与提醒" },
     summary: {
       en: "Scheduled maintenance can be followed in a calendar app, and subscribers get a reminder before it starts.",
-      zh: "可以在日历应用中订阅计划维护,订阅者会在维护开始前收到提醒。",
+      zh: "可以在日历应用中订阅计划维护，订阅者会在维护开始前收到提醒。",
     },
     points: [
       { en: "Every status page serves its maintenance windows as an iCalendar feed at maintenance.ics.", zh: "每个状态页都以 maintenance.ics 提供维护窗口的 iCalendar 订阅源。" },
-      { en: "Confirmed subscribers get one email before a window starts, 24 hours by default; set the lead time from 0 to 168 hours in the status page editor, where 0 turns it off.", zh: "已确认的订阅者会在维护窗口开始前收到一封邮件,默认提前 24 小时;可在状态页编辑界面设置 0 到 168 小时,0 表示关闭。" },
+      { en: "Confirmed subscribers get one email before a window starts, 24 hours by default; set the lead time from 0 to 168 hours in the status page editor, where 0 turns it off.", zh: "已确认的订阅者会在维护窗口开始前收到一封邮件，默认提前 24 小时；可在状态页编辑界面设置 0 到 168 小时，0 表示关闭。" },
     ],
     cloud: { en: "Reminder emails count toward the plan's monthly email allowance.", zh: "提醒邮件计入套餐的每月邮件额度。" },
     link: { href: "/docs/embed#feeds", label: { en: "Read about feeds and the calendar", zh: "阅读订阅源与日历文档" } },
@@ -293,7 +310,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "每个状态页都可以设置每日可用率条何时变为琥珀色和红色。",
     },
     points: [
-      { en: "Set two thresholds under Uptime and notifications in the editor; the defaults are 99.9% for green and 98% for amber.", zh: "在编辑界面的“可用率与通知”中设置两个阈值,默认绿色 99.9%、琥珀色 98%。" },
+      { en: "Set two thresholds under Uptime and notifications in the editor; the defaults are 99.9% for green and 98% for amber.", zh: "在编辑界面的“可用率与通知”中设置两个阈值，默认绿色 99.9%、琥珀色 98%。" },
       { en: "The amber value must be lower than the green one.", zh: "琥珀色阈值必须低于绿色阈值。" },
     ],
   },
@@ -304,13 +321,13 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Better feeds and subscriptions", zh: "更好的订阅源与订阅" },
     summary: {
       en: "Status pages get a combined RSS feed and an embeddable Markdown badge, and subscribers get more control.",
-      zh: "状态页新增合并的 RSS 订阅源和可嵌入的 Markdown 徽章,订阅者拥有更多控制。",
+      zh: "状态页新增合并的 RSS 订阅源和可嵌入的 Markdown 徽章，订阅者拥有更多控制。",
     },
     points: [
-      { en: "rss.xml lists the latest 50 incidents and maintenance windows, and the status page links to it so feed readers find it.", zh: "rss.xml 列出最近 50 条事件和维护窗口,状态页中带有它的链接,订阅阅读器可自动发现。" },
-      { en: "The editor's Embed card adds a Markdown badge snippet and the feed and calendar addresses.", zh: "编辑界面的“嵌入”卡片新增 Markdown 徽章代码,以及订阅源和日历地址。" },
+      { en: "rss.xml lists the latest 50 incidents and maintenance windows, and the status page links to it so feed readers find it.", zh: "rss.xml 列出最近 50 条事件和维护窗口，状态页中带有它的链接，RSS 阅读器可自动发现。" },
+      { en: "The editor's Embed card adds a Markdown badge snippet and the feed and calendar addresses.", zh: "编辑界面的“嵌入”卡片新增 Markdown 徽章代码，以及订阅源和日历地址。" },
       { en: "Visitors can subscribe to only the components they care about.", zh: "访客可以只订阅关心的组件。" },
-      { en: "Entering an address again sends a fresh confirmation or unsubscribe link, so an expired or lost link can be replaced.", zh: "再次输入邮箱会重新发送确认或退订链接,过期或丢失的链接可以补发。" },
+      { en: "Entering an address again sends a fresh confirmation or unsubscribe link, so an expired or lost link can be replaced.", zh: "再次输入邮箱会重新发送确认或退订链接，过期或丢失的链接可以补发。" },
     ],
     link: { href: "/docs/embed", label: { en: "Read the embed docs", zh: "阅读嵌入文档" } },
   },
@@ -321,11 +338,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Self-hosted restarts a stuck scheduler", zh: "自托管调度卡死时自动重启" },
     summary: {
       en: "A self-hosted container now restarts itself if the check scheduler hangs, instead of silently stopping checks.",
-      zh: "自托管容器在检测调度卡死时会自动重启,不再悄悄停止检测。",
+      zh: "自托管容器在检测调度卡死时会自动重启，不再悄悄停止检测。",
     },
     points: [
-      { en: "If one scheduling round runs for more than five minutes, for example on a hung database call, the process exits and Docker's restart policy starts it again.", zh: "如果某一轮调度运行超过五分钟(例如数据库调用卡住),进程会退出,由 Docker 的重启策略重新拉起。" },
-      { en: "Rounds that fail quickly, such as during a database outage, are unaffected and retry on the next round.", zh: "快速失败的调度(例如数据库故障期间)不受影响,下一轮会重试。" },
+      { en: "If one scheduling round runs for more than five minutes, for example on a hung database call, the process exits and Docker's restart policy starts it again.", zh: "如果某一轮调度运行超过五分钟（例如数据库调用卡住），进程会退出，由 Docker 的重启策略重新拉起。" },
+      { en: "Rounds that fail quickly, such as during a database outage, are unaffected and retry on the next round.", zh: "快速失败的调度（例如数据库故障期间）不受影响，下一轮会重试。" },
     ],
   },
   {

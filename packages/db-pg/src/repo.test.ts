@@ -226,6 +226,24 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     expect((await repo.reopenIncident(m.id, new Date(Date.now() - 600_000), "again", "n"))!.postmortemPublishedAt).toBeNull();
   });
 
+  it("withdraws a published postmortem when a non-resolved update reopens the incident", async () => {
+    const [m] = await seed(1);
+    const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.postIncidentUpdate(orgId, down.id, { status: "resolved", body: "ok", visibility: "public" });
+    await repo.updateIncidentWriteUp(orgId, down.id, { postmortem: "pm", publish: true });
+    const open = await repo.postIncidentUpdate(orgId, down.id, { status: "investigating", body: "back", visibility: "public" });
+    expect(open!.incident.postmortemPublishedAt).toBeNull();
+    expect(open!.incident.postmortem).toBe("pm");
+  });
+
+  it("keeps a postmortem published while an update is posted on an incident that was never resolved", async () => {
+    const [m] = await seed(1);
+    const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.updateIncidentWriteUp(orgId, down.id, { postmortem: "pm", publish: true });
+    const r = await repo.postIncidentUpdate(orgId, down.id, { status: "identified", body: "found", visibility: "public" });
+    expect(r!.incident.postmortemPublishedAt).not.toBeNull();
+  });
+
   it("does not count a passing region of a failing run as the monitor having passed", async () => {
     const [m] = await seed(1);
     const userId = `u-${crypto.randomUUID()}`;

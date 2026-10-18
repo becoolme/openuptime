@@ -1,7 +1,7 @@
 // Builds one landing page per language from public/index.html (English, with the dictionaries in its inline script):
 // public/zh-Hans.html, public/ja.html, public/es.html. Real files per language so crawlers get the translated text,
 // <html lang>, canonical and hreflang without running JavaScript. Run by `predev` / `prebuild`.
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -29,6 +29,10 @@ const alternates = ORIGIN
       .map((l) => `<link rel="alternate" hreflang="${l.hreflang}" href="${ORIGIN}${l.path === "/" ? "/" : l.path}">`)
       .join("\n")
   : "";
+// every page under src/pages/docs is rewritten to its /zh-Hans twin, so a new docs page needs no edit here
+const DOC_PAGES = readdirSync(fileURLToPath(new URL("../src/pages/docs/", import.meta.url))).filter((f) => f.endsWith(".astro") && f !== "index.astro").map((f) => `docs/${f.slice(0, -6)}`);
+const ZH_LINKS = new RegExp(`href="/(login|signup|app|docs|${DOC_PAGES.join("|")}|alternatives|for|changelog|privacy|terms)"`, "g");
+
 const STRIP = /<link rel="canonical"[^>]*>\n?|<link rel="alternate" hreflang[^>]*>\n?|<meta (?:property="og:|name="twitter:)[^>]*>\n?/g;
 const attr = (html, re) => (html.match(re)?.[1] ?? "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&amp;/g, "&");
 
@@ -65,7 +69,7 @@ function build(loc) {
     d[key] != null ? `${open}${esc(d[key])}${close}` : m,
   );
   // pages that exist in this language keep the visitor in it; the rest are shared
-  if (loc.code === "zh-CN") html = html.replace(/href="\/(login|signup|app|docs|docs\/api|docs\/embed|docs\/mcp|docs\/self-host|docs\/regions|alternatives|for|changelog|privacy|terms)"/g, 'href="/zh-Hans/$1"');
+  if (loc.code === "zh-CN") html = html.replace(ZH_LINKS, 'href="/zh-Hans/$1"');
   html = html.replace(/href="\/"/g, `href="${loc.path}"`);
   html = html.replace("</head>", `${headTags(html, loc)}\n</head>`);
   return html;

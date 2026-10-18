@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { SEGMENTS, TOOLS } from "./seo-pages";
 import { faqLd, localizeSeoHtml, scriptJson, zhVariant } from "./seo-i18n";
 
@@ -52,5 +54,24 @@ describe("Chinese metadata of the SEO pages", () => {
   it("leaves other pages untouched", () => {
     const html = `<html lang="en"><head><title>Docs · OpenUptime</title><meta name="description" content="Docs"></head></html>`;
     expect(localizeSeoHtml(html)).toBe(html);
+  });
+});
+
+// real output of Base.astro / SeoShell.astro, when the web app has been built (`pnpm --filter @openuptime/web build`)
+const dist = (rel: string) => fileURLToPath(new URL(`../../dist/client/${rel}`, import.meta.url));
+const builtPages = pages.map((p) => [p.slug, ["alternatives", "for"].map((d) => dist(`${d}/${p.slug}.html`)).find(existsSync)] as const).filter((x): x is [string, string] => !!x[1]);
+
+describe.skipIf(!builtPages.length)("localizeSeoHtml on built pages", () => {
+  it("swaps the metadata of every built SEO page and leaves no marker behind", () => {
+    for (const [slug, file] of builtPages) {
+      const html = readFileSync(file, "utf8");
+      expect(html, slug).toContain('id="seo-i18n"');
+      const out = localizeSeoHtml(html);
+      expect(out, slug).not.toContain("seo-i18n");
+      expect(out.match(/<title>([^<]*)<\/title>/)![1], slug).toMatch(CJK);
+      expect(out.match(/name="description" content="([^"]*)"/)![1], slug).toMatch(CJK);
+      expect(out.match(/property="og:title" content="([^"]*)"/)![1], slug).toMatch(CJK);
+      expect(JSON.parse(out.match(/id="seo-ld">([\s\S]*?)<\/script>/)![1]).inLanguage, slug).toBe("zh-Hans");
+    }
   });
 });

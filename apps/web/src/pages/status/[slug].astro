@@ -118,7 +118,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
                 {windows.map((w) => (
                   <div class={`up ${w.state === "active" ? "" : "mon"}`}>
                     <div class="up-h"><b>{w.name}</b><span>{w.state === "active" ? t("In progress") : t("Upcoming")}</span></div>
-                    <p>{fmtWin(w.startsAt)} – {fmtWin(w.endsAt)}</p>
+                    <p><time datetime={w.startsAt}>{fmtWin(w.startsAt)}</time> – <time datetime={w.endsAt}>{fmtWin(w.endsAt)}</time></p>
                   </div>
                 ))}
               </div>
