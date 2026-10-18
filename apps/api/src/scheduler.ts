@@ -1,5 +1,6 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { dispatchAlert, retryDeliveries } from "./alerts";
+import { dispatchAlert, retryDeliveries, sendMaintenanceReminders } from "./alerts";
+import { sendMonthlyReports } from "./reports";
 import { measure } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
 
@@ -63,7 +64,7 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
           const unsent = messages.slice(i).flatMap((m) => m.body.ids.map((id) => ({ id, token: claimed.get(id)! }))).filter((r) => r.token);
           await repo.releaseClaims(unsent).catch((err) => console.error("could not release claims", err));
           total -= unsent.length;
-          return housekeeping(repo, queue, total);
+          return housekeeping(repo, queue, total, entitlements);
         }
       }
     } else {
@@ -71,14 +72,19 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
     }
     if (due.length < limit) break;
   }
-  return housekeeping(repo, queue, total);
+  return housekeeping(repo, queue, total, entitlements);
 }
 
-async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0) {
+async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0, entitlements: Entitlements = unmetered) {
   // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
   await retryDeliveries(repo, queue ? 10 : 3).catch((e) => console.error("alert retry failed", e));
   // cheap housekeeping once an hour
   if (new Date().getMinutes() === 0) await repo.purgeExpired();
+  // reminders and reports are claimed in the database before they are sent, so a coarse cadence is enough
+  if (new Date().getMinutes() % 5 === 0) {
+    await sendMaintenanceReminders(repo, entitlements).catch((e) => console.error("maintenance reminders failed", e));
+    await sendMonthlyReports(repo, new Date(), entitlements).catch((e) => console.error("monthly reports failed", e));
+  }
   return total;
 }
 

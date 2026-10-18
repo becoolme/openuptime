@@ -284,3 +284,20 @@ export async function notifyIncidentUpdate(
     badge: (lang) => ({ label: label(lang), tone: update.status === "resolved" ? "up" : update.status === "investigating" ? "down" : "warn" }),
   }).catch((e) => console.error("incident update notify failed", e));
 }
+
+/**
+ * Reminds the confirmed subscribers of a page shortly before one of its maintenance windows starts. Each window is claimed
+ * once per page before anything is sent, so overlapping ticks never send twice; a failed send is logged, not retried.
+ */
+export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitlements = unmetered) {
+  for (const r of await repo.claimMaintenanceReminders(20)) {
+    const { send: subs } = await withinEmails(entitlements, r.page.organizationId, r.subscribers);
+    if (!subs.length) continue;
+    await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {
+      subject: (p, lang) => `[${p}] ${tr(lang, "Scheduled maintenance: {name}", { name: r.window.name })}`,
+      title: (lang) => tr(lang, "Scheduled maintenance: {name}", { name: r.window.name }),
+      body: (lang) => `${tr(lang, "Scheduled maintenance for {title} starts soon. Checks keep running, but alerts are paused while it lasts.", { title: r.page.title })}\n\n${tr(lang, "Starts")}: ${utc(r.window.startsAt)}\n${tr(lang, "Ends")}: ${utc(r.window.endsAt)}`,
+      badge: (lang) => ({ label: tr(lang, "Scheduled"), tone: "neutral" }),
+    }).catch((e) => console.error("maintenance reminder failed", e));
+  }
+}

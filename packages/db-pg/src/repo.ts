@@ -1019,7 +1019,7 @@ export function createRepo(db: Db): Repo {
           and(
             sql`${schema.statusPage.maintenanceReminderHours} > 0`,
             gte(schema.maintenanceWindow.startsAt, now),
-            sql`${schema.maintenanceWindow.startsAt} <= ${now} + ${schema.statusPage.maintenanceReminderHours} * interval '1 hour'`,
+            sql`${schema.maintenanceWindow.startsAt} <= now() + ${schema.statusPage.maintenanceReminderHours} * interval '1 hour'`,
             sql`not exists (select 1 from maintenance_reminder r where r.maintenance_id = ${schema.maintenanceWindow.id} and r.status_page_id = ${schema.statusPage.id})`,
             or(
               sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
