@@ -129,5 +129,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0025_striped_king_bedlam",
     "when": 1792289182397,
     "sql": "ALTER TABLE \"incident_update\" ADD COLUMN \"by_person\" boolean DEFAULT false NOT NULL;--> statement-breakpoint\nUPDATE \"incident_update\" SET \"by_person\" = true WHERE \"author_id\" IS NOT NULL;\n"
+  },
+  {
+    "tag": "0026_deep_dormammu",
+    "when": 1792289981595,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"status_changed_at\" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint\nCREATE INDEX \"incident_monitor_idx\" ON \"incident\" USING btree (\"monitor_id\",\"started_at\");--> statement-breakpoint\nCREATE INDEX \"incident_update_incident_idx\" ON \"incident_update\" USING btree (\"incident_id\",\"created_at\");"
   }
 ];

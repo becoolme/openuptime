@@ -147,9 +147,14 @@ async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attem
   }
 }
 
+/** A delivery row that counts as an alert people could have seen: not one that was skipped or failed. */
+export const wasDelivered = (r: { status?: string | null; ok?: boolean }) => (r.status ? r.status !== "skipped" && r.status !== "failed" : r.ok !== false);
+
 /** Try failed incident alerts again. Each channel's own delivery row is updated; nothing here throws. */
 export async function retryDeliveries(repo: Repo, limit = 10) {
   const due: DeliveryRetry[] = await repo.claimRetries(limit);
+  // a phone is pushed once per event, also when several of its retries are due in the same round
+  const pushedBy = new Map<string, PushedDevices>();
   for (const { delivery, incident, monitor, channel } of due) {
     // a repeat or escalation is pointless once someone has taken the incident
     if ((delivery.kind === "incident.reminder" || delivery.kind === "incident.escalated") && (incident.acknowledgedAt || incident.resolvedAt)) {
@@ -168,7 +173,7 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
     let reopened = false;
     if (delivery.kind === "incident.opened" && incident.evaluationNote?.startsWith("reopened")) {
       const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)).filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
-      if (opened.some((x) => x.channelId === delivery.channelId && x.createdAt > delivery.createdAt)) {
+      if (opened.some((x) => x.channelId === delivery.channelId && x.createdAt > delivery.createdAt && wasDelivered(x))) {
         const why = "skipped: the incident was reopened and alerted again before this alert could be sent";
         await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
         continue;
@@ -176,7 +181,9 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
       reopened = opened.some((x) => x.createdAt < delivery.createdAt);
     }
     const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened);
-    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined);
+    const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
+    if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
+    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined, pushedBy.get(eventKey));
   }
   return due.length;
 }

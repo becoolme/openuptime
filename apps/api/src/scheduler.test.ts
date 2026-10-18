@@ -94,7 +94,7 @@ describe("nextAfter", () => {
 });
 
 /** A tiny in-memory repo: just what one failed heartbeat check touches. */
-function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean; handled?: boolean; reopenedMuted?: boolean; alertedAgoMin?: number } = {}) {
+function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; monitors?: Monitor[]; reopenable?: boolean; handled?: boolean; reopenedMuted?: boolean; alertedAgoMin?: number; history?: { kind: string; agoMin: number; status?: string }[]; historyFails?: boolean; recent?: boolean; scheduled?: { id: string }[] } = {}) {
   const incidents: { id: string; title: string; auto: boolean; severity: string; resolved: boolean; note?: string | null }[] = [];
   const reopened: string[] = [];
   /** what happened, in order: follow-up clocks set ("schedule") and alert fan-out begun ("alert") */
@@ -116,7 +116,7 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
     hasOpenIncident: async (_id: string, slow: boolean) => incidents.some((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
     openIncidents: async (_id: string, slow: boolean) => incidents.filter((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
-    hadIncidentSince: async () => false,
+    hadIncidentSince: async () => !!opts.recent,
     resolveIncident: async (id: string) => {
       const i = incidents.find((x) => x.id === id)!;
       if (i.resolved) return false;
@@ -124,6 +124,8 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       return true;
     },
     incidentDeliveries: async () => [
+      ...(opts.historyFails ? (() => { throw new Error("db down"); })() : []),
+      ...(opts.history ?? []).map((h) => ({ kind: h.kind, status: h.status, createdAt: new Date(Date.now() - h.agoMin * 60_000) })),
       ...(opts.reopenedMuted ? [{ kind: "incident.muted", createdAt: new Date() }] : []),
       ...(opts.alertedAgoMin !== undefined ? [{ kind: "incident.opened", createdAt: new Date(Date.now() - opts.alertedAgoMin * 60_000) }] : []),
       ...deliveries,
@@ -136,7 +138,7 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
     },
     channelsToAlert: async () => (order.push("alert"), []),
     queueDeliveries: async () => [],
-    scheduleFollowUps: async (inc: { startedAt: Date }) => void order.push("schedule", `at:${inc.startedAt.getTime() > Date.now() - 60_000}`),
+    scheduleFollowUps: async (inc: { id: string; startedAt: Date }) => void (opts.scheduled?.push({ id: inc.id }), order.push("schedule", `at:${inc.startedAt.getTime() > Date.now() - 60_000}`)),
     subscribersFor: async () => [],
     logDeliveries: async (rows: { kind: string }[]) => void rows.forEach((r) => { marked.push(r.kind); deliveries.push({ kind: r.kind, createdAt: new Date() }); }),
   } as unknown as Repo;
@@ -240,11 +242,47 @@ describe("checkOne noise rules", () => {
     expect(order).toEqual([]);
   });
 
-  it("keeps follow-ups but skips the \"again\" alert, and mutes the recovery, when the incident alerted a moment ago", async () => {
+  it("keeps follow-ups but skips the \"again\" alert, and mutes the recovery, when the earlier recovery was never announced", async () => {
     const { repo, order, marked } = fakeRepo({ reopenable: true, alertedAgoMin: 5 });
     await checkOne(repo, hb());
     expect(order).toEqual(["schedule", "at:true"]);
     expect(marked).toEqual(["incident.muted"]);
+  });
+
+  it("still says \"down again\" after a recovery alert went out: alert 10:00, recovered 10:05, fails 10:10", async () => {
+    const { repo, order, marked } = fakeRepo({ reopenable: true, history: [{ kind: "incident.opened", agoMin: 10, status: "sent" }, { kind: "incident.resolved", agoMin: 5, status: "sent" }] });
+    await checkOne(repo, hb());
+    expect(order).toEqual(["schedule", "at:true", "alert"]);
+    expect(marked).not.toContain("incident.muted");
+  });
+
+  it("mutes the \"again\" alert when the recovery was skipped or failed, and does not count a skipped original as an alert", async () => {
+    for (const status of ["skipped", "failed"]) {
+      const { repo, order, marked } = fakeRepo({ reopenable: true, history: [{ kind: "incident.opened", agoMin: 10, status: "sent" }, { kind: "incident.resolved", agoMin: 5, status }] });
+      await checkOne(repo, hb());
+      expect(order).toEqual(["schedule", "at:true"]);
+      expect(marked).toEqual(["incident.muted"]);
+    }
+    // the only "opened" row never went anywhere: nothing was announced, so this alert is not a repeat
+    const { repo, order } = fakeRepo({ reopenable: true, history: [{ kind: "incident.opened", agoMin: 5, status: "skipped" }] });
+    await checkOne(repo, hb());
+    expect(order).toEqual(["schedule", "at:true", "alert"]);
+  });
+
+  it("alerts anyway when the alert history cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { repo, order } = fakeRepo({ reopenable: true, historyFails: true });
+    await checkOne(repo, hb());
+    expect(order).toEqual(["schedule", "at:true", "alert"]);
+  });
+
+  it("follows up a new incident that was muted as flapping, without alerting", async () => {
+    const scheduled: { id: string }[] = [];
+    const { repo, order, marked } = fakeRepo({ recent: true, scheduled });
+    await checkOne(repo, hb());
+    expect(marked).toEqual(["incident.muted"]);
+    expect(scheduled).toHaveLength(1);
+    expect(order).not.toContain("alert");
   });
 
   it("skips the recovery alert while the latest word on the incident is a mute, and sends it otherwise", async () => {

@@ -85,6 +85,15 @@ describe("error classification", () => {
     expect(proberSideError(new Error("no code"))).toBe(false);
     expect(proberSideError(new AggregateError([{ code: "ENETUNREACH" }, { code: "ETIMEDOUT" }]))).toBe(false);
   });
+  it("counts an aggregate as prober-side only when every attempt has a prober-side code", () => {
+    const slice = new Error("Connection timed out"); // a slice that ended: no code, may be a slow target
+    const unreach = { code: "ENETUNREACH" };
+    const mixed = Object.assign(new Error("Connection timed out", { cause: slice }), { errors: [slice, unreach] });
+    expect(proberSideError(mixed)).toBe(false);
+    const all = Object.assign(new Error("x", { cause: unreach }), { errors: [unreach, unreach] });
+    expect(proberSideError(all)).toBe(true);
+    expect(proberSideError(new TypeError("fetch failed", { cause: mixed }))).toBe(false);
+  });
   it("does not treat a refused target as a network failure", () => {
     expect(networkLevelError(Object.assign(new Error("x"), { name: "BlockedTarget" }))).toBe(false);
     expect(networkLevelError(refused)).toBe(true);

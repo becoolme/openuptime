@@ -64,6 +64,8 @@ export const monitor = pgTable(
     failureThreshold: integer("failure_threshold").notNull().default(3),
     regions: text("regions").array().notNull().default(["auto"]),
     status: monitorStatus("status").notNull().default("pending"),
+    /** When `status` last changed: the start of the current streak, which bounds what counts as handled during it. */
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }).notNull().defaultNow(),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }).notNull().defaultNow(),
@@ -160,6 +162,8 @@ export const incident = pgTable(
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),
+    // the flap, reopen and "handled by a person" lookups all start from one monitor's recent incidents
+    index("incident_monitor_idx").on(t.monitorId, t.startedAt),
     uniqueIndex("incident_project_number_idx").on(t.projectId, t.number),
     // at most one open automatic outage and one open automatic latency incident per monitor, even when two checks race
     uniqueIndex("incident_open_auto_idx")
@@ -168,18 +172,22 @@ export const incident = pgTable(
   ],
 );
 
-export const incidentUpdate = pgTable("incident_update", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  incidentId: uuid("incident_id").notNull().references(() => incident.id, { onDelete: "cascade" }),
-  status: incidentStatus("status").notNull(),
-  body: text("body").notNull(),
-  /** "internal" updates are visible to the team only: never on status pages, feeds or subscriber emails. */
-  visibility: incidentUpdateVisibility("visibility").notNull().default("public"),
-  authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
-  /** Written by a person (session, API key or agent), as opposed to the checks. Survives the author's account being deleted. */
-  byPerson: boolean("by_person").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const incidentUpdate = pgTable(
+  "incident_update",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    incidentId: uuid("incident_id").notNull().references(() => incident.id, { onDelete: "cascade" }),
+    status: incidentStatus("status").notNull(),
+    body: text("body").notNull(),
+    /** "internal" updates are visible to the team only: never on status pages, feeds or subscriber emails. */
+    visibility: incidentUpdateVisibility("visibility").notNull().default("public"),
+    authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
+    /** Written by a person (session, API key or agent), as opposed to the checks. Survives the author's account being deleted. */
+    byPerson: boolean("by_person").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incident_update_incident_idx").on(t.incidentId, t.createdAt)],
+);
 
 export const alertChannel = pgTable("alert_channel", {
   id: uuid("id").primaryKey().defaultRandom(),

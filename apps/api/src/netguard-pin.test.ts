@@ -101,6 +101,14 @@ describe("dialing every address", () => {
     expect(err.errors).toHaveLength(2);
   });
 
+  it("does not look the name up a second time once the deadline is used up", async () => {
+    answer("93.184.216.34");
+    const tried: string[] = [];
+    await expect(dialEach(name(), async (a) => { tried.push(a); throw new Error("x"); }, Date.now())).rejects.toThrow();
+    expect(tried).toEqual([]);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
   it("succeeds on the fresh lookup after stale addresses failed", async () => {
     const h = name();
     lookup.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]).mockResolvedValueOnce([{ address: "8.8.8.8", family: 4 }]);
@@ -191,9 +199,17 @@ describe("stale resolutions", () => {
   it("reads the codes of an AggregateError's attempts", async () => {
     const h = name();
     lookup.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]).mockResolvedValueOnce([{ address: "8.8.8.8", family: 4 }]);
-    const agg = new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("a"), { code: "ETIMEDOUT" })]) });
+    const agg = new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("a"), { code: "ETIMEDOUT", syscall: "connect" })]) });
     pinned.mockRejectedValueOnce(agg).mockResolvedValueOnce(new Response("ok"));
     expect((await guardedFetch(`https://${h}/`)).res.status).toBe(200);
+  });
+
+  it("never repeats a request that timed out after the connection was made", async () => {
+    answer("93.184.216.34");
+    pinned.mockRejectedValue(new TypeError("fetch failed", { cause: Object.assign(new Error("read ETIMEDOUT"), { code: "ETIMEDOUT", syscall: "read" }) }));
+    await expect(guardedFetch(`https://${name()}/`)).rejects.toThrow("fetch failed");
+    expect(pinned).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry other errors", async () => {

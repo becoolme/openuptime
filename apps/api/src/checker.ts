@@ -110,7 +110,8 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   if (!hp) return { ok: false, error: "Target must be host:port" };
   const { port } = hp;
   const until = Date.now() + m.timeoutMs;
-  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("Connection timed out")), m.timeoutMs); });
   const once = async (hostname: string, signal: AbortSignal) => {
     const cf = await workerSockets();
     if (cf) {
@@ -130,7 +131,11 @@ async function tcpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
     });
   };
   // every validated address is tried in turn: the check is up when any of them answers
-  await Promise.race([dialEach(hp.hostname, once, until), timeout]);
+  try {
+    await Promise.race([dialEach(hp.hostname, once, until), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
   return { ok: true, latencyMs: Date.now() - started };
 }
 

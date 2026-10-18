@@ -1,5 +1,5 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries } from "./alerts";
+import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries, wasDelivered } from "./alerts";
 import type { CheckOutcome } from "./checker";
 import { sendMonthlyReports } from "./reports";
 import { measure } from "./probes";
@@ -260,9 +260,11 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
     const history = await alertHistory(repo, reopened);
     if (history.muted && !history.openedAt) return;
     await step("reminder schedule", () => repo.scheduleFollowUps({ ...reopened, startedAt: new Date() }, m.projectId ?? null));
-    // a monitor that keeps flipping gets at most one alert per window for the same incident: the "again" alert is skipped,
-    // and the recovery that goes with it is muted too
-    if (history.openedAt && Date.now() - history.openedAt < FLAP_WINDOW_MS) {
+    // A monitor that keeps flipping gets at most one alert per window for the same incident, but only while no recovery
+    // went out in between: people who were told it recovered must be told it is down again. When the recovery was muted
+    // (or never sent) they were not told it recovered, so the "again" alert is skipped and the next recovery is muted too.
+    const recoveryWentOut = history.resolvedAt > history.openedAt;
+    if (!recoveryWentOut && history.openedAt && Date.now() - history.openedAt < FLAP_WINDOW_MS) {
       if (!history.muted) await markMuted(repo, m, reopened.id, "Another alert for this incident went out in the last 15 minutes");
       return;
     }
@@ -279,6 +281,8 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   if (recent) {
     // remember the incident was muted so its recovery mail is skipped too
     await markMuted(repo, m, inc.id, "Another incident for this monitor started in the last 15 minutes");
+    // it is still followed up: if it lasts, the project's reminders and escalations tell people it is down
+    await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
     return;
   }
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
@@ -295,15 +299,24 @@ async function markMuted(repo: Repo, m: Monitor, incidentId: string, why: string
   }]);
 }
 
+type History = { openedAt: number; resolvedAt: number; muted: boolean };
+const NO_HISTORY: History = { openedAt: 0, resolvedAt: 0, muted: false };
+
 /**
- * When an incident last alerted, and whether its alerts are muted now: a mute marker newer than the last alert. A later
- * alert (the window passed) lifts the mute, so its recovery goes out.
+ * When an incident last alerted (down, recovered), and whether its alerts are muted now: a mute marker newer than the
+ * last alert. A later alert (the window passed) lifts the mute, so its recovery goes out. Skipped and failed rows are not
+ * alerts. A history that cannot be read counts as "nothing known": alerts are sent rather than lost.
  */
-async function alertHistory(repo: Repo, inc: { id: string; organizationId: string }) {
-  const rows = await repo.incidentDeliveries(inc.organizationId, inc.id);
-  const latest = (kind: string) => rows.reduce((t, r) => (r.kind === kind ? Math.max(t, r.createdAt.getTime()) : t), 0);
-  const openedAt = latest("incident.opened");
-  return { openedAt, muted: latest("incident.muted") > openedAt };
+async function alertHistory(repo: Repo, inc: { id: string; organizationId: string }): Promise<History> {
+  try {
+    const rows = await repo.incidentDeliveries(inc.organizationId, inc.id);
+    const latest = (kind: string, delivered: boolean) => rows.reduce((t, r) => (r.kind === kind && (!delivered || wasDelivered(r)) ? Math.max(t, r.createdAt.getTime()) : t), 0);
+    const openedAt = latest("incident.opened", true);
+    return { openedAt, resolvedAt: latest("incident.resolved", true), muted: latest("incident.muted", false) > openedAt };
+  } catch (e) {
+    console.error("alert history unavailable, alerting anyway", e);
+    return NO_HISTORY;
+  }
 }
 
 const consecutive = (m: Monitor) => m.failureThreshold;

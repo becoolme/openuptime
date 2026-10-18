@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, createRepo, eq, schema, sql } from "./index";
 
 const url = process.env.DATABASE_URL;
@@ -216,6 +216,38 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     const auto = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m2.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
     await repo.resolveIncident(auto.id, "ok");
     expect(await repo.hadIncidentSince(m2.id, new Date(Date.now() - 60_000))).toBe(true);
+  });
+
+  it("ends a person's handling of an outage at the monitor's last status change, even when no run ever passes", async () => {
+    const [m] = await seed(1);
+    const userId = `u-${crypto.randomUUID()}`;
+    await db.insert(schema.user).values({ id: userId, name: "T", email: `${userId}@example.test` });
+    try {
+      const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+      await repo.postIncidentUpdate(orgId, down.id, { status: "resolved", body: "by hand", authorId: userId });
+      // one region keeps failing, so no run is ever clean
+      await repo.recordRegionResults(m.id, [{ region: "a", ok: true }, { region: "b", ok: false, error: "x" }], { ok: false });
+      expect(await repo.outageHandledByPerson(m.id)).toBe(true);
+      // the monitor went up and down again afterwards: a new outage, nobody has handled it
+      await repo.setMonitorState(m.id, { status: "up" });
+      await new Promise((r) => setTimeout(r, 10));
+      await repo.setMonitorState(m.id, { status: "down" });
+      expect(await repo.outageHandledByPerson(m.id)).toBe(false);
+    } finally {
+      await db.delete(schema.user).where(eq(schema.user.id, userId));
+    }
+  });
+
+  it("moves the status change time only when the status changes", async () => {
+    const [m] = await seed(1);
+    const at = async () => (await db.select({ t: schema.monitor.statusChangedAt }).from(schema.monitor).where(eq(schema.monitor.id, m.id)))[0].t.getTime();
+    await repo.setMonitorState(m.id, { status: "up" });
+    const first = await at();
+    await new Promise((r) => setTimeout(r, 20));
+    await repo.setMonitorState(m.id, { status: "up", lastCheckedAt: new Date() });
+    expect(await at()).toBe(first);
+    await repo.setMonitorState(m.id, { status: "down" });
+    expect(await at()).toBeGreaterThan(first);
   });
 
   it("withdraws a published postmortem when the incident is reopened", async () => {
@@ -498,6 +530,36 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
       expect(skipped.filter((r) => r.incident.id === inc.id)).toHaveLength(0);
       expect(await get(inc.id)).toMatchObject({ reminderCount: 0 });
       expect((await repo.claimReminders(100)).filter((r) => r.incident.id === inc.id)).toHaveLength(1);
+    });
+
+    it("never claims a monitor under maintenance, however many of them are due ahead of a real one", async () => {
+      const held: string[] = [];
+      for (let n = 0; n < 45; n++) {
+        const inc = await incident();
+        await due(inc.id, { nextReminderAt: ago(2000 + n) });
+        held.push(inc.monitorId!);
+      }
+      await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId, name: "w", startsAt: ago(5), endsAt: new Date(Date.now() + 3600_000), monitorIds: held });
+      const free = await incident();
+      await due(free.id);
+      try {
+        // no skip rule at all: the window alone keeps them out
+        expect((await repo.claimReminders(1)).map((r) => r.incident.id)).toEqual([free.id]);
+      } finally {
+        await db.delete(schema.maintenanceWindow).where(eq(schema.maintenanceWindow.organizationId, orgId));
+      }
+      // once the window is gone they are due again, uncounted
+      const back = await repo.claimReminders(100);
+      expect(back.filter((r) => held.includes(r.monitor.id))).toHaveLength(45);
+    });
+
+    it("sends a reminder when the skip rule itself fails, and keeps what it already claimed when a later step fails", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const inc = await incident();
+      await due(inc.id);
+      const got = await repo.claimReminders(100, async () => { throw new Error("boom"); });
+      expect(got.filter((r) => r.incident.id === inc.id)).toHaveLength(1);
+      vi.restoreAllMocks();
     });
 
     it("does not let skipped monitors starve the others, and asks about each monitor once", async () => {

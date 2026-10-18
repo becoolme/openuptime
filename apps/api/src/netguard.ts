@@ -216,7 +216,7 @@ export async function dialEach<T>(host: string, connect: (address: string, signa
     }
     // a literal or a Workers host has no lookup to repeat
     if (addrs.length === 1 && normaliseHost(addrs[0]) === normaliseHost(host)) break;
-    if (Date.now() > until) break;
+    if (Date.now() >= until) break;
     forgetResolved(host);
   }
   if (failures.length === 1) throw failures[0];
@@ -287,20 +287,21 @@ export async function urlProblem(url: string): Promise<string | null> {
 // ---- fetch ---------------------------------------------------------------------------------------------------------
 
 const MAX_REDIRECTS = 5;
-const CONNECT_FAILURES = new Set(["ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EADDRNOTAVAIL", "ENOTFOUND", "EAI_AGAIN"]);
+/** Failures of the connect phase: no request left this machine, so repeating it cannot duplicate anything. */
+const CONNECT_FAILURES = new Set(["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "EAI_AGAIN"]);
 
-/** Error codes of a failure, including those of the attempts inside an AggregateError (several addresses tried). */
-function errorCodes(e: unknown): string[] {
-  const out: string[] = [];
-  const walk = (x: unknown, depth: number) => {
-    if (!x || typeof x !== "object" || depth > 3) return;
-    const { code, cause, errors } = x as { code?: unknown; cause?: unknown; errors?: unknown };
-    if (typeof code === "string") out.push(code);
-    walk(cause, depth + 1);
-    if (Array.isArray(errors)) for (const i of errors) walk(i, depth + 1);
+/**
+ * Does the failure (or one of the attempts inside an AggregateError, several addresses tried) come from the connect phase?
+ * A timeout counts only when it is the connect syscall's own: an ETIMEDOUT while reading means the request may have been sent.
+ */
+function connectFailure(e: unknown): boolean {
+  const walk = (x: unknown, depth: number): boolean => {
+    if (!x || typeof x !== "object" || depth > 3) return false;
+    const { code, syscall, cause, errors } = x as { code?: unknown; syscall?: unknown; cause?: unknown; errors?: unknown };
+    if (typeof code === "string" && (CONNECT_FAILURES.has(code) || (code === "ETIMEDOUT" && syscall === "connect"))) return true;
+    return walk(cause, depth + 1) || (Array.isArray(errors) && errors.some((i) => walk(i, depth + 1)));
   };
-  walk(e, 0);
-  return out;
+  return walk(e, 0);
 }
 const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
 
@@ -325,7 +326,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
     } catch (e) {
       // The cached lookup may be stale (the name moved): forget it and try once more on a fresh, re-validated one.
       // (connect-phase errors only: a request that may have reached the server is never sent twice)
-      if (!addresses || init.signal?.aborted || !errorCodes(e).some((c) => CONNECT_FAILURES.has(c))) throw e;
+      if (!addresses || init.signal?.aborted || !connectFailure(e)) throw e;
       // only worth repeating when the name now points somewhere else
       const before = new Set(addresses);
       forgetResolved(u.hostname);

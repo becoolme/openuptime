@@ -508,7 +508,9 @@ export function createRepo(db: Db): Repo {
       await foldIntoRollup(monitorId, summary.ok, summary.latencyMs ?? null);
     },
     async setMonitorState(id, state) {
-      await db.update(schema.monitor).set(state).where(eq(schema.monitor.id, id));
+      // a changed status starts a new streak
+      const changed = state.status ? { statusChangedAt: sql`case when ${schema.monitor.status} is distinct from ${state.status} then now() else ${schema.monitor.statusChangedAt} end` } : {};
+      await db.update(schema.monitor).set({ ...state, ...changed }).where(eq(schema.monitor.id, id));
     },
     async underMaintenance(m) {
       const now = new Date();
@@ -713,7 +715,8 @@ export function createRepo(db: Db): Repo {
       }
     },
     async outageHandledByPerson(monitorId) {
-      // the current failing streak started after the last passing check; a person resolved an outage incident since then
+      // The current failing streak started after the last passing run and after the monitor's last status change (a region that
+      // fails for good means no run ever passes, so the status change is what keeps an old resolve from counting forever).
       const res = await db.execute(sql`
         select exists (
           select 1 from incident i
@@ -721,6 +724,7 @@ export function createRepo(db: Db): Repo {
             -- a run passed when none of its region rows failed (the rows of one run share a timestamp)
             and i.resolved_at > coalesce((select max(c.checked_at) from check_result c where c.monitor_id = ${monitorId} and c.ok
               and not exists (select 1 from check_result f where f.monitor_id = c.monitor_id and f.checked_at = c.checked_at and not f.ok)), 'epoch'::timestamptz)
+            and i.resolved_at > coalesce((select m.status_changed_at from monitor m where m.id = ${monitorId}), 'epoch'::timestamptz)
             and coalesce((select u.by_person from incident_update u where u.incident_id = i.id and u.status = 'resolved' order by u.created_at desc limit 1), false)
         ) as handled`);
       return !!(res as unknown as { handled: boolean }[])[0]?.handled;
@@ -956,44 +960,61 @@ export function createRepo(db: Db): Repo {
     async claimReminders(limit, skip) {
       const i = schema.incident;
       const out: ReminderDue[] = [];
-      // Skipped monitors (under maintenance) stay due, so a page of candidates can consist of them alone: keep paging past
-      // them until `limit` is filled or nothing is left. The answer is remembered per monitor within the call.
+      // Monitors under maintenance are left out in SQL, so a pile of them cannot fill the pages ahead of the incidents that
+      // are due. `skip` covers whatever else the caller wants held back; those rows stay due, so a page of candidates can
+      // consist of them alone: keep paging past them until `limit` is filled or nothing is left. The answer is remembered
+      // per monitor within the call.
+      const underMaintenance = sql`exists (
+        select 1 from maintenance_window w
+        where w.organization_id = ${schema.monitor.organizationId}
+          and (w.project_id is null or w.project_id = ${schema.monitor.projectId})
+          and w.starts_at <= now() and w.ends_at >= now()
+          and (cardinality(w.monitor_ids) = 0 or ${schema.monitor.id} = any(w.monitor_ids))
+      )`;
       const skipped = new Map<string, boolean>();
       const seen: string[] = [];
       const pageSize = Math.max(limit, 20);
-      for (let page = 0; page < 20 && out.length < limit; page++) {
-        const candidates = await db
-          .select({ incident: i, monitor: schema.monitor, project: schema.project })
-          .from(i)
-          .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
-          .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
-          .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt), seen.length ? notInArray(i.id, seen) : undefined))
-          .orderBy(asc(i.nextReminderAt))
-          .limit(pageSize);
-        for (const c of candidates) {
-          if (out.length >= limit) break;
-          seen.push(c.incident.id);
-          if (skip) {
-            if (!skipped.has(c.monitor.id)) skipped.set(c.monitor.id, await skip(c.monitor));
-            if (skipped.get(c.monitor.id)) continue;
+      try {
+        for (let page = 0; page < 20 && out.length < limit; page++) {
+          const candidates = await db
+            .select({ incident: i, monitor: schema.monitor, project: schema.project })
+            .from(i)
+            .innerJoin(schema.monitor, eq(schema.monitor.id, i.monitorId))
+            .innerJoin(schema.project, eq(schema.project.id, schema.monitor.projectId))
+            .where(and(lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt), sql`not ${underMaintenance}`, seen.length ? notInArray(i.id, seen) : undefined))
+            .orderBy(asc(i.nextReminderAt))
+            .limit(pageSize);
+          for (const c of candidates) {
+            if (out.length >= limit) break;
+            seen.push(c.incident.id);
+            if (skip) {
+              if (!skipped.has(c.monitor.id)) {
+                // a failing check of the skip rule must not hold the reminder back: when in doubt, send it
+                skipped.set(c.monitor.id, await skip(c.monitor).catch((e) => (console.error("reminder skip check failed, not skipping", e), false)));
+              }
+              if (skipped.get(c.monitor.id)) continue;
+            }
+            const interval = c.project.reminderIntervalMin;
+            const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
+            // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
+            // second worker sees no row. The next repeat is counted from now, which folds any missed intervals into this one.
+            const [won] = await db
+              .update(i)
+              .set(
+                interval
+                  ? { reminderCount: sql`${i.reminderCount} + 1`, nextReminderAt: last ? null : sql`now() + make_interval(mins => ${interval})` }
+                  : { nextReminderAt: null },
+              )
+              .where(and(eq(i.id, c.incident.id), eq(i.reminderCount, c.incident.reminderCount), lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
+              .returning();
+            // repeats switched off since the incident opened: the clock is simply cleared
+            if (won && interval) out.push({ incident: won, monitor: c.monitor, project: { reminderIntervalMin: interval, reminderEmail: c.project.reminderEmail, escalation: c.project.escalation }, number: won.reminderCount });
           }
-          const interval = c.project.reminderIntervalMin;
-          const last = c.incident.reminderCount + 1 >= MAX_REMINDERS;
-          // One conditional UPDATE decides who sends: it only matches the exact count and due time that were read, so a
-          // second worker sees no row. The next repeat is counted from now, which folds any missed intervals into this one.
-          const [won] = await db
-            .update(i)
-            .set(
-              interval
-                ? { reminderCount: sql`${i.reminderCount} + 1`, nextReminderAt: last ? null : sql`now() + make_interval(mins => ${interval})` }
-                : { nextReminderAt: null },
-            )
-            .where(and(eq(i.id, c.incident.id), eq(i.reminderCount, c.incident.reminderCount), lte(i.nextReminderAt, sql`now()`), isNull(i.acknowledgedAt), isNull(i.resolvedAt)))
-            .returning();
-          // repeats switched off since the incident opened: the clock is simply cleared
-          if (won && interval) out.push({ incident: won, monitor: c.monitor, project: { reminderIntervalMin: interval, reminderEmail: c.project.reminderEmail, escalation: c.project.escalation }, number: won.reminderCount });
+          if (candidates.length < pageSize) break;
         }
-        if (candidates.length < pageSize) break;
+      } catch (e) {
+        // rows already claimed have used up their repeat: hand them back to be sent rather than lose them with the error
+        console.error("claiming reminders stopped early", e);
       }
       return out as unknown as ReminderDue[];
     },
