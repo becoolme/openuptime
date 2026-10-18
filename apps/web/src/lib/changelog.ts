@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "reliability-fixes-4",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "More reliable alerts and checks", zh: "更可靠的告警与检测" },
+    summary: {
+      en: "Fewer missed \"down again\" alerts, fewer false outages from a prober that is offline, and safer retries.",
+      zh: "减少漏发的“再次故障”告警，减少探测节点自身断网造成的误报，并让重试更安全。",
+    },
+    points: [
+      { en: "A monitor that fails again after its recovery alert went out now always sends a \"down again\" alert; only flapping whose recovery was never announced stays quiet.", zh: "恢复告警已经发出后再次故障，现在一定会发送“再次故障”告警；只有恢复本身未通知过的反复抖动才会保持静默。" },
+      { en: "An incident that was held back as flapping still gets its reminders and escalations if it keeps going.", zh: "因抖动被压制的事件，如果持续不恢复，仍会按设置发送提醒和升级通知。" },
+      { en: "A failure that mixes a timeout with a network error on this machine is no longer mistaken for the prober being offline.", zh: "超时与本机网络错误混合出现的失败，不再被误判为探测节点自身断网。" },
+      { en: "Reminders no longer stall behind many incidents that are under maintenance, and a person's manual resolve only suppresses the outage it belonged to.", zh: "提醒不再被大量处于维护期的事件堵住；人工解决只会抑制它所属的那一次故障。" },
+      { en: "Checks no longer repeat a request that timed out after it was sent, and a mail provider error that is not about headers no longer causes a second email.", zh: "请求发出后超时不再被重复发送；与邮件头无关的邮件服务错误也不再导致重复发信。" },
+    ],
+  },
+  {
     id: "zh-seo-metadata",
     date: "2026-10-17",
     edition: "community",
