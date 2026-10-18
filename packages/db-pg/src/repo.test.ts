@@ -671,14 +671,73 @@ describe.skipIf(!url)("manual incidents stay inside their project", () => {
     expect((await repo.pageIncidents(pageNone, { limit: 10 })).map((i) => i.title)).toEqual([first.title]);
   });
 
-  it("does not let a repeated sign-up change an existing subscriber", async () => {
+  it("lets a repeated sign-up update a pending subscriber but never a confirmed one", async () => {
     const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "C" }).returning())[0];
     const pg = await repo.createStatusPage(orgId, pr.id, { slug: `c${crypto.randomUUID().slice(0, 8)}`, title: "C" });
     const mid = crypto.randomUUID();
+    const rows = () => db.select().from(schema.statusSubscriber).where(eq(schema.statusSubscriber.statusPageId, pg.id));
     await repo.addSubscriber({ pageId: pg.id, email: "p@x.test", token: "t1", locale: "zh-CN", monitorIds: [] });
+    // still pending: the newest language and choice win, the token stays
     const again = await repo.addSubscriber({ pageId: pg.id, email: "p@x.test", token: "t2", locale: "en", monitorIds: [mid] });
-    expect(again).toMatchObject({ locale: "zh-CN", token: "t1", confirmed: false, created: false });
-    const [row] = await db.select().from(schema.statusSubscriber).where(eq(schema.statusSubscriber.statusPageId, pg.id));
-    expect(row).toMatchObject({ locale: "zh-CN", monitorIds: [] });
+    expect(again).toMatchObject({ locale: "en", token: "t1", confirmed: false, created: false });
+    expect((await rows())[0]).toMatchObject({ locale: "en", monitorIds: [mid] });
+    // confirmed: left alone
+    await db.update(schema.statusSubscriber).set({ confirmedAt: new Date() }).where(eq(schema.statusSubscriber.statusPageId, pg.id));
+    const third = await repo.addSubscriber({ pageId: pg.id, email: "p@x.test", token: "t3", locale: "zh-CN", monitorIds: [] });
+    expect(third).toMatchObject({ locale: "en", token: "t1", confirmed: true, created: false });
+    expect((await rows())[0]).toMatchObject({ locale: "en", monitorIds: [mid] });
+  });
+});
+
+describe.skipIf(!url)("maintenance windows and pages without a project", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  const hour = 3600_000;
+  beforeAll(async () => {
+    await db.insert(schema.organization).values({ id: orgId, name: "Test", slug: orgId, createdAt: new Date() });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+  });
+
+  it("shows a page without a project the maintenance of the oldest project", async () => {
+    const [oldest] = await db.insert(schema.project).values({ organizationId: orgId, name: "Old", createdAt: new Date(Date.now() - 5000) }).returning();
+    const [newer] = await db.insert(schema.project).values({ organizationId: orgId, name: "New" }).returning();
+    const created = await repo.createStatusPage(orgId, oldest.id, { slug: `m${crypto.randomUUID().slice(0, 8)}`, title: "M" });
+    await db.update(schema.statusPage).set({ projectId: null, maintenanceReminderHours: 24 }).where(eq(schema.statusPage.id, created.id));
+    const page = { ...created, projectId: null };
+    const win = (projectId: string, name: string) =>
+      db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId, name, startsAt: new Date(Date.now() + 2 * hour), endsAt: new Date(Date.now() + 3 * hour), monitorIds: [] });
+    await win(oldest.id, "oldest");
+    await win(newer.id, "newer");
+    expect((await repo.pageMaintenance(page, { limit: 10 })).map((w) => w.name)).toEqual(["oldest"]);
+    // the reminders agree
+    await db.insert(schema.statusSubscriber).values({ statusPageId: created.id, email: "m@x.test", token: crypto.randomUUID(), confirmedAt: new Date() });
+    const names = (await repo.claimMaintenanceReminders(100)).filter((x) => x.page.id === created.id).map((x) => x.window.name);
+    expect(names).toEqual(["oldest"]);
+  });
+
+  it("does not let windows nobody follows use up the claim limit", async () => {
+    const [pr] = await db.insert(schema.project).values({ organizationId: orgId, name: "Starve" }).returning();
+    const mk = async (title: string) => {
+      const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: title, type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+      const p = await repo.createStatusPage(orgId, pr.id, { slug: `x${crypto.randomUUID().slice(0, 8)}`, title });
+      await repo.updateStatusPage(p.id, { maintenanceReminderHours: 24 });
+      await db.insert(schema.statusPageComponent).values({ statusPageId: p.id, monitorId: m.id });
+      return { p, m };
+    };
+    const quiet = await mk("quiet");
+    const busy = await mk("busy");
+    // the quiet page's only subscriber follows a component the windows do not touch
+    const [elsewhere] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "else", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    await db.insert(schema.statusPageComponent).values({ statusPageId: quiet.p.id, monitorId: elsewhere.id });
+    await db.insert(schema.statusSubscriber).values({ statusPageId: quiet.p.id, email: "q@x.test", token: crypto.randomUUID(), confirmedAt: new Date(), monitorIds: [elsewhere.id] });
+    await db.insert(schema.statusSubscriber).values({ statusPageId: busy.p.id, email: "b@x.test", token: crypto.randomUUID(), confirmedAt: new Date() });
+    const at = (n: number) => ({ startsAt: new Date(Date.now() + n * 60_000), endsAt: new Date(Date.now() + n * 60_000 + hour) });
+    // the quiet page's window is earlier than the busy one
+    await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: pr.id, name: "for-quiet", monitorIds: [quiet.m.id], ...at(60) });
+    await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: pr.id, name: "for-busy", monitorIds: [busy.m.id], ...at(120) });
+    const got = (await repo.claimMaintenanceReminders(100)).filter((x) => x.page.id === quiet.p.id || x.page.id === busy.p.id);
+    expect(got.map((x) => x.window.name)).toEqual(["for-busy"]);
+    expect(await db.select().from(schema.maintenanceReminder).where(eq(schema.maintenanceReminder.statusPageId, quiet.p.id))).toHaveLength(0);
   });
 });
