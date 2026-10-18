@@ -134,6 +134,13 @@
       "when": 1791998395225,
       "tag": "0018_careless_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792281683366,
+      "tag": "0019_illegal_zaran",
+      "breakpoints": true
     }
   ]
 }
