@@ -17,6 +17,7 @@ const whereShape = {
   project: z.string().uuid().optional().describe("Project id (from list_workspaces). Omit to use the default project of the workspace."),
 };
 
+const updateVisibility = z.enum(["public", "internal"]);
 const incidentStatus = z.enum(["investigating", "identified", "monitoring", "resolved"]);
 
 export const TOOLS: Tool[] = [
@@ -58,17 +59,23 @@ export const TOOLS: Tool[] = [
   { name: "list_regions", description: "List the regions checks can run from on this deployment (`auto` is always there) and how many one monitor may use. Set a monitor's `regions` to use them.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/regions" }) },
   { name: "delete_monitor", description: "Permanently delete a monitor and its history.", schema: z.object({ id }), destructive: true, build: (a) => ({ method: "DELETE", path: `/api/monitors/${a.id}` }) },
   { name: "list_incidents", description: "List incidents (open ones first), automatic and manual.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/incidents" }) },
-  { name: "get_incident", description: "Get an incident with its update timeline and the failed checks around it.", schema: z.object({ id }), readOnly: true, build: (a) => ({ method: "GET", path: `/api/incidents/${a.id}` }) },
+  { name: "get_incident", description: "Get an incident (number, root cause, postmortem) with its update timeline, internal updates included, and the failed checks around it.", schema: z.object({ id }), readOnly: true, build: (a) => ({ method: "GET", path: `/api/incidents/${a.id}` }) },
   {
     name: "create_incident",
     description: "Open a manual incident, optionally tied to a monitor. Appears on status pages that include that monitor.",
-    schema: z.object({ title: z.string().min(1).max(200), body: z.string().max(4000).optional(), severity: z.enum(["minor", "major"]).default("major"), monitorId: z.string().uuid().optional() }),
+    schema: z.object({ title: z.string().min(1).max(200), body: z.string().max(4000).optional(), severity: z.enum(["minor", "major"]).default("major"), monitorId: z.string().uuid().optional(), visibility: updateVisibility.optional() }),
     build: (a) => ({ method: "POST", path: "/api/incidents", body: a }),
   },
   {
+    name: "update_incident",
+    description: "Set or clear an incident's root cause (short, up to 500 characters) and postmortem (up to 20000, markdown). Both appear on the public status page once the incident is resolved. An empty string clears a field.",
+    schema: z.object({ id, rootCause: z.string().max(500).nullable().optional(), postmortem: z.string().max(20000).nullable().optional() }),
+    build: ({ id, ...rest }) => ({ method: "PATCH", path: `/api/incidents/${id}`, body: rest }),
+  },
+  {
     name: "post_incident_update",
-    description: "Post a status update on an incident. status resolved closes it. Subscribers and alert channels are notified.",
-    schema: z.object({ id, status: incidentStatus, body: z.string().min(1).max(4000) }),
+    description: "Post a status update on an incident. status resolved closes it. A public update (the default) shows on status pages and is emailed to subscribers; an internal one is visible to the team only.",
+    schema: z.object({ id, status: incidentStatus, body: z.string().min(1).max(4000), visibility: updateVisibility.optional() }),
     build: ({ id, ...rest }) => ({ method: "POST", path: `/api/incidents/${id}/updates`, body: rest }),
   },
   { name: "acknowledge_incident", description: "Acknowledge an incident as the API key's owner.", schema: z.object({ id }), build: (a) => ({ method: "POST", path: `/api/incidents/${a.id}/ack` }) },

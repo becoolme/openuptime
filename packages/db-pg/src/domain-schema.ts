@@ -19,6 +19,7 @@ import { organization, user } from "./auth-schema";
 export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis"]);
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
+export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);
 export const incidentSeverity = pgEnum("incident_severity", ["minor", "major"]);
 export const channelType = pgEnum("channel_type", ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push"]);
 
@@ -36,6 +37,8 @@ export const project = pgTable(
     reminderEmail: boolean("reminder_email").notNull().default(false),
     /** Ordered escalation steps: [{ channelIds, escalateAfterMin }], minutes counted from the start of the incident. */
     escalation: jsonb("escalation").$type<{ channelIds: string[]; escalateAfterMin: number }[]>().notNull().default([]),
+    /** Last incident number handed out in this project; bumped atomically when an incident is created. */
+    incidentSeq: integer("incident_seq").notNull().default(0),
   },
   (t) => [index("project_org_idx").on(t.organizationId)],
 );
@@ -127,6 +130,10 @@ export const incident = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
     monitorId: uuid("monitor_id").references(() => monitor.id, { onDelete: "set null" }),
+    /** The project the incident belongs to; it keeps it when its monitor is deleted. */
+    projectId: projectRef(),
+    /** Sequential number inside the project (INC-12). */
+    number: integer("number"),
     title: text("title").notNull(),
     status: incidentStatus("status").notNull().default("investigating"),
     severity: incidentSeverity("severity").notNull().default("major"),
@@ -143,9 +150,14 @@ export const incident = pgTable(
     /** How many escalation steps have fired, and when the next one is due (null = none left). */
     escalationLevel: integer("escalation_level").notNull().default(0),
     nextEscalationAt: timestamp("next_escalation_at", { withTimezone: true }),
+    /** Short cause, written once it is known. Public once the incident is resolved. */
+    rootCause: text("root_cause"),
+    /** Longer write-up (markdown or plain text). Public once the incident is resolved. */
+    postmortem: text("postmortem"),
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),
+    uniqueIndex("incident_project_number_idx").on(t.projectId, t.number),
     // at most one open automatic outage and one open automatic latency incident per monitor, even when two checks race
     uniqueIndex("incident_open_auto_idx")
       .on(t.monitorId, sql`(${t.severity} = 'minor')`)
@@ -158,6 +170,8 @@ export const incidentUpdate = pgTable("incident_update", {
   incidentId: uuid("incident_id").notNull().references(() => incident.id, { onDelete: "cascade" }),
   status: incidentStatus("status").notNull(),
   body: text("body").notNull(),
+  /** "internal" updates are visible to the team only: never on status pages, feeds or subscriber emails. */
+  visibility: incidentUpdateVisibility("visibility").notNull().default("public"),
   authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
