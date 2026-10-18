@@ -54,7 +54,7 @@ if (smtpConfig) {
   if (!env.EMAIL_FROM) console.warn("SMTP is configured but EMAIL_FROM is not set: emails will only be logged");
   else {
     const smtp = nodemailer.createTransport(smtpConfig);
-    setMailTransport((m) => smtp.sendMail({ from: { name: m.fromName, address: m.from }, to: m.to, subject: m.subject, html: m.html, text: m.text }));
+    setMailTransport((m) => smtp.sendMail({ from: { name: m.fromName, address: m.from }, to: m.to, subject: m.subject, html: m.html, text: m.text, headers: m.headers }));
     // report a bad host/credentials at startup instead of on the first invitation; never fatal
     smtp.verify().then(
       () => console.log("smtp: connection verified"),

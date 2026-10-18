@@ -14,7 +14,7 @@ describe("public incident bodies", () => {
     const inc = {
       id: "i", organizationId: "o", monitorId: null, projectId: "p", number: 7, title: "T", status: "identified" as const, severity: "major" as const, auto: false, assigneeId: "u1",
       startedAt: new Date(), acknowledgedAt: null, resolvedAt: null, evaluationNote: null, nextReminderAt: null, reminderCount: 0, escalationLevel: 0, nextEscalationAt: null,
-      rootCause: "disk full", postmortem: "long text", updates: [up("1", "shown", "public"), up("2", "hidden", "internal")],
+      rootCause: "disk full", postmortem: "long text", postmortemPublishedAt: null as Date | null, updates: [up("1", "shown", "public"), up("2", "hidden", "internal")],
     };
     const open = toPublic(inc);
     expect(open.updates.map((u) => u.body)).toEqual(["shown"]);
@@ -22,6 +22,11 @@ describe("public incident bodies", () => {
     expect(open).not.toHaveProperty("rootCause");
     expect(open).not.toHaveProperty("postmortem");
     expect(JSON.stringify(open)).not.toContain("hidden");
-    expect(toPublic({ ...inc, status: "resolved", resolvedAt: new Date() })).toMatchObject({ rootCause: "disk full", postmortem: "long text" });
+    // resolving alone (an automatic recovery included) does not publish the write-up; a person has to
+    const resolved = { ...inc, status: "resolved" as const, resolvedAt: new Date() };
+    expect(toPublic(resolved)).not.toHaveProperty("postmortem");
+    expect(toPublic({ ...resolved, postmortemPublishedAt: new Date() })).toMatchObject({ rootCause: "disk full", postmortem: "long text" });
+    // published but still open: still private
+    expect(toPublic({ ...inc, postmortemPublishedAt: new Date() })).not.toHaveProperty("postmortem");
   });
 });

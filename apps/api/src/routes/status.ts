@@ -140,12 +140,12 @@ export function publicBody(u: IncidentUpdate) {
 
 /**
  * Public shape of an incident: no assignee, no organization, sanitised update bodies. Internal updates are dropped here
- * as well as in the query, so no new read path can leak one. The root cause and postmortem are shown once the incident
- * is resolved, never while it is still open.
+ * as well as in the query, so no new read path can leak one. The root cause and postmortem are shown only once the incident
+ * is resolved and a person has published them; resolving alone (automatic recovery included) never makes them public.
  */
 export const toPublic = (i: IncidentWithUpdates) => ({
   id: i.id, number: i.number, title: i.title, status: i.status, severity: i.severity, startedAt: i.startedAt, resolvedAt: i.resolvedAt,
-  ...(i.resolvedAt ? { rootCause: i.rootCause, postmortem: i.postmortem } : {}),
+  ...(i.resolvedAt && i.postmortemPublishedAt ? { rootCause: i.rootCause, postmortem: i.postmortem } : {}),
   updates: i.updates.filter((u) => u.visibility === "public").map((u) => ({ id: u.id, body: publicBody(u), status: u.status, createdAt: u.createdAt })),
 });
 
@@ -303,6 +303,8 @@ export const publicStatus = new Hono<AppEnv>()
     const ok =
       (!ip || (await repo.withinLimit(`sub:ip:${ip}`, 10, 3600))) &&
       (await repo.withinLimit(`sub:mail:${page.id}:${email}`, 3, 3600)) &&
+      // one address across all pages, so many pages cannot be used to mail it
+      (await repo.withinLimit(`sub:mail:${email}`, 5, 3600)) &&
       (await repo.withinLimit(`sub:page:${page.id}`, 200, 3600));
     if (!ok) return c.json({ error: "Too many requests, try again later" }, 429);
     if ((await repo.subscriberCount(page.id)) >= MAX_SUBSCRIBERS) return c.json({ error: "Subscriber limit reached" }, 409);
@@ -312,40 +314,45 @@ export const publicStatus = new Hono<AppEnv>()
     const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
     const row = await repo.addSubscriber({ pageId: page.id, email, token, locale: langFromHeader(c.req.header("accept-language")), monitorIds: chosen });
     // Always the same answer, so the endpoint does not reveal who is subscribed. A pending address gets its confirmation
-    // again (the first link may be lost); a confirmed one gets a mail with its unsubscribe link instead.
+    // again (the first link may be lost); a confirmed one gets nothing, so the form cannot be used to mail a stranger.
+    if (row.confirmed) return c.json({ ok: true });
     const lang = row.locale === "zh-CN" ? "zh-CN" : "en";
     const white = await brandingHidden(c, page);
     const footer = tr(lang, white ? "Status updates from {title}." : "Status updates from {title}. Powered by OpenUptime.", { title: page.title });
-    const mail = row.confirmed
-      ? actionEmail({
-          title: tr(lang, "You are already subscribed to {title}", { title: page.title }),
-          body: tr(lang, "This address already gets incident emails. Use the button below if you want to stop them."),
-          footer,
-          cta: tr(lang, "Unsubscribe"),
-          url: `${appUrl()}/api/public/status/_/unsubscribe?token=${row.token}`,
-          lang,
-          brand: white ? page.title : undefined,
-        })
-      : actionEmail({
-          title: tr(lang, "Confirm your subscription to {title}", { title: page.title }),
-          body: tr(lang, "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed."),
-          footer,
-          cta: tr(lang, "Confirm subscription"),
-          url: `${appUrl()}/api/public/status/_/confirm?token=${row.token}`,
-          lang,
-          brand: white ? page.title : undefined,
-        });
-    const subject = row.confirmed ? tr(lang, "You are already subscribed to {title}", { title: page.title }) : tr(lang, "Confirm your subscription to {title}", { title: page.title });
+    const mail = actionEmail({
+      title: tr(lang, "Confirm your subscription to {title}", { title: page.title }),
+      body: tr(lang, "You will get an email when an incident is opened, updated or resolved. If this wasn’t you, ignore this message and you won’t be subscribed."),
+      footer,
+      cta: tr(lang, "Confirm subscription"),
+      url: `${appUrl()}/api/public/status/_/confirm?token=${row.token}`,
+      lang,
+      brand: white ? page.title : undefined,
+    });
+    const subject = tr(lang, "Confirm your subscription to {title}", { title: page.title });
     await sendEmail({ to: email, subject, fromName: white ? page.title : "OpenUptime", ...mail }).catch((e) => console.error("subscription email failed", e));
     return c.json({ ok: true });
   })
+  // Confirming stays a GET so the link in the mail works in one click; it only ever sets a flag, so repeating it (or a mail
+  // scanner opening it) changes nothing further. Unsubscribing is different: GET shows a page, and only a POST acts.
   .get("/_/confirm", async (c) => {
     const slug = await c.get("repo").confirmSubscriber(c.req.query("token") ?? "");
     return c.redirect(slug ? `${appUrl()}/status/${slug}?subscribed=1` : `${appUrl()}/`);
   })
-  .get("/_/unsubscribe", async (c) => {
+  .get("/_/unsubscribe", (c) => {
+    const token = c.req.query("token") ?? "";
+    const zh = langOf(c) === "zh";
+    const t = zh
+      ? { title: "取消订阅", text: "确认不再收到此状态页的邮件通知？", button: "取消订阅" }
+      : { title: "Unsubscribe", text: "Stop receiving email updates from this status page?", button: "Unsubscribe" };
+    const html = `<!doctype html><html lang="${zh ? "zh-CN" : "en"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${t.title}</title><style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f7f7f4;color:#0e1411}main{max-width:360px;padding:24px;text-align:center}button{font:inherit;font-weight:600;padding:10px 20px;border:0;border-radius:8px;background:#0e1411;color:#fff;cursor:pointer}</style></head><body><main><h1 style="font-size:20px">${t.title}</h1><p>${t.text}</p><form method="post" action="?token=${encodeURIComponent(token)}"><button type="submit">${t.button}</button></form></main></body></html>`;
+    return c.html(html, 200, { "cache-control": "no-store", "x-robots-tag": "noindex" });
+  })
+  // POST acts: from the page's button (answered with a redirect) and from a mail client's one-click unsubscribe (RFC 8058, answered with 200)
+  .post("/_/unsubscribe", async (c) => {
     const slug = await c.get("repo").removeSubscriber(c.req.query("token") ?? "");
-    return c.redirect(slug ? `${appUrl()}/status/${slug}?unsubscribed=1` : `${appUrl()}/`);
+    const oneClick = (await c.req.text().catch(() => "")).includes("List-Unsubscribe=One-Click");
+    if (oneClick) return c.text("OK");
+    return c.redirect(slug ? `${appUrl()}/status/${slug}?unsubscribed=1` : `${appUrl()}/`, 303);
   })
   .get("/:slug", async (c) => {
     const slug = c.req.param("slug");

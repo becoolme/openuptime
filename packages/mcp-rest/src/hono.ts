@@ -25,6 +25,8 @@ export type MountMcpOptions = {
 };
 
 const originOf = (url: string) => new URL(url).origin;
+/** Most messages one JSON-RPC batch may carry; a larger one is refused before any of it runs. */
+export const MAX_BATCH = 10;
 const rpcError = (code: number, message: string) => ({ jsonrpc: "2.0", id: null, error: { code, message } });
 
 /**
@@ -74,6 +76,7 @@ export function mountMcp(app: Hono<any>, options: MountMcpOptions) {
       return { status: res.status, text: await res.text() };
     };
 
+    if (Array.isArray(raw) && raw.length > MAX_BATCH) return c.json(rpcError(-32600, `Invalid Request: a batch holds at most ${MAX_BATCH} messages`), 400);
     const items = Array.isArray(raw) ? raw : [raw];
     // bad or expired credentials: tell the client with a real 401 so it can (re)start the authorization flow
     const method = (m: unknown) => String((m as { method?: string } | null)?.method ?? "");

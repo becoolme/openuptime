@@ -361,7 +361,9 @@ async function mailSubscribers(
         lang,
         brand: white ? s.title : undefined,
       });
-      return sendEmail({ to: s.email, subject: o.subject(s.title, lang), fromName: white ? s.title : `${s.title} via OpenUptime`, ...mail });
+      // one-click unsubscribe (RFC 8058): mail clients show their own button and POST to this address
+      const unsubscribe = `${appUrl()}/api/public/status/_/unsubscribe?token=${s.token}`;
+      return sendEmail({ to: s.email, subject: o.subject(s.title, lang), fromName: white ? s.title : `${s.title} via OpenUptime`, headers: { "List-Unsubscribe": `<${unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }, ...mail });
     }),
   );
   results.forEach((r, i) => r.status === "rejected" && console.error(`subscriber email to ${subs[i].email} failed`, r.reason));
@@ -387,11 +389,11 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
 /** A manual incident update (investigating → identified → … → resolved) goes to the same subscribers. */
 export async function notifyIncidentUpdate(
   repo: Repo,
-  inc: { organizationId: string; monitorId: string | null; title: string },
+  inc: { organizationId: string; monitorId: string | null; projectId?: string | null; title: string },
   update: { status: string; body: string },
   entitlements: Entitlements = unmetered,
 ) {
-  const { send: subs } = await withinEmails(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId));
+  const { send: subs } = await withinEmails(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId));
   const label = (lang: Lang) => tr(lang, update.status === "resolved" ? "Resolved" : update.status[0].toUpperCase() + update.status.slice(1));
   await mailSubscribers(subs, await mayHideBranding(entitlements, inc.organizationId), {
     subject: (p, lang) => `[${p}] ${label(lang)}: ${inc.title}`,
@@ -403,17 +405,21 @@ export async function notifyIncidentUpdate(
 
 /**
  * Reminds the confirmed subscribers of a page shortly before one of its maintenance windows starts. Each window is claimed
- * once per page before anything is sent, so overlapping ticks never send twice; a failed send is logged, not retried.
+ * once per page before anything is sent, so overlapping ticks never send twice. The claim is kept once at least one mail went out;
+ * if none could be sent it is given back and the next tick tries again.
  */
 export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitlements = unmetered) {
   for (const r of await repo.claimMaintenanceReminders(20)) {
     const { send: subs } = await withinEmails(entitlements, r.page.organizationId, r.subscribers);
-    if (!subs.length) continue;
-    await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {
+    // a claim with nobody to mail, or with every mail failed, is given back so a later tick can try again
+    const release = () => repo.releaseMaintenanceReminder(r.window.id, r.page.id).catch((e) => console.error("maintenance reminder release failed", e));
+    if (!subs.length) { await release(); continue; }
+    const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {
       subject: (p, lang) => `[${p}] ${tr(lang, "Scheduled maintenance: {name}", { name: r.window.name })}`,
       title: (lang) => tr(lang, "Scheduled maintenance: {name}", { name: r.window.name }),
       body: (lang) => `${tr(lang, "Scheduled maintenance for {title} starts soon. Checks keep running, but alerts are paused while it lasts.", { title: r.page.title })}\n\n${tr(lang, "Starts")}: ${utc(r.window.startsAt)}\n${tr(lang, "Ends")}: ${utc(r.window.endsAt)}`,
       badge: (lang) => ({ label: tr(lang, "Scheduled"), tone: "neutral" }),
-    }).catch((e) => console.error("maintenance reminder failed", e));
+    }).catch((e) => { console.error("maintenance reminder failed", e); return null; });
+    if (!sent || sent.failed >= sent.total) await release();
   }
 }
