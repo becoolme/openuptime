@@ -47,7 +47,9 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
     await cfg.binding.send({ ...base, headers: msg.headers });
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
-    if (!/\bheaders?\b/i.test(why)) throw e;
+    // codes such as E_HEADER_NOT_ALLOWED or invalid_headers count too, so match the substring rather than a word
+    const code = (e as { code?: unknown } | null)?.code;
+    if (!/header/i.test(why) && !(typeof code === "string" && /header/i.test(code))) throw e;
     console.warn("email binding refused custom headers, sending without them", why);
     await cfg.binding.send(base);
   }

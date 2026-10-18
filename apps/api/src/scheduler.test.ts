@@ -239,7 +239,8 @@ describe("checkOne noise rules", () => {
   it("does not alert for a reopened incident that was muted as flapping", async () => {
     const { repo, order } = fakeRepo({ reopenable: true, reopenedMuted: true });
     await checkOne(repo, hb());
-    expect(order).toEqual([]);
+    // no alert, but the reminder clocks are restarted
+    expect(order).toEqual(["schedule", "at:true"]);
   });
 
   it("keeps follow-ups but skips the \"again\" alert, and mutes the recovery, when the earlier recovery was never announced", async () => {
