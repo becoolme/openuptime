@@ -31,8 +31,8 @@ Verify with `openuptime:run_check` and report the real result, not an assumption
 1. `openuptime:list_incidents` (open ones come first), then `openuptime:get_incident` for the timeline and failed checks.
 2. `openuptime:run_check` on the affected monitor. With `region` it makes a one-off request from there and records nothing, which tells a regional problem from a global one.
 3. `openuptime:acknowledge_incident` when the user is taking it.
-4. `openuptime:post_incident_update` with `status` `investigating`, `identified`, `monitoring` or `resolved`. Updates notify subscribers and alert channels, so write what is known and nothing speculative.
-5. Open a manual incident with `openuptime:create_incident` (`severity` `minor` or `major`, optional `monitorId`) for problems no monitor caught.
+4. `openuptime:post_incident_update` with `status` `investigating`, `identified`, `monitoring` or `resolved`. Public updates (the default) notify subscribers and show on status pages, so write what is known and nothing speculative; pass `visibility` `internal` for notes only your team should see.
+5. Open a manual incident with `openuptime:create_incident` (`severity` `minor` or `major`, optional `monitorId`) for problems no monitor caught. After resolving, record `rootCause` and `postmortem` with `openuptime:update_incident`; both become public once the incident is resolved.
 
 ## Planned maintenance
 

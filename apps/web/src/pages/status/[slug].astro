@@ -10,10 +10,10 @@ type Status = {
   bucket?: "hour" | "day";
   overall: "operational" | "degraded" | "outage";
   components: { id: string; name: string; group?: string | null; status: string; uptime90d: number | null; days: { day: string; uptime: number }[] }[];
-  incidents: { id: string; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
+  incidents: { id: string; number?: number | null; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
 };
 const { slug } = Astro.params;
-type History = { items: { id: string; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
+type History = { items: { id: string; number?: number | null; rootCause?: string | null; postmortem?: string | null; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
 const before = Astro.url.searchParams.get("before");
 // the two reads do not depend on each other
 const [{ status, data }, hist] = await Promise.all([
@@ -95,7 +95,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
         <div class="pub-col">
           {data.incidents.map((i) => (
             <article class="card pub-inc live">
-              <div class="pub-inc-h"><h3>{i.title}</h3><span class={`pill ${i.status}`}>{t(i.status)}</span></div>
+              <div class="pub-inc-h"><h3>{i.number ? <small class="mono muted">INC-{i.number} </small> : null}{i.title}</h3><span class={`pill ${i.status}`}>{t(i.status)}</span></div>
               <div class="pub-ups">
                 {i.updates.map((u) => <div class={`up ${stageCls(u.status)}`}><div class="up-h"><b>{t(u.status)}</b><span>{new Date(u.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC</span></div><p>{u.body}</p></div>)}
               </div>
@@ -133,10 +133,12 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
               <article class="pub-pi">
                 <div class="pub-pi-d"><b>{fmtDay(i.startedAt)}</b><span>{new Date(i.startedAt).getUTCFullYear()}</span></div>
                 <div class="pub-pi-c">
-                  <div class="pub-inc-h"><h3>{i.title}</h3>{!i.resolvedAt && <span class="pill down">{t("ongoing")}</span>}</div>
+                  <div class="pub-inc-h"><h3>{i.number ? <small class="mono muted">INC-{i.number} </small> : null}{i.title}</h3>{!i.resolvedAt && <span class="pill down">{t("ongoing")}</span>}</div>
                   <div class="pub-ups">
                     {i.updates.map((u) => <div class={`up ${stageCls(u.status)}`}><div class="up-h"><b>{t(u.status)}</b><span>{new Date(u.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC</span></div><p>{u.body}</p></div>)}
                   </div>
+                  {i.rootCause && <p class="pub-rc" style="margin-top:10px"><b>{t("Root cause")}:</b> {i.rootCause}</p>}
+                  {i.postmortem && <details class="pub-pm" style="margin-top:8px"><summary>{t("Postmortem")}</summary><p style="white-space:pre-wrap">{i.postmortem}</p></details>}
                 </div>
               </article>
             ))}

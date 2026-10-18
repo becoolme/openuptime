@@ -16,7 +16,8 @@ const tools: Tool[] = [
   { name: "delete_monitor", en: "Permanently delete a monitor and its history.", zh: "永久删除监控项及其历史。" },
   { name: "list_incidents / get_incident", en: "Incidents, open ones first, with their timeline.", zh: "事件列表（未结束的在前）及时间线。" },
   { name: "create_incident", en: "Open a manual incident, optionally tied to a monitor.", zh: "创建手动事件，可关联监控项。" },
-  { name: "post_incident_update", en: "Add an update or resolve an incident.", zh: "发布事件更新或标记为已解决。" },
+  { name: "update_incident", en: "Set or clear an incident's root cause and postmortem.", zh: "设置或清除事件的根因和复盘。" },
+  { name: "post_incident_update", en: "Add an update (public or internal) or resolve an incident.", zh: "发布事件更新（公开或内部）或标记为已解决。" },
   { name: "acknowledge_incident", en: "Acknowledge an incident.", zh: "确认事件。" },
   { name: "list_channels", en: "Alert channels.", zh: "告警渠道。" },
   { name: "list_status_pages", en: "Status pages.", zh: "状态页。" },
@@ -25,7 +26,7 @@ const tools: Tool[] = [
   { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
 ];
 ---
-<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-15" toc>
+<Doc description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-17" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>

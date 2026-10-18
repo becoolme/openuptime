@@ -17,18 +17,23 @@ export default function IncidentDetail({ id }: { id: string }) {
   const [inc, setInc] = useState<Incident | null>(null);
   const [status, setStatus] = useState<Incident["status"]>("investigating");
   const [body, setBody] = useState("");
+  const [internal, setInternal] = useState(false);
+  const [rootCause, setRootCause] = useState("");
+  const [postmortem, setPostmortem] = useState("");
+  const [saving, save] = useBusy();
+  const [saved, setSaved] = useState(false);
   const [busy, run] = useBusy();
   const [acking, ack] = useBusy();
   const [err, setErr] = useState("");
-  const load = () => api.incident(id).then((i) => { setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); });
+  const load = () => api.incident(id).then((i) => { setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); });
   useEffect(() => { load(); }, [id]);
   if (!inc) return <p className="muted">{t("Loading…")}</p>;
 
   const resolved = inc.status === "resolved";
-  const post = (s: Incident["status"], text: string) =>
+  const post = (s: Incident["status"], text: string, hidden = false) =>
     run(async () => {
       setErr("");
-      try { await api.postUpdate(id, { status: s, body: text }); setBody(""); await load(); } catch (x) { setErr((x as Error).message); }
+      try { await api.postUpdate(id, { status: s, body: text, visibility: hidden ? "internal" : "public" }); setBody(""); setInternal(false); await load(); } catch (x) { setErr((x as Error).message); }
     });
   const events = [...(inc.updates ?? [])].reverse();
 
@@ -44,7 +49,7 @@ export default function IncidentDetail({ id }: { id: string }) {
         </div>
       </div>
       <div className="url">
-        <span>#{inc.id.slice(0, 6)}</span>
+        <span>{inc.number ? `INC-${inc.number}` : `#${inc.id.slice(0, 6)}`}</span>
         <span className="chip">{t("started")} {utc(inc.startedAt)}</span>
         <span className="chip">{dur(inc.startedAt, inc.resolvedAt)} {resolved ? t("total") : t("elapsed")}</span>
         {inc.auto && <span className="chip">{t("Auto-detected")}</span>}
@@ -53,9 +58,12 @@ export default function IncidentDetail({ id }: { id: string }) {
 
       <div className="cols">
         <div className="col">
-          <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body); }}>
-            <div className="cc-h"><h3>{t("Post an update")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Sent to status page subscribers")}</span></div>
+          <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body, internal); }}>
+            <div className="cc-h"><h3>{t("Post an update")}</h3><span className="faint" style={{ fontSize: 13 }}>{internal ? t("Visible to your team only") : t("Sent to status page subscribers")}</span></div>
             <div className="seg">{STATES.map((s) => <i key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>{t(s)}</i>)}</div>
+            <div className="seg" style={{ marginTop: 14 }}>
+              {(["public", "internal"] as const).map((v) => <i key={v} className={(internal ? "internal" : "public") === v ? "on" : ""} onClick={() => setInternal(v === "internal")}>{t(v === "public" ? "Public update" : "Internal note")}</i>)}
+            </div>
             <textarea className="in" style={{ height: 96, padding: 12, marginTop: 14 }} required value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("What do customers need to know?")} />
             <div className="formact"><button className="btn primary sm" disabled={busy}>{busy ? t("Publishing…") : t("Publish update")}</button></div>
           </form>
@@ -65,7 +73,7 @@ export default function IncidentDetail({ id }: { id: string }) {
             <div className="tl">
               {events.map((u, k) => (
                 <div key={u.id} className={`ev ${k === 0 && !resolved ? "now" : u.status === "resolved" ? "ok" : ""}`}>
-                  <b>{t(u.status)}</b><time>{utc(u.createdAt)}</time>
+                  <b>{t(u.status)}</b>{u.visibility === "internal" && <span className="chip" style={{ marginLeft: 8 }}>{t("Internal")}</span>}<time>{utc(u.createdAt)}</time>
                   <p>{u.body}</p>
                 </div>
               ))}
@@ -73,6 +81,19 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div className="ev"><b>{t("Incident opened")}</b><time>{utc(inc.startedAt)}</time><p>{inc.auto ? t("Consecutive failed checks confirmed.") : t("Declared manually.")}</p>{inc.evaluationNote && <p className="faint">{t("Why")}: {inc.evaluationNote}</p>}</div>
             </div>
           </div>
+
+          <form className="card cc" onSubmit={(e) => {
+            e.preventDefault();
+            setSaved(false);
+            save(async () => {
+              try { await api.saveWriteUp(id, { rootCause: rootCause.trim() || null, postmortem: postmortem.trim() || null }); setSaved(true); await load(); } catch (x) { setErr((x as Error).message); }
+            });
+          }}>
+            <div className="cc-h"><h3>{t("Root cause and postmortem")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Shown on the status page once the incident is resolved")}</span></div>
+            <label className="fld">{t("Root cause")}<input className="in" maxLength={500} value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder={t("One sentence on what went wrong")} /></label>
+            <label className="fld">{t("Postmortem")}<textarea className="in" style={{ height: 160, padding: 12 }} maxLength={20000} value={postmortem} onChange={(e) => setPostmortem(e.target.value)} placeholder={t("What happened, the impact, and what we will change")} /></label>
+            <div className="formact">{saved && <span className="faint" style={{ fontSize: 13 }}>{t("Saved")}</span>}<button className="btn primary sm" disabled={saving}>{saving ? t("Saving…") : t("Save")}</button></div>
+          </form>
 
           {!!inc.deliveries?.length && (
             <div className="card cc">
