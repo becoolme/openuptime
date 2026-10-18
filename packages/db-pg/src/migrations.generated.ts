@@ -124,5 +124,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0024_smooth_spiral",
     "when": 1792282747914,
     "sql": "ALTER TABLE \"incident\" ADD COLUMN \"postmortem_published_at\" timestamp with time zone;"
+  },
+  {
+    "tag": "0025_striped_king_bedlam",
+    "when": 1792289182397,
+    "sql": "ALTER TABLE \"incident_update\" ADD COLUMN \"by_person\" boolean DEFAULT false NOT NULL;--> statement-breakpoint\nUPDATE \"incident_update\" SET \"by_person\" = true WHERE \"author_id\" IS NOT NULL;\n"
   }
 ];

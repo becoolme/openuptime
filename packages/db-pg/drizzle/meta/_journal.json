@@ -176,6 +176,13 @@
       "when": 1792282747914,
       "tag": "0024_smooth_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792289182397,
+      "tag": "0025_striped_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

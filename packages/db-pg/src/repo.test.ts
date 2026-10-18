@@ -199,6 +199,49 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     }
   });
 
+  it("treats a resolve by a person (API key or agent included) as a person's even after the account is deleted, and does not count it as flapping", async () => {
+    const [m] = await seed(1);
+    const userId = `u-${crypto.randomUUID()}`;
+    await db.insert(schema.user).values({ id: userId, name: "T", email: `${userId}@example.test` });
+    const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.postIncidentUpdate(orgId, down.id, { status: "resolved", body: "by key", authorId: userId });
+    expect(await repo.hadIncidentSince(m.id, new Date(Date.now() - 60_000))).toBe(false);
+    await db.delete(schema.user).where(eq(schema.user.id, userId));
+    const [u] = await db.select().from(schema.incidentUpdate).where(eq(schema.incidentUpdate.incidentId, down.id));
+    expect(u.authorId).toBeNull();
+    expect(await repo.reopenIncident(m.id, new Date(Date.now() - 600_000), "again", "n")).toBeNull();
+    expect(await repo.outageHandledByPerson(m.id)).toBe(true);
+    // an incident the checks resolved still counts for flapping
+    const [m2] = await seed(1);
+    const auto = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m2.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.resolveIncident(auto.id, "ok");
+    expect(await repo.hadIncidentSince(m2.id, new Date(Date.now() - 60_000))).toBe(true);
+  });
+
+  it("withdraws a published postmortem when the incident is reopened", async () => {
+    const [m] = await seed(1);
+    const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+    await repo.resolveIncident(down.id, "ok");
+    await repo.updateIncidentWriteUp(orgId, down.id, { postmortem: "pm", publish: true });
+    expect((await repo.reopenIncident(m.id, new Date(Date.now() - 600_000), "again", "n"))!.postmortemPublishedAt).toBeNull();
+  });
+
+  it("does not count a passing region of a failing run as the monitor having passed", async () => {
+    const [m] = await seed(1);
+    const userId = `u-${crypto.randomUUID()}`;
+    await db.insert(schema.user).values({ id: userId, name: "T", email: `${userId}@example.test` });
+    try {
+      const down = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
+      await repo.postIncidentUpdate(orgId, down.id, { status: "resolved", body: "by hand", authorId: userId });
+      await repo.recordRegionResults(m.id, [{ region: "a", ok: true }, { region: "b", ok: false, error: "x" }], { ok: false });
+      expect(await repo.outageHandledByPerson(m.id)).toBe(true);
+      await repo.recordRegionResults(m.id, [{ region: "a", ok: true }, { region: "b", ok: true }], { ok: true });
+      expect(await repo.outageHandledByPerson(m.id)).toBe(false);
+    } finally {
+      await db.delete(schema.user).where(eq(schema.user.id, userId));
+    }
+  });
+
   it("returns null instead of throwing when another incident is already open for the monitor", async () => {
     const [m] = await seed(1);
     const first = (await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "down", auto: true }, { status: "investigating", body: "x" }))!;
@@ -437,6 +480,21 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
       expect(skipped.filter((r) => r.incident.id === inc.id)).toHaveLength(0);
       expect(await get(inc.id)).toMatchObject({ reminderCount: 0 });
       expect((await repo.claimReminders(100)).filter((r) => r.incident.id === inc.id)).toHaveLength(1);
+    });
+
+    it("does not let skipped monitors starve the others, and asks about each monitor once", async () => {
+      const blocked: string[] = [];
+      for (let n = 0; n < 6; n++) {
+        const inc = await incident();
+        await due(inc.id, { nextReminderAt: ago(1000 + n) });
+        blocked.push(inc.monitorId!);
+      }
+      const free = await incident();
+      await due(free.id);
+      const asked: string[] = [];
+      const got = await repo.claimReminders(1, async (m) => (asked.push(m.id), blocked.includes(m.id)));
+      expect(got.map((r) => r.incident.id)).toEqual([free.id]);
+      expect(new Set(asked).size).toBe(asked.length);
     });
 
     it("starts the clock when an incident opens, and sends each repeat once however many workers run", async () => {
