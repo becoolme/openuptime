@@ -7,6 +7,26 @@ afterEach(() => vi.unstubAllGlobals());
 
 const refused = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
 
+describe("configureSelfCheck", () => {
+  it("falls back to the defaults, with a warning, when a non-empty value holds no valid URL", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    configureSelfCheck("ftp://x, not a url");
+    expect(warn).toHaveBeenCalledOnce();
+    const seen: string[] = [];
+    await proberOnline({ fetch: async (u) => (seen.push(u), new Response("ok")) });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatch(/^https:\/\/www\./);
+    warn.mockRestore();
+  });
+
+  it("is switched off only by an empty value", async () => {
+    const fetch = vi.fn(async () => { throw refused; });
+    configureSelfCheck("");
+    expect(await proberOnline({ fetch })).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("proberOnline", () => {
   it("is online as soon as one reference URL answers, whatever the status", async () => {
     const seen: string[] = [];

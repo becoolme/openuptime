@@ -12,9 +12,22 @@ export const REFERENCE_URLS = [
 ];
 let configured: string[] | undefined;
 
-/** `SELFCHECK_URLS`: comma-separated reference URLs; an empty value switches the self-check off; unset keeps the defaults. */
+/**
+ * `SELFCHECK_URLS`: comma-separated reference URLs; an empty value switches the self-check off; unset keeps the defaults.
+ * A value with no usable URL in it is a typo, not a wish to switch off: it is reported and the defaults stay.
+ */
 export function configureSelfCheck(value: string | undefined) {
-  configured = value === undefined ? undefined : value.split(",").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u));
+  if (value === undefined) {
+    configured = undefined;
+    return;
+  }
+  if (!value.trim()) {
+    configured = [];
+    return;
+  }
+  const urls = value.split(",").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u));
+  if (!urls.length) console.warn("SELFCHECK_URLS has no valid http(s) URL; using the default reference URLs. Set it to an empty value to switch the self-check off.");
+  configured = urls.length ? urls : undefined;
 }
 
 const REFERENCE_TIMEOUT_MS = 2500;

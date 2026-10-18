@@ -9,11 +9,42 @@
  * and the response is sent uncompressed so byte budgets count what is on the wire.
  */
 
+/**
+ * "deflate" is zlib-wrapped by the standard, but some servers send the raw stream: look at the first two bytes (the zlib
+ * header) and inflate accordingly.
+ */
+function inflateAuto(zlib: typeof import("node:zlib"), TransformClass: typeof import("node:stream").Transform) {
+  let inner: import("node:stream").Duplex | undefined;
+  let head = Buffer.alloc(0);
+  const start = (t: import("node:stream").Transform, first: Buffer) => {
+    const zlibHeader = first.length >= 2 && (first[0] & 0x0f) === 8 && ((first[0] << 8) | first[1]) % 31 === 0;
+    inner = zlibHeader ? zlib.createInflate() : zlib.createInflateRaw();
+    inner.on("data", (d) => t.push(d));
+    inner.on("error", (e) => t.destroy(e));
+    return inner;
+  };
+  return new TransformClass({
+    transform(chunk: Buffer, _enc, cb) {
+      if (inner) return void inner.write(chunk, () => cb());
+      head = Buffer.concat([head, chunk]);
+      if (head.length < 2) return cb();
+      start(this, head).write(head, () => cb());
+    },
+    flush(cb) {
+      if (!inner && head.length) start(this, head).write(head);
+      if (!inner) return cb();
+      inner.once("end", () => cb());
+      inner.end();
+    },
+  });
+}
+
 export async function pinnedFetch(url: string, init: RequestInit, addresses: string[]): Promise<Response> {
   const u = new URL(url);
   const lib = u.protocol === "https:" ? await import("node:https") : await import("node:http");
   const { Readable } = await import("node:stream");
   const zlib = await import("node:zlib");
+  const { PassThrough, Transform } = await import("node:stream");
   const headers = new Headers(init.headers);
   // always uncompressed on the wire (a caller's own accept-encoding is overridden), so byte budgets count what is received
   headers.set("accept-encoding", "identity");
@@ -51,13 +82,20 @@ export async function pinnedFetch(url: string, init: RequestInit, addresses: str
         if (noBody) res.resume();
         // a server may compress anyway: undo it, so callers always read the real bytes
         const encoding = (out.get("content-encoding") ?? "").trim().toLowerCase();
-        const inflate = noBody ? null : encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "deflate" ? zlib.createInflate() : encoding === "br" ? zlib.createBrotliDecompress() : null;
+        const inflate = noBody ? null : encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "deflate" ? inflateAuto(zlib, Transform) : encoding === "br" ? zlib.createBrotliDecompress() : null;
         let source: import("node:stream").Readable | null = noBody ? null : res;
         if (inflate && source) {
           out.delete("content-encoding");
           out.delete("content-length");
+          // an empty body has nothing to decode, whatever the header claims: it stays empty instead of failing
+          let received = 0;
+          res.on("data", (d: Buffer) => { received += d.length; });
+          const decoded = new PassThrough();
+          inflate.on("error", (e) => (received === 0 ? decoded.end() : decoded.destroy(e)));
           res.on("error", (e) => inflate.destroy(e));
-          source = res.pipe(inflate);
+          inflate.pipe(decoded);
+          res.pipe(inflate);
+          source = decoded;
           // dropping the response (a capped read) must stop the download too
           source.on("close", () => res.destroy());
         }
