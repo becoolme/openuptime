@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "reliability-fixes-3",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Fewer repeat alerts, steadier checks", zh: "减少重复告警，检测更稳" },
+    summary: {
+      en: "A monitor that keeps flipping no longer pages you over and over, and the next outage after you resolve an incident by hand alerts as usual.",
+      zh: "反复抖动的监控项不再不停地提醒你；手动解决事件之后的下一次故障会照常告警。",
+    },
+    points: [
+      { en: "The next outage after you resolve an incident yourself, in the app, with an API key or from an agent, alerts normally instead of being muted as flapping.", zh: "你手动（在应用内、通过 API Key 或智能体）解决事件后，下一次故障会照常告警，不会再被当作抖动静音。" },
+      { en: "A monitor that goes down and up repeatedly sends at most one alert per 15 minutes for the same incident, and a retried alert for a reopened incident still says \"again\".", zh: "监控项反复下线、恢复时，同一事件每 15 分钟最多告警一次；重试发送的重开事件告警仍会写明“再次”。" },
+      { en: "A published postmortem is withdrawn when its incident is reopened, so it is not republished by the next recovery.", zh: "事件被重新打开时，已发布的复盘会被撤回，不会在下一次恢复时再次公开。" },
+      { en: "With ALLOW_PRIVATE_TARGETS on, the check that tells a down target from a prober without internet now still works for public names, and an unusable SELFCHECK_URLS logs a warning and falls back to the defaults.", zh: "开启 ALLOW_PRIVATE_TARGETS 后，用于区分目标故障与探测节点断网的自检对公网域名依然有效；SELFCHECK_URLS 无效时会记录警告并使用默认地址。" },
+      { en: "A target with several addresses is no longer reported down only because one address hangs, and repeat alerts are no longer held back by monitors that are under maintenance.", zh: "目标有多个地址时，不再因其中一个地址无响应而被判定为故障；处于维护中的监控项也不再拖延其他监控项的重复提醒。" },
+    ],
+  },
+  {
     id: "public-surface-fixes",
     date: "2026-10-17",
     edition: "community",
