@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SEGMENTS, TOOLS, type Faq } from "./seo-pages";
@@ -50,6 +50,14 @@ describe("sitemap", () => {
     const script = page("../../scripts/gen-landing.mjs");
     const paths = ["/alternatives", "/for", ...TOOLS.map((t) => `/alternatives/${t.slug}`), ...SEGMENTS.map((s) => `/for/${s.slug}`)];
     for (const p of paths) expect(script, p).toContain(`"${p}"`);
+  });
+  it("lists every documentation page", () => {
+    const script = page("../../scripts/gen-landing.mjs");
+    const dir = fileURLToPath(new URL("../pages/docs/", import.meta.url));
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".astro") && x !== "index.astro")) expect(script, f).toContain(`"/${f.replace(".astro", "")}"`);
+  });
+  it("gives every heading on the comparison and use-case pages an id that is unique per language", () => {
+    for (const f of ["alternatives/[tool]", "for/[segment]"]) expect(page(`../pages/${f}.astro`), f).not.toMatch(/<h2 id="[a-z-]+">/);
   });
   it("has a page file for each route", () => {
     for (const f of ["alternatives/index", "alternatives/[tool]", "for/index", "for/[segment]"]) expect(existsSync(fileURLToPath(new URL(`../pages/${f}.astro`, import.meta.url))), f).toBe(true);

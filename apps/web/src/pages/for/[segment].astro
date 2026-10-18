@@ -17,7 +17,7 @@ const ui = {
     <div lang={attr}>
       <h1>{segment.title[k]}</h1>
       <p class="lede">{segment.lede[k]}</p>
-      <h2 id="scenarios">{ui[k].scen}</h2>
+      <h2 id={`scenarios${k === "zh" ? "-zh" : ""}`}>{ui[k].scen}</h2>
       {segment.scenarios.map((s) => (
         <>
           <h3>{s.title[k]}</h3>
@@ -25,13 +25,13 @@ const ui = {
           <ul class="tags">{s.uses.map((u) => (<li>{u}</li>))}</ul>
         </>
       ))}
-      <h2 id="status-page">{ui[k].status}</h2>
+      <h2 id={`status-page${k === "zh" ? "-zh" : ""}`}>{ui[k].status}</h2>
       <p>{segment.statusPage[k]}</p>
-      <h2 id="alerting">{ui[k].alerts}</h2>
+      <h2 id={`alerting${k === "zh" ? "-zh" : ""}`}>{ui[k].alerts}</h2>
       <p>{segment.alerting[k]}</p>
-      <h2 id="limits">{ui[k].limits}</h2>
+      <h2 id={`limits${k === "zh" ? "-zh" : ""}`}>{ui[k].limits}</h2>
       <ul>{segment.limits.map((x) => (<li>{x[k]}</li>))}</ul>
-      <h2 id="faq">{ui[k].faq}</h2>
+      <h2 id={`faq${k === "zh" ? "-zh" : ""}`}>{ui[k].faq}</h2>
       <div class="faq">{segment.faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}</div>
       <div class="cta">
         <h2>{ui[k].ctaT}</h2>

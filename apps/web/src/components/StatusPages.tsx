@@ -106,7 +106,7 @@ export function StatusPageEditor({ id }: { id: string }) {
     setPending("save");
     setErr("");
     try {
-      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), hideBranding: !!page!.hideBranding, uptimeOkPct: page!.uptimeOkPct ?? 99.9, uptimeWarnPct: page!.uptimeWarnPct ?? 99, mcpEnabled: page!.mcpEnabled !== false, maintenanceReminderHours: page!.maintenanceReminderHours ?? 24, components: comps } as Partial<StatusPage>);
+      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), hideBranding: !!page!.hideBranding, uptimeOkPct: page!.uptimeOkPct ?? 99.9, uptimeWarnPct: page!.uptimeWarnPct ?? 98, mcpEnabled: page!.mcpEnabled !== false, maintenanceReminderHours: page!.maintenanceReminderHours ?? 24, components: comps } as Partial<StatusPage>);
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch (e) {
@@ -170,13 +170,13 @@ export function StatusPageEditor({ id }: { id: string }) {
             <div className="fld">{t("Uptime bar colors")}
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <label className="faint" style={{ fontSize: 13 }}>{t("Green from (%)")} <input className="in" style={{ width: 90 }} type="number" min={1} max={100} step="0.01" value={page.uptimeOkPct ?? 99.9} onChange={(e) => setPage({ ...page, uptimeOkPct: Number(e.target.value) })} /></label>
-                <label className="faint" style={{ fontSize: 13 }}>{t("Amber from (%)")} <input className="in" style={{ width: 90 }} type="number" min={1} max={100} step="0.01" value={page.uptimeWarnPct ?? 99} onChange={(e) => setPage({ ...page, uptimeWarnPct: Number(e.target.value) })} /></label>
+                <label className="faint" style={{ fontSize: 13 }}>{t("Amber from (%)")} <input className="in" style={{ width: 90 }} type="number" min={1} max={100} step="0.01" value={page.uptimeWarnPct ?? 98} onChange={(e) => setPage({ ...page, uptimeWarnPct: Number(e.target.value) })} /></label>
               </div>
               <small className="faint">{t("A day below the amber value is shown red. The amber value must be lower than the green one.")}</small>
             </div>
             <label className="fld">{t("Remind subscribers before maintenance (hours)")}<input className="in" style={{ width: 120 }} type="number" min={0} max={168} step={1} value={page.maintenanceReminderHours ?? 24} onChange={(e) => setPage({ ...page, maintenanceReminderHours: Number(e.target.value) })} /><small className="faint">{t("Confirmed subscribers get one email this long before a window starts. 0 turns reminders off.")}</small></label>
             <button type="button" className="route tog" onClick={() => setPage({ ...page, mcpEnabled: page.mcpEnabled === false })}>
-              <div><b style={{ fontWeight: 500 }}>{t("Allow AI agents to read this page")}</b><small>{t("Lets the public, read-only MCP tools and llms.txt describe this page. The page itself stays public either way.")}</small></div>
+              <div><b style={{ fontWeight: 500 }}>{t("Allow the public MCP tools to read this page")}</b><small>{t("Controls the public, read-only MCP tools only. The page, its feeds and llms.txt stay public either way.")}</small></div>
               <span className={`tg ${page.mcpEnabled !== false ? "on" : ""}`} />
             </button>
           </div>

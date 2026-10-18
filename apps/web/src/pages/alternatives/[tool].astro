@@ -35,25 +35,25 @@ const ui = {
       <h1>{ui[k].h1}</h1>
       <p class="lede">{tool.lede[k]}</p>
       <p>{tool.about[k]} {ui[k].note}</p>
-      <h2 id="compare">{ui[k].glance}</h2>
+      <h2 id={`compare${k === "zh" ? "-zh" : ""}`}>{ui[k].glance}</h2>
       <table class="cmp">
         <thead><tr><th>{ui[k].topic}</th><th>OpenUptime</th><th>{tool.name}</th></tr></thead>
         <tbody>
           {tool.rows.map((r) => (<tr><td>{r.topic[k]}</td><td>{r.ou[k]}</td><td>{r.them[k]}</td></tr>))}
         </tbody>
       </table>
-      <h2 id="gaps">{ui[k].gaps}</h2>
+      <h2 id={`gaps${k === "zh" ? "-zh" : ""}`}>{ui[k].gaps}</h2>
       <p>{ui[k].gapsIntro}</p>
       <ul>{OU_GAPS.map((g) => (<li>{g[k]}</li>))}</ul>
       {tool.theyHave.length > 0 && (<><h3>{ui[k].known}</h3><ul>{tool.theyHave.map((g) => (<li>{g[k]}</li>))}</ul></>)}
-      <h2 id="who">{ui[k].who}</h2>
+      <h2 id={`who${k === "zh" ? "-zh" : ""}`}>{ui[k].who}</h2>
       <div class="two">
         <div><h3>{ui[k].pick}</h3><ul>{tool.bestThem.map((g) => (<li>{g[k]}</li>))}</ul></div>
         <div><h3>{ui[k].pickUs}</h3><ul>{tool.bestUs.map((g) => (<li>{g[k]}</li>))}</ul></div>
       </div>
-      <h2 id="migrate">{ui[k].migrate}</h2>
+      <h2 id={`migrate${k === "zh" ? "-zh" : ""}`}>{ui[k].migrate}</h2>
       <ol>{tool.migrate.map((g) => (<li>{g[k]}</li>))}</ol>
-      <h2 id="faq">{ui[k].faq}</h2>
+      <h2 id={`faq${k === "zh" ? "-zh" : ""}`}>{ui[k].faq}</h2>
       <div class="faq">
         {tool.faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}
       </div>

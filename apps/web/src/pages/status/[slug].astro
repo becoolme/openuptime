@@ -16,12 +16,17 @@ const { slug } = Astro.params;
 type History = { items: { id: string; number?: number | null; rootCause?: string | null; postmortem?: string | null; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
 const before = Astro.url.searchParams.get("before");
 // the two reads do not depend on each other
-const [{ status, data }, hist] = await Promise.all([
+type Maint = { items: { id: string; name: string; startsAt: string; endsAt: string; state: "scheduled" | "active" | "completed" }[] };
+const [{ status, data }, hist, maint] = await Promise.all([
   apiFetch<Status>(`/api/public/status/${slug}`),
   apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`),
+  apiFetch<Maint>(`/api/public/status/${slug}/maintenance`),
 ]);
 if (status === 404 || !data) return new Response("Not found", { status: 404 });
 const history = hist.data ?? { items: [], next: null };
+// windows that are running or still ahead; finished ones are not news
+const windows = (maint.data?.items ?? []).filter((w) => w.state !== "completed");
+const fmtWin = (iso: string) => new Date(iso).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 const activeIds = new Set(data.incidents.map((i) => i.id));
 history.items = history.items.filter((i) => !activeIds.has(i.id));
 // always 90 slots (oldest → now); buckets without checks render as grey "no data"
@@ -51,7 +56,7 @@ const fmtDay = (d: string) => new Date(d).toLocaleDateString((Astro.locals.lang 
 const stageCls = (st: string) => (st === "resolved" ? "ok" : st === "monitoring" ? "mon" : "");
 // the page owner picks where green ends and amber ends (percent); a bad pair falls back to the defaults
 const okAt = (data.page.uptimeOkPct ?? 99.9) / 100;
-const warnAt = (data.page.uptimeWarnPct ?? 99) / 100;
+const warnAt = (data.page.uptimeWarnPct ?? 98) / 100;
 const dayClass = (u: number) => (u >= okAt ? "" : u >= warnAt ? "w" : "d");
 const hideBrand = !!data.page.hideBranding;
 // without OpenUptime's mark the header shows the website's own logo, or just the title when there is no link
@@ -105,6 +110,20 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
               </div>
             </article>
           ))}
+
+          {windows.length > 0 && (
+            <section class="card pub-inc" aria-labelledby="maint-h">
+              <div class="pub-inc-h"><h3 id="maint-h">{t("Scheduled maintenance")}</h3></div>
+              <div class="pub-ups">
+                {windows.map((w) => (
+                  <div class={`up ${w.state === "active" ? "" : "mon"}`}>
+                    <div class="up-h"><b>{w.name}</b><span>{w.state === "active" ? t("In progress") : t("Upcoming")}</span></div>
+                    <p>{fmtWin(w.startsAt)} – {fmtWin(w.endsAt)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div class="pub-st"><h2>{t("Components")}</h2>
             <div class="pub-legend"><span><i></i>{t("Operational")}</span><span><i class="w"></i>{t("Degraded")}</span><span><i class="d"></i>{t("Outage")}</span></div>
