@@ -414,23 +414,29 @@ export async function notifyIncidentUpdate(
   }).catch((e) => console.error("incident update notify failed", e));
 }
 
+/** How many times a reminder whose every mail failed is handed back before it is given up on. */
+const REMINDER_ATTEMPTS = 3;
+
 /**
  * Reminds the confirmed subscribers of a page shortly before one of its maintenance windows starts. Each window is claimed
- * once per page before anything is sent, so overlapping ticks never send twice. The claim is kept once at least one mail went out;
- * if none could be sent it is given back and the next tick tries again.
+ * once per page before anything is sent, so overlapping ticks never send twice. The claim stays when the plan's email
+ * allowance leaves nobody to mail, and when at least one mail went out. It is given back only when every mail failed, and
+ * only for the first few attempts, so a broken mail setup does not retry for ever.
  */
 export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitlements = unmetered) {
   for (const r of await repo.claimMaintenanceReminders(20)) {
     const { send: subs } = await withinEmails(entitlements, r.page.organizationId, r.subscribers);
-    // a claim with nobody to mail, or with every mail failed, is given back so a later tick can try again
-    const release = () => repo.releaseMaintenanceReminder(r.window.id, r.page.id).catch((e) => console.error("maintenance reminder release failed", e));
-    if (!subs.length) { await release(); continue; }
+    // the plan allows no more mail: nothing to send and nothing to retry, so the claim stays
+    if (!subs.length) continue;
     const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {
       subject: (p, lang) => `[${p}] ${tr(lang, "Scheduled maintenance: {name}", { name: r.window.name })}`,
       title: (lang) => tr(lang, "Scheduled maintenance: {name}", { name: r.window.name }),
       body: (lang) => `${tr(lang, "Scheduled maintenance for {title} starts soon. Checks keep running, but alerts are paused while it lasts.", { title: r.page.title })}\n\n${tr(lang, "Starts")}: ${utc(r.window.startsAt)}\n${tr(lang, "Ends")}: ${utc(r.window.endsAt)}`,
       badge: (lang) => ({ label: tr(lang, "Scheduled"), tone: "neutral" }),
     }).catch((e) => { console.error("maintenance reminder failed", e); return null; });
-    if (!sent || sent.failed >= sent.total) await release();
+    if (sent && sent.failed < sent.total) continue;
+    // every mail failed: hand the claim back for another try, up to REMINDER_ATTEMPTS times
+    const retry = await repo.withinLimit(`maint-reminder:${r.window.id}:${r.page.id}`, REMINDER_ATTEMPTS, 24 * 3600).catch(() => false);
+    if (retry) await repo.releaseMaintenanceReminder(r.window.id, r.page.id).catch((e) => console.error("maintenance reminder release failed", e));
   }
 }
