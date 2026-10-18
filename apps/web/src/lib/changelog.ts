@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "zh-seo-metadata",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Chinese titles for comparison pages", zh: "对比页的中文标题与描述" },
+    summary: {
+      en: "The Chinese versions of the alternatives and use-case pages now carry a Chinese title, description and FAQ data for search and link previews.",
+      zh: "替代方案与使用场景页面的中文版现在带有中文标题、描述和常见问题数据，便于搜索引擎收录和链接预览。",
+    },
+    points: [
+      { en: "Pages under /zh-Hans/alternatives and /zh-Hans/for no longer show the English title, description and share card text.", zh: "/zh-Hans/alternatives 与 /zh-Hans/for 下的页面不再显示英文标题、描述和分享卡片文字。" },
+    ],
+    link: { href: "/zh-Hans/alternatives", label: { en: "See the comparison pages", zh: "查看对比页面" } },
+  },
+  {
     id: "public-surface-fixes",
     date: "2026-10-17",
     edition: "community",

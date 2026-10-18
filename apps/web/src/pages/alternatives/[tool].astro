@@ -29,7 +29,7 @@ const ui = {
   },
 } as const;
 ---
-<SeoShell title={tool.title.en} description={tool.description.en} path={`/alternatives/${tool.slug}`} faq={tool.faq}>
+<SeoShell title={tool.title} description={tool.description} path={`/alternatives/${tool.slug}`} faq={tool.faq}>
   {langs.map(({ attr, k }) => (
     <div lang={attr}>
       <h1>{ui[k].h1}</h1>

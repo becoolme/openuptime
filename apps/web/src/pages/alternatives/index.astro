@@ -22,7 +22,7 @@ const ui = {
   zh: { h1: "OpenUptime 替代方案与对比", lede: "写给正在比较可用性监控工具的人。每一页都会说明 OpenUptime 有什么、缺什么，以及什么情况下更适合选另一个产品。", pages: "对比对象", how: "这些页面是怎么写的", howP: "关于 OpenUptime 的每一句话都来自它的代码和文档。关于其他产品的内容只是概括，不写价格和额度，因为这些会变化；请以其官网为准。如发现错误，欢迎在 GitHub 上提 issue。", usecases: "按使用场景", uc: "查看 SaaS、代理机构、电商和 DevOps 团队的监控配置方式。", ucA: "使用场景", faq: "常见问题" },
 } as const;
 ---
-<SeoShell title="Uptime monitoring alternatives" description="Compare OpenUptime with UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma: features, gaps and who each fits." path="/alternatives" faq={faq}>
+<SeoShell title={l("Uptime monitoring alternatives", "可用性监控替代方案")} description={l("Compare OpenUptime with UptimeRobot, Better Stack, Pingdom, StatusCake and Uptime Kuma: features, gaps and who each fits.", "将 OpenUptime 与 UptimeRobot、Better Stack、Pingdom、StatusCake 和 Uptime Kuma 对比：功能、差距与各自适合的人群。")} path="/alternatives" faq={faq}>
   {langs.map(({ attr, k }) => (
     <div lang={attr}>
       <h1>{ui[k].h1}</h1>
