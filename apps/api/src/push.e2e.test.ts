@@ -67,6 +67,14 @@ describe.skipIf(!url)("push devices and the push channel", () => {
     const list = await call(base, ada, "GET", "/push/devices");
     expect(list.body).toHaveLength(1);
 
+    // critical alerts are opt-in, default off, and a later registration without the flag keeps the choice
+    expect(again.body.critical).toBe(false);
+    const crit = await call(base, ada, "PUT", "/push/devices", { token, platform: "ios", environment: "production", critical: true });
+    expect(crit.body.critical).toBe(true);
+    expect((await call(base, ada, "PUT", "/push/devices", { token, platform: "ios", environment: "production" })).body.critical).toBe(true);
+    expect((await call(base, ada, "PUT", "/push/devices", { token, platform: "ios", environment: "production", critical: "yes" })).status).toBe(400);
+    expect((await call(base, ada, "GET", "/push/devices")).body[0].critical).toBe(true);
+
     for (const bad of [{ token: "zz".repeat(20), platform: "ios", environment: "production" }, { token: "ab", platform: "ios", environment: "production" }, { token, platform: "android", environment: "production" }, { token, platform: "ios", environment: "beta" }, { token, platform: "ios", environment: "production", name: "x".repeat(81) }]) {
       expect((await call(base, ada, "PUT", "/push/devices", bad)).status).toBe(400);
     }

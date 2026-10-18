@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "push-critical-alerts",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Critical push alerts and cleaner devices", zh: "紧急推送与设备清理" },
+    summary: { en: "Phones can opt in to critical down alerts, and push notifications stay tidier.", zh: "手机可以选择接收紧急宕机提醒，推送通知也更整洁。" },
+    points: [
+      { en: "Register a device with critical turned on and down alerts can break through Do Not Disturb; recoveries stay quiet.", zh: "注册设备时开启 critical，宕机提醒即可突破勿扰模式，恢复通知仍保持安静。" },
+      { en: "Down alerts without the opt-in are now marked time-sensitive, and reminders for one incident replace the earlier banner.", zh: "未开启时，宕机提醒标记为 time-sensitive，同一事件的提醒会替换之前的横幅。" },
+      { en: "Devices that have not registered for 180 days are removed automatically.", zh: "180 天未重新注册的设备会被自动移除。" },
+    ],
+    link: { href: "/docs/api#push", label: { en: "Read the push API docs", zh: "阅读推送接口文档" } },
+  },
+  {
     id: "backup-restore-docs",
     date: "2026-10-17",
     edition: "community",

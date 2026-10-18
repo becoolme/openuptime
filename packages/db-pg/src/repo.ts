@@ -1,5 +1,6 @@
 import {
   DEFAULT_ALERT_LOG_DAYS,
+  PUSH_DEVICE_STALE_DAYS,
   DEFAULT_CHECK_RETENTION_DAYS,
   MAX_REMINDERS,
   ROLLUP_RETENTION_DAYS,
@@ -496,6 +497,8 @@ export function createRepo(db: Db): Repo {
       await db.execute(sql`delete from rate_limit where window_start < now() - interval '1 day'`);
       await db.execute(sql`delete from alert_delivery d
         where d.created_at < now() - make_interval(days => coalesce((select s.alert_log_retention_days from workspace_setting s where s.organization_id = d.organization_id), ${DEFAULT_ALERT_LOG_DAYS}))`);
+      // a phone that has not opened the app (which re-registers on launch) for half a year is gone or has a stale token
+      await db.delete(schema.pushDevice).where(lte(schema.pushDevice.lastSeenAt, new Date(Date.now() - PUSH_DEVICE_STALE_DAYS * 864e5)));
     },
     async withinLimit(key, limit, windowSec) {
       const t = schema.rateLimit;
@@ -710,10 +713,10 @@ export function createRepo(db: Db): Repo {
       const now = new Date();
       const [row] = await db
         .insert(schema.pushDevice)
-        .values({ userId, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, lastSeenAt: now })
+        .values({ userId, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, critical: d.critical ?? false, lastSeenAt: now })
         .onConflictDoUpdate({
           target: schema.pushDevice.token,
-          set: { userId, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, lastSeenAt: now },
+          set: { userId, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, ...(d.critical === undefined ? {} : { critical: d.critical }), lastSeenAt: now },
         })
         .returning();
       return row as PushDevice;

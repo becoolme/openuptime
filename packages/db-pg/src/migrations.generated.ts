@@ -109,5 +109,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0021_salty_black_cat",
     "when": 1792281933814,
     "sql": "CREATE TABLE \"maintenance_reminder\" (\n\t\"maintenance_id\" uuid NOT NULL,\n\t\"status_page_id\" uuid NOT NULL,\n\t\"sent_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"maintenance_reminder_maintenance_id_status_page_id_pk\" PRIMARY KEY(\"maintenance_id\",\"status_page_id\")\n);\n--> statement-breakpoint\nALTER TABLE \"status_page\" ADD COLUMN \"uptime_ok_pct\" double precision DEFAULT 99.9 NOT NULL;--> statement-breakpoint\nALTER TABLE \"status_page\" ADD COLUMN \"uptime_warn_pct\" double precision DEFAULT 98 NOT NULL;--> statement-breakpoint\nALTER TABLE \"status_page\" ADD COLUMN \"mcp_enabled\" boolean DEFAULT true NOT NULL;--> statement-breakpoint\nALTER TABLE \"status_page\" ADD COLUMN \"maintenance_reminder_hours\" integer DEFAULT 24 NOT NULL;--> statement-breakpoint\nALTER TABLE \"status_subscriber\" ADD COLUMN \"monitor_ids\" uuid[] DEFAULT '{}' NOT NULL;--> statement-breakpoint\nALTER TABLE \"workspace_setting\" ADD COLUMN \"monthly_report\" boolean DEFAULT false NOT NULL;--> statement-breakpoint\nALTER TABLE \"workspace_setting\" ADD COLUMN \"last_report_month\" text;--> statement-breakpoint\nALTER TABLE \"maintenance_reminder\" ADD CONSTRAINT \"maintenance_reminder_maintenance_id_maintenance_window_id_fk\" FOREIGN KEY (\"maintenance_id\") REFERENCES \"public\".\"maintenance_window\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE \"maintenance_reminder\" ADD CONSTRAINT \"maintenance_reminder_status_page_id_status_page_id_fk\" FOREIGN KEY (\"status_page_id\") REFERENCES \"public\".\"status_page\"(\"id\") ON DELETE cascade ON UPDATE no action;"
+  },
+  {
+    "tag": "0022_spotty_solo",
+    "when": 1792282025671,
+    "sql": "ALTER TABLE \"push_device\" ADD COLUMN \"critical\" boolean DEFAULT false NOT NULL;"
   }
 ];

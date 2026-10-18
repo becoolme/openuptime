@@ -155,6 +155,13 @@
       "when": 1792281933814,
       "tag": "0021_salty_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792282025671,
+      "tag": "0022_spotty_solo",
+      "breakpoints": true
     }
   ]
 }

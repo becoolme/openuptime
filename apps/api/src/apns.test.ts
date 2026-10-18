@@ -16,7 +16,7 @@ const env = () => ({ APNS_KEY: pem, APNS_KEY_ID: "KEYID12345", APNS_TEAM_ID: "TE
 const TOKEN_A = "a".repeat(64);
 const TOKEN_B = "b".repeat(64);
 const device = (token: string, over: Partial<PushDevice> = {}): PushDevice => ({
-  id: crypto.randomUUID(), userId: "u", token, platform: "ios", environment: "production", locale: null, name: null, createdAt: new Date(), lastSeenAt: new Date(), ...over,
+  id: crypto.randomUUID(), userId: "u", token, platform: "ios", environment: "production", locale: null, name: null, critical: false, createdAt: new Date(), lastSeenAt: new Date(), ...over,
 });
 const ev = { kind: "incident.opened" as const, incident: { id: "11111111-1111-1111-1111-111111111111", title: "API is down" }, monitor: { id: "m1", name: "API", target: "https://api.example.com" }, reason: "HTTP 503" };
 
@@ -83,6 +83,17 @@ describe("payload", () => {
     expect(buildPayload(resolved, "o", "en").aps).toMatchObject({ alert: { title: "API has recovered", body: "Down for 1 h 15 min" }, "interruption-level": "active" });
     expect(buildPayload(resolved, "o", "zh-CN").aps.alert).toEqual({ title: "API 已恢复", body: "宕机时长 1小时 15分钟" });
   });
+  it("critical: only a real down on an opted-in device", () => {
+    expect(buildPayload(ev, "o", "en", true).aps).toMatchObject({ sound: { critical: 1, name: "default", volume: 1 }, "interruption-level": "critical", "thread-id": "m1" });
+    expect(buildPayload({ ...ev, kind: "incident.reminder" }, "o", "en", true).aps["interruption-level"]).toBe("critical");
+    expect(buildPayload({ ...ev, kind: "incident.escalated" }, "o", "en", true).aps["interruption-level"]).toBe("critical");
+    // not opted in: time-sensitive
+    expect(buildPayload(ev, "o", "en", false).aps).toMatchObject({ sound: "default", "interruption-level": "time-sensitive" });
+    // slow, test and recovery never break through, even when opted in
+    expect(buildPayload({ ...ev, slow: true }, "o", "en", true).aps).toMatchObject({ sound: "default", "interruption-level": "time-sensitive" });
+    expect(buildPayload({ ...ev, test: true }, "o", "en", true).aps).toMatchObject({ sound: "default", "interruption-level": "active" });
+    expect(buildPayload({ ...ev, kind: "incident.resolved" }, "o", "en", true).aps).toMatchObject({ sound: "default", "interruption-level": "active" });
+  });
   it("test messages", () => {
     expect(buildPayload({ ...ev, test: true }, "o", "en").aps.alert).toEqual({ title: "Your channel is connected", body: "This is a test alert from OpenUptime" });
     expect(buildPayload({ ...ev, test: true }, "o", "zh-CN").aps.alert.title).toBe("渠道已连通");
@@ -123,6 +134,20 @@ describe("sendPush", () => {
     expect(Number(a.headers["apns-expiration"])).toBeGreaterThan(Date.now() / 1000);
     expect(JSON.parse(a.body).aps.alert.title).toBe("API is down");
     expect(JSON.parse(b.body).aps.alert.title).toBe("API 宕机了");
+  });
+
+  it("sends critical only to devices that opted in, and collapses by incident", async () => {
+    const seen = stub(() => ({ status: 200, body: "" }));
+    await sendPush(repoStub().repo, [device(TOKEN_A, { critical: true }), device(TOKEN_B)], ev, "org1");
+    const a = seen.find((r) => r.path.endsWith(TOKEN_A))!;
+    const b = seen.find((r) => r.path.endsWith(TOKEN_B))!;
+    expect(JSON.parse(a.body).aps).toMatchObject({ "interruption-level": "critical", sound: { critical: 1 }, "thread-id": "m1" });
+    expect(JSON.parse(b.body).aps["interruption-level"]).toBe("time-sensitive");
+    for (const r of [a, b]) expect(r.headers).toMatchObject({ "apns-collapse-id": ev.incident.id, "apns-priority": "10" });
+    // a reminder for the same incident carries the same collapse id so it replaces the earlier banner
+    seen.length = 0;
+    await sendPush(repoStub().repo, [device(TOKEN_B)], { ...ev, kind: "incident.reminder" }, "org1");
+    expect(seen[0].headers["apns-collapse-id"]).toBe(ev.incident.id);
   });
 
   it("does nothing, without error, when there are no devices", async () => {

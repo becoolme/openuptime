@@ -13,9 +13,10 @@ const body = z.object({
   environment: z.enum(["sandbox", "production"]),
   locale: z.enum(["en", "zh-CN"]).optional(),
   name: z.string().trim().max(80).optional(),
+  critical: z.boolean().optional(),
 });
 
-const shape = (d: PushDevice) => ({ id: d.id, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale, name: d.name });
+const shape = (d: PushDevice) => ({ id: d.id, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale, name: d.name, critical: d.critical });
 
 /** Registrations of phones for push alerts. They belong to the signed-in person (session or API key), not to a workspace. */
 export const push = new Hono<AppEnv>()
@@ -26,7 +27,7 @@ export const push = new Hono<AppEnv>()
     if (!userId) return c.json({ error: "This credential is not tied to a user, so it cannot register a device" }, 403);
     if (!(await repo.withinLimit(`push:${userId}`, 60, 600))) return c.json({ error: "Too many requests, try again in a few minutes" }, 429);
     const v = c.req.valid("json");
-    const device = await repo.upsertPushDevice(userId, { token: v.token, platform: v.platform, environment: v.environment, locale: v.locale ?? null, name: v.name ?? null });
+    const device = await repo.upsertPushDevice(userId, { token: v.token, platform: v.platform, environment: v.environment, locale: v.locale ?? null, name: v.name ?? null, critical: v.critical });
 
     // the first phone makes alerts reach phones: give each workspace the person manages a "Mobile app" channel, once
     if (apnsConfigured()) {
