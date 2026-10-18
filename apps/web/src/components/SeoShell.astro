@@ -3,18 +3,17 @@ import Doc from "../layouts/Doc.astro";
 // Wrapper of the comparison and use-case pages: the Doc layout plus canonical / hreflang links (only when the build knows
 // its public origin, like the landing pages) and FAQPage structured data.
 import type { Faq } from "../lib/seo-pages";
+import type { L } from "../lib/changelog";
+import { faqLd, scriptJson, zhVariant } from "../lib/seo-i18n";
 
-const { title, description, path, faq } = Astro.props as { title: string; description: string; path: string; faq: Faq[] };
+// The page is built in English. The Chinese title, description and FAQ data travel in the seo-i18n block, which the
+// /zh-Hans route swaps in (lib/seo-i18n.ts).
+const { title, description, path, faq } = Astro.props as { title: L; description: L; path: string; faq: Faq[] };
 const origin = Astro.site ? Astro.site.origin : "";
-const ld = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q.en, acceptedAnswer: { "@type": "Answer", text: f.a.en } })),
-};
-// "<" never appears raw inside a script element
-const json = JSON.stringify(ld).replace(/</g, "\\u003c");
+const json = scriptJson(faqLd(faq, "en"));
+const zh = scriptJson(zhVariant(title, description, faq));
 ---
-<Doc title={title} description={description}>
+<Doc title={title.en} description={description.en}>
   <Fragment slot="head">
     {origin && <link rel="canonical" href={`${origin}${path}`} />}
     {origin && <link rel="alternate" hreflang="en" href={`${origin}${path}`} />}
@@ -22,7 +21,8 @@ const json = JSON.stringify(ld).replace(/</g, "\\u003c");
     {origin && <link rel="alternate" hreflang="x-default" href={`${origin}${path}`} />}
     {origin && <meta property="og:url" content={`${origin}${path}`} />}
     {origin && <meta property="og:image" content={`${origin}/og.png`} />}
-    <script type="application/ld+json" set:html={json} />
+    <script type="application/ld+json" id="seo-ld" set:html={json} />
+    <script type="application/json" id="seo-i18n" set:html={zh} />
   </Fragment>
   <slot />
 </Doc>

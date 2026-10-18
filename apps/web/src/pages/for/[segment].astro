@@ -12,7 +12,7 @@ const ui = {
   zh: { scen: "监控什么", status: "状态页", alerts: "告警路由", limits: "需要了解的限制", faq: "常见问题", ctaT: "在 OpenUptime 中设置", ctaP: "可以直接使用托管服务，也可以自己运行。源码在 GitHub，采用 MIT 许可证。", start: "开始监控", self: "自托管指南", all: "全部使用场景", cmp: "与其他工具对比", regions: "多区域检测", mcp: "MCP 服务", api: "API 参考", embed: "嵌入状态" },
 } as const;
 ---
-<SeoShell title={segment.title.en} description={segment.description.en} path={`/for/${segment.slug}`} faq={segment.faq}>
+<SeoShell title={segment.title} description={segment.description} path={`/for/${segment.slug}`} faq={segment.faq}>
   {langs.map(({ attr, k }) => (
     <div lang={attr}>
       <h1>{segment.title[k]}</h1>

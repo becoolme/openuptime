@@ -14,7 +14,7 @@ const ui = {
   zh: { h1: "OpenUptime 使用场景", lede: "同样的功能如何适配不同类型的团队。每一页都会列出具体的监控、状态页和告警配置方式。", cmp: "正在比较工具？", cmpA: "查看替代方案对比", faq: "常见问题" },
 } as const;
 ---
-<SeoShell title="Uptime monitoring by use case" description="How SaaS teams, agencies, online stores and DevOps teams set up monitors, status pages and alerts in OpenUptime." path="/for" faq={faq}>
+<SeoShell title={l("Uptime monitoring by use case", "按使用场景的可用性监控")} description={l("How SaaS teams, agencies, online stores and DevOps teams set up monitors, status pages and alerts in OpenUptime.", "SaaS 团队、代理机构、电商和 DevOps 团队如何在 OpenUptime 中配置监控、状态页和告警。")} path="/for" faq={faq}>
   {langs.map(({ attr, k }) => (
     <div lang={attr}>
       <h1>{ui[k].h1}</h1>

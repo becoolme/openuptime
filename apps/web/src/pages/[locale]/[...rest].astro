@@ -1,5 +1,6 @@
 ---
 import { env } from "cloudflare:workers";
+import { localizeSeoHtml } from "../../lib/seo-i18n";
 
 // /zh-Hans/..., /ja, /es: the same pages under a language prefix. The static pages are fetched from the asset store
 // (they localise themselves from the URL); deep links and status pages are rewritten to their own server routes.
@@ -36,6 +37,8 @@ if (res.ok && type.includes("text/html") && !res.redirected) {
   let html = (await res.text()).replace(/<html lang="[^"]*"/, `<html lang="${locale === "zh-Hans" ? "zh-CN" : locale}"`);
   // pages that carry a canonical link (the comparison pages) point it at the Chinese address when served from it
   if (locale === "zh-Hans" && tail !== "/") html = html.replace(/(<link rel="canonical" href="|<meta property="og:url" content=")(https?:\/\/[^\/"]+)(\/[^"]*")/g, "$1$2/zh-Hans$3");
+  // comparison and use-case pages carry their Chinese title, description and structured data in a JSON block
+  if (locale === "zh-Hans") html = localizeSeoHtml(html);
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", vary: "Cookie" } });
 }
 if (res.ok && !type.includes("text/html")) return res;
