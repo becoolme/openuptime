@@ -36,7 +36,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "订阅文档现在写明同一邮箱重复订阅时的处理方式；新的更新重新打开事件时，已发布的复盘会转为私有。",
     },
     points: [
-      { en: "Subscribing again replaces the language and components of a pending address and sends a fresh confirmation link; a confirmed address gets no mail and no change.", zh: "重复订阅时，待确认的邮箱会以最新的语言和组件覆盖原有选择并收到新的确认链接；已确认的邮箱不会收到邮件，也不会有改动。" },
+      { en: "Subscribing again replaces the language and components of a pending address and sends the confirmation email again; a confirmed address gets no mail and no change.", zh: "重复订阅时，待确认的邮箱会以最新的语言和组件覆盖原有选择并再次收到确认邮件；已确认的邮箱不会收到邮件，也不会有改动。" },
       { en: "The per-address subscribe limit is shared by everyone, so someone else can delay your confirmation mail by submitting your address repeatedly.", zh: "每个邮箱的订阅限流对所有人共用，他人反复提交你的邮箱，可能会延迟你的确认邮件。" },
       { en: "Posting a non-resolved update to a resolved incident reopens it and withdraws its published postmortem, the same as an automatic reopen.", zh: "对已解决的事件发布未解决状态的更新会重新打开它，并撤回已发布的复盘，与自动重开的处理一致。" },
       { en: "On the status page, maintenance times are marked up as dates for browsers and readers.", zh: "状态页上的维护时间现在带有机器可读的日期标记。" },
@@ -72,7 +72,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "Pages under /zh-Hans/alternatives and /zh-Hans/for no longer show the English title, description and share card text.", zh: "/zh-Hans/alternatives 与 /zh-Hans/for 下的页面不再显示英文标题、描述和分享卡片文字。" },
     ],
-    link: { href: "/zh-Hans/alternatives", label: { en: "See the comparison pages", zh: "查看对比页面" } },
+    link: { href: "/alternatives", label: { en: "See the comparison pages", zh: "查看对比页面" } },
   },
   {
     id: "public-surface-fixes-2",
@@ -102,10 +102,10 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       { en: "The next outage after you resolve an incident yourself, in the app, with an API key or from an agent, alerts normally instead of being muted as flapping.", zh: "你手动（在应用内、通过 API Key 或智能体）解决事件后，下一次故障会照常告警，不会再被当作抖动静音。" },
-      { en: "A monitor that goes down and up repeatedly sends at most one alert per 15 minutes for the same incident, and a retried alert for a reopened incident still says \"again\" on chat and webhook channels.", zh: "监控项反复下线、恢复时，同一事件每 15 分钟最多告警一次；重试发送的重开事件告警在聊天和 Webhook 渠道中仍会写明“再次”。" },
+      { en: "A monitor that goes down and up repeatedly sends at most one alert per 15 minutes for the same incident, as long as no recovery alert went out in between, and a retried alert for a reopened incident still says \"again\" on chat and webhook channels.", zh: "监控项反复下线、恢复时，只要期间没有发出过恢复告警，同一事件每 15 分钟最多告警一次；重试发送的重开事件告警在聊天和 Webhook 渠道中仍会写明“再次”。" },
       { en: "A published postmortem is withdrawn when its incident is reopened, so it is not republished by the next recovery.", zh: "事件被重新打开时，已发布的复盘会被撤回，不会在下一次恢复时再次公开。" },
       { en: "With ALLOW_PRIVATE_TARGETS on, the check that tells a down target from a prober without internet now still works for public names, and an unusable SELFCHECK_URLS logs a warning and falls back to the defaults.", zh: "开启 ALLOW_PRIVATE_TARGETS 后，用于区分目标故障与探测节点断网的自检对公网域名依然有效；SELFCHECK_URLS 无效时会记录警告并使用默认地址。" },
-      { en: "A target with several addresses is no longer reported down only because one address hangs, and repeat alerts are no longer held back by monitors that are under maintenance.", zh: "目标有多个地址时，不再因其中一个地址无响应而被判定为故障；处于维护中的监控项也不再拖延其他监控项的重复提醒。" },
+      { en: "A target with several addresses is no longer reported down only because one address hangs.", zh: "目标有多个地址时，不再因其中一个地址无响应而被判定为故障。" },
     ],
   },
   {
