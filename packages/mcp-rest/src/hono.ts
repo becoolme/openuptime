@@ -15,6 +15,11 @@ export type MountMcpOptions = {
   cookieOrigins?: (c: Context) => string[];
   /** A cheap authenticated GET that is run before the first real call, to turn bad credentials into a real HTTP 401. */
   probePath?: string;
+  /**
+   * Serve without credentials. Nothing the caller sends is forwarded (no cookie, no key, no context headers) and only the
+   * server's tools marked `public` are listed or callable. Use it for a second endpoint next to the authenticated one.
+   */
+  anonymous?: boolean;
   /** Where the protected-resource metadata is served; defaults to the RFC 9728 path-inserted form for `path`. */
   resourceMetadataPath?: string;
 };
@@ -40,13 +45,13 @@ export function mountMcp(app: Hono<any>, options: MountMcpOptions) {
     const unauthorized = () => c.json(rpcError(-32001, "Unauthorized"), 401, { "www-authenticate": challenge(origin) });
 
     const headers = new Headers();
-    for (const h of forwarded) {
+    for (const h of options.anonymous ? [] : forwarded) {
       const v = c.req.header(h);
       if (v) headers.set(h, v);
     }
     const foreign = c.req.header("origin");
     if (foreign && foreign !== origin && !(options.cookieOrigins?.(c) ?? []).includes(foreign)) headers.delete("cookie");
-    if (!credentialHeaders.some((h) => headers.has(h))) return unauthorized();
+    if (!options.anonymous && !credentialHeaders.some((h) => headers.has(h))) return unauthorized();
 
     const raw = (await c.req.json().catch(() => undefined)) as unknown;
     if (raw === undefined) return c.json(rpcError(-32700, "Parse error"), 400);
@@ -73,12 +78,12 @@ export function mountMcp(app: Hono<any>, options: MountMcpOptions) {
     // bad or expired credentials: tell the client with a real 401 so it can (re)start the authorization flow
     const method = (m: unknown) => String((m as { method?: string } | null)?.method ?? "");
     const needsAuth = items.some((m) => method(m) !== "ping" && !method(m).startsWith("notifications/"));
-    if (needsAuth && options.probePath) {
+    if (needsAuth && options.probePath && !options.anonymous) {
       const probe = await call({ method: "GET", path: options.probePath });
       if (rejected) return unauthorized();
       if (probe.status === 403) return c.json(rpcError(-32003, probe.text), 403);
     }
-    const out = (await Promise.all(items.map((m) => server.handle(m as never, call)))).filter((r) => r !== null);
+    const out = (await Promise.all(items.map((m) => server.handle(m as never, call, { publicOnly: !!options.anonymous })))).filter((r) => r !== null);
     if (out.length === 0) return c.body(null, 202);
     return c.json(Array.isArray(raw) ? out : out[0]);
   });

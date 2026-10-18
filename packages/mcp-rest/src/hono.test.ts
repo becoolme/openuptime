@@ -6,7 +6,10 @@ import { createMcpServer, defineTool } from "./rpc";
 
 const server = createMcpServer({
   info: { name: "demo", version: "1" },
-  tools: [defineTool({ name: "whoami", description: "Who am I.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/me" }) })],
+  tools: [
+    defineTool({ name: "open_info", description: "Public.", schema: z.object({ slug: z.string() }), readOnly: true, public: true, build: (a) => ({ method: "GET", path: `/api/open/${a.slug}` }) }),
+    defineTool({ name: "whoami", description: "Who am I.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/me" }) }),
+  ],
 });
 
 const app = new Hono();
@@ -14,6 +17,8 @@ app.get("/api/me", (c) => {
   if (c.req.header("authorization") !== "Bearer good") return c.json({ error: "no" }, 401);
   return c.json({ user: "u1", cookie: c.req.header("cookie") ?? null });
 });
+app.get("/api/open/:slug", (c) => c.json({ slug: c.req.param("slug"), auth: c.req.header("authorization") ?? null, cookie: c.req.header("cookie") ?? null }));
+mountMcp(app, { server, path: "/api/mcp/public", anonymous: true });
 mountMcp(app, { server, path: "/api/mcp", scopes: ["mcp:read"], probePath: "/api/me", cookieOrigins: () => ["https://app.example"] });
 mountOAuthMetadata(app, { resource: () => "https://api.example/api/mcp", authorizationServers: () => ["https://api.example/api/auth"], scopes: ["mcp:read"], mcpPath: "/api/mcp" });
 
@@ -63,5 +68,32 @@ describe("mountMcp", () => {
   it("serves the protected resource metadata", async () => {
     const meta: any = await (await app.request("https://api.example/.well-known/oauth-protected-resource/api/mcp")).json();
     expect(meta).toMatchObject({ resource: "https://api.example/api/mcp", authorization_servers: ["https://api.example/api/auth"], scopes_supported: ["mcp:read"] });
+  });
+
+  describe("anonymous endpoint", () => {
+    const anon = (body: unknown, headers: Record<string, string> = {}) =>
+      app.request("https://api.example/api/mcp/public", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+
+    it("works without credentials and lists only public tools", async () => {
+      const res = await anon({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as any).result.tools.map((t: any) => t.name)).toEqual(["open_info"]);
+    });
+
+    it("runs public tools and never forwards the caller's credentials", async () => {
+      const res = await anon({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "open_info", arguments: { slug: "acme" } } }, { authorization: "Bearer good", cookie: "s=1" });
+      expect(JSON.parse(((await res.json()) as any).result.content[0].text)).toEqual({ slug: "acme", auth: null, cookie: null });
+    });
+
+    it("treats tools that are not public as unknown", async () => {
+      const res = await anon({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami" } }, { authorization: "Bearer good" });
+      expect(((await res.json()) as any).error.code).toBe(-32602);
+    });
+
+    it("leaves the authenticated endpoint demanding credentials and listing everything", async () => {
+      expect((await post({ jsonrpc: "2.0", id: 1, method: "tools/list" })).status).toBe(401);
+      const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { authorization: "Bearer good" });
+      expect(((await res.json()) as any).result.tools.length).toBe(2);
+    });
   });
 });
