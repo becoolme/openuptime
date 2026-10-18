@@ -53,7 +53,7 @@ export const incidents = new Hono<AppEnv>()
   .patch(
     "/:id",
     uuidParams,
-    zValidator("json", z.object({ rootCause: z.string().trim().max(ROOT_CAUSE_MAX).nullable().optional(), postmortem: z.string().max(POSTMORTEM_MAX).nullable().optional() })),
+    zValidator("json", z.object({ rootCause: z.string().trim().max(ROOT_CAUSE_MAX).nullable().optional(), postmortem: z.string().max(POSTMORTEM_MAX).nullable().optional(), publishPostmortem: z.boolean().optional() })),
     async (c) => {
       const repo = c.get("repo");
       const id = c.req.param("id");
@@ -61,7 +61,7 @@ export const incidents = new Hono<AppEnv>()
       if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
       // an empty string clears the field, like null
       const blank = (x: string | null | undefined) => (x === undefined ? undefined : x?.trim() ? x : null);
-      const inc = await repo.updateIncidentWriteUp(c.get("orgId"), id, { rootCause: blank(v.rootCause), postmortem: blank(v.postmortem) });
+      const inc = await repo.updateIncidentWriteUp(c.get("orgId"), id, { rootCause: blank(v.rootCause), postmortem: blank(v.postmortem), publish: v.publishPostmortem });
       return inc ? c.json(inc) : c.json({ error: "Not found" }, 404);
     },
   )
@@ -74,6 +74,8 @@ export const incidents = new Hono<AppEnv>()
       const v = c.req.valid("json");
       const id = c.req.param("id");
       if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
+      // the resolution is what subscribers are mailed about, so it cannot be kept internal
+      if (v.status === "resolved" && v.visibility === "internal") return c.json({ error: "A resolved update must be public" }, 400);
       const r = await repo.postIncidentUpdate(c.get("orgId"), id, { ...v, authorId: c.get("userId") });
       if (!r) return c.json({ error: "Not found" }, 404);
       // internal updates stay inside the team: no subscriber email

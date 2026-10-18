@@ -59,6 +59,14 @@ describe("mountMcp", () => {
     expect(((await res.json()) as unknown[]).length).toBe(2);
   });
 
+  it("refuses a batch of more than 10 messages before running any of it", async () => {
+    const msg = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/list" });
+    expect((await post(Array.from({ length: 10 }, (_, i) => msg(i)), { authorization: "Bearer good" })).status).toBe(200);
+    const res = await post(Array.from({ length: 11 }, (_, i) => msg(i)), { authorization: "Bearer good" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error.code).toBe(-32600);
+  });
+
   it("rejects malformed JSON and GET", async () => {
     const bad = await app.request("https://api.example/api/mcp", { method: "POST", headers: { authorization: "Bearer good" }, body: "{" });
     expect(bad.status).toBe(400);

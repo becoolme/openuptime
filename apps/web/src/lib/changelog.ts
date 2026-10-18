@@ -27,6 +27,24 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "public-surface-fixes",
+    date: "2026-10-17",
+    edition: "community",
+    title: { en: "Status page and API fixes", zh: "状态页与接口修复" },
+    summary: {
+      en: "Manual incidents stay on their own project's status pages, write-ups are published only when you say so, and subscribing is harder to abuse.",
+      zh: "手动事件只出现在所属项目的状态页，复盘内容需要你确认才会公开，订阅接口也更难被滥用。",
+    },
+    points: [
+      { en: "An incident without a monitor now shows only on the status pages and subscriber lists of its own project.", zh: "没有关联监控项的事件，现在只会出现在所属项目的状态页和订阅者通知中。" },
+      { en: "Root cause and postmortem stay private until you tick Publish to the status page; write-ups saved before this change are private until you publish them again, and a resolved update can no longer be internal.", zh: "根因和复盘在你勾选「发布到状态页」之前保持私有；此前保存的内容需要重新发布才会公开，已解决的更新也不能再设为内部。" },
+      { en: "Subscribing is limited per address, a confirmed address no longer receives repeat mail, and emails carry one-click unsubscribe (a confirmation page replaces the old link-click removal).", zh: "订阅按邮箱地址限速，已确认的地址不再收到重复邮件；邮件支持一键退订，退订链接会先显示确认页。" },
+      { en: "The amber threshold on status pages defaults to 98%, maintenance reminders are retried when sending fails, and the public MCP toggle is worded clearly, with JSON-RPC batches capped at 10 requests.", zh: "状态页黄色阈值默认为 98%，维护提醒发送失败时会重试，公开 MCP 开关的说明更清晰，JSON-RPC 批量请求上限为 10 个。" },
+      { en: "Status pages list upcoming and running maintenance windows, and documentation pages are included in the sitemap.", zh: "状态页会显示即将开始和进行中的维护窗口，文档页面也已加入站点地图。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "comparison-and-use-case-pages",
     date: "2026-10-17",
     edition: "community",
@@ -52,7 +70,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       { en: "Every incident gets a number that counts up inside its project (INC-12), shown in the list, on the incident page and in the API; search the list by number or title.", zh: "每个事件在所属项目内获得递增编号（如 INC-12），显示在列表、事件详情页和 API 中；列表可按编号或标题搜索。" },
-      { en: "Write a root cause (up to 500 characters) and a postmortem (up to 20000) on the incident page or with PATCH /incidents/:id; both appear on the public status page once the incident is resolved.", zh: "可在事件页或通过 PATCH /incidents/:id 填写根因（最多 500 字符）和复盘（最多 20000 字符）；事件解决后两者会显示在公开状态页上。" },
+      { en: "Write a root cause (up to 500 characters) and a postmortem (up to 20000) on the incident page or with PATCH /incidents/:id; both stay private until you publish them, and then appear on the public status page once the incident is resolved.", zh: "可在事件页或通过 PATCH /incidents/:id 填写根因（最多 500 字符）和复盘（最多 20000 字符）；两者在你发布之前保持私有，发布后于事件解决时显示在公开状态页上。" },
       { en: "Post an update as an internal note: it is visible to your team only and never reaches status pages, the RSS feed or subscriber emails. Updates stay public by default.", zh: "更新可以作为内部备注发布：仅团队可见，不会出现在状态页、RSS 订阅源或订阅者邮件中。更新默认仍为公开。" },
       { en: "The MCP tools gain an update_incident tool and a visibility option on create_incident and post_incident_update.", zh: "MCP 工具新增 update_incident，create_incident 与 post_incident_update 新增 visibility 选项。" },
     ],
@@ -164,7 +182,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "Three read-only tools, status_page_overview, status_page_incidents and status_page_maintenance, are served at /api/mcp/public; the existing tools still require authorization.", zh: "三个只读工具 status_page_overview、status_page_incidents 和 status_page_maintenance 在 /api/mcp/public 提供;原有工具仍需授权。" },
       { en: "Each page has a short llms.txt, and /.well-known/mcp.json lists the MCP endpoints.", zh: "每个状态页都有一份简短的 llms.txt,/.well-known/mcp.json 列出 MCP 端点。" },
-      { en: "A page owner can switch this off per page with “Allow AI agents to read this page”; the page itself stays public.", zh: "页面所有者可以用“允许 AI 代理读取此页面”按页关闭;页面本身仍然公开。" },
+      { en: "A page owner can switch the MCP tools off per page with “Allow the public MCP tools to read this page”; the page, its feeds and llms.txt stay public.", zh: "页面所有者可以用“允许公开的 MCP 工具读取此页面”按页关闭 MCP 工具;页面、订阅源和 llms.txt 仍然公开。" },
       { en: "The MCP docs now start with the one-line claude mcp add command.", zh: "MCP 文档现在以一行 claude mcp add 命令开头。" },
     ],
     link: { href: "/docs/mcp#public", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
@@ -210,7 +228,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "每个状态页都可以设置每日可用率条何时变为琥珀色和红色。",
     },
     points: [
-      { en: "Set two thresholds under Uptime and notifications in the editor; the defaults are 99.9% for green and 99% for amber.", zh: "在编辑界面的“可用率与通知”中设置两个阈值,默认绿色 99.9%、琥珀色 99%。" },
+      { en: "Set two thresholds under Uptime and notifications in the editor; the defaults are 99.9% for green and 98% for amber.", zh: "在编辑界面的“可用率与通知”中设置两个阈值,默认绿色 99.9%、琥珀色 98%。" },
       { en: "The amber value must be lower than the green one.", zh: "琥珀色阈值必须低于绿色阈值。" },
     ],
   },

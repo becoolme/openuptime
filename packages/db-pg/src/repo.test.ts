@@ -537,6 +537,22 @@ describe.skipIf(!url)("status page reminders and monthly reports", () => {
     expect(mine(await repo.claimMaintenanceReminders(50))).toHaveLength(0);
   });
 
+  it("leaves a window unclaimed while nobody could be reminded, and gives a claim back on request", async () => {
+    const { p, m } = await page(24);
+    await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, projectId: p.projectId, name: "soon", startsAt: new Date(Date.now() + 10 * hour), endsAt: new Date(Date.now() + 11 * hour), monitorIds: [m.id] });
+    const mine = (r: Awaited<ReturnType<typeof repo.claimMaintenanceReminders>>) => r.filter((x) => x.page.id === p.id);
+    await sub(p.id, "pending@example.com", false);
+    expect(mine(await repo.claimMaintenanceReminders(100))).toHaveLength(0);
+    // a subscriber who confirms later still gets the reminder
+    await sub(p.id, "late@example.com", true);
+    const [claim] = mine(await repo.claimMaintenanceReminders(100));
+    expect(claim.subscribers.map((x) => x.email)).toEqual(["late@example.com"]);
+    expect(mine(await repo.claimMaintenanceReminders(100))).toHaveLength(0);
+    // a send that failed gives the claim back, and the next tick picks it up
+    await repo.releaseMaintenanceReminder(claim.window.id, p.id);
+    expect(mine(await repo.claimMaintenanceReminders(100))).toHaveLength(1);
+  });
+
   it("does not remind early, when the page turned reminders off, or after the window started", async () => {
     const { p } = await page(0);
     const { p: later } = await page(2);
@@ -569,5 +585,53 @@ describe.skipIf(!url)("status page reminders and monthly reports", () => {
     const row = (await repo.monthlyReport(orgId, from, to)).find((c) => c.name === "aaa-report");
     expect(row).toEqual({ name: "aaa-report", uptime: 99, downtimeMinutes: 30, incidents: 1 });
     expect((await repo.ownerContacts(orgId)).length).toBe(0);
+  });
+});
+
+describe.skipIf(!url)("manual incidents stay inside their project", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  beforeAll(async () => {
+    await db.insert(schema.organization).values({ id: orgId, name: "Test", slug: orgId, createdAt: new Date() });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+  });
+
+  it("shows a monitor-less incident only on pages and to subscribers of its own project", async () => {
+    const [pa] = await db.insert(schema.project).values({ organizationId: orgId, name: "A", createdAt: new Date(Date.now() - 1000) }).returning();
+    const [pb] = await db.insert(schema.project).values({ organizationId: orgId, name: "B" }).returning();
+    const pageA = await repo.createStatusPage(orgId, pa.id, { slug: `a${crypto.randomUUID().slice(0, 8)}`, title: "A" });
+    const pageB = await repo.createStatusPage(orgId, pb.id, { slug: `b${crypto.randomUUID().slice(0, 8)}`, title: "B" });
+    // a page without a project counts as the oldest project's
+    const created = await repo.createStatusPage(orgId, pa.id, { slug: `n${crypto.randomUUID().slice(0, 8)}`, title: "N" });
+    await db.update(schema.statusPage).set({ projectId: null }).where(eq(schema.statusPage.id, created.id));
+    const pageNone = { ...created, projectId: null };
+    for (const [pg, email] of [[pageA, "a@x.test"], [pageB, "b@x.test"], [pageNone, "n@x.test"]] as const) {
+      await db.insert(schema.statusSubscriber).values({ statusPageId: pg.id, email, token: crypto.randomUUID(), confirmedAt: new Date() });
+    }
+    const inc = await repo.createIncident({ organizationId: orgId, projectId: pb.id, title: "only-b", auto: false }, { status: "investigating", body: "x", visibility: "public" });
+    expect(inc.projectId).toBe(pb.id);
+
+    const titles = async (pg: typeof pageA) => [(await repo.pageIncidents(pg, { limit: 10 })).map((i) => i.title), (await repo.statusBoard(pg)).incidents.map((i) => i.title)];
+    expect(await titles(pageB)).toEqual([["only-b"], ["only-b"]]);
+    expect(await titles(pageA)).toEqual([[], []]);
+    expect(await titles(pageNone)).toEqual([[], []]);
+    expect((await repo.subscribersFor(orgId, null, pb.id)).map((s) => s.email)).toEqual(["b@x.test"]);
+    expect((await repo.subscribersFor(orgId, null, pa.id)).map((s) => s.email).sort()).toEqual(["a@x.test", "n@x.test"]);
+
+    // an incident of the oldest project reaches the project-less page too
+    const first = await repo.createIncident({ organizationId: orgId, projectId: pa.id, title: "only-a", auto: false });
+    expect((await repo.pageIncidents(pageNone, { limit: 10 })).map((i) => i.title)).toEqual([first.title]);
+  });
+
+  it("does not let a repeated sign-up change an existing subscriber", async () => {
+    const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "C" }).returning())[0];
+    const pg = await repo.createStatusPage(orgId, pr.id, { slug: `c${crypto.randomUUID().slice(0, 8)}`, title: "C" });
+    const mid = crypto.randomUUID();
+    await repo.addSubscriber({ pageId: pg.id, email: "p@x.test", token: "t1", locale: "zh-CN", monitorIds: [] });
+    const again = await repo.addSubscriber({ pageId: pg.id, email: "p@x.test", token: "t2", locale: "en", monitorIds: [mid] });
+    expect(again).toMatchObject({ locale: "zh-CN", token: "t1", confirmed: false, created: false });
+    const [row] = await db.select().from(schema.statusSubscriber).where(eq(schema.statusSubscriber.statusPageId, pg.id));
+    expect(row).toMatchObject({ locale: "zh-CN", monitorIds: [] });
   });
 });

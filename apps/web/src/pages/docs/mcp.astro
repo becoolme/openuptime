@@ -16,7 +16,7 @@ const tools: Tool[] = [
   { name: "delete_monitor", en: "Permanently delete a monitor and its history.", zh: "永久删除监控项及其历史。" },
   { name: "list_incidents / get_incident", en: "Incidents, open ones first, with their timeline.", zh: "事件列表（未结束的在前）及时间线。" },
   { name: "create_incident", en: "Open a manual incident, optionally tied to a monitor.", zh: "创建手动事件，可关联监控项。" },
-  { name: "update_incident", en: "Set or clear an incident's root cause and postmortem.", zh: "设置或清除事件的根因和复盘。" },
+  { name: "update_incident", en: "Set or clear an incident's root cause and postmortem, and publish them to the status page.", zh: "设置或清除事件的根因和复盘，并可发布到状态页。" },
   { name: "post_incident_update", en: "Add an update (public or internal) or resolve an incident.", zh: "发布事件更新（公开或内部）或标记为已解决。" },
   { name: "acknowledge_incident", en: "Acknowledge an incident.", zh: "确认事件。" },
   { name: "list_channels", en: "Alert channels.", zh: "告警渠道。" },
@@ -99,7 +99,7 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><code>status_page_incidents</code>: recent incidents with their updates.</li>
       <li><code>status_page_maintenance</code>: scheduled and ongoing maintenance windows.</li>
     </ul>
-    <p>The owner of a page can turn this off with <strong>Allow AI agents to read this page</strong> in the status page editor; the page itself stays public. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
+    <p>The owner of a page can turn the MCP tools off with <strong>Allow the public MCP tools to read this page</strong> in the status page editor; the page, its feeds and <code>llms.txt</code> stay public. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
     <h2 id="examples">Example prompts</h2>
     <ul>
       <li>“Add an HTTP monitor for https://api.example.com/health that checks every minute, and put it on a new status page.”</li>
@@ -193,7 +193,7 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><code>status_page_incidents</code>：近期事件及其更新。</li>
       <li><code>status_page_maintenance</code>：计划中和进行中的维护窗口。</li>
     </ul>
-    <p>页面所有者可在状态页编辑界面关闭 <strong>允许 AI 代理读取此页面</strong>；页面本身仍然公开。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
+    <p>页面所有者可在状态页编辑界面关闭 <strong>允许公开的 MCP 工具读取此页面</strong>，这只影响 MCP 工具；页面、订阅源和 <code>llms.txt</code> 仍然公开。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
     <h2 id="examples-zh">示例提示词</h2>
     <ul>
       <li>“给 https://api.example.com/health 加一个 HTTP 监控，每分钟检测一次，并放到一个新的状态页上。”</li>

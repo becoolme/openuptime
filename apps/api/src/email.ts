@@ -11,7 +11,7 @@ export const emailEnabled = () => !!cfg.from && !!(transport || cfg.binding);
 /** Public origin of the web app, for links in emails. */
 export const appUrl = () => cfg.appUrl;
 
-type Transport = (msg: { from: string; fromName: string; to: string; subject: string; html: string; text: string }) => Promise<unknown>;
+type Transport = (msg: { from: string; fromName: string; to: string; subject: string; html: string; text: string; headers?: Record<string, string> }) => Promise<unknown>;
 let transport: Transport | undefined;
 /** Node deployments (Docker) plug an SMTP sender in here; Workers use the EMAIL binding. */
 export const setMailTransport = (t: Transport | undefined) => { transport = t; };
@@ -25,9 +25,9 @@ export function configureEmail(env: Bindings) {
  * Sends through the Cloudflare Email Service `send_email` binding. Without the binding or
  * EMAIL_FROM (local dev) the message is logged instead.
  */
-export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; fromName?: string }) {
+export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; fromName?: string; headers?: Record<string, string> }) {
   if (transport && cfg.from) {
-    await transport({ from: cfg.from, fromName: msg.fromName ?? "OpenUptime", to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
+    await transport({ from: cfg.from, fromName: msg.fromName ?? "OpenUptime", to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, headers: msg.headers });
     return;
   }
   if (!cfg.binding || !cfg.from) {
@@ -35,7 +35,7 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
     return;
   }
   // the display name is what inboxes show instead of the bare "alerts" local part
-  await cfg.binding.send({ from: { email: cfg.from, name: msg.fromName ?? "OpenUptime" }, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
+  await cfg.binding.send({ from: { email: cfg.from, name: msg.fromName ?? "OpenUptime" }, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, ...(msg.headers ? { headers: msg.headers } : {}) });
 }
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

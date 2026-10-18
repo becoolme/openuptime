@@ -106,13 +106,49 @@ describe.skipIf(!url)("incident numbers, write-ups and update visibility", () =>
     const detail = (await call("GET", `/incidents/${inc.id}`)).body;
     expect(detail.updates.map((u: any) => [u.body, u.visibility])).toContainEqual(["SECRET-INTERNAL-NOTE", "internal"]);
 
-    // resolved: root cause and postmortem go public, internal notes still do not
-    await call("POST", `/incidents/${inc.id}/updates`, { status: "resolved", body: "Resolved.", visibility: "internal" });
+    // a resolution cannot be kept internal: subscribers are mailed about it
+    expect((await call("POST", `/incidents/${inc.id}/updates`, { status: "resolved", body: "Resolved.", visibility: "internal" })).status).toBe(400);
+    expect((await call("GET", `/incidents/${inc.id}`)).body.resolvedAt).toBeNull();
+
+    // resolved but not published: the write-up stays private
+    expect((await call("POST", `/incidents/${inc.id}/updates`, { status: "resolved", body: "Resolved." })).status).toBe(201);
+    for (const path of [slug, `${slug}/incidents`, `${slug}/rss`]) expect(await pub(path)).not.toContain("SECRET-ROOT-CAUSE");
+    expect(await pub(`${slug}/incidents`)).not.toContain("SECRET-POSTMORTEM");
+
+    // published by a person: root cause and postmortem go public, internal notes still do not
+    expect((await call("PATCH", `/incidents/${inc.id}`, { publishPostmortem: true })).body.postmortemPublishedAt).toBeTruthy();
     const history = JSON.parse(await pub(`${slug}/incidents`));
     expect(history.items[0]).toMatchObject({ number: 1, rootCause: "SECRET-ROOT-CAUSE", postmortem: "SECRET-POSTMORTEM" });
     expect(JSON.stringify(history)).not.toContain("SECRET-INTERNAL-NOTE");
     expect(await pub(`${slug}/rss`)).not.toContain("SECRET-INTERNAL-NOTE");
     expect(await pub(slug)).not.toContain("SECRET-INTERNAL-NOTE");
+
+    // and can be taken back
+    expect((await call("PATCH", `/incidents/${inc.id}`, { publishPostmortem: false })).body.postmortemPublishedAt).toBeNull();
+    expect(await pub(`${slug}/incidents`)).not.toContain("SECRET-POSTMORTEM");
+  });
+
+  it("keeps a manual incident (no monitor) on the status pages of its own project", async () => {
+    const call = await signedIn();
+    const other = (await call("POST", "/projects", { name: "Other" })).body;
+    const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const slugA = `pa${tag}`;
+    const slugB = `pb${tag}`;
+    expect((await call("POST", "/status-pages", { slug: slugA, title: "Page A" })).status).toBe(201);
+    expect((await call("POST", "/status-pages", { slug: slugB, title: "Page B" }, { "x-project-id": other.id })).status).toBe(201);
+    for (const [slug, email] of [[slugA, "a@example.com"], [slugB, "b@example.com"]]) {
+      sent.length = 0;
+      await raw(`/api/public/status/${slug}/subscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      await raw(`/api/public/status/_/confirm?token=${/token=([a-f0-9]+)/.exec(sent[0].html)![1]}`);
+    }
+
+    const inc = (await call("POST", "/incidents", { title: "ONLY-IN-A", body: "Looking into it." })).body;
+    sent.length = 0;
+    await call("POST", `/incidents/${inc.id}/updates`, { status: "identified", body: "Found it." });
+    expect(sent.map((m) => m.to)).toEqual(["a@example.com"]);
+
+    for (const path of [slugA, `${slugA}/incidents`, `${slugA}/rss`, `${slugA}/llms.txt`]) expect(await pub(path)).toContain("ONLY-IN-A");
+    for (const path of [slugB, `${slugB}/incidents`, `${slugB}/rss`, `${slugB}/llms.txt`]) expect(await pub(path)).not.toContain("ONLY-IN-A");
   });
 
   it("keeps the first update private when an incident is declared as internal", async () => {

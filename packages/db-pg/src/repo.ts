@@ -13,7 +13,7 @@ import {
   type Repo,
   type Scope,
 } from "@openuptime/repo";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
 
@@ -45,12 +45,18 @@ export function createRepo(db: Db): Repo {
     return r.map((x) => x.id);
   }
 
-  /** Incidents shown on a page: those of its own monitors, plus workspace-level ones not tied to a monitor. */
-  function pageScope(orgId: string, monitorIds: string[]) {
-    return and(
-      eq(schema.incident.organizationId, orgId),
-      monitorIds.length ? or(isNull(schema.incident.monitorId), inArray(schema.incident.monitorId, monitorIds)) : isNull(schema.incident.monitorId),
-    );
+  /** The project a page belongs to; a page without one falls back to the workspace's oldest project, as incident numbering does. */
+  async function pageProjectId(page: { organizationId: string; projectId: string | null }) {
+    if (page.projectId) return page.projectId;
+    const [p] = await db.select({ id: schema.project.id }).from(schema.project).where(eq(schema.project.organizationId, page.organizationId)).orderBy(asc(schema.project.createdAt), asc(schema.project.id)).limit(1);
+    return p?.id ?? null;
+  }
+
+  /** Incidents shown on a page: those of its own monitors, plus manual ones (no monitor) of the page's own project. */
+  function pageScope(orgId: string, projectId: string | null, monitorIds: string[] | SQLWrapper) {
+    const manual = and(isNull(schema.incident.monitorId), projectId ? eq(schema.incident.projectId, projectId) : isNull(schema.incident.projectId));
+    const own = Array.isArray(monitorIds) ? (monitorIds.length ? inArray(schema.incident.monitorId, monitorIds) : undefined) : inArray(schema.incident.monitorId, monitorIds);
+    return and(eq(schema.incident.organizationId, orgId), own ? or(manual, own) : manual);
   }
 
   async function withUpdates(list: (typeof schema.incident.$inferSelect)[]): Promise<IncidentWithUpdates[]> {
@@ -638,6 +644,7 @@ export function createRepo(db: Db): Repo {
       const set: Partial<typeof schema.incident.$inferInsert> = {};
       if (w.rootCause !== undefined) set.rootCause = w.rootCause;
       if (w.postmortem !== undefined) set.postmortem = w.postmortem;
+      if (w.publish !== undefined) set.postmortemPublishedAt = w.publish ? new Date() : null;
       const where = and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId));
       if (!Object.keys(set).length) return db.select().from(schema.incident).where(where).then((r) => r[0] ?? null);
       const [row] = await db.update(schema.incident).set(set).where(where).returning();
@@ -995,12 +1002,17 @@ export function createRepo(db: Db): Repo {
         )
         .orderBy(desc(schema.alertDelivery.createdAt))
         .limit(o.limit),
-    async subscribersFor(orgId, monitorId) {
+    async subscribersFor(orgId, monitorId, projectId) {
       const base = db
         .select({ email: schema.statusSubscriber.email, locale: schema.statusSubscriber.locale, token: schema.statusSubscriber.token, slug: schema.statusPage.slug, title: schema.statusPage.title, hideBranding: schema.statusPage.hideBranding, monitorIds: schema.statusSubscriber.monitorIds })
         .from(schema.statusSubscriber)
         .innerJoin(schema.statusPage, eq(schema.statusPage.id, schema.statusSubscriber.statusPageId));
-      if (!monitorId) return base.where(and(eq(schema.statusPage.organizationId, orgId), isNotNull(schema.statusSubscriber.confirmedAt)));
+      // a manual incident has no monitor: it reaches only the pages of its own project (a page without one counts as the oldest project's)
+      if (!monitorId) {
+        const pid = projectId ?? null;
+        const pageProject = sql`coalesce(${schema.statusPage.projectId}, (select p.id from project p where p.organization_id = ${schema.statusPage.organizationId} order by p.created_at, p.id limit 1))`;
+        return base.where(and(eq(schema.statusPage.organizationId, orgId), isNotNull(schema.statusSubscriber.confirmedAt), sql`${pageProject} is not distinct from ${pid}::uuid`));
+      }
       return base
         .innerJoin(
           schema.statusPageComponent,
@@ -1103,6 +1115,7 @@ export function createRepo(db: Db): Repo {
       return page ?? null;
     },
     async statusBoard(page) {
+      const projectId = await pageProjectId(page);
       // Everything below selects the page's monitors itself, so the reads run together instead of one after another.
       const shown = db
         .select({ id: schema.statusPageComponent.monitorId })
@@ -1137,7 +1150,7 @@ export function createRepo(db: Db): Repo {
         db
           .select()
           .from(schema.incident)
-          .where(and(eq(schema.incident.organizationId, page.organizationId), or(isNull(schema.incident.monitorId), inArray(schema.incident.monitorId, shown)), isNull(schema.incident.resolvedAt)))
+          .where(and(pageScope(page.organizationId, projectId, shown), isNull(schema.incident.resolvedAt)))
           .orderBy(desc(schema.incident.startedAt)),
       ]);
       const first = firstRows[0]?.at;
@@ -1167,7 +1180,7 @@ export function createRepo(db: Db): Repo {
       const list = await db
         .select()
         .from(schema.incident)
-        .where(and(pageScope(page.organizationId, await pageMonitorIds(page.id)), o.before ? lt(schema.incident.startedAt, o.before) : undefined))
+        .where(and(pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)), o.before ? lt(schema.incident.startedAt, o.before) : undefined))
         .orderBy(desc(schema.incident.startedAt))
         .limit(o.limit);
       return withUpdates(list);
@@ -1188,9 +1201,8 @@ export function createRepo(db: Db): Repo {
         .select()
         .from(schema.statusSubscriber)
         .where(and(eq(schema.statusSubscriber.statusPageId, s.pageId), eq(schema.statusSubscriber.email, s.email)));
-      // a pending address asking again gets the choices it just made; a confirmed one is not changed by a stranger
-      if (!old.confirmedAt) await db.update(schema.statusSubscriber).set({ locale: s.locale, monitorIds }).where(eq(schema.statusSubscriber.id, old.id));
-      return { locale: old.confirmedAt ? old.locale : s.locale, token: old.token, confirmed: !!old.confirmedAt, created: false };
+      // anyone can type any address: asking again never changes the locale or component choice of a pending or confirmed row
+      return { locale: old.locale, token: old.token, confirmed: !!old.confirmedAt, created: false };
     },
     async pageMaintenance(page, o) {
       const ids = await pageMonitorIds(page.id);
@@ -1228,6 +1240,8 @@ export function createRepo(db: Db): Repo {
             gte(schema.maintenanceWindow.startsAt, now),
             sql`${schema.maintenanceWindow.startsAt} <= now() + ${schema.statusPage.maintenanceReminderHours} * interval '1 hour'`,
             sql`not exists (select 1 from maintenance_reminder r where r.maintenance_id = ${schema.maintenanceWindow.id} and r.status_page_id = ${schema.statusPage.id})`,
+            // nobody to remind: leave the window unclaimed, so a subscriber who joins later still hears about it
+            sql`exists (select 1 from status_subscriber s where s.status_page_id = ${schema.statusPage.id} and s.confirmed_at is not null)`,
             or(
               sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
               sql`exists (select 1 from status_page_component c where c.status_page_id = ${schema.statusPage.id} and c.visible and c.monitor_id = any(${schema.maintenanceWindow.monitorIds}))`,
@@ -1237,9 +1251,6 @@ export function createRepo(db: Db): Repo {
         .limit(limit);
       const out: Awaited<ReturnType<Repo["claimMaintenanceReminders"]>> = [];
       for (const { w, p } of due) {
-        // inserting the row is the claim: whoever gets it back sends, anyone else skips
-        const claimed = await db.insert(schema.maintenanceReminder).values({ maintenanceId: w.id, statusPageId: p.id }).onConflictDoNothing().returning({ id: schema.maintenanceReminder.maintenanceId });
-        if (!claimed.length) continue;
         const affected = w.monitorIds.length ? new Set(w.monitorIds) : null;
         const shown = new Set(await pageMonitorIds(p.id));
         const subs = await db
@@ -1249,9 +1260,16 @@ export function createRepo(db: Db): Repo {
         const subscribers = subs
           .filter((x) => !x.monitorIds.length || x.monitorIds.some((m) => shown.has(m) && (!affected || affected.has(m))))
           .map((x) => ({ email: x.email, locale: x.locale, token: x.token, slug: p.slug, title: p.title, hideBranding: p.hideBranding, monitorIds: x.monitorIds }));
+        if (!subscribers.length) continue;
+        // inserting the row is the claim: whoever gets it back sends, anyone else skips
+        const claimed = await db.insert(schema.maintenanceReminder).values({ maintenanceId: w.id, statusPageId: p.id }).onConflictDoNothing().returning({ id: schema.maintenanceReminder.maintenanceId });
+        if (!claimed.length) continue;
         out.push({ window: w, page: p, subscribers });
       }
       return out;
+    },
+    async releaseMaintenanceReminder(maintenanceId, statusPageId) {
+      await db.delete(schema.maintenanceReminder).where(and(eq(schema.maintenanceReminder.maintenanceId, maintenanceId), eq(schema.maintenanceReminder.statusPageId, statusPageId)));
     },
     async claimMonthlyReports(month, limit) {
       const rows_ = await rows<{ organization_id: string }>(

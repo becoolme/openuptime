@@ -163,7 +163,7 @@ Registers `POST <path>` (and answers `405` with `Allow: POST` to `GET` and `DELE
 | `anonymous` | `false` | Serve without credentials: nothing the caller sends is forwarded, and only tools defined with `public: true` are listed or callable. Mount it as a second endpoint (for example `/api/mcp/public`) beside the authenticated one. |
 | `resourceMetadataPath` | `/.well-known/oauth-protected-resource<path>` | Where clients find the protected-resource metadata. |
 
-JSON-RPC batches are supported. A body that contains only notifications is answered with `202`.
+JSON-RPC batches are supported, up to 10 messages each (a larger one is answered with `400` and JSON-RPC error `-32600`). A body that contains only notifications is answered with `202`.
 
 ### How a call flows
 
