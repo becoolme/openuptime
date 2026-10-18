@@ -16,8 +16,8 @@ const minus = (a: Iterable<string>, ...rest: Iterable<string>[]) => {
   return sorted([...a].filter((x) => !drop.has(x)));
 };
 
-/** Variables the app sets or reads for its own plumbing; never configured by an operator through compose. */
-const INTERNAL = ["API_ORIGIN", "DEPLOY_TARGET", "DEV", "PROD", "VITEST", "WEB_DIST"];
+/** Variables the app sets or reads for its own plumbing (SITE_ORIGIN is read by the web build of a hosted deployment); never configured by an operator through compose. */
+const INTERNAL = ["API_ORIGIN", "DEPLOY_TARGET", "DEV", "PROD", "SITE_ORIGIN", "VITEST", "WEB_DIST"];
 /** Cloudflare bindings, not environment variables. */
 const BINDINGS_ONLY = ["CHECK_QUEUE", "EMAIL", "HYPERDRIVE"];
 /** Read from the environment but wired through compose itself (`ports`, the DATABASE_URL built from the Postgres password). */
