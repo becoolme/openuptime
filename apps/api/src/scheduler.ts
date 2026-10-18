@@ -257,8 +257,15 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   if (reopened) {
     // it starts over as unacknowledged: its reminders and escalation are scheduled again and people are told it is back,
     // unless the first alert was muted as flapping
-    if (await repo.incidentMuted(reopened.id)) return;
+    const history = await alertHistory(repo, reopened);
+    if (history.muted && !history.openedAt) return;
     await step("reminder schedule", () => repo.scheduleFollowUps({ ...reopened, startedAt: new Date() }, m.projectId ?? null));
+    // a monitor that keeps flipping gets at most one alert per window for the same incident: the "again" alert is skipped,
+    // and the recovery that goes with it is muted too
+    if (history.openedAt && Date.now() - history.openedAt < FLAP_WINDOW_MS) {
+      if (!history.muted) await markMuted(repo, m, reopened.id, "Another alert for this incident went out in the last 15 minutes");
+      return;
+    }
     await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: reopened, monitor: m, reason, reopened: true }, m.channelIds, entitlements);
     return;
   }
@@ -271,11 +278,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   if (!inc) return; // a concurrent check opened it
   if (recent) {
     // remember the incident was muted so its recovery mail is skipped too
-    await repo.logDeliveries([{
-      organizationId: m.organizationId, projectId: m.projectId ?? null, channelId: null, channelName: "Muted (flapping)", channelType: "none",
-      kind: "incident.muted", incidentId: inc.id, monitorName: m.name, ok: true, status: "skipped", error: "Another incident for this monitor started in the last 15 minutes",
-      statusMessage: "suppressed: flapping, another incident for this monitor started in the last 15 minutes",
-    }]);
+    await markMuted(repo, m, inc.id, "Another incident for this monitor started in the last 15 minutes");
     return;
   }
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
@@ -284,6 +287,25 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
 
 const FLAP_WINDOW_MS = 15 * 60_000;
 
+/** Records that an incident's alerts were held back as flapping; its recovery alert is skipped while this is the latest word. */
+async function markMuted(repo: Repo, m: Monitor, incidentId: string, why: string) {
+  await repo.logDeliveries([{
+    organizationId: m.organizationId, projectId: m.projectId ?? null, channelId: null, channelName: "Muted (flapping)", channelType: "none",
+    kind: "incident.muted", incidentId, monitorName: m.name, ok: true, status: "skipped", error: why, statusMessage: `suppressed: flapping, ${why[0].toLowerCase()}${why.slice(1)}`,
+  }]);
+}
+
+/**
+ * When an incident last alerted, and whether its alerts are muted now: a mute marker newer than the last alert. A later
+ * alert (the window passed) lifts the mute, so its recovery goes out.
+ */
+async function alertHistory(repo: Repo, inc: { id: string; organizationId: string }) {
+  const rows = await repo.incidentDeliveries(inc.organizationId, inc.id);
+  const latest = (kind: string) => rows.reduce((t, r) => (r.kind === kind ? Math.max(t, r.createdAt.getTime()) : t), 0);
+  const openedAt = latest("incident.opened");
+  return { openedAt, muted: latest("incident.muted") > openedAt };
+}
+
 const consecutive = (m: Monitor) => m.failureThreshold;
 
 /** Resolve a monitor's open incidents: its outage ones, or with `slow` only the automatic latency ones. */
@@ -291,7 +313,7 @@ export async function resolveIncident(repo: Repo, m: Monitor, slow = false, enti
   for (const inc of await repo.openIncidents(m.id, slow)) {
     // false: a concurrent check resolved it first and sent the recovery alert
     if (!(await repo.resolveIncident(inc.id, slow ? "Response time is back under the threshold." : "Checks are passing again."))) continue;
-    if (await repo.incidentMuted(inc.id)) continue;
+    if ((await alertHistory(repo, inc)).muted) continue;
     await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: { ...inc, resolvedAt: new Date() }, monitor: m, ...(slow ? { slow: true as const } : {}) }, m.channelIds, entitlements);
   }
 }
