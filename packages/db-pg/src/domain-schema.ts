@@ -188,6 +188,8 @@ export const pushDevice = pgTable(
     environment: text("environment").notNull().default("production"),
     locale: text("locale"),
     name: text("name"),
+    /** opted in to critical alerts: a "down" push may break through Do Not Disturb */
+    critical: boolean("critical").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },

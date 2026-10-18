@@ -169,13 +169,14 @@ content-type: application/json
     <p>The mobile app registers its APNs device token with the server it is connected to. These endpoints work with a session cookie or an API key and act on the signed-in person's own devices. Check <code>GET /api/config</code> first: <code>push.apns</code> is <code>true</code> when the server can send push notifications.</p>
 <pre><code is:raw>PUT /api/push/devices
 { "token": "&lt;hex, 32-200 chars&gt;", "platform": "ios", "environment": "sandbox" | "production",
-  "locale": "en" | "zh-CN", "name": "Ada's iPhone" }          (locale and name optional, name up to 80 characters)
+  "locale": "en" | "zh-CN", "name": "Ada's iPhone", "critical": false }          (locale, name and critical optional, name up to 80 characters)
 
-200 { "id", "token", "platform", "environment", "locale", "name" }
+200 { "id", "token", "platform", "environment", "locale", "name", "critical" }
 
-GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name" } ]
+GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name", "critical" } ]
 DELETE /api/push/devices/:token    204</code></pre>
     <p>Registering is an upsert by token: a token that was registered by another person moves to the caller. When push is configured, registering also gives every workspace where the caller is owner or admin a <em>Mobile app</em> channel (type <code>push</code>, on for new monitors) if it has none. A <code>push</code> channel alerts every member of its workspace who has a registered device; creating one while push is not configured fails with <code>400</code> and <code>code: "push_not_configured"</code>. A key limited to some projects registers devices but does not create channels.</p>
+    <p><code>critical</code> (boolean, default <code>false</code>) opts the device in to critical alerts. Down alerts then go out with interruption level <code>critical</code> and a critical sound, which can break through Do Not Disturb; without it they are <code>time-sensitive</code>, and recoveries are always <code>active</code>. Leaving <code>critical</code> out when registering again keeps the stored choice. Alerts for one incident share an APNs collapse id, so reminders replace the earlier banner, and notifications are grouped per monitor. A token APNs reports as invalid is removed automatically, and a device that has not registered for 180 days is dropped.</p>
     <h2 id="examples">Examples</h2>
     <h3>Create a monitor</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
@@ -228,13 +229,14 @@ content-type: application/json
     <p>手机 App 会把 APNs 设备令牌注册到它所连接的服务器。这些接口可用会话 Cookie 或 API 密钥调用，只操作当前登录者自己的设备。请先请求 <code>GET /api/config</code>：<code>push.apns</code> 为 <code>true</code> 表示服务器可以发送推送。</p>
 <pre><code is:raw>PUT /api/push/devices
 { "token": "&lt;十六进制，32-200 个字符&gt;", "platform": "ios", "environment": "sandbox" | "production",
-  "locale": "en" | "zh-CN", "name": "Ada 的 iPhone" }          （locale 与 name 可选，name 最多 80 个字符）
+  "locale": "en" | "zh-CN", "name": "Ada 的 iPhone", "critical": false }          （locale、name 与 critical 可选，name 最多 80 个字符）
 
-200 { "id", "token", "platform", "environment", "locale", "name" }
+200 { "id", "token", "platform", "environment", "locale", "name", "critical" }
 
-GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name" } ]
+GET    /api/push/devices           200 [ { "id", "token", "platform", "environment", "locale", "name", "critical" } ]
 DELETE /api/push/devices/:token    204</code></pre>
     <p>注册按令牌做 upsert：之前由其他人注册的令牌会转移给当前调用者。已配置推送时，注册还会为调用者担任所有者或管理员的每个工作区创建一个名为 <em>Mobile app</em> 的渠道（类型 <code>push</code>，对新监控默认开启），已有则不重复创建。<code>push</code> 渠道会通知其工作区中所有已注册设备的成员；未配置推送时创建会返回 <code>400</code> 与 <code>code: "push_not_configured"</code>。仅限部分项目的密钥可以注册设备，但不会创建渠道。</p>
+    <p><code>critical</code>（布尔值，默认 <code>false</code>）表示该设备选择接收紧急提醒。开启后，宕机提醒会以 <code>critical</code> 中断级别和紧急提示音发送，可以突破勿扰模式；未开启时为 <code>time-sensitive</code>，恢复通知始终为 <code>active</code>。再次注册时省略 <code>critical</code> 会保留之前的设置。同一事件的提醒共用一个 APNs collapse id，因此提醒会替换设备上之前的横幅，通知按监控分组。APNs 判定无效的令牌会被自动移除，180 天未重新注册的设备也会被清理。</p>
     <h2 id="examples-zh">示例</h2>
     <h3>创建监控项</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \

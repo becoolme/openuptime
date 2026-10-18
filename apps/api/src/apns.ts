@@ -134,7 +134,7 @@ const downtime = (ms: number, lang: Lang) => {
 };
 
 /** The notification for one language. Stays far below APNs' 4 KB limit: free text is clipped. */
-export function buildPayload(ev: PushEvent, orgId: string, lang: Lang) {
+export function buildPayload(ev: PushEvent, orgId: string, lang: Lang, critical = false) {
   const opened = ev.kind !== "incident.resolved";
   const still = ev.kind === "incident.reminder" || ev.kind === "incident.escalated";
   const name = clip(ev.monitor.name, 100);
@@ -152,12 +152,14 @@ export function buildPayload(ev: PushEvent, orgId: string, lang: Lang) {
     const r = ev.incident.resolvedAt;
     body = s && r ? tr(lang, "Down for {duration}", { duration: downtime(r.getTime() - s.getTime(), lang) }) : tr(lang, "Checks are passing again and the incident is resolved.");
   }
+  // critical breaks through Do Not Disturb, so only a real "down" (not slow, test or recovery) on an opted-in device gets it
+  const isCritical = critical && opened && !ev.slow && !ev.test;
   return {
     aps: {
       alert: { title, body },
-      sound: "default",
+      sound: isCritical ? { critical: 1, name: "default", volume: 1 } : "default",
       "thread-id": ev.monitor.id ?? ev.incident.id,
-      "interruption-level": opened && !ev.test ? "time-sensitive" : "active",
+      "interruption-level": isCritical ? "critical" : opened && !ev.test ? "time-sensitive" : "active",
     },
     incidentId: ev.incident.id,
     monitorId: ev.monitor.id ?? null,
@@ -221,7 +223,7 @@ export async function sendPush(repo: Pick<Repo, "deletePushDeviceByToken">, devi
   const results = await Promise.all(
     devices.map(async (d) => {
       const lang: Lang = isLang(d.locale) ? d.locale : "en";
-      const r = await sendOne(cfg, jwt, d, buildPayload(ev, orgId, lang), collapseId, expiresAt);
+      const r = await sendOne(cfg, jwt, d, buildPayload(ev, orgId, lang, d.critical), collapseId, expiresAt);
       if (r.outcome === "dead") await repo.deletePushDeviceByToken(d.token).catch((e) => console.error("could not remove a dead push device", (e as Error).message));
       return r;
     }),

@@ -363,4 +363,23 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
       expect(await claim(inc.id)).toHaveLength(0);
     });
   });
+
+  describe("push devices", () => {
+    it("keeps critical unless re-registered with a value, and housekeeping drops devices unseen for 180 days", async () => {
+      const tok = (c: string) => `${c}`.repeat(64).slice(0, 64);
+      const [fresh, old] = [tok("e"), tok("f")];
+      const d = await repo.upsertPushDevice(userId, { token: fresh, platform: "ios", environment: "production" });
+      expect(d.critical).toBe(false);
+      expect((await repo.upsertPushDevice(userId, { token: fresh, platform: "ios", environment: "production", critical: true })).critical).toBe(true);
+      expect((await repo.upsertPushDevice(userId, { token: fresh, platform: "ios", environment: "production" })).critical).toBe(true);
+      expect((await repo.upsertPushDevice(userId, { token: fresh, platform: "ios", environment: "production", critical: false })).critical).toBe(false);
+
+      await repo.upsertPushDevice(userId, { token: old, platform: "ios", environment: "production" });
+      await db.update(schema.pushDevice).set({ lastSeenAt: new Date(Date.now() - 181 * 864e5) }).where(eq(schema.pushDevice.token, old));
+      await repo.purgeExpired();
+      const left = (await repo.listPushDevices(userId)).map((x) => x.token);
+      expect(left).toContain(fresh);
+      expect(left).not.toContain(old);
+    });
+  });
 });

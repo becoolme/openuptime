@@ -7,6 +7,8 @@
 export const DEFAULT_CHECK_RETENTION_DAYS = 90;
 /** Hourly rollups are tiny (one row per monitor-hour) so they outlive the raw rows. */
 export const ROLLUP_RETENTION_DAYS = 400;
+/** Push devices not re-registered for this long are dropped by housekeeping. */
+export const PUSH_DEVICE_STALE_DAYS = 180;
 export const DEFAULT_ALERT_LOG_DAYS = 30;
 
 export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
@@ -339,10 +341,13 @@ export interface PushDevice {
   environment: "sandbox" | "production";
   locale: string | null;
   name: string | null;
+  /** the person opted in to critical alerts for this device */
+  critical: boolean;
   createdAt: Date;
   lastSeenAt: Date;
 }
-export type NewPushDevice = Pick<PushDevice, "token" | "platform" | "environment"> & { locale?: string | null; name?: string | null };
+/** `critical` left out keeps the stored value (false for a new device). */
+export type NewPushDevice = Pick<PushDevice, "token" | "platform" | "environment"> & { locale?: string | null; name?: string | null; critical?: boolean };
 
 export interface Counts {
   monitors: number;
