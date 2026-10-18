@@ -258,8 +258,9 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
     // it starts over as unacknowledged: its reminders and escalation are scheduled again and people are told it is back,
     // unless the first alert was muted as flapping
     const history = await alertHistory(repo, reopened);
-    if (history.muted && !history.openedAt) return;
+    // the follow-up clocks restart either way: a muted incident that lasts is still escalated
     await step("reminder schedule", () => repo.scheduleFollowUps({ ...reopened, startedAt: new Date() }, m.projectId ?? null));
+    if (history.muted && !history.openedAt) return;
     // A monitor that keeps flipping gets at most one alert per window for the same incident, but only while no recovery
     // went out in between: people who were told it recovered must be told it is down again. When the recovery was muted
     // (or never sent) they were not told it recovered, so the "again" alert is skipped and the next recovery is muted too.
