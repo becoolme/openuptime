@@ -23,6 +23,15 @@ describe("sendEmail through the Cloudflare binding", () => {
     expect(send.mock.calls[1][0]).not.toHaveProperty("headers");
   });
 
+  it.each([["E_HEADER_NOT_ALLOWED", "message"], ["invalid_headers", "rejected"]])("recognises the header error code %s", async (code, message) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const send = vi.fn(async (m: Record<string, unknown>) => { if (m.headers) throw Object.assign(new Error(message === "message" ? code : message), { code }); return {}; });
+    configureEmail({ EMAIL: { send }, EMAIL_FROM: "alerts@example.com", WEB_ORIGIN: "https://x" } as never);
+    await sendEmail(msg);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0]).not.toHaveProperty("headers");
+  });
+
   it("does not send a second time when the failure has nothing to do with the headers", async () => {
     const send = vi.fn(async () => { throw new Error("timeout while sending"); });
     configureEmail({ EMAIL: { send }, EMAIL_FROM: "alerts@example.com", WEB_ORIGIN: "https://x" } as never);
