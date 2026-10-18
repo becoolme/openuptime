@@ -90,3 +90,18 @@ describe("environment variables", () => {
     expect(minus(vars, code)).toEqual([]);
   });
 });
+
+describe("SELFCHECK_URLS", () => {
+  it("compose does not default it to anything but the code's reference URLs", () => {
+    const codeDefaults = [...read("apps/api/src/selfcheck.ts").match(/REFERENCE_URLS = \[([\s\S]*?)\]/)![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(codeDefaults.length).toBeGreaterThan(0);
+    const line = read("docker-compose.yml").match(/^\s*SELFCHECK_URLS:\s*(.+)$/m)?.[1];
+    if (!line) return; // not passed on at all: the code default applies
+    const dflt = line.match(/^\$\{SELFCHECK_URLS(?::?-)([^}]*)\}$/)?.[1];
+    expect(dflt, "compose must pass SELFCHECK_URLS through as ${SELFCHECK_URLS-default}").toBeDefined();
+    expect(dflt!.split(",").filter(Boolean)).toEqual(codeDefaults);
+  });
+  it("the example files leave it commented out", () => {
+    for (const f of [".env.example", ".env.docker.example"]) expect(read(f), f).not.toMatch(/^SELFCHECK_URLS=/m);
+  });
+});
