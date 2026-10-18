@@ -43,7 +43,12 @@ export const projects = new Hono<AppEnv>()
     if (v.escalation.some((s, i) => i > 0 && s.escalateAfterMin <= v.escalation[i - 1].escalateAfterMin)) return c.json({ error: "Each escalation level must come later than the one before" }, 400);
     const repo = c.get("repo");
     const ids = [...new Set(v.escalation.flatMap((s) => s.channelIds))];
-    if (ids.length && (await repo.channelsByIds(c.get("orgId"), ids)).length !== ids.length) return c.json({ error: "An escalation level names a channel that does not exist" }, 400);
+    if (ids.length) {
+      const found = await repo.channelsByIds(c.get("orgId"), ids);
+      if (found.length !== ids.length) return c.json({ error: "An escalation level names a channel that does not exist" }, 400);
+      // workspace-wide channels (no project) and this project's own are fine; another project's are not
+      if (found.some((ch) => ch.projectId && ch.projectId !== id)) return c.json({ error: "An escalation level names a channel that belongs to another project" }, 400);
+    }
     const row = await repo.saveProjectAlerting(c.get("orgId"), id, v);
     return row ? c.json(row) : c.json({ error: "Not found" }, 404);
   })
