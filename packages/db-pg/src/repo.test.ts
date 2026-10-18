@@ -5,6 +5,11 @@ const url = process.env.DATABASE_URL;
 const db = url ? createDb(url, { max: 4 }) : (undefined as never);
 const repo = url ? createRepo(db) : (undefined as never);
 
+// one shared client for the whole file: closed once, after every suite has cleaned up
+afterAll(async () => {
+  if (url) await db.$client.end();
+});
+
 describe.skipIf(!url)("withinLimit", () => {
   it("allows up to the limit then blocks, per key", async () => {
     const k = `test:${crypto.randomUUID()}`;
@@ -193,7 +198,6 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
   afterAll(async () => {
     await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
     await db.delete(schema.user).where(eq(schema.user.id, userId));
-    await db.$client.end();
   });
 
   // One open automatic incident is allowed per monitor, so each incident gets its own monitor.
@@ -374,7 +378,6 @@ describe.skipIf(!url)("status page reminders and monthly reports", () => {
   });
   afterAll(async () => {
     await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
-    await db.$client.end();
   });
 
   async function page(reminderHours: number) {
