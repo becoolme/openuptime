@@ -35,7 +35,19 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
     return;
   }
   // the display name is what inboxes show instead of the bare "alerts" local part
-  await cfg.binding.send({ from: { email: cfg.from, name: msg.fromName ?? "OpenUptime" }, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, ...(msg.headers ? { headers: msg.headers } : {}) });
+  const base = { from: { email: cfg.from, name: msg.fromName ?? "OpenUptime" }, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text };
+  if (!msg.headers) {
+    await cfg.binding.send(base);
+    return;
+  }
+  // Extra headers (List-Unsubscribe) are not guaranteed to be accepted by every version of the binding. If it refuses the
+  // message with them, send it without: a mail without the one-click link beats no mail at all.
+  try {
+    await cfg.binding.send({ ...base, headers: msg.headers });
+  } catch (e) {
+    console.warn("email binding refused custom headers, sending without them", e instanceof Error ? e.message : e);
+    await cfg.binding.send(base);
+  }
 }
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
