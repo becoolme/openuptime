@@ -33,7 +33,9 @@ const file = tail === "/" ? `/${locale}.html` : tail;
 const res = await get(file);
 const type = res.headers.get("content-type") ?? "";
 if (res.ok && type.includes("text/html") && !res.redirected) {
-  const html = (await res.text()).replace(/<html lang="[^"]*"/, `<html lang="${locale === "zh-Hans" ? "zh-CN" : locale}"`);
+  let html = (await res.text()).replace(/<html lang="[^"]*"/, `<html lang="${locale === "zh-Hans" ? "zh-CN" : locale}"`);
+  // pages that carry a canonical link (the comparison pages) point it at the Chinese address when served from it
+  if (locale === "zh-Hans" && tail !== "/") html = html.replace(/(<link rel="canonical" href="|<meta property="og:url" content=")(https?:\/\/[^\/"]+)(\/[^"]*")/g, "$1$2/zh-Hans$3");
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", vary: "Cookie" } });
 }
 if (res.ok && !type.includes("text/html")) return res;

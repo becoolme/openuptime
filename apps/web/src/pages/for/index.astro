@@ -1,0 +1,30 @@
+---
+import SeoShell from "../../components/SeoShell.astro";
+import { SEGMENTS, type Faq } from "../../lib/seo-pages";
+import type { L } from "../../lib/changelog";
+
+const l = (en: string, zh: string): L => ({ en, zh });
+const faq: Faq[] = [
+  { q: l("Can I use OpenUptime for free?", "OpenUptime 可以免费使用吗？"), a: l("The software is MIT-licensed and free to self-host. The hosted service has plans; check the current ones.", "软件采用 MIT 许可证，自托管免费。托管服务有各档套餐，请查看最新方案。") },
+  { q: l("Which monitor types are there?", "有哪些监控类型？"), a: l("HTTP and HTTPS, TCP, DNS, heartbeat, and PostgreSQL, MySQL / MariaDB and Redis reachability.", "HTTP 与 HTTPS、TCP、DNS、心跳，以及 PostgreSQL、MySQL / MariaDB 和 Redis 连通性。") },
+];
+const langs = [{ attr: "en", k: "en" }, { attr: "zh-CN", k: "zh" }] as const;
+const ui = {
+  en: { h1: "OpenUptime by use case", lede: "How the same features fit different kinds of teams. Each page lists concrete monitors, status page and alert set-ups.", cmp: "Comparing tools?", cmpA: "See the alternatives pages", faq: "Questions" },
+  zh: { h1: "OpenUptime 使用场景", lede: "同样的功能如何适配不同类型的团队。每一页都会列出具体的监控、状态页和告警配置方式。", cmp: "正在比较工具？", cmpA: "查看替代方案对比", faq: "常见问题" },
+} as const;
+---
+<SeoShell title="Uptime monitoring by use case" description="How SaaS teams, agencies, online stores and DevOps teams set up monitors, status pages and alerts in OpenUptime." path="/for" faq={faq}>
+  {langs.map(({ attr, k }) => (
+    <div lang={attr}>
+      <h1>{ui[k].h1}</h1>
+      <p class="lede">{ui[k].lede}</p>
+      <div class="docs-grid">
+        {SEGMENTS.map((s) => (<a class="docs-card" href={`/for/${s.slug}`}><b>{s.name[k]}</b><span>{s.description[k]}</span></a>))}
+      </div>
+      <p>{ui[k].cmp} <a href="/alternatives">{ui[k].cmpA}</a></p>
+      <h2 id="faq">{ui[k].faq}</h2>
+      <div class="faq">{faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}</div>
+    </div>
+  ))}
+</SeoShell>
