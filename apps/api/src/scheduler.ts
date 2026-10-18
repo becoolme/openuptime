@@ -1,5 +1,5 @@
 import type { Monitor, Repo } from "@openuptime/repo";
-import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries } from "./alerts";
+import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries, wasDelivered } from "./alerts";
 import type { CheckOutcome } from "./checker";
 import { sendMonthlyReports } from "./reports";
 import { measure } from "./probes";
@@ -298,9 +298,6 @@ async function markMuted(repo: Repo, m: Monitor, incidentId: string, why: string
     kind: "incident.muted", incidentId, monitorName: m.name, ok: true, status: "skipped", error: why, statusMessage: `suppressed: flapping, ${why[0].toLowerCase()}${why.slice(1)}`,
   }]);
 }
-
-/** A delivery row that counts as an alert people could have seen: not one that was skipped or failed. */
-export const wasDelivered = (r: { status?: string | null; ok?: boolean }) => (r.status ? r.status !== "skipped" && r.status !== "failed" : r.ok !== false);
 
 type History = { openedAt: number; resolvedAt: number; muted: boolean };
 const NO_HISTORY: History = { openedAt: 0, resolvedAt: 0, muted: false };
