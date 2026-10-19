@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "alerts-name-project",
+    date: "2026-10-19",
+    edition: "community",
+    title: { en: "Alerts name the project", zh: "告警标明所属项目" },
+    summary: {
+      en: "When a workspace has several projects, every alert now says which project the monitor belongs to.",
+      zh: "工作区有多个项目时，每条告警都会注明监控所属的项目。",
+    },
+    points: [
+      { en: "Slack, Lark, Telegram and PagerDuty messages, push notifications and the subject of alert emails start with the project name in brackets, for example \"[favicon.im] WWW homepage is down\"; reminders, escalations and recovery messages do too.", zh: "Slack、飞书、Telegram、PagerDuty 消息、推送通知以及告警邮件主题都会以方括号标出项目名，例如“[favicon.im] WWW homepage is down”；提醒、升级和恢复消息同样如此。" },
+      { en: "Alert emails also list the project in their details.", zh: "告警邮件的详情中也会列出所属项目。" },
+      { en: "Webhook payloads always include a project field with the project's id and name.", zh: "Webhook 负载始终包含 project 字段，内含项目的 id 和名称。" },
+      { en: "A workspace with a single project sees the same alerts as before.", zh: "只有一个项目的工作区，告警内容与之前完全相同。" },
+    ],
+  },
+  {
     id: "workspace-menu-polish",
     date: "2026-10-19",
     edition: "community",

@@ -122,6 +122,8 @@ export type PushEvent = {
   test?: true;
   slow?: true;
   monitor: { id?: string; name: string; target: string };
+  project?: { id: string; name: string };
+  multiProject?: true;
 };
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -144,10 +146,11 @@ export function buildPayload(ev: PushEvent, orgId: string, lang: Lang, critical 
     title = tr(lang, "Your channel is connected");
     body = tr(lang, "This is a test alert from OpenUptime");
   } else if (opened) {
-    title = tr(lang, still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
+    const tag = ev.project && ev.multiProject ? `[${clip(ev.project.name, 40)}] ` : "";
+    title = tag + tr(lang, still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
     body = clip(ev.reason || ev.monitor.target || ev.incident.title, 300);
   } else {
-    title = tr(lang, "{name} has recovered", { name });
+    title = (ev.project && ev.multiProject ? `[${clip(ev.project.name, 40)}] ` : "") + tr(lang, "{name} has recovered", { name });
     const s = ev.incident.startedAt;
     const r = ev.incident.resolvedAt;
     body = s && r ? tr(lang, "Down for {duration}", { duration: downtime(r.getTime() - s.getTime(), lang) }) : tr(lang, "Checks are passing again and the incident is resolved.");

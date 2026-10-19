@@ -4,6 +4,7 @@ import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 import { guardedFetch, readCapped } from "./netguard";
+import { ttlCache } from "./ttlcache";
 
 type Event = {
   /** a reminder or escalation repeats the down alert for an incident nobody has acknowledged */
@@ -20,7 +21,41 @@ type Event = {
   /** the monitor failed again soon after recovering, so an earlier incident was reopened */
   reopened?: true;
   monitor: { id?: string; projectId?: string | null; name: string; target: string };
+  /** The monitor's project; filled in when the alert goes out. */
+  project?: { id: string; name: string };
+  /** The workspace has more than one project, so the project's name is shown in the alert. */
+  multiProject?: true;
 };
+
+const PROJECT_TTL_MS = 30_000;
+const projectCache = ttlCache<{ names: Map<string, string> }>(PROJECT_TTL_MS);
+/** For tests: forget the cached project names. */
+export const clearProjectNames = () => projectCache.clear();
+
+/**
+ * Names the monitor's project on the event. The workspace's projects are read once and kept for a short while, so a burst of
+ * alerts costs one query. A lookup that fails leaves the event as it is: an alert never waits on, or fails because of, a name.
+ */
+export async function withProject<E extends Event>(repo: Repo, orgId: string, ev: E): Promise<E> {
+  const id = ev.monitor.projectId;
+  if (!id) return ev;
+  try {
+    let hit = projectCache.get(orgId);
+    if (!hit) {
+      hit = { names: new Map((await repo.listProjects(orgId, null)).map((p) => [p.id, p.name])) };
+      projectCache.set(orgId, hit);
+    }
+    const name = hit.names.get(id);
+    if (!name) return ev;
+    return { ...ev, project: { id, name }, ...(hit.names.size > 1 ? { multiProject: true as const } : {}) };
+  } catch (e) {
+    console.error("project name lookup failed", e);
+    return ev;
+  }
+}
+
+/** `[name] ` when the alert should say which project it is from, else nothing. */
+const tag = (ev: Pick<Event, "project" | "multiProject">) => (ev.project && ev.multiProject ? `[${ev.project.name}] ` : "");
 
 const utc = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
 const duration = (ms: number, lang: Lang = "en") => {
@@ -79,12 +114,12 @@ async function postLark(url: string, text: string, secret?: string) {
 
 const alertText = (ev: Event) =>
   ev.kind === "incident.opened"
-    ? `${ev.slow ? "🟡" : "🔴"} ${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"}${ev.reopened ? " again" : ""} — ${ev.incident.title}`
+    ? `${ev.slow ? "🟡" : "🔴"} ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"}${ev.reopened ? " again" : ""} — ${ev.incident.title}`
     : ev.kind === "incident.reminder"
-      ? `⏰ ${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — reminder ${ev.count ?? 1}`
+      ? `⏰ ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — reminder ${ev.count ?? 1}`
       : ev.kind === "incident.escalated"
-        ? `🚨 ${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — escalated to you`
-        : `✅ ${ev.monitor.name} has recovered`;
+        ? `🚨 ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — escalated to you`
+        : `✅ ${tag(ev)}${ev.monitor.name} has recovered`;
 
 /** The alert is not sent, on purpose, and that is final (an allowance used up, a channel switched off); never retried. The message is the reason shown to people. */
 export class Skipped extends Error {}
@@ -180,7 +215,7 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
       }
       reopened = opened.some((x) => x.createdAt < delivery.createdAt);
     }
-    const ev = eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened);
+    const ev = await withProject(repo, incident.organizationId, eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened));
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
     await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined, pushedBy.get(eventKey));
@@ -193,7 +228,8 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
  * and send it. Switched-off channels get a row that says so. A log that cannot be written must not stop the alert, so the
  * channels without a row are sent directly.
  */
-async function fanOut(repo: Repo, orgId: string, ev: Event, channels: AlertChannel[], entitlements: Entitlements, extra: Partial<NewDelivery> = {}) {
+async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertChannel[], entitlements: Entitlements, extra: Partial<NewDelivery> = {}) {
+  const ev = await withProject(repo, orgId, event);
   const fallback = channels.some((c) => c.type === "email") ? await orgLang(repo, orgId) : "en";
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name, ...extra };
   const live = channels.filter((c) => c.enabled);
@@ -298,7 +334,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       break;
     case "webhook":
       need(cfg.url, "webhook URL");
-      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.slow ? { slow: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
+      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
       break;
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
@@ -355,6 +391,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         }
         const started = ev.incident.startedAt;
         const rows: [string, string][] = [[L("Monitor"), ev.monitor.name]];
+        if (ev.project && ev.multiProject) rows.push([L("Project"), ev.project.name]);
         if (ev.monitor.target) rows.push([L("Target"), ev.monitor.target]);
         if (started) rows.push([L("Started"), utc(started)]);
         if (opened && ev.reason) rows.push([L("Error"), ev.reason]);
@@ -380,7 +417,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           footerUrl: { text: L("Manage alerting"), url: `${appUrl()}/app/alerting` },
           lang,
         });
-        await sendEmail({ to: cfg.to, subject: `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
+        await sendEmail({ to: cfg.to, subject: `${tag(ev)}${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
       }
       break;
   }

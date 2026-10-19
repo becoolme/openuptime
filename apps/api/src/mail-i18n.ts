@@ -18,6 +18,7 @@ const zh: Record<string, string> = {
   "Open alerting": "打开告警设置",
   "Test alert from OpenUptime": "OpenUptime 测试告警",
   Monitor: "监控",
+  Project: "项目",
   Target: "目标",
   Started: "开始时间",
   Error: "错误",

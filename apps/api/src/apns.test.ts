@@ -73,6 +73,14 @@ describe("payload", () => {
     expect(p.aps.sound).toBe("default");
     expect(p).toMatchObject({ incidentId: ev.incident.id, monitorId: "m1", organizationId: "org1", kind: "incident.opened" });
   });
+  it("puts the project in the title when the workspace has several", () => {
+    const withProject = { ...ev, project: { id: "p1", name: "favicon.im" }, multiProject: true as const };
+    expect(buildPayload(withProject, "o", "en").aps.alert).toEqual({ title: "[favicon.im] API is down", body: "HTTP 503" });
+    expect(buildPayload(withProject, "o", "zh-CN").aps.alert.title).toBe("[favicon.im] API 宕机了");
+    const resolved = { ...withProject, kind: "incident.resolved" as const };
+    expect(buildPayload(resolved, "o", "en").aps.alert.title).toBe("[favicon.im] API has recovered");
+    expect(buildPayload({ ...ev, project: withProject.project }, "o", "en").aps.alert.title).toBe("API is down");
+  });
   it("opened, in Chinese, falls back to the target without a reason", () => {
     const p = buildPayload({ ...ev, reason: undefined }, "org1", "zh-CN");
     expect(p.aps.alert).toEqual({ title: "API 宕机了", body: "https://api.example.com" });

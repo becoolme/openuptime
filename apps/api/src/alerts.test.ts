@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendPush } from "./apns";
-import { deliver, retryDeliveries, sendEscalations, sendReminders } from "./alerts";
+import { sendEmail } from "./email";
+import { clearProjectNames, deliver, dispatchAlert, retryDeliveries, sendEscalations, sendReminders, withProject } from "./alerts";
 
 // these tests stub the global fetch and use made-up host names; the pinned connection would bypass the stub and go to the real network
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
+vi.mock("./email", async (orig) => ({ ...(await orig<typeof import("./email")>()), sendEmail: vi.fn(async () => {}) }));
 vi.mock("./apns", () => ({ sendPush: vi.fn(async () => {}) }));
 vi.mock("./pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) }));
 
@@ -229,5 +231,145 @@ describe("reminders and escalation", () => {
     expect(JSON.parse(fetchSpy.mock.calls[0][1]!.body as string)).toMatchObject({ kind: "incident.escalated", count: 2 });
     expect(f.logged[0]).toMatchObject({ channelId: "c2", status: "skipped", statusMessage: "skipped: channel disabled" });
     fetchSpy.mockRestore();
+  });
+});
+
+describe("project name in alerts", () => {
+  const projects = (list: { id: string; name: string }[]) => ({ listProjects: vi.fn(async () => list) });
+  const two = [{ id: "p1", name: "favicon.im" }, { id: "p2", name: "other" }];
+  const mon = { id: "m1", projectId: "p1", name: "WWW homepage", target: "https://x" };
+  const opened = { kind: "incident.opened" as const, incident: { id: "i1", title: "WWW homepage is down" }, monitor: mon };
+  afterEach(() => { clearProjectNames(); vi.restoreAllMocks(); });
+
+  /** Send `event` through dispatchAlert to one channel of `type` and return what the channel got. */
+  async function sent(event: typeof opened & Record<string, unknown>, list: { id: string; name: string }[], type = "slack", extra: Record<string, unknown> = {}) {
+    const cfg: Record<string, unknown> = { slack: { url: "https://hooks.example/s" }, lark: { url: "https://open.larksuite.com/h" }, telegram: { botToken: "t", chatId: "1" }, pagerduty: { routingKey: "k" }, webhook: { url: "https://hooks.example/w" } };
+    const bodies: Record<string, unknown>[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response(JSON.stringify({ code: 0 }), { status: 200 })));
+    const channel = { id: "c1", organizationId: "o", projectId: null, type, name: "c", enabled: true, config: cfg[type] };
+    const repo = {
+      ...projects(list),
+      channelsToAlert: async () => [channel],
+      logDeliveries: async () => {},
+      queueDeliveries: async (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r, id: "d1", attempts: 0 })),
+      claimDelivery: async (id: string) => ({ id, attempts: 0, kind: event.kind }),
+      finishDelivery: async () => {},
+      subscribersFor: async () => [],
+      ...extra,
+    };
+    await dispatchAlert(repo as never, "o", event as never);
+    return { bodies, repo };
+  }
+
+  it("names the project after the status emoji when the workspace has several projects", async () => {
+    expect((await sent(opened, two)).bodies[0]).toEqual({ text: "🔴 [favicon.im] WWW homepage is down — WWW homepage is down" });
+    expect((await sent({ ...opened, slow: true } as never, two)).bodies[0]).toEqual({ text: "🟡 [favicon.im] WWW homepage is responding slowly — WWW homepage is down" });
+    expect((await sent({ ...opened, reopened: true } as never, two)).bodies[0]).toEqual({ text: "🔴 [favicon.im] WWW homepage is down again — WWW homepage is down" });
+  });
+
+  it("keeps today's text in a workspace with a single project", async () => {
+    expect((await sent(opened, [two[0]])).bodies[0]).toEqual({ text: "🔴 WWW homepage is down — WWW homepage is down" });
+  });
+
+  it("covers reminder, escalation and recovery", async () => {
+    expect((await sent({ ...opened, kind: "incident.reminder", count: 2 } as never, two)).bodies[0]).toEqual({ text: "⏰ [favicon.im] WWW homepage is still down and nobody has acknowledged it — reminder 2" });
+    expect((await sent({ ...opened, kind: "incident.escalated" } as never, two)).bodies[0]).toEqual({ text: "🚨 [favicon.im] WWW homepage is still down and nobody has acknowledged it — escalated to you" });
+    expect((await sent({ ...opened, kind: "incident.resolved" } as never, two)).bodies[0]).toEqual({ text: "✅ [favicon.im] WWW homepage has recovered" });
+  });
+
+  it("uses the same text on lark, telegram and the pagerduty summary", async () => {
+    expect((await sent(opened, two, "lark")).bodies[0]).toMatchObject({ msg_type: "text", content: { text: "🔴 [favicon.im] WWW homepage is down — WWW homepage is down" } });
+    expect((await sent(opened, two, "telegram")).bodies[0]).toEqual({ chat_id: "1", text: "🔴 [favicon.im] WWW homepage is down — WWW homepage is down" });
+    expect((await sent(opened, two, "pagerduty")).bodies[0]).toMatchObject({ payload: { summary: "🔴 [favicon.im] WWW homepage is down — WWW homepage is down" } });
+  });
+
+  it("always puts the project in the webhook payload, whatever the project count", async () => {
+    expect((await sent(opened, two, "webhook")).bodies[0]).toMatchObject({ project: { id: "p1", name: "favicon.im" } });
+    expect((await sent(opened, [two[0]], "webhook")).bodies[0]).toMatchObject({ project: { id: "p1", name: "favicon.im" } });
+  });
+
+  it("sends the alert without a project when the lookup fails", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { bodies } = await sent(opened, [], "slack", { listProjects: async () => { throw new Error("db down"); } });
+    expect(bodies[0]).toEqual({ text: "🔴 WWW homepage is down — WWW homepage is down" });
+    const w = await sent(opened, [], "webhook", { listProjects: async () => { throw new Error("db down"); } });
+    expect(w.bodies[0]).not.toHaveProperty("project");
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("reads the workspace's projects once for a burst of alerts", async () => {
+    const repo = projects(two);
+    await withProject(repo as never, "o", opened);
+    await withProject(repo as never, "o", opened);
+    expect(repo.listProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not look anything up for a monitor without a project", async () => {
+    const repo = projects(two);
+    const e = { ...opened, monitor: { ...mon, projectId: null } };
+    expect(await withProject(repo as never, "o", e)).toBe(e);
+    expect(repo.listProjects).not.toHaveBeenCalled();
+  });
+
+  it("names the project in a retried alert", async () => {
+    const bodies: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response("", { status: 200 })));
+    const repo = {
+      ...projects(two),
+      claimRetries: async () => [{
+        delivery: { id: "d1", kind: "incident.opened", attempts: 1, organizationId: "o", channelId: "c1", createdAt: new Date() },
+        incident: { id: "i1", organizationId: "o", title: "WWW homepage is down", startedAt: new Date(), resolvedAt: null, acknowledgedAt: null, auto: true, severity: "major", reminderCount: 0, escalationLevel: 0 },
+        monitor: mon,
+        channel: { id: "c1", organizationId: "o", type: "slack", name: "s", config: { url: "https://hooks.example/x" }, enabled: true },
+      }],
+      finishDelivery: async () => {},
+    };
+    await retryDeliveries(repo as never);
+    expect(bodies[0]).toEqual({ text: "🔴 [favicon.im] WWW homepage is down — WWW homepage is down" });
+  });
+
+  it("names the project in a reminder and an escalation", async () => {
+    const bodies: { text?: string }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response("", { status: 200 })));
+    const incident = { id: "i1", organizationId: "o", title: "WWW homepage is down", startedAt: new Date(), resolvedAt: null, acknowledgedAt: null, auto: true, severity: "major", reminderCount: 1, escalationLevel: 1 };
+    const hook = { id: "c1", organizationId: "o", type: "slack", name: "s", enabled: true, config: { url: "https://hooks.example/x" } };
+    const repo = {
+      ...projects(two),
+      underMaintenance: async () => false,
+      claimReminders: async () => [{ incident, monitor: { ...mon, organizationId: "o", channelIds: [] }, project: { reminderEmail: false }, number: 1 }],
+      claimEscalations: async () => [{ incident, monitor: { ...mon, organizationId: "o", channelIds: [] }, step: { channelIds: ["c1"] }, level: 1 }],
+      channelsToAlert: async () => [{ ...hook, type: "push" }],
+      channelsByIds: async () => [hook],
+      queueDeliveries: async (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r, id: "d1", attempts: 0 })),
+      claimDelivery: async (id: string) => ({ id, attempts: 0, kind: "x" }),
+      finishDelivery: async () => {},
+      logDeliveries: async () => {},
+      pushDevicesForOrganization: async () => [{ id: "dev" }],
+    };
+    vi.mocked(sendPush).mockClear();
+    await sendReminders(repo as never);
+    expect(vi.mocked(sendPush).mock.calls[0][2]).toMatchObject({ kind: "incident.reminder", project: { id: "p1", name: "favicon.im" }, multiProject: true });
+    await sendEscalations(repo as never);
+    expect(bodies[0].text).toBe("🚨 [favicon.im] WWW homepage is still down and nobody has acknowledged it — escalated to you");
+  });
+
+  it("prefixes the email subject and lists the project, in the reader's language", async () => {
+    const mail = vi.mocked(sendEmail);
+    const send = async (event: Record<string, unknown>, lang: "en" | "zh-CN") => {
+      mail.mockClear();
+      await deliver({ type: "email", name: "mail", config: { to: "a@example.com" } }, { ...opened, incident: { id: "i1", title: "x", startedAt: new Date() }, ...event } as never, "t", lang);
+      return mail.mock.calls[0][0] as unknown as { subject: string; html?: string; text?: string };
+    };
+    const multi = { project: { id: "p1", name: "favicon.im" }, multiProject: true };
+    expect((await send(multi, "en")).subject).toBe("[favicon.im] 🔴 WWW homepage is down · OpenUptime");
+    expect((await send({ ...multi, kind: "incident.resolved" }, "en")).subject).toBe("[favicon.im] ✅ WWW homepage has recovered · OpenUptime");
+    const zh = await send(multi, "zh-CN");
+    expect(zh.subject).toMatch(/^\[favicon\.im\] 🔴 /);
+    expect(JSON.stringify(zh)).toContain("项目");
+    expect(JSON.stringify(await send(multi, "en"))).toContain("favicon.im");
+    // one project: unchanged
+    const single = await send({ project: multi.project }, "en");
+    expect(single.subject).toBe("🔴 WWW homepage is down · OpenUptime");
+    expect(JSON.stringify(single)).not.toContain("favicon.im");
   });
 });
