@@ -8,6 +8,9 @@ import { verifyOAuthToken } from "./oauth";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Value of the `ou_project` cookie and the `x-project-id` header for the workspace-wide view. */
+export const ALL_PROJECTS = "all";
+
 /** Resolves the session and the active organization; 401 if there is none. */
 export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   const auth = c.get("auth");
@@ -62,7 +65,10 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   if (!userId) throw new HTTPException(401, { message: "Unauthorized" });
 
   const repo = c.get("repo");
-  const wanted = c.req.header("x-project-id") ?? cookieValue(c.req.header("cookie"), "ou_project") ?? scope?.[0];
+  const asked = c.req.header("x-project-id") ?? cookieValue(c.req.header("cookie"), "ou_project");
+  // "all" is the workspace-wide view: the project is then the usual fallback (a limited key: its first project)
+  const allProjects = asked === ALL_PROJECTS;
+  const wanted = (allProjects ? undefined : asked) ?? scope?.[0];
   // the org id comes from user-supplied key metadata: only trust it for orgs the user belongs to
   if (orgId && fromKey && !(await repo.isMember(userId, orgId))) throw new HTTPException(403, { message: "Not a member of this workspace" });
   if (!orgId) {
@@ -72,6 +78,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   const projectId = await cachedProject(repo, orgId, wanted);
   if (scope && !scope.includes(projectId)) throw new HTTPException(403, { message: "API key has no access to this project" });
   c.set("projectId", projectId);
+  c.set("allProjects", allProjects);
   c.set("projectScope", scope);
   // a key sees only its own workspace
   c.set("workspaceGrant", granted ?? (fromKey ? new Map([[orgId, scope]]) : null));
@@ -91,6 +98,21 @@ export const requireManager = createMiddleware<AppEnv>(async (c, next) => {
   if (!(await isManager(c))) throw new HTTPException(403, { message: "Only workspace owners and admins can do this" });
   await next();
 });
+
+/**
+ * Writes to project-scoped routes need a project: in the "All projects" view the request would land in the fallback
+ * project, which is never what the caller meant. Reads pass.
+ */
+export const rejectInAllProjects = createMiddleware<AppEnv>(async (c, next) => {
+  if (c.get("allProjects") && !["GET", "HEAD", "OPTIONS"].includes(c.req.method)) throw new HTTPException(400, { message: "Choose a project" });
+  await next();
+});
+
+/** What a list route reads: the active project, or every project the caller may see in the "All projects" view. */
+export async function listedProjects(c: Context<AppEnv>): Promise<string | string[]> {
+  if (!c.get("allProjects")) return c.get("projectId");
+  return (await c.get("repo").listProjects(c.get("orgId"), c.get("projectScope"))).map((p) => p.id);
+}
 
 /** Path ids are uuids: anything else is simply not found (instead of a database error surfacing as a 500). */
 export const uuidParams = createMiddleware<AppEnv>(async (c, next) => {

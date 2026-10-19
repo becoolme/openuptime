@@ -89,6 +89,8 @@ export type MonitorPatch = Partial<Omit<MonitorInput, "type">> & { paused?: bool
 /** Bookkeeping written by the checker and the heartbeat endpoint. */
 export type MonitorState = Partial<Pick<Monitor, "status" | "consecutiveFailures" | "consecutiveSlow" | "lastCheckedAt" | "nextCheckAt">>;
 
+export type ProjectOverview = { id: string; name: string; monitors: number; down: number; openIncidents: number };
+
 export interface MonitorListItem extends Monitor {
   uptime24h: number | null;
   avgLatency24h: number | null;
@@ -433,6 +435,8 @@ export interface Repo {
 
   listProjects(orgId: string, scope: Scope): Promise<Pick<Project, "id" | "name" | "createdAt">[]>;
   countProjects(orgId: string): Promise<number>;
+  /** Per project (within the key's scope): monitors, monitors that are down and unresolved incidents. */
+  projectOverview(orgId: string, scope: Scope): Promise<ProjectOverview[]>;
   createProject(orgId: string, name: string): Promise<Project>;
   renameProject(orgId: string, id: string, name: string): Promise<Project | null>;
   deleteProject(orgId: string, id: string): Promise<void>;
@@ -441,7 +445,8 @@ export interface Repo {
   ensureDefaultProject(orgId: string): Promise<string>;
 
   // ── monitors ─────────────────────────────────────────────────────────────────
-  listMonitors(orgId: string, projectId: string): Promise<MonitorListItem[]>;
+  /** One project, or several (the "All projects" view: the caller passes the ids it may see). */
+  listMonitors(orgId: string, projectId: string | string[]): Promise<MonitorListItem[]>;
   exportMonitors(orgId: string, projectId: string): Promise<Monitor[]>;
   getMonitor(orgId: string, id: string, scope: Scope): Promise<Monitor | null>;
   monitorDetail(monitorId: string): Promise<MonitorDetail>;
@@ -484,7 +489,8 @@ export interface Repo {
   withinLimit(key: string, limit: number, windowSec: number): Promise<boolean>;
 
   // ── incidents ────────────────────────────────────────────────────────────────
-  listIncidents(orgId: string, projectId: string): Promise<IncidentWithMonitor[]>;
+  /** One project, or several (the "All projects" view); newest first, at most 100. */
+  listIncidents(orgId: string, projectId: string | string[]): Promise<IncidentWithMonitor[]>;
   /** Is the incident on one of the key's projects (or not tied to a monitor)? */
   incidentVisible(orgId: string, id: string, scope: Scope): Promise<boolean>;
   incidentDetail(orgId: string, id: string): Promise<IncidentDetail | null>;

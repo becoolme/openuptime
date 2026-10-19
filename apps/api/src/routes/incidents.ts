@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { notifyIncidentUpdate } from "../alerts";
 import type { AppEnv } from "../env";
-import { uuidParams } from "../middleware";
+import { listedProjects, uuidParams } from "../middleware";
 import { purgePublicStatus } from "./status";
 
 const visibility = z.enum(["public", "internal"]);
@@ -20,7 +20,7 @@ const asNumber = (q: string) => {
 export const incidents = new Hono<AppEnv>()
   // ?q= filters by incident number (INC-12 or 12) or by a word in the title
   .get("/", async (c) => {
-    const list = await c.get("repo").listIncidents(c.get("orgId"), c.get("projectId"));
+    const list = await c.get("repo").listIncidents(c.get("orgId"), await listedProjects(c));
     const q = c.req.query("q")?.trim();
     if (!q) return c.json(list);
     const n = asNumber(q);

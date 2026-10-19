@@ -24,6 +24,8 @@ const unlimited: MiddlewareHandler<AppEnv> = async (c, next) => {
 
 export const projects = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await c.get("repo").listProjects(c.get("orgId"), c.get("projectScope"))))
+  // the "All projects" strip: per project, how many monitors, how many are down and how many incidents are open
+  .get("/overview", async (c) => c.json(await c.get("repo").projectOverview(c.get("orgId"), c.get("projectScope"))))
   .post("/", unlimited, zValidator("json", body), async (c) => c.json(await c.get("repo").createProject(c.get("orgId"), c.req.valid("json").name), 201))
   .patch("/:id", uuidParams, unlimited, requireManager, zValidator("json", body), async (c) => {
     const row = await c.get("repo").renameProject(c.get("orgId"), c.req.param("id"), c.req.valid("json").name);
