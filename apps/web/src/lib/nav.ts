@@ -2,7 +2,8 @@
 import { lp } from "./locale-path";
 import { prefetch, resetCache } from "./api";
 import { resolveRoute } from "./routes";
-import { isAllProjects, setProjectCookie } from "./scope";
+import { ALL, isAllProjects, setProjectCookie } from "./scope";
+import { forgetAll, rememberAll, takeAll } from "./from-all";
 
 export function navigate(to: string) {
   history.pushState(null, "", lp(to));
@@ -14,6 +15,7 @@ export function navigate(to: string) {
  * reloading the document. List pages stay where they are; a detail page belongs to the old project, so it falls back to Monitors.
  */
 export function switchScope() {
+  forgetAll(); // an explicit choice of project or workspace wins over "back to All"
   resetCache();
   const hit = resolveRoute(location.pathname);
   if (!hit || hit.params.length) history.pushState(null, "", lp("/app"));
@@ -33,7 +35,20 @@ export function selectProject(id: string) {
  */
 export function adoptProject(id: string | null | undefined) {
   if (!id || !isAllProjects()) return;
+  rememberAll();
   document.cookie = setProjectCookie(id);
+  resetCache();
+  window.dispatchEvent(new Event("ou:project"));
+  window.dispatchEvent(new Event("ou:changed"));
+}
+
+/**
+ * The back link of a detail page opened from the "All projects" view: go back to that view rather than staying in the
+ * page's project. Does nothing when the visitor came from a project or picked one since.
+ */
+export function backToAll() {
+  if (!takeAll()) return;
+  document.cookie = setProjectCookie(ALL);
   resetCache();
   window.dispatchEvent(new Event("ou:project"));
   window.dispatchEvent(new Event("ou:changed"));

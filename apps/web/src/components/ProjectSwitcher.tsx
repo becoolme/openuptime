@@ -1,10 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Project } from "../lib/api";
 import { t } from "../lib/i18n";
 import { authClient } from "../lib/auth-client";
 import { useBusy } from "../lib/use-busy";
 import { selectProject as select, switchScope } from "../lib/nav";
+import { scrollEdges } from "../lib/scroll-edges";
 import { ALL, COOKIE, isAllProjects, setProjectCookie } from "../lib/scope";
+
+/** A list with at most a few rows in view: fades at the edge that still has rows behind it, so it reads as scrollable. */
+function ScrollList({ children, deps }: { children: React.ReactNode; deps: unknown[] }) {
+  const el = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const measure = useCallback(() => {
+    const e = el.current;
+    if (!e) return;
+    const next = scrollEdges(e.scrollTop, e.clientHeight, e.scrollHeight);
+    setEdges((c) => (c.top === next.top && c.bottom === next.bottom ? c : next));
+  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(measure, deps);
+  return (
+    <div className={`menu-scroll${edges.top ? " more-t" : ""}${edges.bottom ? " more-b" : ""}`}>
+      <div className="menu-list" ref={el} onScroll={measure}>{children}</div>
+    </div>
+  );
+}
 
 /** Sidebar workspace block: shows the workspace and active project, and switches / creates / renames / deletes projects. */
 export default function ProjectSwitcher() {
@@ -81,17 +101,17 @@ export default function ProjectSwitcher() {
       {open && (
         <div className="menu card" role="listbox">
           <div className="menu-h nav-l">
-            <span>{t("Workspaces")}</span>
+            <span>{t("Workspaces")}{orgs.length > 1 && <em className="menu-n">{orgs.length}</em>}</span>
             <button type="button" className="menu-add" title={t("New workspace")} aria-label={t("New workspace")} onClick={() => setAddingWs(!addingWs)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           </div>
           {orgs.length > 1 && (
-            <div className="menu-list">
+            <ScrollList deps={[orgs.length]}>
               {orgs.map((o) => (
                 <button key={o.id} role="option" aria-selected={o.id === orgId} className={`mi ${o.id === orgId ? "on" : ""}`} onClick={() => (o.id === orgId ? setOpen(false) : switchOrg(o.id))}>
                   <span>{o.name}</span>{o.id === orgId && <span>✓</span>}
                 </button>
               ))}
-            </div>
+            </ScrollList>
           )}
           {addingWs && (
             <form onSubmit={createOrg} style={{ padding: 6, display: "grid", gap: 6 }}>
@@ -101,19 +121,21 @@ export default function ProjectSwitcher() {
           )}
           <div className="sep" />
           <div className="menu-h nav-l">
-            <span>{t("Projects")}</span>
+            <span>{t("Projects")}{projects.length > 0 && <em className="menu-n">{projects.length}</em>}</span>
             <button type="button" className="menu-add" title={t("New project")} aria-label={t("New project")} onClick={() => setAdding(!adding)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           </div>
-          <div className="menu-list">
+          <div className="menu-pin">
             <button role="option" aria-selected={all} className={`mi ${all ? "on" : ""}`} onClick={() => (all ? setOpen(false) : (document.cookie = setProjectCookie(ALL), switchScope()))}>
               <span>{t("All projects")}</span>{all && <span>✓</span>}
             </button>
+          </div>
+          <ScrollList deps={[projects.length]}>
             {projects.map((p) => (
               <button key={p.id} role="option" aria-selected={!all && p.id === current} className={`mi ${!all && p.id === current ? "on" : ""}`} onClick={() => (!all && p.id === current ? setOpen(false) : select(p.id))}>
                 <span>{p.name}</span>{!all && p.id === current && <span>✓</span>}
               </button>
             ))}
-          </div>
+          </ScrollList>
           {adding && (
             <form onSubmit={create} style={{ padding: 6, display: "grid", gap: 6 }}>
               <input className="in" style={{ height: 34, fontSize: 14 }} autoFocus required maxLength={60} placeholder={t("Project name")} value={name} onChange={(e) => setName(e.target.value)} />

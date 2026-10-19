@@ -1,4 +1,4 @@
-import { adoptProject, navigate } from "../lib/nav";
+import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { api, type Monitor, type StatusPage, type Subscriber } from "../lib/api";
@@ -119,7 +119,7 @@ export function StatusPageEditor({ id }: { id: string }) {
   }
   return (
     <>
-      <p className="crumb-back"><a href="/app/status-pages" className="muted">{t("← Status pages")}</a></p>
+      <p className="crumb-back"><a href="/app/status-pages" className="muted" onClick={backToAll}>{t("← Status pages")}</a></p>
       <div className="ph">
         <div style={{ minWidth: 0 }}>
           <h1 className="ph-title">{page.title}</h1>

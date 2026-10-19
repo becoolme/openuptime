@@ -156,6 +156,8 @@ export const zh: Record<string, string> = {
   "Response": "响应",
   "No monitors match.": "没有匹配的监控。",
   "monitors": "个监控",
+  "monitor": "个监控",
+  "open incident": "个未解决事件",
   "Every": "每",
   "failures before incident": "次失败触发事件",
   "Uptime 7d": "7 天可用率",

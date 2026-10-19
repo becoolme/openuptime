@@ -1,4 +1,4 @@
-import { adoptProject, navigate } from "../lib/nav";
+import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
@@ -58,7 +58,7 @@ export default function MonitorDetail({ id }: { id: string }) {
   const num = (v: number | null | undefined, unit: string, digits = 0) => (v == null ? "—" : <>{digits ? v.toFixed(digits) : v}<u>{unit}</u></>);
   return (
     <>
-      <p className="crumb-back"><a href="/app" className="muted">{t("← Monitors")}</a></p>
+      <p className="crumb-back"><a href="/app" className="muted" onClick={backToAll}>{t("← Monitors")}</a></p>
       <div className="ph">
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1 className="ph-title">{m.name} <span className={`pill ${m.status}`}>{t(m.status)}</span></h1>
