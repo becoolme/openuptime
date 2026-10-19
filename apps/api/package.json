@@ -10,7 +10,8 @@
     "typecheck": "tsc -p .",
     "test": "vitest run",
     "build:node": "esbuild src/server.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\"",
-    "start": "node dist/server.mjs"
+    "start": "node dist/server.mjs",
+    "build:glama": "esbuild scripts/glama-api.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/glama-api.mjs --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\""
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.7",
