@@ -51,7 +51,7 @@ describe("rejectInAllProjects", () => {
     app.all("/x/y", (c) => c.body(null, 204));
     app.onError((e, c) => c.json({ error: e.message }, (e as { status?: 400 }).status ?? 500));
     const res = await app.request("/x/y", { method });
-    return [res.status, (await res.json().catch(() => null))?.error];
+    return [res.status, ((await res.json().catch(() => null)) as { error?: string } | null)?.error];
   };
   it("refuses writes in the all view and lets reads and single-project writes through", async () => {
     for (const m of ["POST", "PUT", "PATCH", "DELETE"]) expect(await run(true, m)).toEqual([400, "Choose a project"]);
