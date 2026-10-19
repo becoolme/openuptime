@@ -43,7 +43,16 @@ h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em}
 .nav.on{background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font-weight:500}
 .nav-l{font:500 11px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);padding:16px 10px 6px}
 .menu-h{display:flex;align-items:center;justify-content:space-between;padding:10px 4px 4px 10px}
-.menu-list{max-height:176px;overflow-y:auto;overscroll-behavior:contain}
+.menu-scroll{position:relative}
+.menu-list{max-height:158px;overflow-y:auto;overscroll-behavior:contain}
+@supports not selector(::-webkit-scrollbar){.menu-list{scrollbar-width:thin;scrollbar-color:var(--faint) transparent}}
+.menu-list::-webkit-scrollbar{width:8px}.menu-list::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--faint) 55%,transparent);border-radius:99px;border:2px solid var(--surface)}.menu-list::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+.menu-scroll::before,.menu-scroll::after{content:"";position:absolute;left:0;right:0;height:22px;z-index:1;pointer-events:none;opacity:0;transition:opacity .15s}
+.menu-scroll::before{top:0;background:linear-gradient(var(--surface),transparent)}.menu-scroll::after{bottom:0;background:linear-gradient(transparent,var(--surface))}
+.menu-scroll.more-t::before,.menu-scroll.more-b::after{opacity:1}
+.menu-n{margin-left:6px;font-style:normal;font-weight:400;color:var(--faint)}
+.menu-n::before{content:"· "}
+.scope-chip{display:inline-flex;align-items:center;vertical-align:middle;height:22px;margin-left:12px;padding:0 9px;border:1px solid var(--line);border-radius:99px;background:var(--surface-2);color:var(--muted);font:500 12px var(--sans);letter-spacing:0}
 .menu-list .mi span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu-add{width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:7px;background:none;color:var(--muted);cursor:pointer}
 .menu-add:hover{background:var(--surface-2);color:var(--ink)}

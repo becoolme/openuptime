@@ -27,6 +27,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "workspace-menu-polish",
+    date: "2026-10-19",
+    edition: "community",
+    title: { en: "Clearer project switcher and All projects view", zh: "更清晰的项目切换器与所有项目视图" },
+    summary: {
+      en: "The project switcher shows how many projects there are and that its list scrolls, and the All projects view is easier to follow.",
+      zh: "项目切换器会显示项目数量并明确提示列表可滚动，“所有项目”视图也更易于使用。",
+    },
+    points: [
+      { en: "The Projects and Workspaces headings show a count, and a long list fades at the edge that has more rows and has a slim scrollbar.", zh: "“项目”和“工作区”标题旁显示数量，较长的列表会在还有更多内容的一侧渐隐，并带有细滚动条。" },
+      { en: "The All projects entry stays pinned above the scrolling project list.", zh: "“所有项目”一项固定在可滚动的项目列表上方。" },
+      { en: "Project cards say \"1 monitor\" and \"1 open incident\" instead of \"1 monitors\".", zh: "项目卡片中的数量文案已修正，单数时不再显示复数形式。" },
+      { en: "Monitors and Incidents show an All projects label beside the title while that view is active.", zh: "启用“所有项目”视图时，监控项和事件页面的标题旁会显示“所有项目”标签。" },
+      { en: "The back link on a monitor, incident or status page opened from All projects returns to that view.", zh: "从“所有项目”打开监控项、事件或状态页后，返回链接会回到该视图。" },
+    ],
+  },
+  {
     id: "all-projects-view",
     date: "2026-10-19",
     edition: "community",

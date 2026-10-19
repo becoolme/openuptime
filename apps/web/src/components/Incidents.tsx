@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ago, api, type Incident, type Monitor } from "../lib/api";
 import { useBusy } from "../lib/use-busy";
 import { isAllProjects } from "../lib/scope";
-import { ProjectBadge, useProjects } from "./AllProjects";
+import { ProjectBadge, ScopeChip, useProjects } from "./AllProjects";
 
 const DAY = 86400_000;
 const dur = (a: string, b: string | null) => {
@@ -42,7 +42,7 @@ export default function Incidents() {
   return (
     <>
       <div className="ph">
-        <div><h1 className="serif">{t("Incidents")}</h1><p className="muted">{t("Everything that went wrong, and how fast we fixed it.")}</p></div>
+        <div><h1 className="serif">{t("Incidents")}{everything && <ScopeChip />}</h1><p className="muted">{t("Everything that went wrong, and how fast we fixed it.")}</p></div>
         {!everything && <div className="ph-actions">
           <a className="btn" href="/app/maintenance">{t("Schedule maintenance")}</a>
           <button className="btn primary" onClick={() => setDeclaring(true)}>

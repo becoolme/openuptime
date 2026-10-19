@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ago, api, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
-import { ProjectBadge, ProjectStrip, useProjects } from "./AllProjects";
+import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
 const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS" };
 
@@ -94,7 +94,7 @@ export default function Monitors() {
     <>
       <div className="ph">
         <div>
-          <h1>{t("Monitors")}</h1>
+          <h1>{t("Monitors")}{everything && <ScopeChip />}</h1>
           <p className="muted">
             {items === null ? t("Loading…") : down.length ? `${down.length} ${t("down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
           </p>

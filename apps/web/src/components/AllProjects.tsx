@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Project, type ProjectOverview } from "../lib/api";
 import { t } from "../lib/i18n";
 import { selectProject } from "../lib/nav";
+import { plural } from "../lib/plural";
 import { projectName, showBadges } from "../lib/scope";
 
 /** The projects of the workspace, for naming the rows of a merged list. */
@@ -21,6 +22,11 @@ export function ProjectBadge({ id, projects }: { id: string | null | undefined; 
   );
 }
 
+/** Small chip beside a page title saying the page lists every project of the workspace. */
+export function ScopeChip() {
+  return <span className="scope-chip">{t("All projects")}</span>;
+}
+
 /** Per-project summary on top of the Monitors page in the "All projects" view. */
 export function ProjectStrip({ rows }: { rows: ProjectOverview[] }) {
   if (rows.length < 2) return null;
@@ -29,8 +35,8 @@ export function ProjectStrip({ rows }: { rows: ProjectOverview[] }) {
       {rows.map((p) => (
         <button key={p.id} type="button" className="card pov-c" onClick={() => selectProject(p.id)}>
           <b>{p.name}</b>
-          <small>{p.monitors} {t("monitors")}{p.down > 0 && <> · <span className="bad">{p.down} {t("down")}</span></>}</small>
-          <small>{p.openIncidents > 0 ? <span className="bad">{p.openIncidents} {t("open incidents")}</span> : t("No open incidents")}</small>
+          <small>{plural(p.monitors, "monitor", "monitors")}{p.down > 0 && <> · <span className="bad">{p.down} {t("down")}</span></>}</small>
+          <small>{p.openIncidents > 0 ? <span className="bad">{plural(p.openIncidents, "open incident", "open incidents")}</span> : t("No open incidents")}</small>
         </button>
       ))}
     </div>
