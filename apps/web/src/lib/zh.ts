@@ -510,4 +510,8 @@ export const zh: Record<string, string> = {
   "Postmortem": "复盘",
   "One sentence on what went wrong": "用一句话说明出了什么问题",
   "What happened, the impact, and what we will change": "发生了什么、影响范围，以及我们将做出的改进",
+  "Read-only overview. Choose a project to make changes.": "只读总览。请先选择一个项目再进行修改。",
+  "This page belongs to a single project. Choose one to continue.": "此页面属于单个项目，请选择一个项目继续。",
+  "No open incidents": "没有未解决事件",
+  "Choose a project to add the first one.": "请选择一个项目来添加第一个监控。",
 };

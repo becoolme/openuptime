@@ -17,6 +17,8 @@ import Account from "./Account";
 import ApiKeys from "./ApiKeys";
 import Settings from "./Settings";
 import Usage from "./Usage";
+import { ChooseProject } from "./AllProjects";
+import { isAllProjects } from "../lib/scope";
 
 const NAV_PREFIX = "/app";
 
@@ -41,7 +43,11 @@ function internal(a: HTMLAnchorElement, e: MouseEvent) {
   return p === NAV_PREFIX || p.startsWith(NAV_PREFIX + "/");
 }
 
-function View({ name, params }: { name: string; params: string[] }) {
+/** Pages that work on one project: in the "All projects" view they ask for a choice instead of showing the oldest project. */
+const PER_PROJECT = new Set(["StatusPages", "Alerting", "Maintenance"]);
+
+function View({ name, params, title }: { name: string; params: string[]; title: string }) {
+  if (PER_PROJECT.has(name) && isAllProjects()) return <ChooseProject title={title} />;
   switch (name) {
     case "Monitors": return <Monitors />;
     case "MonitorDetail": return <MonitorDetail id={params[0]} />;
@@ -110,5 +116,5 @@ export default function Router() {
 
   const hit = resolveRoute(path);
   if (!hit) return <p className="muted">{t("Page not found.")} <a href={lp("/app")}>{t("← Monitors")}</a></p>;
-  return <><Toaster /><VerifyBar /><View key={`${path}#${scope}#${bump}`} name={hit.route.name} params={hit.params} /></>;
+  return <><Toaster /><VerifyBar /><View key={`${path}#${scope}#${bump}`} name={hit.route.name} params={hit.params} title={hit.route.title} /></>;
 }

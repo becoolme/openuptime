@@ -605,3 +605,13 @@ html[lang="zh-CN"] h1{font-weight:700}
 .fill{height:100%;border-radius:99px;background:var(--accent)}.fill.warn{background:#c98a0a}
 .pill.warn{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:99px;font-size:12.5px;font-weight:500;border:1px solid rgba(201,138,10,.32);background:rgba(201,138,10,.12);color:#c98a0a}
 .seg i.locked{opacity:.45;cursor:not-allowed}
+
+/* "All projects" view: project label on merged rows, and the per-project summary on top of Monitors */
+.pbadge{display:inline-block;max-width:120px;vertical-align:bottom;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px;padding:0 6px;border-radius:5px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font:500 11px var(--sans);line-height:16px;cursor:pointer}
+.pbadge:hover,.pbadge:focus-visible{color:var(--ink);border-color:var(--line-2)}
+.pov{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:22px}
+.pov-c{display:grid;gap:2px;padding:12px 14px;text-align:left;font:inherit;color:var(--ink);cursor:pointer}
+.pov-c:hover{border-color:var(--line-2)}
+.pov-c b{font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pov-c small{font-size:12.5px;color:var(--muted)}
+.pov-c .bad{color:var(--down)}

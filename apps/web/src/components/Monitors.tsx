@@ -1,8 +1,10 @@
 import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { ago, api, type Channel, type Incident, type Monitor } from "../lib/api";
+import { ago, api, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
 import { regionLocked, toggleRegion } from "../lib/regions";
+import { isAllProjects } from "../lib/scope";
+import { ProjectBadge, ProjectStrip, useProjects } from "./AllProjects";
 
 const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS" };
 
@@ -25,13 +27,18 @@ export default function Monitors() {
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  // "All projects": every project of the workspace in one read-only list, with a summary per project on top
+  const everything = isAllProjects();
+  const projects = useProjects();
+  const [overview, setOverview] = useState<ProjectOverview[]>([]);
 
   const load = () => {
     api.monitors().then(setItems);
     api.incidents().then(setIncidents).catch(() => {});
+    if (everything) api.projectOverview().then(setOverview).catch(() => {});
   };
   useEffect(() => {
-    Promise.all([api.channels(), api.statusPages()]).then(([c, p]) => setSetup({ channels: c.length > 0, pages: p.length > 0 })).catch(() => {});
+    if (!everything) Promise.all([api.channels(), api.statusPages()]).then(([c, p]) => setSetup({ channels: c.length > 0, pages: p.length > 0 })).catch(() => {});
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
@@ -92,13 +99,15 @@ export default function Monitors() {
             {items === null ? t("Loading…") : down.length ? `${down.length} ${t("down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
           </p>
         </div>
-        <div className="acts">
+        {!everything && <div className="acts">
           <input id="mon-import" type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
           <button className="btn" onClick={() => document.getElementById("mon-import")?.click()}>{t("Import")}</button>
           {all.length > 0 && <a className="btn" href="/api/monitors/export" download="openuptime-monitors.json">{t("Export")}</a>}
           <button className="btn primary" onClick={() => setOpen(true)}>{t("+ New monitor")}</button>
-        </div>
+        </div>}
       </div>
+      {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
+      {everything && <ProjectStrip rows={overview} />}
 
       {note && <p className={note.ok ? "muted" : "err"} style={{ marginBottom: 12 }}>{note.text} <button className="btn sm" onClick={() => setNote(null)}>{t("Dismiss")}</button></p>}
 
@@ -122,7 +131,9 @@ export default function Monitors() {
         </div>
       )}
 
-      {items?.length === 0 ? (
+      {items?.length === 0 && everything ? (
+        <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No monitors yet")}</h3><p className="muted">{t("Choose a project to add the first one.")}</p></div>
+      ) : items?.length === 0 ? (
         <div className="onb">
           <div className="onb-h">
             <div>
@@ -179,7 +190,7 @@ export default function Monitors() {
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
                   <span className="chip">{TYPE_LABEL[m.type]}</span>
-                  <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
+                  <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
                 </div>
                 <span><span className={`pill ${m.status}`}>{t(m.status)}</span></span>
                 <span className="spk"><Spark data={m.spark ?? []} status={m.status} /></span>
@@ -193,7 +204,7 @@ export default function Monitors() {
           </div>
         </>
       )}
-      {open && <MonitorForm onClose={() => setOpen(false)} onSaved={() => { setOpen(false); load(); window.dispatchEvent(new Event("ou:changed")); }} />}
+      {open && !everything && <MonitorForm onClose={() => setOpen(false)} onSaved={() => { setOpen(false); load(); window.dispatchEvent(new Event("ou:changed")); }} />}
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { adoptProject } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
@@ -26,7 +27,7 @@ export default function IncidentDetail({ id }: { id: string }) {
   const [busy, run] = useBusy();
   const [acking, ack] = useBusy();
   const [err, setErr] = useState("");
-  const load = () => api.incident(id).then((i) => { setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); setPublish(!!i.postmortemPublishedAt); });
+  const load = () => api.incident(id).then((i) => { adoptProject(i.projectId); setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); setPublish(!!i.postmortemPublishedAt); });
   useEffect(() => { load(); }, [id]);
   if (!inc) return <p className="muted">{t("Loading…")}</p>;
 
