@@ -78,6 +78,12 @@ export type Variables = {
   orgId: string;
   /** Active project inside the workspace (cookie `ou_project` / header `x-project-id`, else the oldest). */
   projectId: string;
+  /**
+   * The request asked for the "All projects" view (cookie `ou_project=all` / header `x-project-id: all`). `projectId` is
+   * then only the fallback project; the monitor and incident lists read every project the caller may see, and writes
+   * to project-scoped routes are refused (see rejectInAllProjects).
+   */
+  allProjects: boolean;
   /** Set for API keys limited to some projects: the only project ids this request may touch (null = no limit). */
   projectScope: Scope;
   /**

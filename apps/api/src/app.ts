@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { createAuth, currentSession, NATIVE_CALLBACK, signupDisabled, slugify, turnstile } from "./auth";
 import { connectionString, type AppEnv } from "./env";
 import { mountMcp } from "./mcp-route";
-import { requireOrg } from "./middleware";
+import { rejectInAllProjects, requireOrg } from "./middleware";
 import { alertLog, settings } from "./routes/alert-log";
 import { channels } from "./routes/channels";
 import { push } from "./routes/push";
@@ -180,6 +180,8 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   // authenticated
   const authed = new Hono<AppEnv>();
   authed.use("*", requireOrg);
+  // routes that act on the active project: in the "All projects" view only their reads work
+  for (const path of ["/monitors", "/incidents", "/channels", "/alert-log", "/maintenance", "/status-pages"]) authed.use(`${path}/*`, rejectInAllProjects);
   authed.route("/projects", projects);
   authed.route("/monitors", monitors);
   authed.route("/incidents", incidents);
@@ -252,7 +254,14 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     return c.json({ regions: availableRegions(), types: PROBE_TYPES, maxPerMonitor: plan?.maxRegions ?? null });
   });
   // sidebar badges: one round trip, four counts
-  authed.get("/counts", async (c) => c.json(await c.get("repo").counts(c.get("orgId"), c.get("projectId"))));
+  authed.get("/counts", async (c) => {
+    const repo = c.get("repo");
+    const counts = await repo.counts(c.get("orgId"), c.get("projectId"));
+    if (!c.get("allProjects")) return c.json(counts);
+    // the all-projects view: the two badges that have a merged list add up over every project the caller may see
+    const overview = await repo.projectOverview(c.get("orgId"), c.get("projectScope"));
+    return c.json({ ...counts, monitors: overview.reduce((n, p) => n + p.monitors, 0), incidents: overview.reduce((n, p) => n + p.openIncidents, 0) });
+  });
   edition.mount?.({ app, authed });
   app.route("/api", authed);
 

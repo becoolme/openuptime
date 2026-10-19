@@ -1,4 +1,4 @@
-import { navigate } from "../lib/nav";
+import { adoptProject, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
@@ -24,10 +24,10 @@ export default function MonitorDetail({ id }: { id: string }) {
     try { await fn(); } catch (e) { setErr((e as Error).message); setPending(""); return; }
     setPending("");
   };
-  const load = () => api.monitor(id).then((d) => setM(d as Detail));
+  // opened from the "All projects" view: from here on work in the monitor's own project, then read what depends on it
+  const load = () => api.monitor(id).then((d) => { adoptProject(d.projectId); setM(d as Detail); });
   useEffect(() => {
-    load();
-    api.channels().then(setChannels).catch(() => {});
+    load().then(() => api.channels().then(setChannels)).catch(() => {});
     api.regions().then((r) => setNames(Object.fromEntries(r.regions.map((x) => [x.id, x.name])))).catch(() => {});
     const t = setInterval(load, 10000);
     return () => clearInterval(t);

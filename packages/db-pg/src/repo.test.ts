@@ -879,3 +879,70 @@ describe.skipIf(!url)("maintenance windows and pages without a project", () => {
     expect(await db.select().from(schema.maintenanceReminder).where(eq(schema.maintenanceReminder.statusPageId, quiet.p.id))).toHaveLength(0);
   });
 });
+
+// The "All projects" view: lists over several projects of one workspace, never another's.
+describe.skipIf(!url)("lists across projects", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  const otherOrg = `test-org-${crypto.randomUUID()}`;
+  let a: string;
+  let b: string;
+  let foreign: string;
+
+  beforeAll(async () => {
+    await db.insert(schema.organization).values([
+      { id: orgId, name: "Test", slug: orgId, createdAt: new Date() },
+      { id: otherOrg, name: "Other", slug: otherOrg, createdAt: new Date() },
+    ]);
+    [{ id: a }] = await db.insert(schema.project).values({ organizationId: orgId, name: "A" }).returning({ id: schema.project.id });
+    [{ id: b }] = await db.insert(schema.project).values({ organizationId: orgId, name: "B" }).returning({ id: schema.project.id });
+    [{ id: foreign }] = await db.insert(schema.project).values({ organizationId: otherOrg, name: "F" }).returning({ id: schema.project.id });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+    await db.delete(schema.organization).where(eq(schema.organization.id, otherOrg));
+  });
+
+  const mon = async (org: string, project: string, name: string, status: "up" | "down" = "up") =>
+    (await db.insert(schema.monitor).values({ organizationId: org, projectId: project, name, type: "tcp" as const, target: "127.0.0.1:1", intervalSec: 60, status }).returning())[0];
+
+  it("lists the monitors of several projects, and an empty list of none", async () => {
+    await mon(orgId, a, "in-a");
+    await mon(orgId, b, "in-b", "down");
+    await mon(otherOrg, foreign, "elsewhere");
+    expect((await repo.listMonitors(orgId, a)).map((m) => m.name)).toEqual(["in-a"]);
+    expect((await repo.listMonitors(orgId, [a, b])).map((m) => [m.name, m.projectId])).toEqual([["in-a", a], ["in-b", b]]);
+    expect(await repo.listMonitors(orgId, [])).toEqual([]);
+    // a project of another workspace yields nothing, even when asked for by id
+    expect(await repo.listMonitors(orgId, [foreign])).toEqual([]);
+    expect((await repo.listMonitors(orgId, [a, foreign])).map((m) => m.name)).toEqual(["in-a"]);
+  });
+
+  it("lists incidents of several projects with their project, newest first", async () => {
+    const ma = await mon(orgId, a, "ia");
+    const mb = await mon(orgId, b, "ib");
+    const ia = await repo.createIncident({ organizationId: orgId, monitorId: ma.id, projectId: a, title: "ia" });
+    const ib = await repo.createIncident({ organizationId: orgId, monitorId: mb.id, projectId: b, title: "ib" });
+    const orphan = await repo.createIncident({ organizationId: orgId, projectId: b, title: "no-monitor" });
+    const other = await repo.createIncident({ organizationId: otherOrg, projectId: foreign, title: "theirs" });
+    const ids = (await repo.listIncidents(orgId, [a, b])).map((i) => i.id);
+    expect(ids).toEqual(expect.arrayContaining([ia.id, ib.id, orphan.id]));
+    expect(ids).not.toContain(other.id);
+    expect((await repo.listIncidents(orgId, [a])).map((i) => i.id)).toEqual([ia.id]);
+    expect(await repo.listIncidents(orgId, [])).toEqual([]);
+    expect(await repo.listIncidents(orgId, [foreign])).toEqual([]);
+  });
+
+  it("counts monitors, monitors down and open incidents per project, within the scope", async () => {
+    const r = await repo.projectOverview(orgId, null);
+    expect(r.map((p) => p.id)).toEqual([a, b]);
+    const byId = Object.fromEntries(r.map((p) => [p.id, p]));
+    expect(byId[a]).toMatchObject({ name: "A", monitors: 2, down: 0, openIncidents: 1 });
+    expect(byId[b]).toMatchObject({ name: "B", monitors: 2, down: 1, openIncidents: 2 });
+    expect((await repo.projectOverview(orgId, [b])).map((p) => p.id)).toEqual([b]);
+    expect(await repo.projectOverview(orgId, [foreign])).toEqual([]);
+    // resolved incidents do not count
+    const [inc] = await repo.listIncidents(orgId, [a]);
+    await repo.resolveIncident(inc.id, "ok");
+    expect((await repo.projectOverview(orgId, [a]))[0].openIncidents).toBe(0);
+  });
+});

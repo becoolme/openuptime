@@ -3,7 +3,7 @@ import type { Repo } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { isManager, requireManager, uuidParams } from "../middleware";
+import { isManager, listedProjects, requireManager, uuidParams } from "../middleware";
 import { creditCost } from "../entitlements";
 import { targetProblem } from "../netguard";
 import { MASK, maskHeaders, restoreHeaders } from "../secrets";
@@ -185,7 +185,7 @@ const shown = async <T extends { headers?: Record<string, string> | null }>(c: C
   (await isManager(c)) ? rows : rows.map((m) => (m.headers && Object.keys(m.headers).length ? { ...m, headers: maskHeaders(m.headers) } : m));
 
 export const monitors = new Hono<AppEnv>()
-  .get("/", async (c) => c.json(await shown(c, await c.get("repo").listMonitors(c.get("orgId"), c.get("projectId")))))
+  .get("/", async (c) => c.json(await shown(c, await c.get("repo").listMonitors(c.get("orgId"), await listedProjects(c)))))
   .post("/", zValidator("json", body), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");

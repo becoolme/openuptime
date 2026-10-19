@@ -4,6 +4,8 @@ import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Incident, type Monitor } from "../lib/api";
 import { useBusy } from "../lib/use-busy";
+import { isAllProjects } from "../lib/scope";
+import { ProjectBadge, useProjects } from "./AllProjects";
 
 const DAY = 86400_000;
 const dur = (a: string, b: string | null) => {
@@ -18,6 +20,8 @@ export default function Incidents() {
   const [tab, setTab] = useState<"all" | "open" | "resolved">("all");
   const [q, setQ] = useState("");
   const [declaring, setDeclaring] = useState(false);
+  const everything = isAllProjects();
+  const projects = useProjects();
   const load = () => api.incidents().then(setItems);
   useEffect(() => { load(); }, []);
 
@@ -39,13 +43,14 @@ export default function Incidents() {
     <>
       <div className="ph">
         <div><h1 className="serif">{t("Incidents")}</h1><p className="muted">{t("Everything that went wrong, and how fast we fixed it.")}</p></div>
-        <div className="ph-actions">
+        {!everything && <div className="ph-actions">
           <a className="btn" href="/app/maintenance">{t("Schedule maintenance")}</a>
           <button className="btn primary" onClick={() => setDeclaring(true)}>
             <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>{t("Declare incident")}
           </button>
-        </div>
+        </div>}
       </div>
+      {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
 
       <div className="kp">
         <div className="card"><small>{t("Open now")}</small><b>{open.length}</b><div className={`d ${open.length ? "bad" : ""}`}>{open[0]?.monitorName ?? (open.length ? t("Investigating") : t("All clear"))}</div></div>
@@ -72,7 +77,7 @@ export default function Incidents() {
           <div className="tr th"><span>{t("Incident")}</span><span>{t("Status")}</span><span>{t("Started")}</span><span>{t("Duration")}</span><span>{t("Affected")}</span></div>
           {shown.map((i) => (
             <a className="tr" key={i.id} href={`/app/incidents/${i.id}`}>
-              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small title={i.evaluationNote ?? undefined}>{i.number ? `INC-${i.number}` : `#${i.id.slice(0, 6)}`}{i.auto ? ` · ${t("auto")}` : ""}{i.evaluationNote ? ` · ${i.evaluationNote}` : ""}</small></div></div>
+              <div className="nm"><span className={`dot ${i.status === "resolved" ? "up" : i.severity === "minor" ? "warn" : "down"}`} /><div><b>{i.title}</b><small title={i.evaluationNote ?? undefined}>{everything && <ProjectBadge id={i.projectId} projects={projects} />}{i.number ? `INC-${i.number}` : `#${i.id.slice(0, 6)}`}{i.auto ? ` · ${t("auto")}` : ""}{i.evaluationNote ? ` · ${i.evaluationNote}` : ""}</small></div></div>
               <span><span className={`pill ${i.status === "resolved" ? "resolved" : "down"}`}>{t(i.status)}</span></span>
               <span className="muted">{ago(i.startedAt)}</span>
               <span className="num mono">{i.resolvedAt || i.status !== "resolved" ? dur(i.startedAt, i.resolvedAt) : "—"}</span>
@@ -81,7 +86,7 @@ export default function Incidents() {
           ))}
         </div>
       )}
-      {declaring && <Declare onClose={() => setDeclaring(false)} onDone={(id) => navigate(`/app/incidents/${id}`)} />}
+      {declaring && !everything && <Declare onClose={() => setDeclaring(false)} onDone={(id) => navigate(`/app/incidents/${id}`)} />}
     </>
   );
 }

@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "all-projects-view",
+    date: "2026-10-19",
+    edition: "community",
+    title: { en: "See all projects at once", zh: "一览所有项目" },
+    summary: {
+      en: "The project switcher has a new All projects view that lists monitors and incidents from every project in the workspace.",
+      zh: "项目切换器新增“所有项目”视图，可在一处查看工作区内所有项目的监控项和事件。",
+    },
+    points: [
+      { en: "Monitors and incidents show a project badge on each row, and a summary card per project shows its monitors, down count and open incidents.", zh: "监控项和事件的每一行都带有项目标记，每个项目还有一张摘要卡片，显示监控数、故障数和未解决事件数。" },
+      { en: "The view is read-only: pages that belong to one project ask you to choose a project, and opening a monitor or incident switches to its project.", zh: "该视图为只读：属于单个项目的页面会提示先选择项目，打开某个监控项或事件时会切换到它所在的项目。" },
+      { en: "The API accepts x-project-id: all for reads, and GET /projects/overview returns per-project totals; writes in this mode return 400.", zh: "API 的读取请求可使用 x-project-id: all，GET /projects/overview 返回各项目汇总；此模式下的写入请求返回 400。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "docs-fixes-3",
     date: "2026-10-17",
     edition: "community",

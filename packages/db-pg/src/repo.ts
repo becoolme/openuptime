@@ -297,6 +297,31 @@ export function createRepo(db: Db): Repo {
       const [n] = await db.select({ n: count() }).from(schema.project).where(eq(schema.project.organizationId, orgId));
       return n.n;
     },
+    async projectOverview(orgId, scope) {
+      const list = await db
+        .select({ id: schema.project.id, name: schema.project.name })
+        .from(schema.project)
+        .where(and(eq(schema.project.organizationId, orgId), inScope(scope, schema.project.id)))
+        .orderBy(asc(schema.project.createdAt));
+      if (!list.length) return [];
+      const ids = sql.join(list.map((p) => sql`${p.id}::uuid`), sql`, `);
+      const [mon, inc] = await Promise.all([
+        rows<{ project_id: string; monitors: number; down: number }>(
+          db.execute(sql`select project_id, count(*)::int as monitors, (count(*) filter (where status = 'down'))::int as down
+            from monitor where organization_id = ${orgId} and project_id in (${ids}) group by project_id`),
+        ),
+        // an incident belongs to the project that numbered it; one without falls back to its monitor's project
+        rows<{ project_id: string; n: number }>(
+          db.execute(sql`select coalesce(i.project_id, m.project_id) as project_id, count(*)::int as n
+            from incident i left join monitor m on m.id = i.monitor_id
+            where i.organization_id = ${orgId} and i.status <> 'resolved' and coalesce(i.project_id, m.project_id) in (${ids}) group by 1`),
+        ),
+      ]);
+      return list.map((p) => {
+        const m = mon.find((x) => x.project_id === p.id);
+        return { id: p.id, name: p.name, monitors: m?.monitors ?? 0, down: m?.down ?? 0, openIncidents: inc.find((x) => x.project_id === p.id)?.n ?? 0 };
+      });
+    },
     async createProject(orgId, name) {
       const [row] = await db.insert(schema.project).values({ organizationId: orgId, name }).returning();
       return row;
@@ -327,6 +352,8 @@ export function createRepo(db: Db): Repo {
 
     // ── monitors ───────────────────────────────────────────────────────────────
     async listMonitors(orgId, projectId) {
+      const ids = ([] as string[]).concat(projectId);
+      if (!ids.length) return [];
       const since = new Date(Date.now() - 864e5);
       const [list, series] = await Promise.all([
         db
@@ -338,7 +365,7 @@ export function createRepo(db: Db): Repo {
           })
           .from(schema.monitor)
           .leftJoin(schema.checkRollup, and(eq(schema.checkRollup.monitorId, schema.monitor.id), gte(schema.checkRollup.bucket, since)))
-          .where(and(eq(schema.monitor.organizationId, orgId), eq(schema.monitor.projectId, projectId)))
+          .where(and(eq(schema.monitor.organizationId, orgId), inArray(schema.monitor.projectId, ids)))
           .groupBy(schema.monitor.id)
           .orderBy(schema.monitor.name),
         // last 30 latency samples per monitor, for the list sparkline
@@ -347,7 +374,7 @@ export function createRepo(db: Db): Repo {
             select monitor_id, latency_ms from (
               select r.monitor_id, r.latency_ms, row_number() over (partition by r.monitor_id order by r.checked_at desc) rn
               from check_result r join monitor m on m.id = r.monitor_id
-              where m.organization_id = ${orgId} and m.project_id = ${projectId} and r.checked_at >= ${since.toISOString()}::timestamptz
+              where m.organization_id = ${orgId} and m.project_id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)}) and r.checked_at >= ${since.toISOString()}::timestamptz
             ) x where rn <= 30 order by monitor_id, rn desc`),
         ),
       ]);
@@ -564,12 +591,14 @@ export function createRepo(db: Db): Repo {
 
     // ── incidents ──────────────────────────────────────────────────────────────
     async listIncidents(orgId, projectId) {
+      const ids = ([] as string[]).concat(projectId);
+      if (!ids.length) return [];
       const r = await db
         .select({ i: schema.incident, monitorName: schema.monitor.name })
         .from(schema.incident)
         .leftJoin(schema.monitor, eq(schema.monitor.id, schema.incident.monitorId))
         // an incident belongs to the project that numbered it; one without (it predates numbering) falls back to its monitor
-        .where(and(eq(schema.incident.organizationId, orgId), or(eq(schema.incident.projectId, projectId), and(isNull(schema.incident.projectId), or(eq(schema.monitor.projectId, projectId), isNull(schema.incident.monitorId))))))
+        .where(and(eq(schema.incident.organizationId, orgId), or(inArray(schema.incident.projectId, ids), and(isNull(schema.incident.projectId), or(inArray(schema.monitor.projectId, ids), isNull(schema.incident.monitorId))))))
         .orderBy(desc(schema.incident.startedAt))
         .limit(100);
       return r.map((x) => ({ ...x.i, monitorName: x.monitorName }));

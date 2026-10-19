@@ -1,4 +1,4 @@
-import { navigate } from "../lib/nav";
+import { adoptProject, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { api, type Monitor, type StatusPage, type Subscriber } from "../lib/api";
@@ -84,10 +84,11 @@ export function StatusPageEditor({ id }: { id: string }) {
   const [upgrade, setUpgrade] = useState<string | undefined>();
   useEffect(() => {
     api.statusPage(id).then((p) => {
+      adoptProject(p.projectId);
       setPage(p);
       setComps((p.components ?? (p.monitorIds ?? []).map((monitorId) => ({ monitorId, groupName: null }))).map((c) => ({ monitorId: c.monitorId, groupName: c.groupName || DEFAULT_GROUP })));
+      api.monitors().then(setMonitors);
     });
-    api.monitors().then(setMonitors);
   }, [id]);
   if (!page) return <p className="muted">{t("Loading…")}</p>;
   const byId = new Map(monitors.map((m) => [m.id, m]));
