@@ -23,6 +23,13 @@ if (!known.includes(locale)) {
   return new Response("Not found", { status: 404 });
 }
 
+// a prefix repeated (/zh-Hans/zh-Hans/...) is not a page
+if (known.some((k) => tail === `/${k}` || tail.startsWith(`/${k}/`))) {
+  const page = await get("/404").catch(() => undefined);
+  if (page?.ok) return new Response(page.body, { status: 404, headers: { "content-type": "text/html; charset=utf-8", vary: "Cookie" } });
+  return new Response("Not found", { status: 404 });
+}
+
 // ja / es exist for the landing page only
 if (locale !== "zh-Hans" && tail !== "/") return Astro.redirect(tail, 302);
 if (Astro.url.pathname.length > 1 && Astro.url.pathname.endsWith("/")) {

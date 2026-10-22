@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "repeated-language-prefix-404",
+    date: "2026-10-22",
+    edition: "community",
+    title: { en: "Repeated language prefix returns 404", zh: "重复的语言前缀返回 404" },
+    summary: {
+      en: "Addresses such as /zh-Hans/zh-Hans/status/example are no longer served as pages.",
+      zh: "类似 /zh-Hans/zh-Hans/status/example 的地址不再被当作页面返回。",
+    },
+    points: [
+      { en: "Search engines can no longer index endless copies of a page under a repeated /zh-Hans prefix.", zh: "搜索引擎不会再收录同一页面在重复 /zh-Hans 前缀下的无限副本。" },
+    ],
+  },
+  {
     id: "node-security-release",
     date: "2026-10-22",
     edition: "community",
