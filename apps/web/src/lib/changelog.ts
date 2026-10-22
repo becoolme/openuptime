@@ -27,6 +27,26 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "node-security-release",
+    date: "2026-10-22",
+    edition: "community",
+    title: { en: "Patched Node.js in Docker images", zh: "Docker 镜像升级到已修复的 Node.js" },
+    summary: {
+      en: "The Docker images now pin Node.js 22.23.4, which fixes the security issues in the 21 October Node.js releases.",
+      zh: "Docker 镜像现在固定使用 Node.js 22.23.4，修复了 10 月 21 日 Node.js 安全版本中的漏洞。",
+    },
+    points: [
+      {
+        en: "The server and probe images build on node:22.23.4-alpine instead of a floating 22 tag.",
+        zh: "服务端和探针镜像基于 node:22.23.4-alpine 构建，不再使用浮动的 22 标签。",
+      },
+      {
+        en: "If you run the probe or server on your own Node.js, update to 22.23.4, 24.22.1 or 26.12.1; the supported range in package.json now says so.",
+        zh: "如果你用自己的 Node.js 运行探针或服务端，请升级到 22.23.4、24.22.1 或 26.12.1；package.json 中的受支持版本范围已同步更新。",
+      },
+    ],
+  },
+  {
     id: "alerts-name-project",
     date: "2026-10-19",
     edition: "community",

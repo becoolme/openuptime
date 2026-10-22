@@ -3,14 +3,14 @@
 #   docker build -f apps/probe/Dockerfile -t openuptime-probe .
 #   docker run -d -p 8787:8787 -e PROBE_SECRET=… openuptime-probe
 
-FROM node:22-alpine AS build
+FROM node:22.23.4-alpine AS build
 RUN corepack enable
 WORKDIR /src
 COPY . .
 RUN pnpm install --frozen-lockfile --filter @openuptime/probe...
 RUN pnpm --filter @openuptime/probe build:node
 
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 ENV NODE_ENV=production PORT=8787
 WORKDIR /app
 COPY --from=build /src/apps/probe/dist/server.mjs ./server.mjs
