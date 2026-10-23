@@ -326,7 +326,7 @@ fieldset{min-width:0}
 .auth-or{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--faint);font-size:13px}
 .auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:var(--line)}
 .auth-foot{margin-top:20px;text-align:center;font-size:14px}
-.auth-note{padding:14px 16px;border:1px solid var(--accent-line);background:var(--accent-weak);border-radius:12px;margin-bottom:16px}
+.auth-note{padding:14px 16px;border:1px solid var(--accent-line);background:var(--accent-weak);border-radius:12px;margin:22px 0 22px}
 .legal{font-size:12.5px;text-align:center}
 .auth-r{position:relative;background:var(--surface-2);border-left:1px solid var(--line);display:grid;place-items:center;padding:48px;overflow:hidden;
   background-image:radial-gradient(var(--dot,var(--line-2)) 1px,transparent 1px);background-size:22px 22px}
