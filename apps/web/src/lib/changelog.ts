@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "protected-monitor-request-settings",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Protected monitor request settings", zh: "保护监控请求设置" },
+    summary: { en: "Changing request settings while retaining stored headers now requires an owner or admin.", zh: "保留已有请求头时，修改请求设置现在需要所有者或管理员权限。" },
+    points: [{ en: "Members can still edit monitoring settings and replace a request with headers they supply themselves.", zh: "成员仍可编辑监控设置，或使用自己提供的请求头替换整个请求。" }],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "workspace-access-revocation",
     date: "2026-10-23",
     edition: "community",

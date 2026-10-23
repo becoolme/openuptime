@@ -6,7 +6,7 @@ import type { AppEnv } from "../env";
 import { isManager, listedProjects, requireManager, uuidParams } from "../middleware";
 import { creditCost } from "../entitlements";
 import { targetProblem } from "../netguard";
-import { MASK, maskHeaders, restoreHeaders } from "../secrets";
+import { MASK, maskHeaders, restoreHeaders, sameJson } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
 import { isRegionConfigured, runInRegion } from "../probes";
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
@@ -255,11 +255,19 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
-    // a placeholder header value (what non-managers are shown) keeps the stored one
-    if (v.headers) {
+    // Retaining stored headers also retains their access rights: only managers may change the request around them.
+    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
-      v.headers = restoreHeaders(v.headers, current.headers);
+      if (v.headers) v.headers = restoreHeaders(v.headers, current.headers);
+      const nextHeaders = v.headers ?? current.headers;
+      const retainsStored = Object.entries(current.headers).some(([key, value]) => nextHeaders[key] === value);
+      const changesRequest = (v.target !== undefined && v.target !== current.target)
+        || (v.method !== undefined && v.method !== current.method)
+        || !sameJson(nextHeaders, current.headers);
+      if (retainsStored && changesRequest && !(await isManager(c))) {
+        return c.json({ error: "Only workspace owners and admins can change request settings while keeping stored headers", code: "protected_request_headers" }, 403);
+      }
     }
     if (v.target !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
