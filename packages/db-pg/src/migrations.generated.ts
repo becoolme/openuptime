@@ -139,5 +139,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0027_optimal_golden_guardian",
     "when": 1792762532167,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"expected_location\" text;"
+  },
+  {
+    "tag": "0028_left_pepper_potts",
+    "when": 1792776858624,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"run_generation\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"last_run_generation\" integer DEFAULT 0 NOT NULL;"
   }
 ];

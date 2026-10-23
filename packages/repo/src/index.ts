@@ -58,6 +58,8 @@ export interface Monitor {
   consecutiveFailures: number;
   lastCheckedAt: Date | null;
   nextCheckAt: Date;
+  /** Internal sequence assigned atomically when a scheduled run is claimed. */
+  runGeneration?: number;
   paused: boolean;
   heartbeatToken: string | null;
   keyword: string | null;
@@ -467,11 +469,10 @@ export interface Repo {
   claimDue(limit: number): Promise<Monitor[]>;
   monitorsByIds(ids: string[]): Promise<Monitor[]>;
   /**
-   * Mark claimed runs as started. A run is identified by its monitor and the due time its claim assigned (`token`, the
-   * `nextCheckAt` that `claimDue` returned). Returns the monitors whose run had not been started yet, so a redelivered
-   * queue message never runs (or bills) the same check twice.
+   * Mark claimed runs as started by their monotonic generation. Older generations are discarded, even after a newer
+   * run; `token` is the leased deadline, retained for old messages and heartbeat validation.
    */
-  beginRuns(runs: { id: string; token: Date }[]): Promise<string[]>;
+  beginRuns(runs: { id: string; token: Date; generation?: number }[]): Promise<string[]>;
   /** Hand claimed monitors back, due right now, when their work could not be queued. Monitors that moved on since are left alone. */
   releaseClaims(runs: { id: string; token: Date }[]): Promise<void>;
   /** Store a raw result and fold it into its hourly rollup. */

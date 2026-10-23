@@ -71,6 +71,9 @@ export const monitor = pgTable(
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }).notNull().defaultNow(),
     /** due time the claim of the run that started last had assigned; a redelivered queue message carries the same one */
     lastRunToken: timestamp("last_run_token", { withTimezone: true }),
+    /** Claim order is independent of the interval and heartbeat deadline. */
+    runGeneration: integer("run_generation").notNull().default(0),
+    lastRunGeneration: integer("last_run_generation").notNull().default(0),
     paused: boolean("paused").notNull().default(false),
     heartbeatToken: text("heartbeat_token"),
     /** http: response body must contain (or, with keywordMode "absent", must not contain) this text */

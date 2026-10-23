@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "deduplicate-delayed-check-runs",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Skip delayed duplicate checks", zh: "跳过延迟重复检测" },
+    summary: { en: "A delayed queue retry no longer repeats a check after a newer run has started.", zh: "新一轮检测开始后，旧队列消息的重试不会再重复执行检测。" },
+    points: [{ en: "Changing the check interval keeps new runs working while old retries remain suppressed.", zh: "修改检测间隔后，新检测照常运行，旧消息仍会被去重。" }],
+    cloud: { en: "Delayed duplicate runs no longer consume extra check credits.", zh: "延迟重复的检测不再额外消耗检测额度。" },
+  },
+  {
     id: "protected-monitor-request-settings",
     date: "2026-10-23",
     edition: "community",

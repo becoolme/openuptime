@@ -483,6 +483,7 @@ export function createRepo(db: Db): Repo {
         // advance from the scheduled time, so finishing a check late never pushes the next one past a whole cron tick;
         // a monitor that is far behind (paused, outage of the scheduler) restarts from now instead of catching up in a burst
         .set({
+          runGeneration: sql`${schema.monitor.runGeneration} + 1`,
           nextCheckAt: sql`case when ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec}) > now()
             then ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec})
             else now() + make_interval(secs => ${schema.monitor.intervalSec}) end`,
@@ -499,13 +500,18 @@ export function createRepo(db: Db): Repo {
       return ids.length ? db.select().from(schema.monitor).where(inArray(schema.monitor.id, ids)) : [];
     },
     async beginRuns(runs) {
-      // one conditional update per monitor: the row lock makes concurrent duplicates take turns, and only the first sees the old token
+      // The row lock serializes duplicate starts. Generations never move backwards when an interval is shortened.
       const started = await Promise.all(
-        runs.map(async ({ id, token }) => {
+        runs.map(async ({ id, token, generation }) => {
+          if (generation !== undefined && (!Number.isSafeInteger(generation) || generation <= 0)) throw new Error("Invalid run generation");
+          const newer = generation === undefined
+            // Legacy messages can finish until this monitor starts using generation-based claims.
+            ? and(eq(schema.monitor.lastRunGeneration, 0), or(isNull(schema.monitor.lastRunToken), sql`${schema.monitor.lastRunToken} < ${token.toISOString()}::timestamptz`))
+            : sql`${schema.monitor.lastRunGeneration} < ${generation} and ${schema.monitor.runGeneration} >= ${generation}`;
           const won = await db
             .update(schema.monitor)
-            .set({ lastRunToken: token })
-            .where(and(eq(schema.monitor.id, id), or(isNull(schema.monitor.lastRunToken), sql`${schema.monitor.lastRunToken} <> ${token.toISOString()}::timestamptz`)))
+            .set({ lastRunToken: token, ...(generation !== undefined ? { lastRunGeneration: generation } : {}) })
+            .where(and(eq(schema.monitor.id, id), newer))
             .returning({ id: schema.monitor.id });
           return won.length ? id : null;
         }),
