@@ -39,6 +39,8 @@ describe("probe handler", () => {
     expect((await handleProbe(await signed({ ...check, type: "postgres", target: "postgres://u:p@db.example.com/x" }), { secret })).status).toBe(400);
     expect(parseCheck({ ...check, timeoutMs: 999_999 })).toHaveProperty("error");
     expect(parseCheck({ ...check, headers: { a: 1 } })).toHaveProperty("error");
+    expect(parseCheck({ ...check, expectedLocation: 5 })).toHaveProperty("error");
+    expect(parseCheck({ ...check, expectedStatus: 301, expectedLocation: "/new" })).toMatchObject({ input: { expectedLocation: "/new" } });
   });
 
   it("will not be aimed at a private address", async () => {

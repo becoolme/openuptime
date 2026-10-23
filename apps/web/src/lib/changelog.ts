@@ -27,6 +27,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "redirect-monitoring",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Pick the expected status, check redirects", zh: "状态码改为选择，支持检查跳转" },
+    summary: {
+      en: "The expected status of an HTTP monitor is now chosen from a list, and a monitor that expects a redirect checks where it leads.",
+      zh: "HTTP 监控的期望状态码改为下拉选择；期望跳转时，还能检查跳转的目的地。",
+    },
+    points: [
+      { en: "Choose the expected status from the common ones instead of typing a number; a monitor with an unusual value keeps it.", zh: "期望状态码从常用值中选择，不用再手填数字；已有的特殊值会保留。" },
+      { en: "With 301, 302, 303, 307 or 308 expected, the redirect is no longer followed, so the monitor passes on the redirect itself instead of failing on the page it leads to.", zh: "期望 301、302、303、307 或 308 时不再跟随跳转，监控按跳转本身判断，不会因为目的页面的状态码而失败。" },
+      { en: "Optionally set where the redirect must lead, as a full URL or a path; a different Location fails the check and the error shows both.", zh: "可选填跳转必须指向的地址（完整 URL 或路径）；Location 不一致时检测失败，错误信息会同时显示实际值和期望值。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "mcp-refresh-discovery",
     date: "2026-10-23",
     edition: "community",

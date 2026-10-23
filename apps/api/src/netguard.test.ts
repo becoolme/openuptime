@@ -95,6 +95,22 @@ describe("checks and redirects", () => {
     }
   });
 
+  it("hands back the first response untouched when told not to follow", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      seen.push(url);
+      return new Response(null, { status: 301, headers: { location: "https://93.184.216.34/next" } });
+    });
+    try {
+      const { res, url } = await guardedFetch("https://93.184.216.34/start", {}, { follow: false });
+      expect(res.status).toBe(301);
+      expect(url).toBe("https://93.184.216.34/start");
+      expect(seen).toEqual(["https://93.184.216.34/start"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("checks every redirect hop, not just the first", async () => {
     const seen: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {

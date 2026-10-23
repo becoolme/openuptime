@@ -23,6 +23,8 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   if (keyword !== null && (typeof keyword !== "string" || keyword.length > 500)) return { error: "keyword must be a string" };
   const keywordMode = o.keywordMode ?? "contains";
   if (keywordMode !== "contains" && keywordMode !== "absent") return { error: "keywordMode must be contains or absent" };
+  const expectedLocation = o.expectedLocation ?? null;
+  if (expectedLocation !== null && (typeof expectedLocation !== "string" || expectedLocation.length > 2048)) return { error: "expectedLocation must be a string" };
   const headers = o.headers ?? {};
   if (typeof headers !== "object" || Array.isArray(headers) || headers === null) return { error: "headers must be an object" };
   const entries = Object.entries(headers as Record<string, unknown>);
@@ -30,7 +32,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   return {
     input: {
       type: o.type, target: o.target, method, expectedStatus: expectedStatus as number, timeoutMs: timeoutMs as number,
-      keyword: keyword as string | null, keywordMode, headers: Object.fromEntries(entries) as Record<string, string>,
+      keyword: keyword as string | null, keywordMode, expectedLocation: expectedLocation as string | null, headers: Object.fromEntries(entries) as Record<string, string>,
     },
   };
 }

@@ -76,6 +76,8 @@ export const monitor = pgTable(
     /** http: response body must contain (or, with keywordMode "absent", must not contain) this text */
     keyword: text("keyword"),
     keywordMode: text("keyword_mode").notNull().default("contains"),
+    /** http, with a redirect status expected: where the redirect must lead (absolute URL, or a path on the target's site) */
+    expectedLocation: text("expected_location"),
     /** http: extra request headers (also used for bearer / basic auth) */
     headers: jsonb("headers").$type<Record<string, string>>().notNull().default({}),
     /** heartbeat: how long after the expected ping we wait before declaring it missed */

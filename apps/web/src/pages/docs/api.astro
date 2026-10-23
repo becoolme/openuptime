@@ -15,6 +15,7 @@ failureThreshold integer 1-10  consecutive failures before an incident opens (de
 regions        string[], ids from GET /regions                 (default ["auto"]; http and tcp monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
+expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus: the redirect is not followed; Location must equal this URL or path (default null = any)
 headers        { [name: string]: string }                    (default {})
 graceSec       integer 0-86400, heartbeat grace period       (default 0)
 channelIds     uuid[], max 50                                (default [])

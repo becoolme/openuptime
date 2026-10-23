@@ -7,7 +7,7 @@ export type Monitor = {
   status: "pending" | "up" | "degraded" | "down" | "paused"; paused: boolean;
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
-  keyword?: string | null; keywordMode?: "contains" | "absent"; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
+  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   /** the project the monitor belongs to (the lists of the "All projects" view mix several) */
   projectId?: string | null;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;

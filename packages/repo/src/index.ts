@@ -62,6 +62,7 @@ export interface Monitor {
   heartbeatToken: string | null;
   keyword: string | null;
   keywordMode: string;
+  expectedLocation: string | null;
   headers: Record<string, string>;
   graceSec: number;
   channelIds: string[];
@@ -80,7 +81,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
-  | "keyword" | "keywordMode" | "headers" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCheckAt?: Date };

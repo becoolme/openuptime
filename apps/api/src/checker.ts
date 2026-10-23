@@ -9,6 +9,8 @@ export type CheckInput = {
   timeoutMs: number;
   keyword?: string | null;
   keywordMode?: string;
+  /** With a redirect status expected: where the redirect must lead (an absolute URL, or a path on the target's own site). */
+  expectedLocation?: string | null;
   headers?: Record<string, string>;
 };
 export type CheckOutcome = {
@@ -65,15 +67,33 @@ async function proberFault(m: CheckInput, e: unknown): Promise<boolean> {
   return !(await proberOnline());
 }
 
+/** Statuses that send the client elsewhere: when one of them is expected, the redirect itself is what gets checked. */
+export const REDIRECT_STATUSES = [301, 302, 303, 307, 308];
+
+/** Where `location` leads from `base`, as an absolute URL; null when it cannot be read as one. */
+function resolveUrl(location: string, base: string): string | null {
+  if (!location) return null; // an empty reference would resolve to the base itself
+  try { return new URL(location, base).href; } catch { return null; }
+}
+
 async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
-  const { res, url } = await guardedFetch(m.target, {
-    method: m.method,
-    signal: AbortSignal.timeout(m.timeoutMs),
-    headers: { "user-agent": checkUserAgent(), accept: "*/*", ...m.headers },
-  });
+  const expectRedirect = REDIRECT_STATUSES.includes(m.expectedStatus);
+  const { res, url } = await guardedFetch(
+    m.target,
+    { method: m.method, signal: AbortSignal.timeout(m.timeoutMs), headers: { "user-agent": checkUserAgent(), accept: "*/*", ...m.headers } },
+    { follow: !expectRedirect },
+  );
   // when redirects were followed, say where we ended up: a 404 usually comes from the final hop, not the URL typed
   const where = url !== m.target ? ` at ${url}` : "";
   const statusOk = res.status === m.expectedStatus || (m.expectedStatus === 200 && res.status >= 200 && res.status < 300);
+  if (statusOk && expectRedirect && m.expectedLocation) {
+    const got = resolveUrl(res.headers.get("location") ?? "", url);
+    const want = resolveUrl(m.expectedLocation, m.target);
+    if (got !== want) {
+      await res.body?.cancel();
+      return { ok: false, statusCode: res.status, latencyMs: Date.now() - started, error: got ? `Redirects to ${got}, expected ${want ?? m.expectedLocation}` : `Expected a redirect to ${want ?? m.expectedLocation}, but there is no Location header` };
+    }
+  }
   if (!m.keyword || m.method === "HEAD") {
     await res.body?.cancel();
     const latencyMs = Date.now() - started;

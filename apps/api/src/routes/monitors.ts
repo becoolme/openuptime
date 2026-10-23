@@ -24,6 +24,8 @@ const fields = {
   regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]),
   keyword: z.string().max(500).nullable(),
   keywordMode: z.enum(["contains", "absent"]),
+  // an absolute http(s) URL or a path; blank means "any destination"
+  expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable(),
   headers: z.record(z.string().max(100), z.string().max(2000)),
   graceSec: z.number().int().min(0).max(86400),
   channelIds: z.array(z.string().uuid()).max(50),
@@ -49,6 +51,7 @@ const body = z.object({
   regions: fields.regions.default(["auto"]),
   keyword: fields.keyword.default(null),
   keywordMode: fields.keywordMode.default("contains"),
+  expectedLocation: fields.expectedLocation.default(null),
   headers: fields.headers.default({}),
   graceSec: fields.graceSec.default(0),
   channelIds: fields.channelIds.default([]),

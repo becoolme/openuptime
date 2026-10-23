@@ -209,11 +209,22 @@ export default function Monitors() {
   );
 }
 
+const REDIRECTS = [301, 302, 303, 307, 308];
+const STATUS_NAMES: Record<number, string> = {
+  200: "OK (any 2xx)", 201: "Created", 202: "Accepted", 204: "No Content",
+  301: "Moved Permanently", 302: "Found", 303: "See Other", 307: "Temporary Redirect", 308: "Permanent Redirect",
+  400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 410: "Gone", 429: "Too Many Requests",
+  500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable",
+};
+/** The common statuses, plus whatever an existing monitor already expects (it may predate the list). */
+const statusOptions = (current: number) =>
+  [...new Set([...Object.keys(STATUS_NAMES).map(Number), current])].sort((a, b) => a - b).map((n) => ({ value: n, label: STATUS_NAMES[n] ? `${n} ${STATUS_NAMES[n]}` : String(n) }));
+
 /** Create a monitor, or edit one when `monitor` is given (its type is fixed). */
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
-    method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, failureThreshold: monitor?.failureThreshold ?? 3,
+    method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
@@ -269,7 +280,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const { regions, ...rest } = f;
       // only http and tcp checks can run from a region; leaving the field out keeps the stored value
       const probed = (f.type === "http" || f.type === "tcp") && places.length > 1;
-      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: f.type === "http" && f.keyword ? f.keyword : null };
+      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: f.type === "http" && f.keyword ? f.keyword : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         await api.updateMonitor(monitor.id, patch);
@@ -320,13 +331,19 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             )}
             {f.type === "http" && (
               <label className="fld">{t("Expected status")}
-                <input className="in mono" type="number" min={100} max={599} value={f.expectedStatus} onChange={(e) => set("expectedStatus", Number(e.target.value) || 200)} />
+                <Select className="in mono" value={f.expectedStatus} onChange={(v) => set("expectedStatus", v)} options={statusOptions(f.expectedStatus)} />
               </label>
             )}
             <label className="fld">{t("Failures before incident")}
               <Select className="in" value={f.failureThreshold} onChange={(v) => set("failureThreshold", v)} options={[1, 2, 3, 5, 10].map((n) => ({ value: n, label: String(n) }))} />
             </label>
           </div>
+        )}
+        {f.type === "http" && REDIRECTS.includes(f.expectedStatus) && (
+          <label className="fld">{t("Redirect must lead to (optional)")}
+            <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
+          </label>
         )}
         {f.type === "http" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 10 }}>

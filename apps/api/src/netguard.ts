@@ -307,9 +307,10 @@ const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
 
 /**
  * fetch() that checks the host before every hop and follows redirects itself (so a public URL cannot bounce a check to
- * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop.
+ * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop. With `follow: false` the
+ * first response is returned as it is, redirect or not, so the caller can judge the redirect itself.
  */
-export async function guardedFetch(url: string, init: RequestInit = {}): Promise<{ res: Response; url: string }> {
+export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true }: { follow?: boolean } = {}): Promise<{ res: Response; url: string }> {
   let current = url;
   let method = init.method ?? "GET";
   let body = init.body;
@@ -335,7 +336,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}): Promise
       res = await pinnedFetch(current, req, fresh);
     }
     const location = res.headers.get("location");
-    if (res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
+    if (!follow || res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
     await res.body?.cancel();
     if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects");
     const next = new URL(location, current);

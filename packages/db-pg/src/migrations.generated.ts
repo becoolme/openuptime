@@ -134,5 +134,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0026_deep_dormammu",
     "when": 1792289981595,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"status_changed_at\" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint\n-- Existing monitors did not change status at deploy time: date the current status from their latest auto incident (when it started for a monitor that is not up, when it ended for one that is), else from creation.\nUPDATE \"monitor\" SET \"status_changed_at\" = COALESCE((SELECT CASE WHEN \"monitor\".\"status\" = 'up' THEN max(i.\"resolved_at\") ELSE max(i.\"started_at\") END FROM \"incident\" i WHERE i.\"monitor_id\" = \"monitor\".\"id\" AND i.\"auto\"), \"monitor\".\"created_at\");--> statement-breakpoint\nCREATE INDEX \"incident_monitor_idx\" ON \"incident\" USING btree (\"monitor_id\",\"started_at\");--> statement-breakpoint\nCREATE INDEX \"incident_update_incident_idx\" ON \"incident_update\" USING btree (\"incident_id\",\"created_at\");"
+  },
+  {
+    "tag": "0027_optimal_golden_guardian",
+    "when": 1792762532167,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"expected_location\" text;"
   }
 ];

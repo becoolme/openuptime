@@ -221,7 +221,7 @@ export function createRepo(db: Db): Repo {
         workspaces.push({
           ...base,
           projects: await q(sql`select id, name, created_at from project where organization_id = ${id}`),
-          monitors: await q(sql`select id, project_id, name, type, target, method, expected_status, interval_sec, timeout_ms, failure_threshold, keyword, keyword_mode, headers, tags, slow_threshold_ms, slow_alert_after, created_at from monitor where organization_id = ${id}`),
+          monitors: await q(sql`select id, project_id, name, type, target, method, expected_status, interval_sec, timeout_ms, failure_threshold, keyword, keyword_mode, expected_location, headers, tags, slow_threshold_ms, slow_alert_after, created_at from monitor where organization_id = ${id}`),
           channels: await q(sql`select id, project_id, name, type, config, enabled, created_at from alert_channel where organization_id = ${id}`),
           incidents: await q(sql`select id, monitor_id, title, status, severity, auto, started_at, resolved_at from incident where organization_id = ${id}`),
           statusPages: await q(sql`select id, project_id, slug, title, theme, created_at from status_page where organization_id = ${id}`),
