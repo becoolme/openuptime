@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "mcp-refresh-discovery",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Discover MCP token renewal", zh: "MCP 令牌续期发现" },
+    summary: { en: "MCP clients can discover the scope needed to request renewable access.", zh: "MCP 客户端现在可以发现申请可续期访问所需的权限。" },
+    points: [{ en: "OAuth discovery advertises offline_access so clients can request a refresh token when connecting.", zh: "OAuth 发现文档公布 offline_access，方便客户端在连接时申请刷新令牌。" }],
+    link: { href: "/docs/mcp", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
+  },
+  {
     id: "password-changed-email",
     date: "2026-10-23",
     edition: "community",

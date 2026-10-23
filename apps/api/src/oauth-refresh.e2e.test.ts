@@ -25,7 +25,9 @@ describe.skipIf(!url)("OAuth refresh with offline_access", () => {
     const client: { client_id: string } = await reg.json();
     const verifier = randomBytes(32).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
-    const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: redirect, scope: "mcp:read mcp:write offline_access", state: "s", code_challenge: challenge, code_challenge_method: "S256", resource });
+    const metadata = await (await req("/.well-known/oauth-protected-resource/api/mcp")).json() as { scopes_supported: string[] };
+    expect(metadata.scopes_supported).toContain("offline_access");
+    const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: redirect, scope: metadata.scopes_supported.join(" "), state: "s", code_challenge: challenge, code_challenge_method: "S256", resource });
     const a = await req(`/api/auth/oauth2/authorize?${q}`, { headers: { cookie }, redirect: "manual" });
     const authCookie = `${cookie}; ou_grant=${encodeURIComponent(`${challenge}~*`)}`;
     const query = (loc: string) => new URL(loc, ORIGIN).search.slice(1);

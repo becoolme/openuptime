@@ -42,7 +42,8 @@ export function mountMcp(app: Hono<AppEnv>) {
   mountOAuthMetadata(app, {
     resource: (c) => mcpResource(c.env),
     authorizationServers: (c) => [`${originOf(c.env.BETTER_AUTH_URL)}/api/auth`],
-    scopes: SCOPES,
+    // Discovery clients use this list to request a refresh token as well as MCP access.
+    scopes: [...SCOPES, "offline_access"],
     resourceName: "OpenUptime",
     mcpPath: "/api/mcp",
     authorizationServer: {
