@@ -32,6 +32,18 @@ describe.skipIf(!url)("request hardening", () => {
 
     const hb = (await call("POST", "/monitors", { name: "Cron", type: "heartbeat", intervalSec: 3600 })).body;
     expect(hb.heartbeatToken).toBeTruthy();
+    expect((await raw(`/api/heartbeat/${hb.heartbeatToken}`)).status).toBe(200);
+    const before = (await call("GET", `/monitors/${hb.id}`)).body;
+    expect(before.status).toBe("up");
+    expect(new Date(before.nextCheckAt).getTime()).toBeGreaterThan(Date.now() + 3000_000);
+    for (const body of [{}, { region: "auto" }]) {
+      expect(await call("POST", `/monitors/${hb.id}/check`, body)).toMatchObject({ status: 400, body: { code: "regions_not_supported" } });
+    }
+    const after = (await call("GET", `/monitors/${hb.id}`)).body;
+    expect(after.status).toBe("up");
+    expect(after.nextCheckAt).toBe(before.nextCheckAt);
+    expect(after.results).toEqual(before.results);
+    expect((await call("GET", "/incidents")).body).toEqual([]);
     expect((await call("PATCH", `/monitors/${hb.id}`, { paused: true })).body.status).toBe("paused");
     const ping = await raw(`/api/heartbeat/${hb.heartbeatToken}`);
     expect(ping.status).toBe(200);

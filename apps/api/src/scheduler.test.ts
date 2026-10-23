@@ -7,7 +7,7 @@ import { MESSAGE_SIZE, checkOne, resolveIncident, nextAfter, processCheckMessage
 
 describe("runDueChecks", () => {
   it("packs due monitors into queue messages, each monitor exactly once", async () => {
-    const due = Array.from({ length: 130 }, () => ({ id: crypto.randomUUID() }) as Monitor);
+    const due = Array.from({ length: 130 }, () => ({ id: crypto.randomUUID(), nextCheckAt: new Date("2026-10-23T12:00:00Z"), runGeneration: 7 }) as Monitor);
     let first = true;
     const repo = {
       // one lease round returns everything, the next is empty
@@ -25,6 +25,7 @@ describe("runDueChecks", () => {
     expect(ids).toHaveLength(130);
     expect(new Set(ids)).toEqual(new Set(due.map((m) => m.id)));
     expect(sent.every((m) => m.body.ids.length <= MESSAGE_SIZE)).toBe(true);
+    expect(sent.every((m) => m.body.generations?.length === m.body.ids.length && m.body.generations.every((g) => g === 7))).toBe(true);
     // every message only holds monitors of one delay slot
     expect(sent.every((m) => new Set(m.body.ids.map(slotOf)).size === 1)).toBe(true);
   });

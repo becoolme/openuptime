@@ -197,6 +197,13 @@
       "when": 1792762532167,
       "tag": "0027_optimal_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792776858624,
+      "tag": "0028_left_pepper_potts",
+      "breakpoints": true
     }
   ]
 }

@@ -111,6 +111,7 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     expect(results.flat()).toEqual([m.id]);
     // the next claim is a different run
     expect(await repo.beginRuns([{ id: m.id, token: new Date(run.token.getTime() + 60_000) }])).toEqual([m.id]);
+    expect(await repo.beginRuns([run])).toEqual([]); // A, B, A must not repeat A.
     // an unqueued claim comes due again immediately
     await repo.releaseClaims([run]);
     const [again] = (await repo.claimDue(1000)).filter((x) => x.id === m.id);
@@ -118,6 +119,25 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     // a claim that has moved on since is left alone
     await repo.releaseClaims([run]);
     expect((await repo.claimDue(1000)).filter((x) => x.id === m.id)).toHaveLength(0);
+  });
+
+  it("dedupes interleaved claims without losing checks after an interval is shortened", async () => {
+    const [m] = await seed(1);
+    const claim = async (intervalSec: number) => {
+      await db.update(schema.monitor).set({ intervalSec, nextCheckAt: new Date(Date.now() - 1000) }).where(eq(schema.monitor.id, m.id));
+      const row = (await repo.claimDue(1000)).find((x) => x.id === m.id)!;
+      return { id: m.id, token: row.nextCheckAt, generation: row.runGeneration! };
+    };
+    const a = await claim(3600);
+    expect(a.generation).toBeGreaterThan(0);
+    expect((await Promise.all([repo.beginRuns([a]), repo.beginRuns([a])])).flat()).toEqual([m.id]);
+    const b = await claim(60);
+    expect(b.token.getTime()).toBeLessThan(a.token.getTime());
+    expect(b.generation).toBeGreaterThan(a.generation);
+    expect(await repo.beginRuns([b])).toEqual([m.id]);
+    expect(await repo.beginRuns([a])).toEqual([]);
+    expect(await repo.beginRuns([b])).toEqual([]);
+    expect(await repo.beginRuns([{ id: m.id, token: a.token }])).toEqual([]); // Legacy replay after migration.
   });
 
   it("dedupes outages separately from latency incidents", async () => {

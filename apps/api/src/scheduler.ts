@@ -25,10 +25,10 @@ export function slotOf(id: string) {
 }
 
 /**
- * `at` holds, in the order of `ids`, the due time each monitor's claim assigned: it names the run, so a redelivered
- * message is recognised. Messages queued before it existed have none and run without that check.
+ * `at` holds the leased deadlines for heartbeat validation. `generations` names runs independently of interval
+ * changes, so an old redelivery cannot repeat a check or advance the monitor after a newer run.
  */
-export type CheckMessage = { ids: string[]; at?: string[] };
+export type CheckMessage = { ids: string[]; at?: string[]; generations?: number[] };
 export type CheckQueue = { sendBatch(messages: { body: CheckMessage; delaySeconds?: number }[]): Promise<unknown> };
 
 /**
@@ -43,6 +43,7 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
     total += due.length;
     if (queue) {
       const claimed = new Map(due.map((m) => [m.id, m.nextCheckAt] as const));
+      const generations = new Map(due.map((m) => [m.id, m.runGeneration] as const));
       const messages: { body: CheckMessage; delaySeconds: number }[] = [];
       for (let slot = 0; slot < SLOTS; slot++) {
         const ids = due.filter((m) => slotOf(m.id) === slot).map((m) => m.id);
@@ -50,6 +51,8 @@ export async function runDueChecks(repo: Repo, queue?: CheckQueue, entitlements:
           const part = ids.slice(i, i + MESSAGE_SIZE);
           const times = part.map((id) => claimed.get(id));
           const body: CheckMessage = times.every(Boolean) ? { ids: part, at: times.map((t) => t!.toISOString()) } : { ids: part };
+          const runs = part.map((id) => generations.get(id));
+          if (body.at && runs.every((g) => g !== undefined && Number.isSafeInteger(g) && g > 0)) body.generations = runs as number[];
           messages.push({ body, delaySeconds: slot * SLOT_SECONDS });
         }
       }
@@ -109,10 +112,12 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
 export async function processCheckMessage(repo: Repo, msg: CheckMessage, entitlements: Entitlements = unmetered) {
   const monitors = await repo.monitorsByIds(msg.ids);
   const token = new Map(msg.at ? msg.ids.map((id, i) => [id, new Date(msg.at![i])] as const) : []);
+  if (msg.generations && (msg.generations.length !== msg.ids.length || !msg.at || msg.generations.some((g) => !Number.isSafeInteger(g) || g <= 0))) throw new Error("Invalid run generations");
+  const generation = new Map(msg.generations ? msg.ids.map((id, i) => [id, msg.generations![i]] as const) : []);
   // a heartbeat that was pinged after it was claimed has a new due time and is not missing anything
   const pinged = (m: Monitor) => m.type === "heartbeat" && token.has(m.id) && m.nextCheckAt.getTime() !== token.get(m.id)!.getTime();
   const open = monitors.filter((m) => !m.paused && !pinged(m));
-  const runs = open.filter((m) => token.has(m.id)).map((m) => ({ id: m.id, token: token.get(m.id)! }));
+  const runs = open.filter((m) => token.has(m.id)).map((m) => ({ id: m.id, token: token.get(m.id)!, ...(generation.has(m.id) ? { generation: generation.get(m.id)! } : {}) }));
   const started = new Set(runs.length ? await repo.beginRuns(runs) : []);
   await checkMany(repo, open.filter((m) => !token.has(m.id) || started.has(m.id)), entitlements);
 }

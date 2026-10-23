@@ -27,6 +27,40 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "heartbeat-manual-check-guard",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Keep heartbeat deadlines intact", zh: "避免心跳手动检测误报" },
+    summary: { en: "Heartbeats wait for incoming pings and no longer offer a manual check.", zh: "心跳监控等待任务上报，不再提供手动检测。" },
+    points: [{ en: "Manual check requests are refused without changing heartbeat status, history or its deadline.", zh: "手动检测请求会被拒绝，不会改变心跳状态、历史或截止时间。" }],
+  },
+  {
+    id: "deduplicate-delayed-check-runs",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Skip delayed duplicate checks", zh: "跳过延迟重复检测" },
+    summary: { en: "A delayed queue retry no longer repeats a check after a newer run has started.", zh: "新一轮检测开始后，旧队列消息的重试不会再重复执行检测。" },
+    points: [{ en: "Changing the check interval keeps new runs working while old retries remain suppressed.", zh: "修改检测间隔后，新检测照常运行，旧消息仍会被去重。" }],
+    cloud: { en: "Delayed duplicate runs no longer consume extra check credits.", zh: "延迟重复的检测不再额外消耗检测额度。" },
+  },
+  {
+    id: "protected-monitor-request-settings",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Protected monitor request settings", zh: "保护监控请求设置" },
+    summary: { en: "Changing request settings while retaining stored headers now requires an owner or admin.", zh: "保留已有请求头时，修改请求设置现在需要所有者或管理员权限。" },
+    points: [{ en: "Members can still edit monitoring settings and replace a request with headers they supply themselves.", zh: "成员仍可编辑监控设置，或使用自己提供的请求头替换整个请求。" }],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
+    id: "workspace-access-revocation",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Workspace access follows membership", zh: "工作区访问权限即时更新" },
+    summary: { en: "Removing a member now revokes access through their existing sessions.", zh: "移除成员后，其已有登录会话也会失去工作区访问权限。" },
+    points: [{ en: "Workspace permissions are checked against current membership on each request.", zh: "每次访问工作区时都会核对当前成员身份。" }],
+  },
+  {
     id: "clearer-mcp-tools",
     date: "2026-10-23",
     edition: "community",
