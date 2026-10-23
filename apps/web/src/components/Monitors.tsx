@@ -446,13 +446,15 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             )}
           </div>
         )}
-        <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
         </div>
         <div className="mfoot">
           {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
-            <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+          <div className="mact">
+            <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
+            <div className="mbtns">
+              <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
+              <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+            </div>
           </div>
         </div>
       </form>
