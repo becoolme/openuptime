@@ -33,9 +33,10 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "No refreshing in background tabs", zh: "后台标签页不再刷新" },
     summary: { en: "Pages that refresh themselves now stop while their tab is hidden.", zh: "会自动刷新的页面，在标签页隐藏时不再发起请求。" },
     points: [
-      { en: "The monitor list, monitor detail and custom-domain status stop polling while the tab is in the background.", zh: "监控列表、监控详情和自定义域名状态在标签页位于后台时不再轮询。" },
+      { en: "The monitor list and monitor detail stop polling while the tab is in the background.", zh: "监控列表和监控详情在标签页位于后台时不再轮询。" },
       { en: "When you switch back, the page fetches fresh data once right away.", zh: "切回标签页时，页面会立即抓取一次最新数据。" },
     ],
+    cloud: { en: "The custom-domain status on a status page follows the same rule.", zh: "状态页上的自定义域名状态同样遵循这一规则。" },
   },
   {
     id: "heartbeat-manual-check-guard",
