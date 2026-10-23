@@ -26,7 +26,10 @@ describe.skipIf(!url)("password reset mail", () => {
     const email = `reset-${Date.now()}@example.com`;
     const su = await post("/api/auth/sign-up/email", { email, password: "correct horse battery", name: "Ada" });
     const cookie = su.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
-    const session = () => app.fetch(new Request(`${ORIGIN}/api/auth/get-session?disableCookieCache=true`, { headers: { cookie } }), env as never).then((r) => r.json());
+    const session = async () => {
+      const response = await app.fetch(new Request(`${ORIGIN}/api/auth/get-session?disableCookieCache=true`, { headers: { cookie } }), env as never);
+      return response.json();
+    };
     expect(await session()).toBeTruthy();
     sent.length = 0;
 
