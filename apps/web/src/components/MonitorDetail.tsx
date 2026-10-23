@@ -74,7 +74,7 @@ export default function MonitorDetail({ id }: { id: string }) {
         <div className="ph-actions">
           <button className="btn" onClick={() => setEditing(true)}>{t("Edit")}</button>
           <button className="btn" disabled={!!pending} onClick={() => act("pause", async () => { await api.updateMonitor(id, { paused: !m.paused }); await load(); })}>{pending === "pause" ? t("Saving…") : m.paused ? t("Resume") : t("Pause")}</button>
-          <button className="btn primary" disabled={!!pending} onClick={() => act("check", async () => { await api.checkNow(id); await load(); })}>{pending === "check" ? t("Checking…") : t("Check now")}</button>
+          {m.type !== "heartbeat" && <button className="btn primary" disabled={!!pending} onClick={() => act("check", async () => { await api.checkNow(id); await load(); })}>{pending === "check" ? t("Checking…") : t("Check now")}</button>}
         </div>
       </div>
 

@@ -322,13 +322,14 @@ export const monitors = new Hono<AppEnv>()
     const region = asked.data.region;
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
+    if (m.type === "heartbeat") return c.json({ error: "Heartbeat monitors have no check to run", code: "regions_not_supported" }, 400);
     if (region !== undefined) {
       if (!(PROBE_TYPES as readonly string[]).includes(m.type) && region !== AUTO) {
         return c.json({ error: `Regions other than auto are available for ${PROBE_TYPES.join(" and ")} monitors only`, code: "regions_not_supported" }, 400);
       }
       if (!isRegionConfigured(region)) return c.json({ error: `Unknown region: ${region}`, code: "unknown_region", regions: [region] }, 400);
     }
-    const cost = region !== undefined ? (m.type === "heartbeat" ? 0 : 1) : creditCost(m);
+    const cost = region !== undefined ? 1 : creditCost(m);
     // a manual check is a request like any other: it takes a credit
     if ((await c.get("entitlements").spendCredits(m.organizationId, cost)) < cost) {
       return c.json({ error: "No credits left this period", code: "credits_exhausted" }, 402);
@@ -337,7 +338,6 @@ export const monitors = new Hono<AppEnv>()
       await checkOne(repo, m, c.get("entitlements"));
       return c.json({ ok: true });
     }
-    if (m.type === "heartbeat") return c.json({ error: "Heartbeat monitors have no check to run", code: "regions_not_supported" }, 400);
     const run = await runInRegion(region, m);
     if ("unreachable" in run) return c.json({ error: run.unreachable, code: "probe_unreachable", region }, 502);
     return c.json({ ok: true, region, result: run.outcome });

@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "heartbeat-manual-check-guard",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Keep heartbeat deadlines intact", zh: "避免心跳手动检测误报" },
+    summary: { en: "Heartbeats wait for incoming pings and no longer offer a manual check.", zh: "心跳监控等待任务上报，不再提供手动检测。" },
+    points: [{ en: "Manual check requests are refused without changing heartbeat status, history or its deadline.", zh: "手动检测请求会被拒绝，不会改变心跳状态、历史或截止时间。" }],
+  },
+  {
     id: "deduplicate-delayed-check-runs",
     date: "2026-10-23",
     edition: "community",
