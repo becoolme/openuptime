@@ -52,6 +52,8 @@ const zh = scriptJson(zhVariant(title, description, faq));
   .doc .cta .btns { display: flex; flex-wrap: wrap; gap: 10px; }
   .doc a.btn-s { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line-2); color: var(--ink); text-decoration: none; font-weight: 500; }
   .doc a.btn-s.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .doc a.btn-s { transition: background-color .12s, border-color .12s, opacity .12s; }
+  @media (hover: hover) { .doc a.btn-s:hover { background: var(--surface-2); border-color: var(--faint); } .doc a.btn-s.primary:hover { background: var(--accent); border-color: var(--accent); opacity: .88; } }
   .doc .related { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
   @media (max-width: 560px) { .doc .two { grid-template-columns: 1fr; } }
 </style>

@@ -175,6 +175,7 @@ const { title, updated, toc, description } = Astro.props as { title: string; upd
   .doc-top-in { max-width: 1160px; margin: 0 auto; height: 68px; padding: 0 28px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 32px; }
   .doc-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: -.01em; text-decoration: none; }
   .doc-brand b { font-weight: 600; }
+  @media (hover: hover) { .doc-brand:hover { opacity: .8; } .doc a:not([class]):hover, .doc a.sf-status:hover { text-decoration: underline; } .sf-grid a.sf-status:hover { border-color: var(--faint); text-decoration: none; } }
   .doc-mk { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, #0f9d58, #0a5c34); display: grid; place-items: center; flex: none; }
   .doc-mk svg { width: 16px; height: 16px; }
   .doc-links { display: flex; gap: 28px; justify-self: center; font-size: 14.5px; }

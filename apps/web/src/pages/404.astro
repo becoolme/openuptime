@@ -53,6 +53,8 @@ const days = Array.from({ length: 90 }, (_, i) => i === 89);
   .nf-cta { display: flex; flex-wrap: wrap; gap: 12px; }
   .nf-btn { display: inline-flex; align-items: center; min-height: 48px; padding: 0 24px; border-radius: 12px; background: var(--ink); color: var(--bg); text-decoration: none; font-size: 16px; font-weight: 600; }
   .nf-btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); font-weight: 500; }
+  .nf-btn { transition: opacity .12s, background-color .12s, border-color .12s; }
+  @media (hover: hover) { .nf-btn:hover { opacity: .85; } .nf-btn.ghost:hover { opacity: 1; background: var(--surface-2); border-color: var(--faint); } .nf-top .doc-brand:hover { opacity: .8; } }
   @media (max-width: 600px) { .nf-top { padding: 18px 20px; } .nf-bar i { height: 32px; } }
 </style>
 <style is:global>

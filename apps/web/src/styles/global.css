@@ -624,3 +624,29 @@ html[lang="zh-CN"] h1{font-weight:700}
 .pov-c b{font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pov-c small{font-size:12.5px;color:var(--muted)}
 .pov-c .bad{color:var(--down)}
+
+/* Hover feedback for everything clickable. Kept in one place so a new control is easy to check against it. */
+.btn,.icon-btn,.ws,.me,.type-c,.region-opt,.region-sum,.consent-ws,.ftabs .tab,.seg i,.pw-t,.route.tog,.dd-btn,.callout .x,.toast-x,.chip.add{transition:background-color .12s,border-color .12s,color .12s,box-shadow .12s}
+@media (hover:hover){
+.btn:not(:disabled):hover{background:var(--surface-2);border-color:var(--faint)}
+.btn.primary:not(:disabled):hover{background:color-mix(in srgb,var(--ink) 86%,var(--bg));border-color:color-mix(in srgb,var(--ink) 86%,var(--bg))}
+.btn.danger-l:not(:disabled):hover{background:color-mix(in srgb,var(--down) 8%,var(--surface));border-color:color-mix(in srgb,var(--down) 45%,var(--line-2))}
+.icon-btn:hover{background:var(--surface-2);border-color:var(--faint)}
+.ftabs .tab:not(.on):hover{background:color-mix(in srgb,var(--surface) 70%,transparent);color:var(--ink)}
+.seg i:not(.on):not(.locked):hover{background:color-mix(in srgb,var(--surface) 70%,transparent);color:var(--ink)}
+.type-c:not(.on):not(:disabled):hover,.region-opt:not(.on):not(:disabled):hover,.consent-ws:not(.on):hover{border-color:var(--faint);background:var(--surface-2)}
+.region-sum:hover,.modal .fld .route.tog:hover{border-color:var(--faint);background:var(--surface-2)}
+button.route.tog:hover{background:var(--surface-2)}
+a.route:hover{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+.pw-t:hover{color:var(--ink);background:var(--surface-2)}
+.dd-btn.in:hover{border-color:var(--faint)}
+.dd-c .dd-btn:hover{background:var(--surface-2);color:var(--ink);border-color:var(--faint)}
+.toast-x:hover{color:var(--ink)}
+.pill-btn:hover{opacity:.75}
+.sel:hover{border-color:var(--faint)}
+.auth-link:hover,.sp-url:hover,.pub-rss:hover,.pub-pager a:hover,.pub-foot a:hover{text-decoration:underline;text-underline-offset:3px}
+a.muted:hover{color:var(--ink)}
+.tabs a:not(.on):hover,.tabs button:not(.on):hover{color:var(--ink)}
+.brand:hover,.auth-brand:hover,.pub-brand:hover{opacity:.8}
+}
+.btn:not(:disabled):active,.icon-btn:active{transform:translateY(1px)}

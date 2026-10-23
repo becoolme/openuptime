@@ -27,6 +27,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "hover-feedback",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Hover feedback on buttons", zh: "按钮悬停反馈" },
+    summary: {
+      en: "Buttons, tabs, option cards and links now react when you point at them.",
+      zh: "按钮、标签页、选项卡片和链接在鼠标悬停时都有了反馈。",
+    },
+    points: [
+      { en: "Buttons, icon buttons, tabs, segmented controls and option cards change background or border on hover.", zh: "按钮、图标按钮、标签页、分段选择和选项卡片在悬停时会改变背景或边框。" },
+      { en: "Links in the sidebar, docs, changelog and public pages are underlined or dimmed on hover, and buttons sink slightly when pressed.", zh: "侧边栏、文档、更新日志和公开页面中的链接在悬停时会出现下划线或变淡，按钮按下时会轻微下沉。" },
+    ],
+  },
+  {
     id: "redirect-monitoring",
     date: "2026-10-23",
     edition: "community",
