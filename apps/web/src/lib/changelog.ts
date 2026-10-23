@@ -36,6 +36,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "通过重置链接修改密码后，账号邮箱会收到一封通知。",
     },
     points: [
+      { en: "Resetting a password also signs the account out on every device.", zh: "重置密码后，该账号在所有设备上的登录都会退出。" },
       { en: "The email says the password was changed and links to a new reset, in case it wasn't you; it never contains the password or a token.", zh: "邮件说明密码已被更改，并附上再次重置的链接，以防不是本人操作；邮件中不含密码或令牌。" },
     ],
   },

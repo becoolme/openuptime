@@ -79,7 +79,7 @@ const zh: Record<string, string> = {
   "Security email. You can't unsubscribe from these.": "安全邮件，无法退订。",
   "Choose a new password": "设置新密码",
   "Your password was changed": "你的密码已更改",
-  "The password for your OpenUptime account was just changed with a reset link. If this was you, nothing more to do.\n\nIf it wasn't you, reset your password again now.": "你的 OpenUptime 账号密码刚刚通过重置链接更改。如果是你本人操作，无需处理。\n\n如果不是你本人操作，请立即再次重置密码。",
+  "The password for your OpenUptime account was just changed with a reset link, and you were signed out on every device. If this was you, sign in again with the new password.\n\nIf it wasn't you, reset your password again now.": "你的 OpenUptime 账号密码刚刚通过重置链接更改，所有设备上的登录已退出。如果是你本人操作，请用新密码重新登录。\n\n如果不是你本人操作，请立即再次重置密码。",
   "Reset password again": "再次重置密码",
   "Your OpenUptime password was changed": "你的 OpenUptime 密码已更改",
   "Join {org} on OpenUptime": "加入 OpenUptime 上的 {org}",

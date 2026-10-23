@@ -159,6 +159,8 @@ export function createAuth(database: Database, env: Bindings) {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
+      // whoever held the old password (or a stolen session) is signed out when it is reset
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         const lang = await userLang(repo, user.email);
         const mail = actionEmail({
@@ -177,7 +179,7 @@ export function createAuth(database: Database, env: Bindings) {
           const lang = await userLang(repo, user.email);
           const mail = actionEmail({
             title: tr(lang, "Your password was changed"),
-            body: tr(lang, "The password for your OpenUptime account was just changed with a reset link. If this was you, nothing more to do.\n\nIf it wasn't you, reset your password again now."),
+            body: tr(lang, "The password for your OpenUptime account was just changed with a reset link, and you were signed out on every device. If this was you, sign in again with the new password.\n\nIf it wasn't you, reset your password again now."),
             footer: tr(lang, "Security email. You can't unsubscribe from these."),
             cta: tr(lang, "Reset password again"),
             url: `${appUrl()}/forgot-password`,

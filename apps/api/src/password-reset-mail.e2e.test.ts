@@ -24,7 +24,10 @@ describe.skipIf(!url)("password reset mail", () => {
   it("tells the owner after the password was changed", async () => {
     await app.fetch(new Request(`${ORIGIN}/internal/migrate`, { method: "POST", headers: { "x-cron-secret": "cron" } }), env as never);
     const email = `reset-${Date.now()}@example.com`;
-    await post("/api/auth/sign-up/email", { email, password: "correct horse battery", name: "Ada" });
+    const su = await post("/api/auth/sign-up/email", { email, password: "correct horse battery", name: "Ada" });
+    const cookie = su.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    const session = () => app.fetch(new Request(`${ORIGIN}/api/auth/get-session?disableCookieCache=true`, { headers: { cookie } }), env as never).then((r) => r.json());
+    expect(await session()).toBeTruthy();
     sent.length = 0;
 
     await post("/api/auth/request-password-reset", { email, redirectTo: `${ORIGIN}/reset-password` });
@@ -38,6 +41,8 @@ describe.skipIf(!url)("password reset mail", () => {
     expect(res.status).toBe(200);
     const notice = sent.find((m) => m.to === email && m.subject === "Your OpenUptime password was changed");
     expect(notice).toBeTruthy();
+    // a session opened before the reset is gone (the signed cookie cache can still answer for up to 5 minutes)
+    expect(await session()).toBeNull();
     // the notice carries no secret: no token, no password
     expect(notice!.html + notice!.text).not.toContain(token!);
     expect(notice!.html + notice!.text).not.toContain("brand new");
