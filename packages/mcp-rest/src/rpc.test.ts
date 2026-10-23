@@ -73,8 +73,8 @@ describe("mcp-rest", () => {
     const open = createMcpServer({
       info: { name: "demo", version: "1" },
       tools: [
-        defineTool({ name: "open", description: "Open.", schema: z.object({ slug: z.string() }), readOnly: true, public: true, build: (a) => ({ method: "GET", path: `/open/${a.slug}` }) }),
-        defineTool({ name: "private", description: "Private.", schema: z.object({}), build: () => ({ method: "GET", path: "/private" }) }),
+        defineTool({ name: "open", aliases: ["legacy_open"], description: "Open.", schema: z.object({ slug: z.string() }), readOnly: true, public: true, build: (a) => ({ method: "GET", path: `/open/${a.slug}` }) }),
+        defineTool({ name: "private", aliases: ["legacy_private"], description: "Private.", schema: z.object({}), build: () => ({ method: "GET", path: "/private" }) }),
       ],
       context: { shape: { team: z.string().optional() }, toHeaders: () => ({}) },
     });
@@ -85,5 +85,14 @@ describe("mcp-rest", () => {
     expect((await run("tools/list", undefined, false)).result.tools.length).toBe(2);
     expect((await run("tools/call", { name: "private", arguments: {} })).error.code).toBe(-32602);
     expect((await run("tools/call", { name: "open", arguments: { slug: "a" } })).result.isError).toBeFalsy();
+    expect((await run("tools/call", { name: "legacy_private", arguments: {} })).error.code).toBe(-32602);
+    expect((await run("tools/call", { name: "legacy_open", arguments: { slug: "a" } })).result.isError).toBeFalsy();
+    expect((await run("tools/call", { name: "legacy_open", arguments: { slug: 1 } })).result.isError).toBe(true);
   });
+
+  it("rejects collisions between canonical names and aliases before serving tools", () => {
+    const tool = defineTool({ name: "get", aliases: ["old_get"], description: "Get.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/" }) });
+    expect(() => createMcpServer({ info: { name: "demo", version: "1" }, tools: [tool, { ...tool, name: "old_get", aliases: [] }] })).toThrow("Duplicate MCP tool name or alias: old_get");
+  });
+
 });

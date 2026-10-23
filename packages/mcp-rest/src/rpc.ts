@@ -8,11 +8,17 @@ export type CallRest = (call: RestCall) => Promise<RestResult>;
 export type Tool<S extends z.ZodObject = z.ZodObject> = {
   name: string;
   description: string;
+  /** Legacy invocation names, omitted from tools/list to keep discovery unambiguous. */
+  aliases?: readonly string[];
   schema: S;
   /** Does not change anything. */
   readOnly?: boolean;
   /** Removes data. */
   destructive?: boolean;
+  /** Repeating the call has no additional effect on the resource. */
+  idempotent?: boolean;
+  /** The call interacts with external systems beyond the API itself. */
+  openWorld?: boolean;
   /**
    * Safe to serve without credentials: only these tools are listed and callable on an endpoint mounted with
    * `anonymous: true`. Leave it off for anything that reads or changes private data. Public tools do not take the
@@ -55,6 +61,13 @@ const fail = (id: Rpc["id"], code: number, message: string) => ({ jsonrpc: "2.0"
 /** Builds a stateless MCP server: `handle` answers one JSON-RPC message, and returns null for notifications. */
 export function createMcpServer(options: McpServerOptions) {
   const { info, instructions, tools, context } = options;
+  const names = new Set<string>();
+  for (const tool of tools) {
+    for (const name of [tool.name, ...(tool.aliases ?? [])]) {
+      if (names.has(name)) throw new Error(`Duplicate MCP tool name or alias: ${name}`);
+      names.add(name);
+    }
+  }
   const versions = options.protocolVersions ?? DEFAULT_PROTOCOL_VERSIONS;
   const withContext = (t: Tool) => (context && !t.public ? t.schema.extend(context.shape) : t.schema);
 
@@ -64,7 +77,7 @@ export function createMcpServer(options: McpServerOptions) {
       name: t.name,
       description: t.description,
       inputSchema,
-      annotations: { readOnlyHint: !!t.readOnly, destructiveHint: !!t.destructive, idempotentHint: !!t.readOnly, openWorldHint: false },
+      annotations: { readOnlyHint: !!t.readOnly, destructiveHint: !!t.destructive, idempotentHint: t.idempotent ?? !!t.readOnly, openWorldHint: t.openWorld ?? false },
     };
   };
   const manifest = tools.map(describe);
@@ -89,7 +102,7 @@ export function createMcpServer(options: McpServerOptions) {
       case "tools/list":
         return ok(msg.id, { tools: o.publicOnly ? publicManifest : manifest });
       case "tools/call": {
-        const tool = tools.find((t) => t.name === msg.params?.name && (!o.publicOnly || t.public));
+        const tool = tools.find((t) => (t.name === msg.params?.name || t.aliases?.includes(msg.params?.name)) && (!o.publicOnly || t.public));
         if (!tool) return fail(msg.id, -32602, `Unknown tool: ${msg.params?.name}`);
         const parsed = withContext(tool).safeParse(msg.params?.arguments ?? {});
         if (!parsed.success) {

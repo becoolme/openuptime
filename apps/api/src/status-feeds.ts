@@ -139,7 +139,7 @@ export function buildLlmsTxt(o: {
       `- [Incident history](${o.api}/incidents)`,
       `- [RSS feed](${o.api}/rss.xml)`,
       `- [Maintenance calendar](${o.api}/maintenance.ics)`,
-      ...(o.mcp ? [`- Read-only MCP endpoint, no credentials needed: ${o.mcp} (tools: status_page_overview, status_page_incidents, status_page_maintenance; pass slug)`] : []),
+      ...(o.mcp ? [`- Read-only MCP endpoint, no credentials needed: ${o.mcp} (tools: get_public_status_page, list_public_status_page_incidents, list_public_status_page_maintenance; pass slug)`] : []),
     ].join("\n") + "\n"
   );
 }

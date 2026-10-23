@@ -95,10 +95,11 @@ url = "https://openuptime.app/api/mcp"</code></pre>
     <p>A second endpoint, <code>https://openuptime.app/api/mcp/public</code>, needs no credentials and offers only three read-only tools. They take the slug of a published status page and return what the public page already shows. The tools above still need authorization.</p>
     <pre><code>claude mcp add --transport http acme-status https://openuptime.app/api/mcp/public</code></pre>
     <ul>
-      <li><code>status_page_overview</code>: overall state, each component with its status and 90-day uptime, active incidents.</li>
-      <li><code>status_page_incidents</code>: recent incidents with their updates.</li>
-      <li><code>status_page_maintenance</code>: scheduled and ongoing maintenance windows.</li>
+      <li><code>get_public_status_page</code>: overall state, each component with its status and 90-day uptime, active incidents.</li>
+      <li><code>list_public_status_page_incidents</code>: recent incidents with their updates.</li>
+      <li><code>list_public_status_page_maintenance</code>: scheduled and ongoing maintenance windows.</li>
     </ul>
+    <p>Existing clients may still call the legacy names <code>status_page_overview</code>, <code>status_page_incidents</code> and <code>status_page_maintenance</code>; discovery lists the names above.</p>
     <p>The owner of a page can turn the MCP tools off with <strong>Allow the public MCP tools to read this page</strong> in the status page editor; the page, its feeds and <code>llms.txt</code> stay public. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
     <h2 id="examples">Example prompts</h2>
     <ul>
@@ -189,10 +190,11 @@ url = "https://openuptime.app/api/mcp"</code></pre>
     <p>另有一个端点 <code>https://openuptime.app/api/mcp/public</code>，不需要任何凭证，只提供三个只读工具。它们接收已发布状态页的 slug，返回公开页面本来就显示的内容。上面的其他工具仍然需要授权。</p>
     <pre><code>claude mcp add --transport http acme-status https://openuptime.app/api/mcp/public</code></pre>
     <ul>
-      <li><code>status_page_overview</code>：整体状态、各组件的状态与 90 天可用率、进行中的事件。</li>
-      <li><code>status_page_incidents</code>：近期事件及其更新。</li>
-      <li><code>status_page_maintenance</code>：计划中和进行中的维护窗口。</li>
+      <li><code>get_public_status_page</code>：整体状态、各组件的状态与 90 天可用率、进行中的事件。</li>
+      <li><code>list_public_status_page_incidents</code>：近期事件及其更新。</li>
+      <li><code>list_public_status_page_maintenance</code>：计划中和进行中的维护窗口。</li>
     </ul>
+    <p>已有客户端仍可调用旧名称 <code>status_page_overview</code>、<code>status_page_incidents</code> 和 <code>status_page_maintenance</code>；工具发现返回上面的新名称。</p>
     <p>页面所有者可在状态页编辑界面关闭 <strong>允许公开的 MCP 工具读取此页面</strong>，这只影响 MCP 工具；页面、订阅源和 <code>llms.txt</code> 仍然公开。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
     <h2 id="examples-zh">示例提示词</h2>
     <ul>
