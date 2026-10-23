@@ -295,9 +295,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     }
   }
   return (
-    <div className="modal" onClick={onClose}>
-      <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2 style={{ fontSize: 30 }}>{monitor ? t("Edit monitor") : t("New monitor")}</h2>
+    <div className="modal">
+      <form className="card mform" onSubmit={submit}>
+        <div className="mhead">
+          <h2 style={{ fontSize: 30 }}>{monitor ? t("Edit monitor") : t("New monitor")}</h2>
+          <button type="button" className="icon-btn mclose" aria-label={t("Close")} title={t("Close")} onClick={onClose}>×</button>
+        </div>
+        <div className="mbody">
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
@@ -387,7 +391,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </label>
         )}
         {others.length > 0 && (
-          <label className="fld">{t("Depends on")}
+          <label className="fld"><span>{t("Depends on")} <span className="info" tabIndex={0} role="img" aria-label={t("What is a dependency?")} data-tip={t("A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.")} onClick={(e) => e.preventDefault()}>i</span></span>
             <Select className="in" value={f.dependsOnMonitorId ?? ""} onChange={(v) => set("dependsOnMonitorId", v || null)}
               options={[{ value: "", label: t("Nothing") }, ...others.map((o) => ({ value: o.id, label: o.name }))]} />
             <small className="faint">{t("While that monitor is down, this one opens no incidents and sends no alerts.")}</small>
@@ -443,10 +447,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
-        {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
-          <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+        </div>
+        <div className="mfoot">
+          {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
+            <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+          </div>
         </div>
       </form>
     </div>

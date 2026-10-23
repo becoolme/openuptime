@@ -650,3 +650,17 @@ a.muted:hover{color:var(--ink)}
 .brand:hover,.auth-brand:hover,.pub-brand:hover{opacity:.8}
 }
 .btn:not(:disabled):active,.icon-btn:active{transform:translateY(1px)}
+
+/* Monitor form: title and buttons stay in view, only the fields scroll. */
+.modal .card.mform{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden;max-height:calc(100vh - 40px)}
+.mform .mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px 14px;border-bottom:1px solid var(--line);flex:none}
+.mform .mhead h2{margin:0}
+.mform .mclose{font-size:22px;line-height:1;flex:none}
+.mform .mbody{display:grid;gap:16px;padding:18px 24px;overflow-y:auto;overscroll-behavior:contain;flex:1 1 auto;min-height:0}
+.mform .mfoot{display:grid;gap:10px;padding:14px 24px;border-top:1px solid var(--line);flex:none;background:var(--surface)}
+.mform .mfoot .err{margin:0}
+@media (max-width:640px){.modal .card.mform{max-height:90vh;padding:0;border-radius:18px 18px 0 0}.mform .mhead,.mform .mbody,.mform .mfoot{padding-left:18px;padding-right:18px}.mform .mfoot{padding-bottom:calc(14px + env(safe-area-inset-bottom))}}
+.info{display:inline-grid;place-items:center;width:15px;height:15px;margin-left:3px;border:1px solid var(--faint);border-radius:50%;color:var(--muted);font:600 10px var(--sans);font-style:normal;cursor:help;position:relative;vertical-align:1px}
+.info:hover,.info:focus-visible{color:var(--ink);border-color:var(--ink);outline:0}
+.info::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-30%);width:max-content;max-width:min(280px,70vw);padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--bg);font:400 12.5px/1.45 var(--sans);text-align:left;white-space:normal;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s;z-index:5}
+.info:hover::after,.info:focus-visible::after{opacity:1;visibility:visible}
