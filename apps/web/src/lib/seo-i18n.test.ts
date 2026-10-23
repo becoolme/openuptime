@@ -75,3 +75,18 @@ describe.skipIf(!builtPages.length)("localizeSeoHtml on built pages", () => {
     }
   });
 });
+
+describe("localizeSeoHtml without FAQ data", () => {
+  it("swaps title and description of a docs-style page and leaves its structured data alone", () => {
+    const html = [
+      `<head><title>Pricing · OpenUptime</title><meta name="description" content="English"><meta property="og:title" content="Pricing · OpenUptime">`,
+      `<script type="application/ld+json" id="seo-ld">{"a":1}</script>`,
+      `<script type="application/json" id="seo-i18n">${scriptJson({ title: "价格 · OpenUptime", description: "中文描述" })}</script></head>`,
+    ].join("");
+    const out = localizeSeoHtml(html);
+    expect(out).toContain("<title>价格 · OpenUptime</title>");
+    expect(out).toContain('content="中文描述"');
+    expect(out).toContain('id="seo-ld">{"a":1}');
+    expect(out).not.toContain("seo-i18n");
+  });
+});

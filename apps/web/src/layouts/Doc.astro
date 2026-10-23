@@ -1,11 +1,16 @@
 ---
 import Base from "./Base.astro";
+import { SITE_SUFFIX, scriptJson } from "../lib/seo-i18n";
 // Long-form static pages (privacy, terms, API reference). Both languages are in the markup;
 // CSS shows the block matching <html lang>, which Base.astro's inline script sets from `ou_lang`.
-const { title, updated, toc, description } = Astro.props as { title: string; updated?: string; toc?: boolean; description?: string };
+// `titleZh` / `descriptionZh` are what search results and link previews show on /zh-Hans/ pages. The page is built once,
+// in English; the Chinese metadata rides along in a JSON block that the /zh-Hans route swaps in (see localizeSeoHtml).
+const { title, titleZh, descriptionZh, updated, toc, description } = Astro.props as { title: string; titleZh?: string; descriptionZh?: string; updated?: string; toc?: boolean; description?: string };
+const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title) + SITE_SUFFIX, description: descriptionZh ?? description ?? "" }) : null;
 ---
 <Base title={`${title} · OpenUptime`} description={description} router={false}>
   <slot name="head" slot="head" />
+  {zhMeta && <script type="application/json" id="seo-i18n" slot="head" set:html={zhMeta} />}
   <header class="doc-top">
     <div class="doc-top-in">
       <a href="/" class="doc-brand">

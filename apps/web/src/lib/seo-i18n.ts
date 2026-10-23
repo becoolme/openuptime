@@ -22,7 +22,7 @@ export const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g
 export interface SeoI18n {
   title: string;
   description: string;
-  ld: unknown;
+  ld?: unknown;
 }
 
 export const zhVariant = (title: L, description: L, faq: Faq[]): SeoI18n => ({ title: title.zh + SITE_SUFFIX, description: description.zh, ld: faqLd(faq, "zh") });
@@ -49,5 +49,5 @@ export function localizeSeoHtml(html: string): string {
     .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${esc(zh.title)}</title>`)
     .replace(/(<meta\b[^>]*\b(?:name="description"|property="og:description")[^>]*\bcontent=")[^"]*(")/g, (_, a, b) => a + esc(zh.description) + b)
     .replace(/(<meta\b[^>]*\bproperty="og:title"[^>]*\bcontent=")[^"]*(")/g, (_, a, b) => a + esc(zh.title) + b)
-    .replace(LD, (_, a, b) => a + scriptJson(zh.ld) + b);
+    .replace(LD, (m, a, b) => (zh.ld === undefined ? m : a + scriptJson(zh.ld) + b));
 }

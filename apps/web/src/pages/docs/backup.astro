@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc description="Back up and restore the Postgres database of a Docker deployment of OpenUptime with pg_dump and pg_restore, and check a backup before you rely on it." title="Backup and restore" updated="2026-10-17" toc>
+<Doc titleZh="备份与恢复 Postgres" descriptionZh="用 pg_dump 和 pg_restore 备份、恢复 Docker 部署的 OpenUptime 数据库，并在依赖备份之前先验证它。" description="Back up and restore the Postgres database of a Docker deployment of OpenUptime with pg_dump and pg_restore, and check a backup before you rely on it." title="Backup and restore" updated="2026-10-17" toc>
   <div lang="en">
     <h1>Backup and restore</h1>
     <p class="lede">Everything OpenUptime stores lives in one Postgres database. Back that up, keep your <code>.env</code> next to it, and practise a restore before you need one. The commands below are for the Docker deployment from <a href="/docs/self-host">Self-host</a>; the service is called <code>postgres</code> and the database, user and name are all <code>openuptime</code>.</p>
