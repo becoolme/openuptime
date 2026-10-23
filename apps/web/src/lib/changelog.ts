@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "pause-refresh-in-background-tabs",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "No refreshing in background tabs", zh: "后台标签页不再刷新" },
+    summary: { en: "Pages that refresh themselves now stop while their tab is hidden.", zh: "会自动刷新的页面，在标签页隐藏时不再发起请求。" },
+    points: [
+      { en: "The monitor list, monitor detail and custom-domain status stop polling while the tab is in the background.", zh: "监控列表、监控详情和自定义域名状态在标签页位于后台时不再轮询。" },
+      { en: "When you switch back, the page fetches fresh data once right away.", zh: "切回标签页时，页面会立即抓取一次最新数据。" },
+    ],
+  },
+  {
     id: "heartbeat-manual-check-guard",
     date: "2026-10-23",
     edition: "community",

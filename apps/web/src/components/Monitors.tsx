@@ -2,6 +2,7 @@ import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
+import { pollWhileVisible } from "../lib/poll";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
@@ -40,8 +41,7 @@ export default function Monitors() {
   useEffect(() => {
     if (!everything) Promise.all([api.channels(), api.statusPages()]).then(([c, p]) => setSetup({ channels: c.length > 0, pages: p.length > 0 })).catch(() => {});
     load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
+    return pollWhileVisible(load, 15000);
   }, []);
   // ⌘K / Ctrl+K focuses the search box
   useEffect(() => {

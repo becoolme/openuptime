@@ -2,6 +2,7 @@ import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
+import { pollWhileVisible } from "../lib/poll";
 import { groupRuns } from "../lib/runs";
 import { MonitorForm } from "./Monitors";
 
@@ -29,8 +30,7 @@ export default function MonitorDetail({ id }: { id: string }) {
   useEffect(() => {
     load().then(() => api.channels().then(setChannels)).catch(() => {});
     api.regions().then((r) => setNames(Object.fromEntries(r.regions.map((x) => [x.id, x.name])))).catch(() => {});
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
+    return pollWhileVisible(load, 10000);
   }, [id]);
   if (!m) return <p className="muted">{t("Loading…")}</p>;
 
