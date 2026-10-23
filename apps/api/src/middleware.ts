@@ -69,8 +69,8 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   // "all" is the workspace-wide view: the project is then the usual fallback (a limited key: its first project)
   const allProjects = asked === ALL_PROJECTS;
   const wanted = (allProjects ? undefined : asked) ?? scope?.[0];
-  // the org id comes from user-supplied key metadata: only trust it for orgs the user belongs to
-  if (orgId && fromKey && !(await repo.isMember(userId, orgId))) throw new HTTPException(403, { message: "Not a member of this workspace" });
+  // Sessions and grants can outlive membership; authorize the active workspace against current membership.
+  if (orgId && !(await repo.isMember(userId, orgId))) throw new HTTPException(403, { message: "Not a member of this workspace" });
   if (!orgId) {
     orgId = (await repo.anyWorkspaceOf(userId)) ?? undefined;
     if (!orgId) throw new HTTPException(403, { message: "No workspace" });

@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "workspace-access-revocation",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Workspace access follows membership", zh: "工作区访问权限即时更新" },
+    summary: { en: "Removing a member now revokes access through their existing sessions.", zh: "移除成员后，其已有登录会话也会失去工作区访问权限。" },
+    points: [{ en: "Workspace permissions are checked against current membership on each request.", zh: "每次访问工作区时都会核对当前成员身份。" }],
+  },
+  {
     id: "clearer-mcp-tools",
     date: "2026-10-23",
     edition: "community",
