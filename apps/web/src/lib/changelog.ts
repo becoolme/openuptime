@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "password-changed-email",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Email after a password reset", zh: "重置密码后发送邮件通知" },
+    summary: {
+      en: "When a password is changed with a reset link, the account's email address gets a notice.",
+      zh: "通过重置链接修改密码后，账号邮箱会收到一封通知。",
+    },
+    points: [
+      { en: "The email says the password was changed and links to a new reset, in case it wasn't you; it never contains the password or a token.", zh: "邮件说明密码已被更改，并附上再次重置的链接，以防不是本人操作；邮件中不含密码或令牌。" },
+    ],
+  },
+  {
     id: "repeated-language-prefix-404",
     date: "2026-10-22",
     edition: "community",

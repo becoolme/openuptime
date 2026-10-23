@@ -4,7 +4,7 @@ import type { Database } from "@openuptime/repo";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { captcha, jwt, oneTimeToken, organization, twoFactor } from "better-auth/plugins";
-import { actionEmail, sendEmail } from "./email";
+import { actionEmail, appUrl, sendEmail } from "./email";
 import { userLang, tr } from "./mail-i18n";
 import type { Bindings } from "./env";
 
@@ -170,6 +170,24 @@ export function createAuth(database: Database, env: Bindings) {
           lang,
         });
         await sendEmail({ to: user.email, subject: tr(lang, "Reset your OpenUptime password"), fromName: "OpenUptime", ...mail });
+      },
+      // a reset is a security event: tell the owner afterwards, so a takeover does not go unnoticed
+      onPasswordReset: async ({ user }) => {
+        try {
+          const lang = await userLang(repo, user.email);
+          const mail = actionEmail({
+            title: tr(lang, "Your password was changed"),
+            body: tr(lang, "The password for your OpenUptime account was just changed with a reset link. If this was you, nothing more to do.\n\nIf it wasn't you, reset your password again now."),
+            footer: tr(lang, "Security email. You can't unsubscribe from these."),
+            cta: tr(lang, "Reset password again"),
+            url: `${appUrl()}/forgot-password`,
+            lang,
+          });
+          await sendEmail({ to: user.email, subject: tr(lang, "Your OpenUptime password was changed"), fromName: "OpenUptime", ...mail });
+        } catch (err) {
+          // the password is already changed; a failed notice must not turn that into an error for the user
+          console.error("password-changed email failed", err);
+        }
       },
     },
     socialProviders:
