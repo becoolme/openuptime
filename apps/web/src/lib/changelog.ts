@@ -27,6 +27,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "clearer-mcp-tools",
+    date: "2026-10-23",
+    edition: "community",
+    title: { en: "Clearer MCP tool guidance", zh: "更清晰的 MCP 工具说明" },
+    summary: { en: "MCP tools explain their inputs, results and effects so agents can choose and call them more reliably.", zh: "MCP 工具补充了参数、返回结果和操作影响说明，帮助智能体正确选择和调用。" },
+    points: [
+      { en: "Monitor arguments explain units, discovery sources, replacement lists and how to clear optional settings.", zh: "监控参数说明了单位、可选值来源、列表替换和清除可选设置的方式。" },
+      { en: "Tool descriptions distinguish configuration edits, pausing, incident updates and public status queries, including their effects on checks and notifications.", zh: "工具说明明确区分配置修改、暂停、事件更新和公开状态查询，并说明对检测与通知的影响。" },
+      { en: "Public status tools use get_public_status_page, list_public_status_page_incidents and list_public_status_page_maintenance; old invocation names remain supported.", zh: "公开状态工具改用 get_public_status_page、list_public_status_page_incidents 和 list_public_status_page_maintenance，旧调用名称继续兼容。" },
+    ],
+    link: { href: "/docs/mcp", label: { en: "Read the MCP docs", zh: "阅读 MCP 文档" } },
+  },
+  {
     id: "hover-feedback",
     date: "2026-10-23",
     edition: "community",

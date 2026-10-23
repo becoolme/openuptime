@@ -47,7 +47,7 @@ test("stdio evaluator uses the real authenticated API and cleans up", { timeout:
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   const manifest = await rpc("tools/list", {});
   assert.ok(manifest.result.tools.some((item) => item.name === "create_monitor"));
-  assert.ok(manifest.result.tools.some((item) => item.name === "status_page_overview"));
+  assert.ok(manifest.result.tools.some((item) => item.name === "get_public_status_page"));
   const workspaces = await tool("list_workspaces");
   assert.equal(workspaces.workspaces.length, 1);
   assert.deepEqual(await tool("list_monitors"), []);

@@ -12,30 +12,30 @@ import { isRegionConfigured, runInRegion } from "../probes";
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 const fields = {
-  name: z.string().min(1).max(120),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis"]),
-  target: z.string().max(2048),
-  method: z.enum(["GET", "HEAD", "POST"]),
-  expectedStatus: z.number().int().min(100).max(599),
-  intervalSec: z.number().int().min(60).max(86400),
-  timeoutMs: z.number().int().min(1000).max(30000),
-  failureThreshold: z.number().int().min(1).max(10),
+  name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis"]).describe("Check protocol; immutable after creation. HTTP checks a URL, heartbeat waits for incoming pings, and other types check a service."),
+  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. TCP: host:port. DNS: hostname. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  method: z.enum(["GET", "HEAD", "POST"]).describe("HTTP request method; ignored for other monitor types."),
+  expectedStatus: z.number().int().min(100).max(599).describe("HTTP response status that counts as healthy; an expected 3xx is checked without following the redirect."),
+  intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Hosted plans may require a longer interval."),
+  timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds."),
+  failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
-  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]),
-  keyword: z.string().max(500).nullable(),
-  keywordMode: z.enum(["contains", "absent"]),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP/TCP only. A supplied list replaces the existing one."),
+  keyword: z.string().max(500).nullable().describe("HTTP response-body text to test; null disables keyword matching."),
+  keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body must contain keyword or must not contain it."),
   // an absolute http(s) URL or a path; blank means "any destination"
-  expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable(),
-  headers: z.record(z.string().max(100), z.string().max(2000)),
-  graceSec: z.number().int().min(0).max(86400),
-  channelIds: z.array(z.string().uuid()).max(50),
-  tags: z.array(z.string().trim().min(1).max(32)).max(20),
-  slowThresholdMs: z.number().int().min(100).max(60000),
-  slowAlertAfter: z.number().int().min(0).max(20),
+  expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
+  headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
+  graceSec: z.number().int().min(0).max(86400).describe("Extra seconds allowed after a heartbeat deadline before it counts as missed; used only for heartbeat monitors."),
+  channelIds: z.array(z.string().uuid()).max(50).describe("Alert-channel UUIDs from list_channels. Replaces the selected channels; an empty list clears them. Newly created monitors also inherit auto-enabled channels."),
+  tags: z.array(z.string().trim().min(1).max(32)).max(20).describe("Dashboard filter labels; a supplied list replaces the existing tags, and an empty list clears them."),
+  slowThresholdMs: z.number().int().min(100).max(60000).describe("Latency in milliseconds above which a successful check counts as slow."),
+  slowAlertAfter: z.number().int().min(0).max(20).describe("Consecutive slow checks required for a slow-response alert; zero disables these alerts."),
   // another monitor of the same project; while it is down this one opens no incidents and sends no alerts
-  dependsOnMonitorId: z.string().uuid().nullable(),
+  dependsOnMonitorId: z.string().uuid().nullable().describe("Parent monitor UUID in the same project; suppresses new incidents and alerts while the parent is down. Null removes the dependency."),
   // several regions: how many must fail before the monitor goes down; 0 = a majority of the regions that answered
-  minRegionsFailing: z.number().int().min(0).max(20),
+  minRegionsFailing: z.number().int().min(0).max(20).describe("Failed regions needed to mark a multi-region monitor down; zero uses a majority of regions that answered."),
 };
 
 /** Create: omitted fields take defaults. */
@@ -91,7 +91,7 @@ function normaliseImport(raw: unknown): unknown {
 }
 
 /** Update: only named fields change (defaults here would silently reset the rest); type is immutable. */
-const patchBody = z.object(fields).partial().omit({ type: true }).extend({ paused: z.boolean().optional() });
+const patchBody = z.object(fields).partial().omit({ type: true }).extend({ paused: z.boolean().optional().describe("True pauses checks and alerts; false resumes checking with pending status. Prefer pause_monitor or resume_monitor for this change alone.") });
 
 /** Exposed for the MCP tool definitions so they cannot drift from the REST validation. */
 export const monitorCreateSchema = body;

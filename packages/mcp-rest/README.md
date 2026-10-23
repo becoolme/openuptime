@@ -115,6 +115,15 @@ Bad arguments and REST errors (status 400 and up) are returned as **tool errors*
 the model can read them and retry. Protocol errors (unknown method, unknown tool, malformed request) use JSON-RPC error
 codes.
 
+### Tool metadata
+
+Describe each argument with `.describe(...)`, including units, discovery sources and clearing/replacement behavior.
+A tool description should explain when to use it, its result and any side effects beyond the schema.
+`readOnly` and `destructive` set the corresponding MCP hints. `idempotent` may override the default (true for
+read-only tools, false otherwise); set `openWorld: true` when a call interacts with external systems.
+`aliases: ["old_name"]` preserves legacy calls while only the canonical `name` appears in discovery. Aliases use the
+same validation and public/private boundary as their canonical tool; names and aliases must be unique across tools.
+
 ### Context arguments
 
 Some APIs need to know where a call acts: a tenant, a workspace, a project. Declare optional arguments once and they

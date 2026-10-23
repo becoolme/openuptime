@@ -57,7 +57,7 @@ describe.skipIf(!url)("status page feeds, calendar, llms.txt and public MCP", ()
 
     // the public MCP endpoint needs no credentials and lists only the read-only status page tools
     const listed: any = await (await rpc("/api/mcp/public", { jsonrpc: "2.0", id: 1, method: "tools/list" })).json();
-    expect(listed.result.tools.map((t: any) => t.name).sort()).toEqual(["status_page_incidents", "status_page_maintenance", "status_page_overview"]);
+    expect(listed.result.tools.map((t: any) => t.name).sort()).toEqual(["get_public_status_page", "list_public_status_page_incidents", "list_public_status_page_maintenance"]);
     const overview: any = await (await rpc("/api/mcp/public", { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "status_page_overview", arguments: { slug } } })).json();
     expect(overview.result.isError).toBeFalsy();
     expect(JSON.parse(overview.result.content[0].text).page.slug).toBe(slug);
