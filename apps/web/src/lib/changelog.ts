@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "incident-list-long-notes",
+    date: "2026-10-24",
+    edition: "community",
+    title: { en: "Incident list keeps its layout", zh: "事件列表排版修复" },
+    summary: { en: "Long incident notes no longer run over the other columns.", zh: "过长的事件说明不再压到其他列上。" },
+    points: [
+      { en: "Titles and notes in the incident list are cut off with an ellipsis; the full note shows on hover.", zh: "事件列表里过长的标题和说明会以省略号截断，悬停可查看完整说明。" },
+    ],
+  },
+  {
     id: "status-page-subscribe-form-tidy",
     date: "2026-10-23",
     edition: "community",

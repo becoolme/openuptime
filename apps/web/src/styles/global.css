@@ -379,6 +379,7 @@ fieldset{min-width:0}
 .inc-tbl .tr.th{min-height:44px}
 .inc-tbl .nm{display:flex;align-items:center;gap:12px;min-width:0}
 .inc-tbl .nm b{font-weight:500}
+.inc-tbl .nm>div{min-width:0}.inc-tbl .nm small{display:block}.inc-tbl .nm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:820px){.dh h1{font-size:32px}.dh-acts{margin-left:0;width:100%}.inc-tbl .tr{padding:14px 16px;min-height:0}}
 .dot{width:9px;height:9px;border-radius:99px;flex:none;background:var(--faint);display:inline-block}
 .dot.up{background:var(--accent)}.dot.warn{background:var(--warn)}.dot.down{background:var(--down)}
