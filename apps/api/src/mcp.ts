@@ -154,11 +154,12 @@ export const PUBLIC_TOOLS: Tool[] = [
 
 export const SERVER_INFO = { name: "openuptime", version: "1.0.0" };
 
-export const server = createMcpServer({
+/** The tool list is fixed here; an edition passes the tools it adds (see Edition.mcpTools). */
+export const createServer = (extraTools: Tool[] = []) => createMcpServer({
   info: SERVER_INFO,
   instructions:
     "Manage monitor configuration, investigate incidents and publish status pages. Start with list_workspaces to discover accessible workspace/project ids, then the resource list tool for UUIDs. Private tools accept optional workspace/project selectors and use the caller's existing OAuth/API-key permissions; public-status tools use a slug and no credentials. Omitted patch fields stay unchanged; supplied lists replace prior lists. Use pause_monitor/resume_monitor for pause-only changes and post_incident_update for incident status changes or subscriber messages. Alert-channel and maintenance configuration is managed in the app or REST API; these tools expose discovery/read access to those resources.",
-  tools: [...TOOLS, ...PUBLIC_TOOLS],
+  tools: [...TOOLS, ...extraTools, ...PUBLIC_TOOLS],
   context: {
     shape: whereShape,
     toHeaders: ({ workspace, project }): Record<string, string> => ({
@@ -167,3 +168,5 @@ export const server = createMcpServer({
     }),
   },
 });
+
+export const server = createServer();

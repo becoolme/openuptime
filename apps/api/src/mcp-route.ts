@@ -1,8 +1,9 @@
 import { mountMcp as mountMcpEndpoint, mountOAuthMetadata } from "@openuptime/mcp-rest/hono";
+import type { Tool } from "@openuptime/mcp-rest";
 import type { Hono } from "hono";
 import { mcpResource } from "./auth";
 import type { AppEnv } from "./env";
-import { PUBLIC_TOOLS, server } from "./mcp";
+import { createServer, PUBLIC_TOOLS, server as communityServer } from "./mcp";
 
 const originOf = (url: string) => new URL(url).origin;
 const SCOPES = ["mcp:read", "mcp:write"];
@@ -11,7 +12,8 @@ const SCOPES = ["mcp:read", "mcp:write"];
  * Remote MCP server and the OAuth discovery documents agents need to authorize themselves. The protocol, the transport
  * and the metadata documents come from @openuptime/mcp-rest; this wires them to our API and authorization server.
  */
-export function mountMcp(app: Hono<AppEnv>) {
+export function mountMcp(app: Hono<AppEnv>, extraTools: Tool[] = []) {
+  const server = extraTools.length ? createServer(extraTools) : communityServer;
   // read-only tools for public status pages; no credentials, and nothing the caller sends reaches the API
   mountMcpEndpoint(app, { server, path: "/api/mcp/public", anonymous: true });
   // a small discovery document for agents and directories

@@ -162,7 +162,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     return c.json({ applied: [...(await database.migrate()), ...((await edition.migrate?.(database)) ?? [])] });
   });
 
-  mountMcp(app);
+  mountMcp(app, edition.mcpTools);
 
   // the authorization screen's picker: the signed-in user's workspaces with their projects (before any workspace is active)
   app.get("/api/oauth/picker", async (c) => {

@@ -1,6 +1,7 @@
 import type { RestCall } from "@openuptime/mcp-rest";
 import { describe, expect, it } from "vitest";
-import { PUBLIC_TOOLS, server, TOOLS } from "./mcp";
+import { z } from "zod";
+import { createServer, PUBLIC_TOOLS, server, TOOLS } from "./mcp";
 
 const calls: RestCall[] = [];
 const call = async (c: RestCall) => {
@@ -91,4 +92,14 @@ describe("openuptime mcp tools", () => {
     expect(annotations("update_incident").idempotentHint).toBe(false); // publishing sets a new timestamp
   });
 
+});
+
+describe("edition tools", () => {
+  it("lists the tools an edition adds, after the core ones and before the public ones", async () => {
+    const extra = { name: "edition_probe", description: "test", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/probe" }) } as never;
+    const r: any = await createServer([extra]).handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, call);
+    const names = r.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toHaveLength(TOOLS.length + PUBLIC_TOOLS.length + 1);
+    expect(names.indexOf("edition_probe")).toBe(TOOLS.length);
+  });
 });
