@@ -34,6 +34,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "The component picker on a status page's subscribe form reads like the text above it.", zh: "状态页订阅表单里的组件选择，样式与上方说明文字保持一致。" },
     points: [
       { en: "The “Only these components” hint is plain text instead of a label sitting on a box border.", zh: "“仅订阅这些组件”的提示改为普通文字，不再压在边框上。" },
+      { en: "The component list is collapsed by default and opens when you click the hint.", zh: "组件列表默认折叠，点击提示后展开。" },
     ],
     cloud: { en: "On a custom status page domain, the RSS, maintenance calendar and llms.txt links no longer return 404.", zh: "在自定义状态页域名上，RSS、维护日历和 llms.txt 链接不再返回 404。" },
   },

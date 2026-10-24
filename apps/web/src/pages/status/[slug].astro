@@ -179,10 +179,10 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
             <form id="sub">
               <input class="in" type="email" name="email" required placeholder="you@example.com" aria-label="Email" />
               {data.components.length > 1 && (
-                <fieldset class="pub-pick">
-                  <legend class="muted">{t("Only these components (all if none are ticked)")}</legend>
+                <details class="pub-pick">
+                  <summary class="muted">{t("Only these components (all if none are ticked)")}</summary>
                   {data.components.map((c) => <label><input type="checkbox" name="monitorId" value={c.id} /> {c.name}</label>)}
-                </fieldset>
+                </details>
               )}
               <button class="btn primary" type="submit">{t("Subscribe")}</button>
             </form>

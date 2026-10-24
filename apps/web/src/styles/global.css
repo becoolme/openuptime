@@ -464,7 +464,7 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .pub-side{position:sticky;top:20px}
 .pub-sub{padding:22px;display:grid;gap:12px}.pub-sub h3{font-size:18px}
 .pub-sub form{display:grid;gap:10px}.pub-sub p{font-size:13.5px}
-.pub-pick{border:0;margin:0;padding:0;min-width:0;display:grid;gap:4px;font-size:13.5px}.pub-pick legend{padding:0;margin-bottom:4px;font-size:inherit}.pub-pick label{display:flex;gap:8px;align-items:center}
+.pub-pick{font-size:13.5px}.pub-pick summary{cursor:pointer;font-size:inherit}.pub-pick[open] summary{margin-bottom:6px}.pub-pick label{display:flex;gap:8px;align-items:center;margin:4px 0}
 .pub-foot{padding-top:20px;padding-bottom:40px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
 .pub-foot a{color:var(--accent)}
 @media(max-width:900px){.pub-grid{grid-template-columns:minmax(0,1fr)}.pub-side{position:static;order:-1}.pub-hd h1{font-size:38px}.pub-ring{display:none}}
