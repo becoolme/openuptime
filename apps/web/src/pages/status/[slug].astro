@@ -65,6 +65,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
 ---
 <Base title={`${data.page.title} · Status`}>
   <Fragment slot="head">
+    {!hideBrand && <meta name="generator" content="openuptime.app" />}
     <link rel="canonical" href={canon} />
     <link rel="alternate" type="application/rss+xml" title={`${data.page.title} status`} href={`${base}/api/public/status/${slug}/rss.xml`} />
     <link rel="alternate" hreflang="en" href={`${base}/status/${slug}`} />
