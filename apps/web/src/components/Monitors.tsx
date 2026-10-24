@@ -1,7 +1,7 @@
 import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { ago, api, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
@@ -190,6 +190,7 @@ export default function Monitors() {
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
                   <span className="chip">{TYPE_LABEL[m.type]}</span>
+                  <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span>
                   <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
                 </div>
                 <span><span className={`pill ${m.status}`}>{t(m.status)}</span></span>

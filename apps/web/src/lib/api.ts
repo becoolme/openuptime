@@ -238,6 +238,12 @@ export const api = {
   ack: (id: string) => req(`/incidents/${id}/ack`, { method: "POST" }),
 };
 
+/** A check interval in its shortest form: 30s, 5m, 2h, 1d (45m stays 45m; 90 s stays 90s). */
+export const everyShort = (sec: number) => {
+  for (const [unit, size] of [["d", 86400], ["h", 3600], ["m", 60]] as const) if (sec >= size && sec % size === 0) return `${sec / size}${unit}`;
+  return `${sec}s`;
+};
+
 export const ago = (iso: string | null) => {
   if (!iso) return "—";
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
