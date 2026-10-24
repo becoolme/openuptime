@@ -30,7 +30,7 @@ export const zh: Record<string, string> = {
   "+ New monitor": "+ 新建监控", "New monitor": "新建监控", "Create monitor": "创建监控", "Cancel": "取消", "Close": "关闭", "What is a dependency?": "什么是依赖？", "A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.": "依赖是指这个监控所依赖的另一个监控，例如网关或你的网络。被依赖的监控宕机期间，这个监控不会重复告警同一次故障。",
   "Loading…": "加载中…", "down right now": "个正在故障", "Everything is up.": "一切正常。", "Nothing is being watched yet.": "还没有任何监控。",
   "No monitors yet": "还没有监控", "Add a URL and we’ll check it every minute.": "添加一个 URL，我们每分钟检查一次。",
-  "+ Add your first monitor": "+ 添加第一个监控", Monitor: "监控", Status: "状态", "Uptime 24h": "24 小时可用率", Latency: "延迟", Checked: "最近检查", "Check interval": "检测间隔",
+  "+ Add your first monitor": "+ 添加第一个监控", Monitor: "监控", Status: "状态", "Uptime 24h": "24 小时可用率", Latency: "延迟", Checked: "最近检查", "Check interval": "检测间隔", "Click to change the check interval": "点击修改检测间隔", "Interval updated": "检测间隔已更新", Confirm: "确认",
   Type: "类型", "HTTP(S)": "HTTP(S)", "TCP port": "TCP 端口", DNS: "DNS", "Heartbeat (cron)": "心跳（定时任务）",
   "URL": "URL", "Host:port": "主机:端口", Hostname: "主机名", "Check every": "检查间隔", "1 minute": "1 分钟", "5 minutes": "5 分钟", "15 minutes": "15 分钟",
   "Check now": "立即检查", Pause: "暂停", Resume: "恢复", Delete: "删除", "← Monitors": "← 监控",

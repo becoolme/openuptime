@@ -30,10 +30,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     id: "monitor-list-interval",
     date: "2026-10-24",
     edition: "community",
-    title: { en: "Check interval in the monitor list", zh: "监控列表显示检测间隔" },
+    title: { en: "Check interval in the monitor list", zh: "监控列表显示并修改检测间隔" },
     summary: { en: "Each monitor in the list shows how often it is checked.", zh: "监控列表里的每个监控都会显示检测频率。" },
     points: [
       { en: "A small tag such as 1m or 5m sits next to the monitor type, so you no longer open a monitor to see its interval.", zh: "监控类型旁边新增 1m、5m 之类的小标签，不必点进监控就能看到检测间隔。" },
+      { en: "Click the tag to pick 1, 5 or 15 minutes, then confirm to save it without opening the monitor.", zh: "点击标签可选择 1、5 或 15 分钟，确认后即保存，无需打开监控。" },
     ],
   },
   {

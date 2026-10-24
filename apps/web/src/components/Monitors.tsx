@@ -1,6 +1,6 @@
 import Select from "./Select";
 import { t } from "../lib/i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ago, api, everyShort, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { regionLocked, toggleRegion } from "../lib/regions";
@@ -17,6 +17,69 @@ export function Spark({ data, status }: { data: (number | null)[]; status: strin
   const lo = Math.min(...pts), hi = Math.max(...pts), span = Math.max(1, hi - lo);
   const d = pts.map((v, i) => `${i ? "L" : "M"}${((i / (pts.length - 1)) * 140).toFixed(1)} ${(26 - ((v - lo) / span) * 22).toFixed(1)}`).join("");
   return <svg className="sp" viewBox="0 0 140 30" preserveAspectRatio="none"><path d={d} fill="none" stroke={color} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+}
+
+const INTERVALS = [[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"]] as const;
+
+/** The interval tag in the monitor list: click to pick another interval, then confirm to save it. */
+function IntervalTag({ monitor, onChanged }: { monitor: Monitor; onChanged: (sec: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<number | null>(null);
+  const [floor, setFloor] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+  const close = () => { setOpen(false); setPick(null); setMsg(null); };
+  useEffect(() => {
+    if (!open) return;
+    api.usage().then((u) => setFloor(u.metered ? (u.plan?.minIntervalSec ?? 0) : 0)).catch(() => {});
+    const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const label = (sec: number) => t(INTERVALS.find(([v]) => v === sec)?.[1] ?? `${sec}s`);
+  const save = async () => {
+    if (pick == null) return;
+    setBusy(true);
+    try {
+      await api.updateMonitor(monitor.id, { intervalSec: pick });
+      onChanged(pick);
+      setPick(null);
+      setMsg({ ok: true, text: t("Interval updated") });
+      setTimeout(close, 1200);
+    } catch (e) {
+      const x = e as Error & { code?: string };
+      setMsg({ ok: false, text: x.code === "interval_not_allowed" ? t("This check interval is not available on your plan.") : x.message });
+    }
+    setBusy(false);
+  };
+  return (
+    // the row is a link: clicks in here must not open the monitor
+    <span className="iv" ref={ref} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <button type="button" className="chip iv-tag" title={t("Click to change the check interval")} onClick={() => (open ? close() : setOpen(true))}>{everyShort(monitor.intervalSec)}</button>
+      {open && (
+        <div className="iv-pop" role="dialog" aria-label={t("Check every")}>
+          {pick == null && !msg?.ok ? (
+            <>
+              <b>{t("Check every")}</b>
+              {INTERVALS.map(([v, l]) => {
+                const locked = v < floor && v < monitor.intervalSec;
+                return <button type="button" key={v} className={`iv-opt${v === monitor.intervalSec ? " on" : ""}`} disabled={locked || v === monitor.intervalSec} title={locked ? t("Not available on your plan") : undefined} onClick={() => { setMsg(null); setPick(v); }}>{t(l)}</button>;
+              })}
+            </>
+          ) : pick != null ? (
+            <>
+              <span>{t("Check every")} {label(pick)}?</span>
+              <span className="iv-acts"><button type="button" className="btn sm primary" disabled={busy} onClick={save}>{busy ? t("Saving…") : t("Confirm")}</button><button type="button" className="btn sm" disabled={busy} onClick={() => setPick(null)}>{t("Cancel")}</button></span>
+            </>
+          ) : null}
+          {msg && <span className={msg.ok ? "iv-ok" : "err"}>{msg.ok ? "✓ " : ""}{msg.text}</span>}
+        </div>
+      )}
+    </span>
+  );
 }
 
 export default function Monitors() {
@@ -190,7 +253,7 @@ export default function Monitors() {
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
                   <span className="chip">{TYPE_LABEL[m.type]}</span>
-                  <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span>
+                  {everything || m.type === "heartbeat" ? <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span> : <IntervalTag monitor={m} onChanged={(sec) => setItems((xs) => xs && xs.map((x) => (x.id === m.id ? { ...x, intervalSec: sec } : x)))} />}
                   <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
                 </div>
                 <span><span className={`pill ${m.status}`}>{t(m.status)}</span></span>
