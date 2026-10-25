@@ -30,10 +30,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     id: "status-page-site-logo",
     date: "2026-10-24",
     edition: "community",
-    title: { en: "Your site's logo on the status page", zh: "状态页显示你网站的图标" },
-    summary: { en: "A status page that links to your website now shows that website's icon in the header.", zh: "设置了网站链接的状态页，页头会显示该网站的图标。" },
+    title: { en: "Status page header and phone layout", zh: "状态页页头与手机布局" },
+    summary: { en: "A status page shows your website's icon in the header, and the phone layout reads in a better order.", zh: "状态页页头显示你网站的图标，手机上的排布顺序也更合理。" },
     points: [
       { en: "The icon replaces the OpenUptime mark; without a website link the page looks as before.", zh: "该图标会替换 OpenUptime 的标志；没有设置网站链接的页面保持原样。" },
+      { en: "On phones, the components and incidents come first and the subscribe box follows them.", zh: "手机上先显示组件和事件，订阅框排在它们后面。" },
     ],
   },
   {
