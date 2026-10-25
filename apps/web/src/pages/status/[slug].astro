@@ -59,8 +59,8 @@ const okAt = (data.page.uptimeOkPct ?? 99.9) / 100;
 const warnAt = (data.page.uptimeWarnPct ?? 98) / 100;
 const dayClass = (u: number) => (u >= okAt ? "" : u >= warnAt ? "w" : "d");
 const hideBrand = !!data.page.hideBranding;
-// without OpenUptime's mark the header shows the website's own logo, or just the title when there is no link
-const logo = hideBrand ? siteLogo(data.page.externalUrl) : null;
+// a page that links to its own website shows that website's logo in place of OpenUptime's mark
+const logo = siteLogo(data.page.externalUrl);
 Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
 ---
 <Base title={`${data.page.title} · Status`}>
@@ -74,7 +74,7 @@ Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
   </Fragment>
   <div class="pub">
     <header class="pub-top"><div class="pub-wrap pub-top-in">
-      <span class="pub-brand">{!hideBrand && <span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>}{logo && <img class="pub-logo" src={logo} width="26" height="26" alt="" referrerpolicy="no-referrer" loading="eager" decoding="async" />}{data.page.title}{data.page.externalUrl && (
+      <span class="pub-brand">{!hideBrand && !logo && <span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>}{logo && <img class="pub-logo" src={logo} width="26" height="26" alt="" referrerpolicy="no-referrer" loading="eager" decoding="async" />}{data.page.title}{data.page.externalUrl && (
         <a class="pub-ext" href={data.page.externalUrl} target="_blank" rel="nofollow noopener noreferrer" aria-label={t("Visit website")} title={t("Visit website")}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a>
       )}</span>
       <a class="btn sm primary" href="#subscribe">{t("Subscribe")}</a>

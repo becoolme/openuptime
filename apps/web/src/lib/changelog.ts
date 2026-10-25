@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "status-page-site-logo",
+    date: "2026-10-24",
+    edition: "community",
+    title: { en: "Your site's logo on the status page", zh: "状态页显示你网站的图标" },
+    summary: { en: "A status page that links to your website now shows that website's icon in the header.", zh: "设置了网站链接的状态页，页头会显示该网站的图标。" },
+    points: [
+      { en: "The icon replaces the OpenUptime mark; without a website link the page looks as before.", zh: "该图标会替换 OpenUptime 的标志；没有设置网站链接的页面保持原样。" },
+    ],
+  },
+  {
     id: "monitor-list-interval",
     date: "2026-10-24",
     edition: "community",
