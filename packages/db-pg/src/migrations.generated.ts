@@ -149,5 +149,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0029_monitor_websocket",
     "when": 1793160668461,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'websocket';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"ws_message\" text;"
+  },
+  {
+    "tag": "0030_confused_ironclad",
+    "when": 1793165362744,
+    "sql": "ALTER TABLE \"maintenance_window\" ADD COLUMN \"series_id\" uuid;--> statement-breakpoint\nALTER TABLE \"maintenance_window\" ADD COLUMN \"recurrence\" jsonb;--> statement-breakpoint\nCREATE INDEX \"maintenance_series_idx\" ON \"maintenance_window\" USING btree (\"organization_id\",\"series_id\");"
   }
 ];

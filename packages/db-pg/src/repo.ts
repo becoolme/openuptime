@@ -1141,15 +1141,45 @@ export function createRepo(db: Db): Repo {
     },
 
     listMaintenance: (orgId, projectId) =>
-      db
-        .select()
-        .from(schema.maintenanceWindow)
+      db.select().from(schema.maintenanceWindow)
         .where(and(eq(schema.maintenanceWindow.organizationId, orgId), eq(schema.maintenanceWindow.projectId, projectId)))
-        .orderBy(desc(schema.maintenanceWindow.startsAt))
-        .limit(200),
+        .orderBy(sql`case when ${schema.maintenanceWindow.endsAt} >= now() then 0 else 1 end`, sql`abs(extract(epoch from (${schema.maintenanceWindow.startsAt} - now())))`)
+        .limit(1000),
     async createMaintenance(orgId, projectId, w) {
-      const [row] = await db.insert(schema.maintenanceWindow).values({ ...w, organizationId: orgId, projectId }).returning();
-      return row;
+      if (!w.recurrence) {
+        const [row] = await db.insert(schema.maintenanceWindow).values({ ...w, organizationId: orgId, projectId }).returning();
+        return row;
+      }
+      const { frequency, timeZone, until } = w.recurrence;
+      // Materialize the bounded series atomically: every occurrence has its own stable reminder/ICS identity.
+      // Calendar arithmetic is local; duration is elapsed time. Postgres resolves gaps using the old offset
+      // and overlaps using the new offset. Keep the explicitly supplied first instant unchanged.
+      const stepDays = frequency === "weekly" ? 7 : 1;
+      const duration = w.endsAt.getTime() - w.startsAt.getTime();
+      const instants = await rows<{ start: string }>(db.execute(sql`
+        select occurrence::text as start from (
+          select case when n = 0 then ${w.startsAt.toISOString()}::timestamptz
+            else ((${w.startsAt.toISOString()}::timestamptz at time zone ${timeZone}) + make_interval(days => n * ${stepDays})) at time zone ${timeZone} end as occurrence
+          from generate_series(0, 366) as n
+        ) occurrences where occurrence <= ${until}::timestamptz order by occurrence
+      `));
+      const seriesId = crypto.randomUUID();
+      // A historical whole-day offset jump can map two local dates to one instant. Never create duplicate windows.
+      const uniqueStarts = [...new Set(instants.map(({ start }) => new Date(start).getTime()))];
+      const values = uniqueStarts.map((start) => ({ ...w, organizationId: orgId, projectId, seriesId, startsAt: new Date(start), endsAt: new Date(start + duration) }));
+      const result = await db.insert(schema.maintenanceWindow).values(values).returning();
+      return result.sort((a, b) => +a.startsAt - +b.startsAt)[0];
+    },
+    async endMaintenance(orgId, id, scope) {
+      await db.update(schema.maintenanceWindow).set({ endsAt: new Date() })
+        .where(and(eq(schema.maintenanceWindow.id, id), eq(schema.maintenanceWindow.organizationId, orgId), inScope(scope, schema.maintenanceWindow.projectId), lte(schema.maintenanceWindow.startsAt, sql`now()`), gte(schema.maintenanceWindow.endsAt, sql`now()`)));
+    },
+    async cancelMaintenanceSeries(orgId, seriesId, scope) {
+      await db.transaction(async (tx) => {
+        const owned = and(eq(schema.maintenanceWindow.organizationId, orgId), eq(schema.maintenanceWindow.seriesId, seriesId), inScope(scope, schema.maintenanceWindow.projectId));
+        await tx.delete(schema.maintenanceWindow).where(and(owned, gte(schema.maintenanceWindow.startsAt, sql`now()`)));
+        await tx.update(schema.maintenanceWindow).set({ endsAt: new Date() }).where(and(owned, lt(schema.maintenanceWindow.startsAt, sql`now()`), gte(schema.maintenanceWindow.endsAt, sql`now()`)));
+      });
     },
     async deleteMaintenance(orgId, id, scope) {
       await db
@@ -1326,7 +1356,7 @@ export function createRepo(db: Db): Repo {
               : sql`cardinality(${schema.maintenanceWindow.monitorIds}) = 0`,
           ),
         )
-        .orderBy(desc(schema.maintenanceWindow.startsAt))
+        .orderBy(sql`case when ${schema.maintenanceWindow.endsAt} >= now() then 0 else 1 end`, sql`abs(extract(epoch from (${schema.maintenanceWindow.startsAt} - now())))`)
         .limit(o.limit);
     },
     async claimMaintenanceReminders(limit) {

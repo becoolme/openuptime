@@ -22,7 +22,7 @@ export type Project = { id: string; name: string };
 /** One project's line in the "All projects" overview. */
 export type ProjectOverview = Project & { monitors: number; down: number; openIncidents: number };
 export type Subscriber = { id: string; email: string; confirmedAt: string | null; createdAt: string };
-export type Maintenance = { id: string; name: string; startsAt: string; endsAt: string; monitorIds: string[] };
+export type Maintenance = { seriesId?: string | null; recurrence?: { frequency: "daily" | "weekly"; timeZone: string; until: string } | null; id: string; name: string; startsAt: string; endsAt: string; monitorIds: string[] };
 export type CheckResult = { id: string; ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string; region?: string };
 export type RegionStat = {
   region: string; checks24h: number; uptime24h: number | null; avgLatency24h: number | null;
@@ -204,6 +204,8 @@ export const api = {
   deleteProject: (id: string) => req<void>(`/projects/${id}`, { method: "DELETE" }),
   maintenance: () => req<Maintenance[]>("/maintenance"),
   createMaintenance: (b: Omit<Maintenance, "id">) => req<Maintenance>("/maintenance", { method: "POST", body: JSON.stringify(b) }),
+  endMaintenance: (id: string) => req<{ ok: boolean }>(`/maintenance/${id}/end`, { method: "POST" }),
+  cancelMaintenanceSeries: (id: string) => req<void>(`/maintenance/series/${id}`, { method: "DELETE" }),
   deleteMaintenance: (id: string) => req<void>(`/maintenance/${id}`, { method: "DELETE" }),
   /** What this deployment can do (public). */
   config: () => req<{ push?: { apns: boolean } }>("/config"),

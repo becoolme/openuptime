@@ -278,7 +278,7 @@ export const publicStatus = new Hono<AppEnv>()
       overall: LABELS[overallOf(board.components.map((x) => x.status))].en,
       components: board.components,
       incidents: board.incidents,
-      maintenance: [...windows].reverse(),
+      maintenance: windows,
       mcp: page.mcpEnabled ? `${origin}/api/mcp/public` : null,
     });
     return c.body(body, 200, { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=300" });
@@ -293,7 +293,7 @@ export const publicStatus = new Hono<AppEnv>()
     if (!page) return c.json({ error: "Not found" }, 404);
     const now = Date.now();
     const rows = await repo.pageMaintenance(page, { since: new Date(now - 7 * 864e5), limit: 50 });
-    const items = rows.reverse().map((w) => ({
+    const items = rows.map((w) => ({
       id: w.id,
       name: w.name,
       startsAt: w.startsAt,

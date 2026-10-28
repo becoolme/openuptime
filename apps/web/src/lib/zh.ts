@@ -26,6 +26,11 @@ export const zh: Record<string, string> = {
   "Know which account this is": "识别这是哪个账号",
   Allow: "允许", Deny: "拒绝", "You can revoke access at any time from your account settings.": "你可以随时在账户设置中撤销访问。",
   "Authorized agents": "已授权的 Agent", "Apps you let manage OpenUptime on your behalf (MCP / OAuth).": "你授权代为管理 OpenUptime 的应用（MCP / OAuth）。",
+  "Skip once": "跳过本次", "End now": "立即结束", "Cancel series": "取消系列", "Repeat": "重复", "Does not repeat": "不重复", "Daily": "每天", "Weekly": "每周", "Recurrence time zone": "重复时区", "Repeat until": "重复至",
+  "Start, end and repeat-until inputs use your browser time zone.": "开始、结束和重复截止时间均按浏览器时区输入。",
+  "Cancel future occurrences and end any active window in this series?": "取消此系列未来的维护窗口，并结束当前正在进行的窗口？",
+  "Repeats at the first start's local clock time in this zone. Duration stays fixed; skipped spring times move forward and repeated autumn times use the later occurrence.": "按首次开始时间在所选时区的当地时刻重复。实际持续时长不变；夏令时跳过的时刻向后顺延，重复的时刻选择后一次。",
+  "Choose an end within 366 days; each window may last up to 24 hours. Skip individual occurrences or cancel the series below.": "截止时间须在首次开始后的 366 天内，每次最多持续 24 小时。可跳过单次或取消整个系列。",
   // monitors
   "+ New monitor": "+ 新建监控", "New monitor": "新建监控", "Create monitor": "创建监控", "Cancel": "取消", "Close": "关闭", "What is a dependency?": "什么是依赖？", "A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.": "依赖是指这个监控所依赖的另一个监控，例如网关或你的网络。被依赖的监控宕机期间，这个监控不会重复告警同一次故障。",
   "Loading…": "加载中…", "down right now": "个正在故障", "Everything is up.": "一切正常。", "Nothing is being watched yet.": "还没有任何监控。",
