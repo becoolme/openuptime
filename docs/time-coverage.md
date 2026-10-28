@@ -26,10 +26,10 @@ Maintenance is **included**. `observedMaintenanceMs` is an overlapping label: ob
 
 ## Storage and concurrency / 存储与并发
 
-Observation append and generation updates lock the monitor in one transaction. Configuration changes increment a revision and append a control event in one transaction. Old configuration results and duplicate/older scheduled generations are discarded. A heartbeat that wins a race with a missed-heartbeat check prevents the stale miss from adding coverage. Manual checks may create fresh observations; unrecorded regional spot checks do not.
+Observation append and generation updates lock the monitor in one transaction. Configuration changes increment a revision and append a control event in one transaction. Old configuration results and duplicate/older scheduled generations are discarded. A heartbeat that wins a race with a missed-heartbeat check prevents the stale miss from adding coverage. Its committed observation also rejects a newly loaded miss until expiry, even if the handler has not updated the scheduling deadline yet. Manual checks may create fresh observations; unrecorded regional spot checks do not.
 
 Observations are kept for 35 days plus the latest older event per monitor as a boundary anchor. Expired observations never extend through missing data; the retained predecessor also prevents an old pause from reappearing after a resume is purged. Monitor/workspace deletion cascades to this history. Storage grows with check frequency (one row per recorded run); aggregate queries run inside PostgreSQL rather than loading a month's observations into an API worker. Raw-check retention does not control this separate 35-day history.
 
-写入观测与检测序号更新在同一事务内锁定监控；修改配置与增加版本号、写入控制事件也在同一事务内完成。旧配置结果、重复或过时的调度序号被拒绝。心跳先于缺失判断写入时，过时的缺失观测不会进入历史。手动完整检测可以产生新观测；单区域临时测试不会。
+写入观测与检测序号更新在同一事务内锁定监控；修改配置与增加版本号、写入控制事件也在同一事务内完成。旧配置结果、重复或过时的调度序号被拒绝。心跳先于缺失判断写入时，过时的缺失观测不会进入历史。即使心跳处理尚未更新调度截止时间，已提交的观测也会在有效期内拒绝新加载的缺失判断。手动完整检测可以产生新观测；单区域临时测试不会。
 
 保留 35 天观测及每个监控最后一条更早的事件作为时间窗边界锚点。过期观测不会延续到缺失区间；保留最后事件也避免删除恢复事件后旧暂停重新生效。删除监控/工作区时级联删除历史。存储量与检测频率成正比（每次记录的检测一行）；统计由 PostgreSQL 聚合，避免 API Worker 读取整月明细。原始检测保留设置不影响这份独立的 35 天历史。

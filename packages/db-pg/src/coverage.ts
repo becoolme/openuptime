@@ -17,6 +17,11 @@ export async function recordObservation(db: Db, snapshot: Monitor, result: { ok:
     if (last && last.observedAt > at) return false;
     // The ping fence is committed with the observation, not the later mutable lastCheckedAt/incident updates.
     if (current.type === "heartbeat" && !options.heartbeatPing && current.coverageHeartbeatVersion !== (snapshot.coverageHeartbeatVersion ?? 0)) return false;
+    // A scheduler may load the new ping version before the ping handler updates nextCheckAt.
+    // Check the committed observation under the same lock, not that mutable deadline.
+    if (current.type === "heartbeat" && !options.heartbeatPing && !result.ok
+      && last?.revision === current.coverageRevision && (last.state === "up" || last.state === "degraded")
+      && last.validUntil && last.validUntil > at) return false;
     const durationMs = current.type === "heartbeat"
       ? (current.intervalSec + current.graceSec) * 1000
       : current.intervalSec * 1000 + current.timeoutMs + 60_000;

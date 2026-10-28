@@ -80,6 +80,23 @@ describe.skipIf(!url)("bounded observation time coverage", () => {
     expect(await repo.recordObservation(loaded, { ok: false })).toBe(true);
   });
 
+  it("rejects a fresh-version miss before the ping handler updates its expired deadline", async () => {
+    const m = await monitor({ type: "heartbeat", intervalSec: 60, graceSec: 15, nextCheckAt: at(-60), runGeneration: 1 });
+    clock(0); expect(await repo.recordObservation(m, { ok: true }, { heartbeatPing: true })).toBe(true);
+    const loaded = (await repo.getMonitor(orgId, m.id, null))!;
+    expect(loaded.coverageHeartbeatVersion).toBe(1);
+    expect(loaded.nextCheckAt).toEqual(at(-60));
+    expect(loaded.lastCheckedAt).toBeNull();
+    clock(1); expect(await repo.recordObservation(loaded, { ok: false }, { generation: 1 })).toBe(false);
+    clock(74); expect(await repo.recordObservation(loaded, { ok: false }, { generation: 1 })).toBe(false);
+    expect((await db.select().from(schema.monitor).where(eq(schema.monitor.id, m.id)))[0].coverageGeneration).toBe(0);
+    // Expiry is exclusive; refusing an early miss must not consume its generation.
+    clock(75); expect(await repo.recordObservation(loaded, { ok: false }, { generation: 1 })).toBe(true);
+    const r = (await repo.timeCoverage(orgId, m.id, null, 7, at(100)))!;
+    expect(r.states.up).toBe(75000); expect(r.states.down).toBe(25000);
+    expect(await db.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, m.id))).toHaveLength(2);
+  });
+
   it("captures maintenance labels without later edits rewriting history or excluding failures", async () => {
     const m = await monitor();
     const [window] = await db.insert(schema.maintenanceWindow).values({ organizationId: orgId, name: "Upgrade", startsAt: at(-1), endsAt: at(50), monitorIds: [m.id] }).returning();
