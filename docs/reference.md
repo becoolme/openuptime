@@ -139,3 +139,9 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+### Alert routing policies
+
+An edition may implement `Entitlements.selectAlertChannels(workspaceId, input)`. The input contains the project, monitor, incident, event kind, routing time and enabled candidate channel IDs. Return a subset of those IDs; unknown IDs and disabled channels cannot become recipients. This runs for initial incident/recovery delivery and the existing reminder/escalation paths, after those paths apply their normal channel rules (reminders remain push, plus opted-in email). An exception suppresses the candidates and records a generic routing-unavailable reason, without logging provider details. Retries retain their queued channel; changing a policy does not retarget an already queued notification. Subscriber email and direct channel tests are separate from this hook.
+
+The default implementation has no policy. This is a general interface, not an on-call scheduler; an integration must validate schedule membership/ownership and present empty or unavailable coverage to operators.

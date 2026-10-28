@@ -232,7 +232,24 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
   const ev = await withProject(repo, orgId, event);
   const fallback = channels.some((c) => c.type === "email") ? await orgLang(repo, orgId) : "en";
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name, ...extra };
-  const live = channels.filter((c) => c.enabled);
+  let live = channels.filter((c) => c.enabled);
+  if (entitlements.selectAlertChannels && live.length) {
+    let selected: Set<string>;
+    let policyFailed = false;
+    try {
+      selected = new Set(await entitlements.selectAlertChannels(orgId, {
+        projectId: ev.monitor.projectId ?? null, monitorId: ev.monitor.id ?? null,
+        incidentId: ev.incident.id, kind: ev.kind, at: new Date(), channelIds: live.map((c) => c.id),
+      }));
+    } catch {
+      selected = new Set(); policyFailed = true;
+    }
+    const why = policyFailed ? "skipped: alert routing policy unavailable" : "skipped: not selected by alert routing policy";
+    const excluded = live.filter((c) => !selected.has(c.id));
+    await repo.logDeliveries(excluded.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: why, statusMessage: why })));
+    // Intersect with existing candidates; a policy cannot add another project's channel or enable a disabled one.
+    live = live.filter((c) => selected.has(c.id));
+  }
   const off = channels.filter((c) => !c.enabled);
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
   // a phone is pushed once per event, however many push channels reach it

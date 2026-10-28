@@ -26,6 +26,14 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  { id: "alert-routing-policy", date: "2026-10-28", edition: "community",
+    title: { en: "Alert routing policy hook", zh: "告警路由策略扩展" },
+    summary: { en: "Custom deployments can select which eligible channels receive an incident notification.", zh: "定制部署可以从符合条件的渠道中选择事件通知接收方。" },
+    points: [
+      { en: "Policies run before deliveries are queued, record skipped channels, and preserve the original recipient when retrying.", zh: "策略在投递入队前执行，记录跳过的渠道，并在重试时保留原接收方。" },
+      { en: "The default routing is unchanged; the hook does not add on-call schedules or rotation management.", zh: "默认路由保持原样；扩展接口不包含值班排班或轮换管理。" },
+    ],
+  },
   {
     id: "websocket-monitors",
     date: "2026-10-28",

@@ -8,6 +8,12 @@ import { effectiveRegions } from "./regions";
  * Usage is measured in credits: one check that makes an outbound request is one credit (see `creditCost`).
  */
 export interface Entitlements {
+  /** Optional routing policy: return a subset of candidate IDs. Initial delivery only; queued retries keep their recipient. */
+  selectAlertChannels?(workspaceId: string, input: {
+    projectId: string | null; monitorId: string | null; incidentId: string;
+    kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";
+    at: Date; channelIds: string[];
+  }): Promise<string[]>;
   /**
    * Take `credits` for work that is about to run. Resolves with how many were granted, between 0 and `credits`:
    * fewer than asked means the allowance for the current period is used up and the rest must not run.
