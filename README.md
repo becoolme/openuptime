@@ -6,9 +6,9 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 
 [Hosted version](https://openuptime.app) · [Docs](https://openuptime.app/docs/self-host) · [Reference](docs/reference.md) · [MIT license](LICENSE)
 
-- HTTP, TCP, DNS, heartbeat, PostgreSQL, MySQL and Redis checks, with keyword matching and slow-response alerts
-- Incidents, maintenance windows and public status pages with email / RSS subscriptions
-- Alerts to Slack, Lark / Feishu, Telegram, PagerDuty, webhooks and email
+- HTTP, TCP, DNS, heartbeat, PostgreSQL, MySQL, Redis and WebSocket checks, with keyword matching and slow-response alerts
+- Incidents with acknowledgement, assignment and postmortems; maintenance windows and public status pages with email / RSS subscriptions
+- Alerts to Slack, Lark / Feishu, Telegram, PagerDuty, webhooks and email, with repeat reminders and escalation
 - Workspaces, projects, roles, API keys, an MCP server for agents, JSON import / export
 
 | Part | Stack |
@@ -219,7 +219,7 @@ plans, billing and a few features that live only in that build; it plugs into th
 | Limits | None: no plans, quotas or metering | Free plan, paid plans from $5/month ([pricing](https://openuptime.app/pricing)); monitors, checks, emails and history length depend on the plan |
 | Running it | You: Postgres, the Worker or container, a mail provider, backups, upgrades | We do; nothing to install |
 | SSL certificate monitoring (expiry alerts, `ssl` monitor type) | Not included | Lite and above |
-| Custom domain for a status page | Not included | Team |
+| Custom domain for a status page | Not included | Every paid plan (Lite and above), plus early-access workspaces |
 | Where your data lives | Your database | Ours (Postgres on managed hosting) |
 
 Pick self-hosting if you want to own the data and the infrastructure, or have no limits to worry about. Pick hosted if
