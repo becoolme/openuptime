@@ -70,7 +70,15 @@ describe("status access boundary", () => {
     const update = { status: "investigating", body: "Detail" };
     await notifyIncidentUpdate(repo, inc, update, { ...unmetered, spendEmails: spend, canNotifySubscriber: async () => false });
     expect(spend).not.toHaveBeenCalled();
-    await expect(notifyIncidentUpdate(repo, inc, update, { ...unmetered, spendEmails: spend, canNotifySubscriber: async () => { throw new Error("Policy unavailable"); } })).rejects.toThrow("Policy unavailable");
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(notifyIncidentUpdate(repo, inc, update, { ...unmetered, spendEmails: spend, canNotifySubscriber: async () => { throw new Error("Policy unavailable: secret"); } })).resolves.toBeUndefined();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith("incident update subscriber policy unavailable");
+    } finally {
+      fetch.mockRestore(); log.mockRestore();
+    }
     expect(spend).not.toHaveBeenCalled();
   });
 });
