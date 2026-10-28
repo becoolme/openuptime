@@ -70,7 +70,8 @@ function build(loc) {
   );
   // pages that exist in this language keep the visitor in it; the rest are shared
   if (loc.code === "zh-CN") html = html.replace(ZH_LINKS, 'href="/zh-Hans/$1"');
-  html = html.replace(/href="\/"/g, `href="${loc.path}"`);
+  // home links stay in this language; the language menu (data-l) keeps pointing at each language
+  html = html.replace(/href="\/"(?![^>]*data-l=)/g, `href="${loc.path}"`);
   html = html.replace("</head>", `${headTags(html, loc)}\n</head>`);
   return html;
 }

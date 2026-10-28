@@ -43,11 +43,12 @@ const { title = "OpenUptime", router = true, noindex = false, description = "" }
         }
         document.documentElement.lang = lg;
         if (pm && pm[1] === "zh-Hans") {
-          // links written as /app, /login ... keep the visitor inside their language
+          // links written as /app, /login ... keep the visitor inside their language; a link with hreflang (the language
+          // menu) already names its language
           var skip = /^\/(zh-Hans|ja|es|api|_astro)(\/|$|\?|#)|\.[a-z0-9]+([?#]|$)/i;
           var fix = function (a) {
             var h = a.getAttribute("href");
-            if (h && h.charAt(0) === "/" && h.charAt(1) !== "/" && !skip.test(h)) a.setAttribute("href", "/zh-Hans" + (h === "/" ? "" : h));
+            if (h && !a.hasAttribute("hreflang") && h.charAt(0) === "/" && h.charAt(1) !== "/" && !skip.test(h)) a.setAttribute("href", "/zh-Hans" + (h === "/" ? "" : h));
           };
           var sweep = function (n) {
             if (n.nodeType !== 1) return;

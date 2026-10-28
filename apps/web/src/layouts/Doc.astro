@@ -6,6 +6,11 @@ import { SITE_SUFFIX, scriptJson } from "../lib/seo-i18n";
 // `titleZh` / `descriptionZh` are what search results and link previews show on /zh-Hans/ pages. The page is built once,
 // in English; the Chinese metadata rides along in a JSON block that the /zh-Hans route swaps in (see localizeSeoHtml).
 const { title, titleZh, descriptionZh, updated, toc, description } = Astro.props as { title: string; titleZh?: string; descriptionZh?: string; updated?: string; toc?: boolean; description?: string };
+// The language menu is plain links so crawlers find every language version. English and Chinese keep the page you are
+// reading; ja / es exist for the landing page only. The /zh-Hans copy is this same HTML, so the paths come from the English
+// one (at build time the path ends in .html).
+const page = Astro.url.pathname.replace(/^\/zh-Hans(?=\/|$)/, "").replace(/(\/index)?\.html$|\/$/, "") || "/";
+const langHref: Record<string, string> = { en: page, "zh-CN": page === "/" ? "/zh-Hans" : "/zh-Hans" + page, ja: "/ja", es: "/es" };
 const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title) + SITE_SUFFIX, description: descriptionZh ?? description ?? "" }) : null;
 ---
 <Base title={`${title} · OpenUptime`} description={description} router={false}>
@@ -58,10 +63,10 @@ const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title)
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <ul class="lang-menu" id="lang-menu" role="menu">
-            <li><button type="button" role="menuitemradio" data-l="en">English</button></li>
-            <li><button type="button" role="menuitemradio" data-l="zh-CN">简体中文</button></li>
-            <li><button type="button" role="menuitemradio" data-l="ja">日本語</button></li>
-            <li><button type="button" role="menuitemradio" data-l="es">Español</button></li>
+            <li><a href={langHref.en} hreflang="en" role="menuitemradio" data-l="en">English</a></li>
+            <li><a href={langHref["zh-CN"]} hreflang="zh-Hans" role="menuitemradio" data-l="zh-CN">简体中文</a></li>
+            <li><a href={langHref.ja} hreflang="ja" role="menuitemradio" data-l="ja">日本語</a></li>
+            <li><a href={langHref.es} hreflang="es" role="menuitemradio" data-l="es">Español</a></li>
           </ul>
         </div>
       </div>
@@ -150,7 +155,7 @@ const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title)
       var btn = document.getElementById("lang"), menu = document.getElementById("lang-menu");
       if (!btn || !menu) return;
       var cur = document.documentElement.lang;
-      menu.querySelectorAll("button").forEach(function (b) {
+      menu.querySelectorAll("a").forEach(function (b) {
         var on = b.dataset.l === cur;
         b.setAttribute("aria-checked", String(on));
         if (on) document.getElementById("lang-cur").textContent = b.textContent;
@@ -158,13 +163,12 @@ const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title)
       function close() { menu.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
       btn.addEventListener("click", function (e) { e.stopPropagation(); btn.setAttribute("aria-expanded", String(menu.classList.toggle("open"))); });
       menu.addEventListener("click", function (e) {
-        var b = e.target.closest("button[data-l]");
-        if (!b) return;
-        var l = b.dataset.l, p = location.pathname.replace(/^\/zh-Hans(?=\/|$)/, "") || "/";
+        var a = e.target.closest("a[data-l]");
+        if (!a) return;
+        var l = a.dataset.l;
         document.cookie = "ou_lang=" + l + ";path=/;max-age=31536000;samesite=lax";
-        // ja / es exist for the landing page only; English and Chinese keep the page you are reading
-        var to = l === "ja" ? "/ja" : l === "es" ? "/es" : l === "zh-CN" ? "/zh-Hans" + (p === "/" ? "" : p) : p;
-        location.assign(to + (l === "ja" || l === "es" ? "" : location.search + location.hash));
+        // the link then navigates by itself; English and Chinese also keep the query and the section you are on
+        if (l === "en" || l === "zh-CN") a.href = a.getAttribute("href").split(/[?#]/)[0] + location.search + location.hash;
       });
       document.addEventListener("click", close);
       document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
@@ -259,10 +263,10 @@ const zhMeta = titleZh || descriptionZh ? scriptJson({ title: (titleZh ?? title)
   .lang-btn[aria-expanded=true] .chev { transform: rotate(180deg); }
   .lang-menu { position: absolute; right: 0; bottom: calc(100% + 6px); min-width: 150px; padding: 5px; margin: 0; list-style: none; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,.14); z-index: 60; display: none; }
   .lang-menu.open { display: block; }
-  .lang-menu button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: 14px var(--sans); text-align: left; cursor: pointer; color: var(--ink); }
-  .lang-menu button:hover { background: rgba(127,127,127,.12); }
-  .lang-menu button[aria-checked=true] { font-weight: 600; }
-  .lang-menu button[aria-checked=true]::after { content: "✓"; color: var(--accent); }
+  .lang-menu a { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: 14px var(--sans); text-align: left; cursor: pointer; color: var(--ink); text-decoration: none; }
+  .lang-menu a:hover { background: rgba(127,127,127,.12); }
+  .lang-menu a[aria-checked=true] { font-weight: 600; }
+  .lang-menu a[aria-checked=true]::after { content: "✓"; color: var(--accent); }
   @media (max-width: 760px) { .sf-grid { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 560px) { .doc { padding-top: 32px; } .doc h1 { font-size: 32px; } }
 </style>

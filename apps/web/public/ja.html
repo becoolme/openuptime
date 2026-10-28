@@ -85,10 +85,10 @@ nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 78%,
 .lang-btn[aria-expanded=true] .chev{transform:rotate(180deg)}
 .lang-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:150px;padding:5px;margin:0;list-style:none;border-radius:12px;border:1px solid var(--line);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:60;display:none}
 .lang-menu.open{display:block}
-.lang-menu button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:0;border-radius:8px;background:none;font-size:14px;text-align:left;cursor:pointer;color:var(--ink)}
-.lang-menu button:hover{background:var(--bg-soft,rgba(127,127,127,.12))}
-.lang-menu button[aria-checked=true]{font-weight:600}
-.lang-menu button[aria-checked=true]::after{content:"✓";color:var(--accent,#0f9d58)}
+.lang-menu a{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:0;border-radius:8px;background:none;font-size:14px;text-align:left;cursor:pointer;color:var(--ink)}
+.lang-menu a:hover{background:var(--bg-soft,rgba(127,127,127,.12))}
+.lang-menu a[aria-checked=true]{font-weight:600}
+.lang-menu a[aria-checked=true]::after{content:"✓";color:var(--accent,#0f9d58)}
 .icon-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer;transition:.15s}
 .icon-btn:hover{border-color:var(--line-2)}
 .icon-btn svg{width:17px;height:17px}
@@ -703,10 +703,10 @@ html,body{overflow-x:clip}
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <ul class="lang-menu" id="lang-menu" role="menu">
-      <li><button type="button" role="menuitemradio" data-l="en">English</button></li>
-      <li><button type="button" role="menuitemradio" data-l="zh-CN">简体中文</button></li>
-      <li><button type="button" role="menuitemradio" data-l="ja">日本語</button></li>
-      <li><button type="button" role="menuitemradio" data-l="es">Español</button></li>
+      <li><a href="/" hreflang="en" role="menuitemradio" data-l="en">English</a></li>
+      <li><a href="/zh-Hans" hreflang="zh-Hans" role="menuitemradio" data-l="zh-CN">简体中文</a></li>
+      <li><a href="/ja" hreflang="ja" role="menuitemradio" data-l="ja">日本語</a></li>
+      <li><a href="/es" hreflang="es" role="menuitemradio" data-l="es">Español</a></li>
     </ul>
   </div>
     </div>
@@ -846,7 +846,7 @@ function setLang(l){
   document.title=d.title||EN.title;
   document.querySelector('meta[name=description]').content=d.desc||EN.desc;
   root.setAttribute('lang',l);
-  document.querySelectorAll('#lang-menu button').forEach(function(b){
+  document.querySelectorAll('#lang-menu a').forEach(function(b){
     var on=b.dataset.l===l;b.setAttribute('aria-checked',on);
     if(on)document.getElementById('lang-cur').textContent=b.textContent;
   });
@@ -888,7 +888,8 @@ function renderMonitors(){
   var btn=document.getElementById('lang'),menu=document.getElementById('lang-menu');
   function close(){menu.classList.remove('open');btn.setAttribute('aria-expanded','false')}
   btn.addEventListener('click',function(e){e.stopPropagation();var o=menu.classList.toggle('open');btn.setAttribute('aria-expanded',o)});
-  menu.addEventListener('click',function(e){var b=e.target.closest('button[data-l]');if(b){var l=b.dataset.l,R={'zh-CN':'zh-Hans',ja:'ja',es:'es'};document.cookie='ou_lang='+l+';path=/;max-age=31536000;samesite=lax';location.assign(R[l]?'/'+R[l]:'/')}});
+  /* the options are real links (crawlers follow them to each language); a click also remembers the choice */
+  menu.addEventListener('click',function(e){var a=e.target.closest('a[data-l]');if(a)document.cookie='ou_lang='+a.dataset.l+';path=/;max-age=31536000;samesite=lax'});
   document.addEventListener('click',close);
   document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
 })();
