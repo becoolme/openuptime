@@ -17,12 +17,12 @@ type History = { items: { id: string; number?: number | null; rootCause?: string
 const before = Astro.url.searchParams.get("before");
 // the two reads do not depend on each other
 type Maint = { items: { id: string; name: string; startsAt: string; endsAt: string; state: "scheduled" | "active" | "completed" }[] };
-const [{ status, data }, hist, maint] = await Promise.all([
-  apiFetch<Status>(`/api/public/status/${slug}`),
-  apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`),
-  apiFetch<Maint>(`/api/public/status/${slug}/maintenance`),
+const [{ status, data, privateResponse }, hist, maint] = await Promise.all([
+  apiFetch<Status>(`/api/public/status/${slug}`, Astro.request),
+  apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`, Astro.request),
+  apiFetch<Maint>(`/api/public/status/${slug}/maintenance`, Astro.request),
 ]);
-if (status === 404 || !data) return new Response("Not found", { status: 404 });
+if (status === 404 || !data) return new Response("Not found", { status: 404, headers: { "cache-control": "private, no-store" } });
 const history = hist.data ?? { items: [], next: null };
 // windows that are running or still ahead; finished ones are not news
 const windows = (maint.data?.items ?? []).filter((w) => w.state !== "completed");
@@ -61,7 +61,7 @@ const dayClass = (u: number) => (u >= okAt ? "" : u >= warnAt ? "w" : "d");
 const hideBrand = !!data.page.hideBranding;
 // a page that links to its own website shows that website's logo in place of OpenUptime's mark
 const logo = siteLogo(data.page.externalUrl);
-Astro.response.headers.set("cache-control", "public, max-age=30, s-maxage=30");
+Astro.response.headers.set("cache-control", privateResponse || hist.privateResponse || maint.privateResponse ? "private, no-store" : "public, max-age=30, s-maxage=30");
 ---
 <Base title={`${data.page.title} · Status`}>
   <Fragment slot="head">

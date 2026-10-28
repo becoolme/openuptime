@@ -136,6 +136,15 @@ async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: 
   return { send: subs.slice(0, granted), skipped: subs.length - granted };
 }
 
+/** Authorization is separate from quota: policy failure must never fall back to sending. */
+async function subscriberAllowance(entitlements: Entitlements, orgId: string, subs: SubscriberTarget[]) {
+  const allowed: SubscriberTarget[] = [];
+  for (const sub of subs) {
+    if (!entitlements.canNotifySubscriber || await entitlements.canNotifySubscriber(orgId, sub)) allowed.push(sub);
+  }
+  return withinEmails(entitlements, orgId, allowed);
+}
+
 /** Attempts per alert, the first one included. The first retry is queued a minute after the failure, the next five minutes later. */
 export const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_SEC = 300;
@@ -459,7 +468,7 @@ async function mailSubscribers(
 async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitlements: Entitlements) {
   if (!ev.monitor.id) return null;
   const all = await repo.subscribersFor(orgId, ev.monitor.id);
-  const { send: subs, skipped } = await withinEmails(entitlements, orgId, all);
+  const { send: subs, skipped } = await subscriberAllowance(entitlements, orgId, all);
   const opened = ev.kind === "incident.opened";
   const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
   const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, orgId), {
@@ -478,7 +487,7 @@ export async function notifyIncidentUpdate(
   update: { status: string; body: string },
   entitlements: Entitlements = unmetered,
 ) {
-  const { send: subs } = await withinEmails(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId));
+  const { send: subs } = await subscriberAllowance(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId));
   const label = (lang: Lang) => tr(lang, update.status === "resolved" ? "Resolved" : update.status[0].toUpperCase() + update.status.slice(1));
   await mailSubscribers(subs, await mayHideBranding(entitlements, inc.organizationId), {
     subject: (p, lang) => `[${p}] ${label(lang)}: ${inc.title}`,
@@ -499,7 +508,7 @@ const REMINDER_ATTEMPTS = 3;
  */
 export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitlements = unmetered) {
   for (const r of await repo.claimMaintenanceReminders(20)) {
-    const { send: subs } = await withinEmails(entitlements, r.page.organizationId, r.subscribers);
+    const { send: subs } = await subscriberAllowance(entitlements, r.page.organizationId, r.subscribers);
     // the plan allows no more mail: nothing to send and nothing to retry, so the claim stays
     if (!subs.length) continue;
     const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {

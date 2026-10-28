@@ -201,7 +201,27 @@ async function rssFeed(c: Context<AppEnv>) {
   return c.body(xml, 200, { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=60" });
 }
 
+/** All slug routes, including subscriptions and machine-readable feeds, share this boundary. */
+async function statusAccess(c: Context<AppEnv>, next: () => Promise<void>) {
+  const policy = c.get("entitlements").statusPageAccess;
+  const slug = c.req.param("slug");
+  if (!policy || !slug || slug === "_") return next();
+  // No shared response is safe while a deployment uses an access policy, including not-found/errors.
+  c.set("statusResponsePrivate", true);
+  c.header("cache-control", "private, no-store");
+  const page = await c.get("repo").statusPageBySlug(slug);
+  if (!page) return c.json({ error: "Not found" }, 404);
+  const access = await policy(page, c.req.raw);
+  if (!access.allowed) return c.json({ error: "Not found" }, 404);
+  // Always bypass external caches for policy-enabled deployments: a formerly public page may change access.
+  await next();
+  c.header("cache-control", "private, no-store");
+  c.header("vary", "Cookie, Authorization");
+}
+
 export const publicStatus = new Hono<AppEnv>()
+  .use("/:slug", statusAccess)
+  .use("/:slug/*", statusAccess)
   // one-line state for embeds; small and cacheable
   .get("/:slug/summary", async (c) => {
     const repo = c.get("repo");
@@ -248,6 +268,7 @@ export const publicStatus = new Hono<AppEnv>()
         return { items, next: rows.length > HISTORY_PAGE ? items[items.length - 1].startedAt : null };
       },
       waitUntilOf(c),
+      { bypass: c.get("statusResponsePrivate") },
     );
     return body ? c.json(body) : c.json({ error: "Not found" }, 404);
   })
@@ -383,6 +404,7 @@ export const publicStatus = new Hono<AppEnv>()
         };
       },
       waitUntilOf(c),
+      { bypass: c.get("statusResponsePrivate") },
     );
     return body ? c.json(body) : c.json({ error: "Not found" }, 404);
   });

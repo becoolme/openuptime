@@ -83,6 +83,7 @@ export type RequestPrincipal = Readonly<RequestIdentity & {
 export type Variables = {
   /** Present only after requireOrg has successfully verified identity, membership and selected project access. */
   requestPrincipal?: RequestPrincipal;
+  statusResponsePrivate?: boolean;
   repo: Repo;
   database: Database;
   auth: Auth;

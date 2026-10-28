@@ -167,3 +167,9 @@ Both migration entry points validate that the database's applied timestamps and 
 ### 事务限制
 
 两个迁移入口都在同一个事务中执行所有待执行迁移，因此不支持 `CREATE INDEX CONCURRENTLY` 等不能在事务内运行的语句，同一次运行中也不能使用 `ALTER TYPE … ADD VALUE` 刚新增的枚举值。这类变更请拆成单独的部署。
+
+### Status distribution policies
+
+Edition implementations may supply `Entitlements.statusPageAccess(page, request)` and `canNotifySubscriber(workspaceId, subscriber)`. The default has neither hook and keeps public behavior. The access hook runs before board/history cache reads on all slug routes, including feeds, badges and subscription creation. Denials return 404; exceptions do not allow access. Deployments with a policy bypass shared caches and use private/no-store responses even for publicly allowed pages. SSR forwards visitor cookies. Token confirmation/unsubscribe routes remain available; subscriber eligibility is rechecked before incident/update/maintenance emails and before spending quota.
+
+These are extension interfaces, not a private-status product. A deployment adding access controls must handle identity/invitations, authorize subscriber email ownership, purge any already-cached public response when enabling the policy, and apply the same policy to its own custom-domain proxies.
