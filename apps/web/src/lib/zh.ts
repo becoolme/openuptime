@@ -1,5 +1,8 @@
 /** Simplified Chinese strings, keyed by the English source text. */
 export const zh: Record<string, string> = {
+  "Publish alerts to an ntfy topic.": "将告警发布到 ntfy 主题。",
+  "ntfy server URL": "ntfy 服务器 URL", "Topic": "主题", "Access token (optional)": "访问令牌（可选）", "Notification priority": "通知优先级",
+
   // nav / chrome
   Monitors: "监控", Incidents: "事件", "Status pages": "状态页", Alerting: "告警", Team: "团队", "API keys": "API 密钥", Settings: "设置", "Account settings": "账户设置",
   "Sign out": "退出登录", "Sign in": "登录", "Create account": "创建账号", "Create an account": "创建账号",

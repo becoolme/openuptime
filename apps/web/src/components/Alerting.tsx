@@ -5,6 +5,7 @@ import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 
 const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
+  { id: "ntfy", label: "ntfy", desc: "Publish alerts to an ntfy topic." },
   { id: "slack", label: "Slack", desc: "Post to a channel with an incoming webhook." },
   { id: "lark", label: "Lark / Feishu", desc: "Post to a group with a custom bot." },
   { id: "email", label: "Email", desc: "Send alerts to an address or on-call alias." },
@@ -18,6 +19,7 @@ const svg = (d: React.ReactNode) => (
 );
 /** Generic glyphs per channel type (not brand logos). */
 const ICONS: Record<Channel["type"], React.ReactNode> = {
+  ntfy: svg(<><path d="M6 16V9a6 6 0 0 1 12 0v7l2 2H4l2-2M10 21h4" /></>),
   slack: svg(<path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16" />),
   lark: svg(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />),
   email: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>),
@@ -31,7 +33,7 @@ const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c
 
 export default function Alerting() {
   const [items, setItems] = useState<Channel[] | null>(null);
-  const [f, setF] = useState({ type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", auto: false });
+  const [f, setF] = useState({ type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", auto: false });
   const [err, setErr] = useState("");
   const [busy, run] = useBusy();
   const [removing, setRemoving] = useState("");
@@ -57,12 +59,12 @@ export default function Alerting() {
   const load = () => api.channels().then(setItems);
   useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
-  const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", auto: false };
+  const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", auto: false };
   const openAdd = () => { setErr(""); setEditId(""); setF(blank); setAdding(true); };
   const openEdit = (c: Channel) => {
     setErr("");
     setEditId(c.id);
-    setF({ ...blank, type: c.type, name: c.name, url: c.config.url ?? "", to: c.config.to ?? "", botToken: c.config.botToken ?? "", chatId: c.config.chatId ?? "", routingKey: c.config.routingKey ?? "", secret: c.config.secret ?? "", auto: !!c.autoEnable });
+    setF({ ...blank, type: c.type, name: c.name, url: c.config.url ?? "", to: c.config.to ?? "", botToken: c.config.botToken ?? "", chatId: c.config.chatId ?? "", routingKey: c.config.routingKey ?? "", secret: c.config.secret ?? "", topic: c.config.topic ?? "", token: c.config.token ?? "", priority: c.config.priority ?? "3", auto: !!c.autoEnable });
     setAdding(true);
   };
   async function add(e: React.SyntheticEvent) {
@@ -73,6 +75,7 @@ export default function Alerting() {
         f.type === "email" ? { to: f.to }
         : f.type === "telegram" ? { botToken: f.botToken, chatId: f.chatId }
         : f.type === "pagerduty" ? { routingKey: f.routingKey }
+        : f.type === "ntfy" ? { url: f.url || "https://ntfy.sh", topic: f.topic, token: f.token, priority: f.priority }
         : f.type === "push" ? {}
         : f.type === "lark" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
         : { url: f.url };
@@ -221,6 +224,12 @@ export default function Alerting() {
             {(f.type === "slack" || f.type === "webhook" || f.type === "lark") && (
               <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
             )}
+            {f.type === "ntfy" && <>
+              <label className="fld">{t("ntfy server URL")}<input className="in" type="url" value={f.url} placeholder="https://ntfy.sh" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
+              <label className="fld">{t("Topic")}<input className="in" required pattern="[A-Za-z0-9_-]{1,64}" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })} /></label>
+              <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
+              <label className="fld">{t("Notification priority")}<select className="in" value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>{["1", "2", "3", "4", "5"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
+            </>}
             {f.type === "lark" && (
               <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>
             )}

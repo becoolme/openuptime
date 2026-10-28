@@ -8,7 +8,7 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 
 - HTTP, TCP, DNS, heartbeat, PostgreSQL, MySQL and Redis checks, with keyword matching and slow-response alerts
 - Incidents, maintenance windows and public status pages with email / RSS subscriptions
-- Alerts to Slack, Lark / Feishu, Telegram, PagerDuty, webhooks and email
+- Alerts to Slack, ntfy, Lark / Feishu, Telegram, PagerDuty, webhooks and email
 - Workspaces, projects, roles, API keys, an MCP server for agents, JSON import / export
 
 | Part | Stack |

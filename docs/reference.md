@@ -90,6 +90,7 @@ Each public status page offers email subscriptions (double opt-in, one-click uns
 | Type | Config |
 | --- | --- |
 | Slack | incoming webhook URL |
+| ntfy | server origin URL (for example `https://ntfy.sh`), topic, optional bearer access token, priority string `1`–`5` (default `3`). Topic: 1–64 letters, digits, `_` or `-`. Redirects are refused; the public-target network policy applies to self-hosted servers too. Long messages are truncated below 4096 UTF-8 bytes. |
 | Lark / Feishu | custom bot webhook URL (`open.larksuite.com` or `open.feishu.cn`), optional signing secret |
 | Webhook | URL (receives a JSON POST) |
 | Telegram | bot token + chat ID |

@@ -8,7 +8,7 @@ import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
 
-const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push"] as const;
+const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "ntfy"] as const;
 type ChannelType = (typeof TYPES)[number];
 
 const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL");
@@ -16,6 +16,12 @@ const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test
 const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
   email: z.object({ to: z.string().trim().max(254).email() }),
   slack: z.object({ url }),
+  ntfy: z.object({
+    url: url.refine((v) => { const u = new URL(v); return u.pathname === "/" && !u.search && !u.hash && !u.username && !u.password; }, "Use the server origin without a topic, query or credentials"),
+    topic: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Use 1–64 letters, digits, underscores or hyphens"),
+    token: z.string().max(500).regex(/^[^\r\n]*$/).optional(),
+    priority: z.enum(["1", "2", "3", "4", "5"]).default("3"),
+  }),
   webhook: z.object({ url }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),
   telegram: z.object({ botToken: z.string().trim().min(1).max(200), chatId: z.string().trim().min(1).max(100) }),
