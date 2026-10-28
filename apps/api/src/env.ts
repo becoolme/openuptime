@@ -69,6 +69,7 @@ export type Bindings = {
 export type Auth = ReturnType<typeof createAuth>;
 
 export type Variables = {
+  statusResponsePrivate?: boolean;
   repo: Repo;
   database: Database;
   auth: Auth;

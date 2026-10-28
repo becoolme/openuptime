@@ -1,4 +1,4 @@
-import type { Monitor } from "@openuptime/repo";
+import type { Monitor, StatusPage, SubscriberTarget } from "@openuptime/repo";
 import { effectiveRegions } from "./regions";
 
 /**
@@ -8,6 +8,10 @@ import { effectiveRegions } from "./regions";
  * Usage is measured in credits: one check that makes an outbound request is one credit (see `creditCost`).
  */
 export interface Entitlements {
+  /** Optional access policy, evaluated before every status response and before shared caches. Missing means public. */
+  statusPageAccess?(page: StatusPage, request: Request): Promise<{ allowed: boolean }>;
+  /** Recheck a subscriber immediately before notification. Missing means allowed; exceptions fail closed. */
+  canNotifySubscriber?(workspaceId: string, subscriber: SubscriberTarget): Promise<boolean>;
   /**
    * Take `credits` for work that is about to run. Resolves with how many were granted, between 0 and `credits`:
    * fewer than asked means the allowance for the current period is used up and the rest must not run.

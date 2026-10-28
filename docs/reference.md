@@ -139,3 +139,9 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+### Status distribution policies
+
+Edition implementations may supply `Entitlements.statusPageAccess(page, request)` and `canNotifySubscriber(workspaceId, subscriber)`. The default has neither hook and keeps public behavior. The access hook runs before board/history cache reads on all slug routes, including feeds, badges and subscription creation. Denials return 404; exceptions do not allow access. Deployments with a policy bypass shared caches and use private/no-store responses even for publicly allowed pages. SSR forwards visitor cookies. Token confirmation/unsubscribe routes remain available; subscriber eligibility is rechecked before incident/update/maintenance emails and before spending quota.
+
+These are extension interfaces, not a private-status product. A deployment adding access controls must handle identity/invitations, authorize subscriber email ownership, purge any already-cached public response when enabling the policy, and apply the same policy to its own custom-domain proxies.

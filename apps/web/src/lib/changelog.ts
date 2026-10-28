@@ -26,6 +26,14 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  { id: "status-delivery-policy", date: "2026-10-28", edition: "community",
+    title: { en: "Status delivery policy hooks", zh: "状态页分发策略扩展" },
+    summary: { en: "Custom deployments can apply one access policy to status pages, feeds and subscriber notifications.", zh: "定制部署可以为状态页、订阅源和订阅通知设置统一的访问策略。" },
+    points: [
+      { en: "Policy-enabled status responses bypass shared caches, and server-rendered pages preserve visitor cookies and private caching rules.", zh: "启用策略的状态页响应绕过共享缓存，服务端渲染会保留访客 Cookie 并遵循私有缓存规则。" },
+      { en: "Default Community pages remain public; these hooks do not add membership, invitations or a private-page UI.", zh: "Community 默认状态页仍公开；扩展接口不包含成员管理、邀请或私有页面界面。" },
+    ],
+  },
   {
     id: "websocket-monitors",
     date: "2026-10-28",

@@ -12,10 +12,10 @@ export const PRODUCT_URL: string =
 // (in `astro dev` the binding points at a Worker that is not running, so use API_ORIGIN there)
 const binding = import.meta.env.PROD ? (env as { API?: { fetch: typeof fetch } }).API : undefined;
 
-export async function apiFetch<T>(path: string, request?: Request): Promise<{ status: number; data: T | null }> {
+export async function apiFetch<T>(path: string, request?: Request): Promise<{ status: number; data: T | null; privateResponse: boolean }> {
   const init = { headers: { cookie: request?.headers.get("cookie") ?? "" } };
   const res = binding ? await binding.fetch(`https://openuptime.internal${path}`, init) : await fetch(`${API_ORIGIN}${path}`, init);
-  return { status: res.status, data: res.ok ? ((await res.json()) as T) : null };
+  return { status: res.status, privateResponse: /private|no-store/i.test(res.headers.get("cache-control") ?? ""), data: res.ok ? ((await res.json()) as T) : null };
 }
 
 /** Fetches several API GETs in parallel for SSR; failed ones are simply left out (the client falls back to its own request). */

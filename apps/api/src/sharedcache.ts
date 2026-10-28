@@ -46,7 +46,8 @@ export function waitUntilOf(c: { executionCtx: { waitUntil(p: Promise<unknown>):
 export function sharedCache<V>(name: string, ttlMs: number, max = 500) {
   const memory = ttlCache<V>(ttlMs, max);
   return {
-    async cached(key: string, load: () => Promise<V | undefined>, waitUntil?: WaitUntil): Promise<V | undefined> {
+    async cached(key: string, load: () => Promise<V | undefined>, waitUntil?: WaitUntil, options?: { bypass?: boolean }): Promise<V | undefined> {
+      if (options?.bypass) return load();
       const mem = memory.get(key);
       if (mem !== undefined) return mem;
       const store = ttlMs > 0 ? edge : undefined;
