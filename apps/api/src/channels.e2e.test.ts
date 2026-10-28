@@ -1,5 +1,7 @@
 import { openDatabase } from "@openuptime/db-pg";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
 import { createApp } from "./app";
 
 // Runs only when TEST_DATABASE_URL points at a database (shared with the other end-to-end tests).
@@ -23,6 +25,14 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
       const r = await raw(`/api${path}`, { method, headers: { cookie, "content-type": "application/json", ...(project ? { "x-project-id": project } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
       return { status: r.status, body: (await r.json().catch(() => null)) as any };
     };
+    const teams = await call("POST", "/channels", { type: "teams", name: "Teams", config: { url: "https://teams.com/api/webhooks/123/test-token", ignored: "drop" } });
+    expect(teams.status).toBe(201);
+    expect(teams.body.config).toEqual({ url: "https://teams.com/api/webhooks/123/test-token" });
+    expect((await call("GET", "/channels")).body).toContainEqual(expect.objectContaining({ id: teams.body.id, type: "teams" }));
+    expect((await call("PATCH", `/channels/${teams.body.id}`, { config: { url: "https://teams.com/api/webhooks/123/replacement" } })).status).toBe(200);
+    expect((await call("POST", "/channels", { type: "teams", name: "Missing", config: {} })).status).toBe(400);
+    expect((await call("POST", "/channels", { type: "teams", name: "Private", config: { url: "http://127.0.0.1/hook" } })).status).toBe(400);
+    expect((await call("DELETE", `/channels/${teams.body.id}`)).status).toBe(204);
     const monitor = { name: "Site", type: "http", target: "https://example.com" };
 
     const plain = (await call("POST", "/channels", { type: "email", name: "Plain", config: { to: "a@example.com" } })).body;

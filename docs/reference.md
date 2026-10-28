@@ -90,6 +90,7 @@ Each public status page offers email subscriptions (double opt-in, one-click uns
 | Type | Config |
 | --- | --- |
 | Slack | incoming webhook URL |
+| Microsoft Teams | Workflow webhook URL accepting an Adaptive Card message envelope. Use “When a Teams webhook request is received” with “Anyone” authentication; authenticated tenant/user triggers and legacy MessageCard connectors are not supported. A successful delivery means the workflow accepted the request, not that its later posting action completed. |
 | Lark / Feishu | custom bot webhook URL (`open.larksuite.com` or `open.feishu.cn`), optional signing secret |
 | Webhook | URL (receives a JSON POST) |
 | Telegram | bot token + chat ID |

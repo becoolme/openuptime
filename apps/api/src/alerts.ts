@@ -328,6 +328,17 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       need(cfg.url, "webhook URL");
       await post(cfg.url!, { text });
       break;
+    case "teams": {
+      need(cfg.url, "webhook URL");
+      // Workflow webhooks accept the Adaptive Card message envelope.
+      const content = text.length <= 4000 ? text : `${text.slice(0, 3999).replace(/[\uD800-\uDBFF]$/, "")}…`;
+      await post(cfg.url!, { type: "message", attachments: [{
+        contentType: "application/vnd.microsoft.card.adaptive", contentUrl: null,
+        content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.2",
+          body: [{ type: "TextBlock", text: content, wrap: true }] },
+      }] });
+      break;
+    }
     case "lark":
       need(cfg.url, "webhook URL");
       await postLark(cfg.url!, text, cfg.secret || undefined);

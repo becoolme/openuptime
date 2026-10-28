@@ -1,5 +1,6 @@
 /** Simplified Chinese strings, keyed by the English source text. */
 export const zh: Record<string, string> = {
+  "Send Adaptive Cards to a Teams Workflow webhook.": "通过 Teams 工作流 Webhook 发送自适应卡片。",
   // nav / chrome
   Monitors: "监控", Incidents: "事件", "Status pages": "状态页", Alerting: "告警", Team: "团队", "API keys": "API 密钥", Settings: "设置", "Account settings": "账户设置",
   "Sign out": "退出登录", "Sign in": "登录", "Create account": "创建账号", "Create an account": "创建账号",

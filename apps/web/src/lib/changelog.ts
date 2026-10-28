@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "teams-alerts", date: "2026-10-28", edition: "community",
+    title: { en: "Microsoft Teams alerts", zh: "Microsoft Teams 告警" },
+    summary: { en: "Send monitor alerts through a Teams Workflow webhook.", zh: "通过 Teams 工作流 Webhook 接收监控告警。" },
+    points: [
+      { en: "Add a channel with an unauthenticated Workflow webhook URL, then test an Adaptive Card before connecting monitors.", zh: "添加无需登录验证的工作流 Webhook URL，测试自适应卡片后即可关联监控。" },
+      { en: "Outages, recoveries, reminders and escalations use the existing delivery history and retries; delivery confirms webhook acceptance, not completion of the workflow.", zh: "故障、恢复、提醒和升级通知沿用现有投递记录与重试；投递成功表示 Webhook 已接收，不代表工作流已执行完成。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",

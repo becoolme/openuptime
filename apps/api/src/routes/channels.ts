@@ -8,7 +8,7 @@ import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
 
-const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push"] as const;
+const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "teams"] as const;
 type ChannelType = (typeof TYPES)[number];
 
 const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL");
@@ -16,6 +16,7 @@ const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test
 const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
   email: z.object({ to: z.string().trim().max(254).email() }),
   slack: z.object({ url }),
+  teams: z.object({ url }),
   webhook: z.object({ url }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),
   telegram: z.object({ botToken: z.string().trim().min(1).max(200), chatId: z.string().trim().min(1).max(100) }),
