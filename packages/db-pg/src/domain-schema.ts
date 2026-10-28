@@ -85,6 +85,9 @@ export const monitor = pgTable(
     headers: jsonb("headers").$type<Record<string, string>>().notNull().default({}),
     /** websocket: text sent once the connection is open; a reply must then come back */
     wsMessage: text("ws_message"),
+    dnsRecordType: text("dns_record_type").$type<"A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS">().notNull().default("A"),
+    dnsExpectedValue: text("dns_expected_value"),
+    dnsMatchMode: text("dns_match_mode").$type<"exact" | "contains">().notNull().default("exact"),
     /** heartbeat: how long after the expected ping we wait before declaring it missed */
     graceSec: integer("grace_sec").notNull().default(0),
     /** alert only these channels; empty = every enabled channel in the org */

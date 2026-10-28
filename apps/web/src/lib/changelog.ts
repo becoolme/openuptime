@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "dns-record-assertions", date: "2026-10-28", edition: "community",
+    title: { en: "Check DNS record values", zh: "校验 DNS 记录值" },
+    summary: { en: "Monitor A, AAAA, CNAME, MX, TXT and NS records with optional value matching.", zh: "支持监控 A、AAAA、CNAME、MX、TXT 和 NS 记录，并可校验期望值。" },
+    points: [
+      { en: "Require one answer to match an exact value or contain text; unrelated record types no longer count as success.", zh: "可要求至少一条记录完全匹配期望值或包含指定文本；其他类型的记录不再被误判为成功。" },
+      { en: "Configure DNS checks in the dashboard, API or MCP, and preserve their settings when exporting and importing monitors.", zh: "可通过控制台、API 或 MCP 配置 DNS 检测，导入导出时会保留这些设置。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",

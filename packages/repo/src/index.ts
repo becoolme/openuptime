@@ -68,6 +68,9 @@ export interface Monitor {
   headers: Record<string, string>;
   /** websocket: text sent once the connection is open; null = only the handshake (and a greeting, with a keyword) */
   wsMessage: string | null;
+  dnsRecordType?: "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS";
+  dnsExpectedValue?: string | null;
+  dnsMatchMode?: "exact" | "contains";
   graceSec: number;
   channelIds: string[];
   tags: string[];
@@ -85,7 +88,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
-  | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCheckAt?: Date };
