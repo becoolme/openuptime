@@ -33,6 +33,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "Choose one to ten successful checks or heartbeat pings; the default remains one.", zh: "可设置一到十次成功检测或心跳，默认仍为一次。" },
       { en: "A multi-region vote counts as one run; failed checks reset the streak while raw uptime data continues to reflect each result.", zh: "每轮多区域投票计一次，失败后重新累计；可用率仍按原始检测结果计算。" },
+      { en: "Overlapping checks count against the latest recovery streak, so an older check cannot restore a streak cleared by a failure.", zh: "同时进行的检测按最新恢复计数累计，旧检测不会恢复已被失败清零的成功记录。" },
     ],
   },
   {

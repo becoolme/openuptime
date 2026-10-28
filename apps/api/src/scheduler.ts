@@ -157,13 +157,6 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
   }
 }
 
-/** Only conclusive successful runs count. Bound the streak so healthy monitors never overflow it. */
-export function recoveryProgress(m: Pick<Monitor, "recoveryThreshold" | "consecutiveSuccesses">, ok: boolean) {
-  const threshold = m.recoveryThreshold ?? 1;
-  const successes = ok ? Math.min((m.consecutiveSuccesses ?? 0) + 1, threshold) : 0;
-  return { successes, ready: successes >= threshold };
-}
-
 export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
   // a due heartbeat monitor means no ping arrived in time
   const { out, results, note: regionNote } =
@@ -181,17 +174,20 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   // one region is one row; several are rows per region that count as a single run in the rollup
   if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
   else await repo.recordRegionResults(m.id, results, { ok: out.ok, latencyMs: out.latencyMs });
+  // Concurrent manual/scheduled checks must advance the latest streak atomically. A failure that
+  // completed while this check was in flight cannot be overwritten by its old success count.
+  const recovery = await repo.recordRecoveryProgress(m, out.ok);
+  if (!recovery) return;
   // Regular monitors keep the due time the lease gave them (a fixed cadence, whatever the check duration). A heartbeat is
   // due one interval plus grace after this moment.
   const next = m.type === "heartbeat" ? { nextCheckAt: nextAfter(m) } : {};
   // during maintenance keep recording results but leave status, failure count and incidents alone
   if (inMaintenance && !out.ok) {
     console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE}`);
-    await repo.setMonitorState(m.id, { lastCheckedAt: new Date(), consecutiveSuccesses: 0, ...next });
+    await repo.setMonitorState(m.id, { lastCheckedAt: new Date(), ...next });
     return;
   }
   const failures = out.ok ? 0 : m.consecutiveFailures + 1;
-  const recovery = recoveryProgress(m, out.ok);
   const slow = out.ok && !!out.latencyMs && out.latencyMs > m.slowThresholdMs;
   // a failed check neither extends nor ends a slow streak
   const slowCount = !out.ok ? m.consecutiveSlow : slow ? m.consecutiveSlow + 1 : 0;
@@ -217,17 +213,16 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const pending = opensOutage || recovering || slowTrips || slowClears;
   await repo.setMonitorState(m.id, {
     consecutiveFailures: failures,
-    consecutiveSuccesses: recovery.successes,
     ...(pending ? {} : { status, consecutiveSlow: finalSlow }),
     ...(m.type === "heartbeat" ? {} : { lastCheckedAt: new Date() }),
     ...next,
   });
 
   if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements);
-  if (recovering) await resolveIncident(repo, m, false, entitlements);
+  if (recovering && !(await completeRecovery(repo, m, slow ? "degraded" : "up", finalSlow, entitlements))) return;
   if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements);
   if (slowClears) await resolveIncident(repo, m, true, entitlements);
-  if (pending) await repo.setMonitorState(m.id, { status, consecutiveSlow: finalSlow });
+  if (pending && !recovering) await repo.setMonitorState(m.id, { status, consecutiveSlow: finalSlow });
 }
 
 async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entitlements: Entitlements) {
@@ -335,6 +330,16 @@ async function alertHistory(repo: Repo, inc: { id: string; organizationId: strin
 }
 
 const consecutive = (m: Monitor) => m.failureThreshold;
+
+/** Commit the recovery decision with its incidents before sending any recovery notifications. */
+export async function completeRecovery(repo: Repo, m: Monitor, status: "up" | "degraded", consecutiveSlow: number, entitlements: Entitlements = unmetered) {
+  const resolved = await repo.completeRecovery(m, status, consecutiveSlow);
+  for (const inc of resolved ?? []) {
+    if ((await alertHistory(repo, inc)).muted) continue;
+    await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: inc, monitor: m }, m.channelIds, entitlements);
+  }
+  return resolved !== null;
+}
 
 /** Resolve a monitor's open incidents: its outage ones, or with `slow` only the automatic latency ones. */
 export async function resolveIncident(repo: Repo, m: Monitor, slow = false, entitlements: Entitlements = unmetered) {

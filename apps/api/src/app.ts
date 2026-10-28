@@ -23,7 +23,7 @@ import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { availableRegions } from "./probes";
 import { PROBE_TYPES } from "./regions";
-import { resolveIncident, runDueChecks } from "./scheduler";
+import { completeRecovery, runDueChecks } from "./scheduler";
 
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
   const edition = options.edition ?? community;
@@ -146,8 +146,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
     if (!wasDown) await repo.setMonitorState(m.id, { status: "up" });
     if (wasDown && ready) {
-      await resolveIncident(repo, m, false, c.get("entitlements"));
-      await repo.setMonitorState(m.id, { status: "up" });
+      await completeRecovery(repo, updated, "up", 0, c.get("entitlements"));
     }
     return c.json({ ok: true });
   });

@@ -466,6 +466,10 @@ export interface Repo {
   monitorByHeartbeatToken(token: string): Promise<Monitor | null>;
   /** Atomically count a ping and renew its deadline; null if the monitor is paused or gone. */
   recordHeartbeatSuccess(id: string): Promise<Monitor | null>;
+  /** Count a completed result against the latest stored streak, not its pre-check snapshot. */
+  recordRecoveryProgress(m: Monitor, ok: boolean): Promise<{ successes: number; ready: boolean } | null>;
+  /** Lock and verify the latest recovery streak, then resolve outage incidents and change state atomically. */
+  completeRecovery(m: Monitor, status: "up" | "degraded", consecutiveSlow: number): Promise<Incident[] | null>;
 
   // ── checking ─────────────────────────────────────────────────────────────────
   /**

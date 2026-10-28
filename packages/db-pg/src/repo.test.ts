@@ -966,3 +966,35 @@ describe.skipIf(!url)("lists across projects", () => {
     expect((await repo.projectOverview(orgId, [a]))[0].openIncidents).toBe(0);
   });
 });
+
+
+describe.skipIf(!url)("atomic recovery progress", () => {
+  const orgId = `recovery-progress-${crypto.randomUUID()}`;
+  beforeAll(async () => { await db.insert(schema.organization).values({ id: orgId, name: "Recovery", slug: orgId, createdAt: new Date() }); });
+  afterAll(async () => { if (url) await db.delete(schema.organization).where(eq(schema.organization.id, orgId)); });
+
+  it("counts concurrent successes once each and respects intervening failures despite stale snapshots", async () => {
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, name: "Service", target: "https://example.com", status: "down", recoveryThreshold: 3 }).returning();
+    const results = await Promise.all([repo.recordRecoveryProgress(m, true), repo.recordRecoveryProgress(m, true)]);
+    expect(results.map((r) => r!.successes).sort()).toEqual([1, 2]);
+    expect(await repo.recordRecoveryProgress(m, false)).toEqual({ successes: 0, ready: false });
+    expect(await repo.recordRecoveryProgress({ ...m, consecutiveSuccesses: 2 }, true)).toEqual({ successes: 1, ready: false });
+    const incident = await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "Down", auto: true }, { status: "investigating", body: "Failed" });
+    expect(incident).not.toBeNull();
+    await repo.recordRecoveryProgress(m, true);
+    expect(await repo.recordRecoveryProgress(m, true)).toMatchObject({ ready: true });
+    await repo.recordRecoveryProgress(m, false);
+    expect(await repo.completeRecovery(m, "up", 0)).toBeNull();
+    expect((await repo.openIncidents(m.id, false)).map((i) => i.id)).toContain(incident!.id);
+    expect((await repo.getMonitor(orgId, m.id, null))?.status).toBe("down");
+    await repo.updateMonitor(orgId, m.id, null, { recoveryThreshold: 1 });
+    expect(await repo.recordRecoveryProgress(m, true)).toEqual({ successes: 1, ready: true });
+    const committed = await Promise.all([repo.completeRecovery(m, "up", 0), repo.completeRecovery(m, "up", 0)]);
+    expect(committed.filter((r) => r !== null)).toHaveLength(1);
+    expect(committed.flatMap((r) => r ?? []).map((i) => i.id)).toEqual([incident!.id]);
+    expect((await repo.getMonitor(orgId, m.id, null))?.status).toBe("up");
+    await repo.updateMonitor(orgId, m.id, null, { paused: true });
+    expect(await repo.recordRecoveryProgress(m, true)).toBeNull();
+    expect((await repo.getMonitor(orgId, m.id, null))?.consecutiveSuccesses).toBe(0);
+  });
+});

@@ -476,6 +476,29 @@ export function createRepo(db: Db): Repo {
       return m ?? null;
     },
 
+    async recordRecoveryProgress(m, ok) {
+      const [row] = await db.update(schema.monitor).set({
+        consecutiveSuccesses: ok ? sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})` : 0,
+      }).where(and(eq(schema.monitor.id, m.id), eq(schema.monitor.paused, false)))
+        .returning({ successes: schema.monitor.consecutiveSuccesses, threshold: schema.monitor.recoveryThreshold });
+      return row ? { successes: row.successes, ready: row.successes >= row.threshold } : null;
+    },
+
+    async completeRecovery(m, status, consecutiveSlow) {
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor).where(eq(schema.monitor.id, m.id)).for("update");
+        if (!current || current.paused || current.status !== "down" || current.consecutiveSuccesses < current.recoveryThreshold) return null;
+        const at = new Date();
+        const resolved = await tx.update(schema.incident)
+          .set({ status: "resolved", resolvedAt: at, nextReminderAt: null, nextEscalationAt: null })
+          .where(and(eq(schema.incident.monitorId, m.id), isNull(schema.incident.resolvedAt), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`))
+          .returning();
+        if (resolved.length) await tx.insert(schema.incidentUpdate).values(resolved.map((inc) => ({ incidentId: inc.id, status: "resolved" as const, body: "Checks are passing again." })));
+        await tx.update(schema.monitor).set({ status, consecutiveSlow, statusChangedAt: at }).where(eq(schema.monitor.id, m.id));
+        return resolved;
+      });
+    },
+
     async recordHeartbeatSuccess(id) {
       const [row] = await db.update(schema.monitor).set({
         consecutiveSuccesses: sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})`,
