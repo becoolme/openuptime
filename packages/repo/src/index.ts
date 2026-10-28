@@ -489,6 +489,7 @@ export interface Repo {
    * `summary` (the verdict across regions), so uptime counts runs and not regions.
    */
   recordRegionResults(monitorId: string, results: RegionResult[], summary: { ok: boolean; latencyMs?: number | null }): Promise<void>;
+  acceptDomainExpiry(snapshot: Monitor, expiry: DomainExpiry): Promise<boolean>;
   setMonitorState(id: string, state: MonitorState): Promise<void>;
   /** Is a maintenance window of the monitor's project (or a workspace-wide one) covering it right now? */
   underMaintenance(m: Pick<Monitor, "id" | "organizationId" | "projectId">): Promise<boolean>;

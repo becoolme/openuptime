@@ -311,7 +311,6 @@ export const monitors = new Hono<AppEnv>()
       ...(v.paused !== undefined ? { status: v.paused ? "paused" : "pending", nextCheckAt: new Date() } : {}),
     });
     if (!row) return c.json({ error: "Not found" }, 404);
-    if (row.type === "domain" && (v.target !== undefined || v.domainExpiryWarnDays !== undefined)) { await repo.setMonitorState(row.id, { domainExpiry: null }); row.domainExpiry = null; }
     // a heartbeat's deadline depends on interval + grace, so re-derive it when either changes
     if (row.type === "heartbeat" && (v.intervalSec !== undefined || v.graceSec !== undefined) && v.paused === undefined) {
       const again = await repo.updateMonitor(c.get("orgId"), row.id, c.get("projectScope"), { nextCheckAt: nextAfter(row) });

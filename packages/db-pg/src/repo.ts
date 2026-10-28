@@ -468,7 +468,7 @@ export function createRepo(db: Db): Repo {
     async updateMonitor(orgId, id, scope, patch) {
       const [row] = await db
         .update(schema.monitor)
-        .set(patch)
+        .set({ ...patch, ...(patch.target !== undefined || patch.domainExpiryWarnDays !== undefined ? { domainExpiry: null } : {}) })
         .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
         .returning();
       return row ?? null;
@@ -552,6 +552,14 @@ export function createRepo(db: Db): Repo {
         results.map((r) => ({ monitorId, region: r.region, ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error })),
       );
       await foldIntoRollup(monitorId, summary.ok, summary.latencyMs ?? null);
+    },
+    async acceptDomainExpiry(snapshot, expiry) {
+      // Conditional UPDATE is atomic with target/threshold edits and their metadata invalidation.
+      const rows = await db.update(schema.monitor).set({ domainExpiry: expiry }).where(and(
+        eq(schema.monitor.id, snapshot.id), eq(schema.monitor.type, "domain"), eq(schema.monitor.paused, false),
+        eq(schema.monitor.target, snapshot.target), eq(schema.monitor.domainExpiryWarnDays, snapshot.domainExpiryWarnDays ?? 30),
+      )).returning({ id: schema.monitor.id });
+      return rows.length === 1;
     },
     async setMonitorState(id, state) {
       // a changed status starts a new streak

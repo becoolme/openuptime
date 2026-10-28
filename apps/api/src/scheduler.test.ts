@@ -114,6 +114,7 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
     outageHandledByPerson: async () => !!opts.handled,
     recordCheck: async () => {},
     recordRegionResults: async () => {},
+    acceptDomainExpiry: async (_m: Monitor, expiry: unknown) => { states.push({ domainExpiry: expiry }); return true; },
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
     hasOpenIncident: async (_id: string, slow: boolean) => incidents.some((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
     openIncidents: async (_id: string, slow: boolean) => incidents.filter((i) => !i.resolved && (i.auto && i.severity === "minor") === slow),
@@ -461,4 +462,13 @@ it("domain unknown/renewal failures open one accurately titled incident, without
     expect(incidents[0].title).toBe(unknown ? "API: domain expiry unknown" : "API: domain renewal needed");
     expect(states.some(s => (s.domainExpiry as { state?: string })?.state === (unknown ? "unknown" : "expiring"))).toBe(true);
   }
+});
+
+ it("discards all effects when a domain snapshot is refused after its lookup completes", async () => {
+  const { repo, incidents, states } = fakeRepo();
+  repo.cachedRdap = async key => ({ expiresAt: new Date(Date.now() + 3600_000), value: key === "bootstrap:v1" ? { data: {} } : { expiresAt: null, checkedAt: new Date().toISOString(), source: null, error: "No date" } });
+  repo.acceptDomainExpiry = async () => false;
+  const record = vi.fn(); repo.recordCheck = record;
+  await checkOne(repo, hb({ type: "domain", target: "example.com", timeoutMs: 1000 }));
+  expect(record).not.toHaveBeenCalled(); expect(incidents).toHaveLength(0); expect(states).toHaveLength(0);
 });

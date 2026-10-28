@@ -171,7 +171,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
   if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
   if (out.domainExpiry) {
-    await repo.setMonitorState(m.id, { domainExpiry: out.domainExpiry });
+    if (!(await repo.acceptDomainExpiry(m, out.domainExpiry))) return;
     m = { ...m, domainExpiry: out.domainExpiry };
   }
   const inMaintenance = await repo.underMaintenance(m);
