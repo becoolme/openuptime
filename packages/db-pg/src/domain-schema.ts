@@ -253,6 +253,7 @@ export const alertDelivery = pgTable(
     statusMessage: text("status_message"),
     /** set when a worker took the row (pending -> sending); a row stuck in sending is handed back after a few minutes */
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    emailQuotaAttempted: boolean("email_quota_attempted").notNull().default(false),
     /** set when the incident was acknowledged after this alert went out */
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(1),

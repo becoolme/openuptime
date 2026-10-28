@@ -228,6 +228,8 @@ export interface AlertDelivery {
   /** the reason in words, e.g. "failed: HTTP 500", "skipped: channel disabled" */
   statusMessage: string | null;
   claimedAt: Date | null;
+  /** Persisted before routed email quota is attempted; interrupted retries must not charge again. */
+  emailQuotaAttempted?: boolean;
   /** when the incident was acknowledged after this alert went out */
   acknowledgedAt: Date | null;
   /** how many times delivery was tried (failed incident alerts are retried a few times) */
@@ -235,7 +237,7 @@ export interface AlertDelivery {
   createdAt: Date;
 }
 export type DeliveryStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
-export type NewDelivery = Omit<AlertDelivery, "id" | "createdAt" | "attempts" | "projectId" | "channelId" | "incidentId" | "monitorName" | "error" | "status" | "statusMessage" | "claimedAt" | "acknowledgedAt"> &
+export type NewDelivery = Omit<AlertDelivery, "id" | "createdAt" | "attempts" | "projectId" | "channelId" | "incidentId" | "monitorName" | "error" | "status" | "statusMessage" | "claimedAt" | "acknowledgedAt" | "emailQuotaAttempted"> &
   Partial<Pick<AlertDelivery, "projectId" | "channelId" | "incidentId" | "monitorName" | "error" | "status" | "statusMessage">>;
 
 /** A repeat alert whose claim this worker won: the incident, its monitor and the project's settings. */
@@ -558,6 +560,8 @@ export interface Repo {
   queueDeliveries(rows: NewDelivery[]): Promise<AlertDelivery[]>;
   /** One conditional UPDATE: pending -> sending. Null when another worker holds the row or it is not due. */
   claimDelivery(id: string): Promise<AlertDelivery | null>;
+  /** Checkpoint only the current sending attempt; false means this worker no longer owns the claim. */
+  markDeliveryEmailQuotaAttempt(id: string, attempts: number): Promise<boolean>;
   /**
    * Close a claimed row. `retryInSec` puts a failed row back to pending for another attempt; null leaves it failed.
    * Only a row still in `sending` is touched, so a late finisher cannot overwrite a sweep's decision.

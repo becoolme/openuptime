@@ -174,11 +174,22 @@ async function authorizeChannel(channel: AlertChannel, ev: Event, entitlements: 
  * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
  * `meter` charges an email against the workspace allowance; retries are not charged again.
  */
-async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices, routingAt?: Date) {
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts" | "emailQuotaAttempted">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices, routingAt?: Date) {
   const attempts = d.attempts + 1;
   try {
     if (routingAt) await authorizeChannel(channel, ev, meter ?? unmetered, routingAt);
-    if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
+    if (meter && channel.type === "email" && !d.emailQuotaAttempted) {
+      if (routingAt) {
+        // Persist before spending: a worker can disappear after charging but before calling the provider.
+        // Recovery still reauthorizes routing, but must not charge the same delivery again.
+        // A crash immediately after this checkpoint may leave one email uncharged (quota is fail-open).
+        let owned: boolean;
+        try { owned = await repo.markDeliveryEmailQuotaAttempt(d.id, d.attempts); }
+        catch { throw new Error(ROUTING_UNAVAILABLE); }
+        if (!owned) return false;
+      }
+      if ((await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
+    }
     await deliver(channel, ev, alertText(ev), lang, repo, pushed);
     await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
     return true;

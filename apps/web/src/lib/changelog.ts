@@ -31,6 +31,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Custom deployments can select which eligible channels receive an incident notification.", zh: "定制部署可以从符合条件的渠道中选择事件通知接收方。" },
     points: [
       { en: "Policies run before sending, record skipped channels, and retry unavailable decisions without changing the original routing time.", zh: "策略在发送前执行，记录跳过的渠道；策略暂不可用时会重试，并保留原路由时间。" },
+      { en: "Recovered routed emails recheck authorization without spending their allowance twice after a worker interruption.", zh: "路由邮件在任务中断后恢复时会重新校验权限，且不会重复扣除邮件额度。" },
       { en: "The default routing is unchanged; the hook does not add on-call schedules or rotation management.", zh: "默认路由保持原样；扩展接口不包含值班排班或轮换管理。" },
     ],
   },

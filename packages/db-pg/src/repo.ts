@@ -915,6 +915,13 @@ export function createRepo(db: Db): Repo {
         .returning();
       return (row as AlertDelivery) ?? null;
     },
+    async markDeliveryEmailQuotaAttempt(id, attempts) {
+      const t = schema.alertDelivery;
+      const rows = await db.update(t).set({ emailQuotaAttempted: true })
+        .where(and(eq(t.id, id), eq(t.status, "sending"), eq(t.attempts, attempts)))
+        .returning({ id: t.id });
+      return rows.length > 0;
+    },
     async finishDelivery(id, r) {
       const t = schema.alertDelivery;
       const again = r.status === "failed" && r.retryInSec != null;

@@ -1,0 +1,1 @@
+ALTER TABLE "alert_delivery" ADD COLUMN "email_quota_attempted" boolean DEFAULT false NOT NULL;

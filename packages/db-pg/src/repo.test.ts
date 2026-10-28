@@ -539,13 +539,18 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
     const marker = "alert routing policy unavailable";
     const orphan = await queue(inc.id, { error: marker });
     const interrupted = await queue(inc.id, { error: marker });
-    await repo.claimDelivery(interrupted.id);
+    const claimed = (await repo.claimDelivery(interrupted.id))!;
+    expect(await repo.markDeliveryEmailQuotaAttempt(orphan.id, 0)).toBe(false);
+    expect(await repo.markDeliveryEmailQuotaAttempt(claimed.id, claimed.attempts)).toBe(true);
     await db.update(schema.alertDelivery).set({ createdAt: ago(10) }).where(eq(schema.alertDelivery.id, orphan.id));
     await db.update(schema.alertDelivery).set({ claimedAt: ago(10) }).where(eq(schema.alertDelivery.id, interrupted.id));
     await repo.sweepStuckDeliveries({ stuckSec: 300, maxAttempts: 3 });
     const recovered = (await repo.claimRetries(100)).filter((r) => [orphan.id, interrupted.id].includes(r.delivery.id));
     expect(recovered).toHaveLength(2);
     expect(recovered.every((r) => r.delivery.error === marker)).toBe(true);
+    expect(recovered.find((r) => r.delivery.id === interrupted.id)?.delivery.emailQuotaAttempted).toBe(true);
+    expect(recovered.find((r) => r.delivery.id === orphan.id)?.delivery.emailQuotaAttempted).toBe(false);
+    expect(await repo.markDeliveryEmailQuotaAttempt(claimed.id, claimed.attempts)).toBe(false);
     for (const r of recovered) await repo.finishDelivery(r.delivery.id, { status: "skipped", error: "policy denied", message: "policy denied" });
   });
 
