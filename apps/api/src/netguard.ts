@@ -1,3 +1,4 @@
+import { domainName } from "./domain-name";
 /**
  * Outbound-request guard. Monitors, status checks and alert webhooks make requests to addresses users type in; on a
  * server that can reach its own network that is a way to probe it (metadata endpoints, databases, admin panels). By
@@ -150,8 +151,8 @@ async function resolveAll(host: string): Promise<string[]> {
  * validated, so the connection can be pinned to what was checked. Literals and Workers (where the platform refuses
  * private ranges itself) have nothing to pin: `addresses` is null.
  */
-export async function guardAddresses(host: string): Promise<{ host: string; addresses: string[] | null }> {
-  if (allowPrivate) return { host, addresses: null };
+export async function guardAddresses(host: string, publicOnly = false): Promise<{ host: string; addresses: string[] | null }> {
+  if (allowPrivate && !publicOnly) return { host, addresses: null };
   const h = normaliseHost(host);
   if (hostBlocked(h)) throw new BlockedTarget();
   if (isLiteral(h) || isWorkers()) return { host: h, addresses: null };
@@ -255,6 +256,7 @@ export function hostPort(target: string, defaultPort: number): { hostname: strin
 
 /** Why a monitor target is refused, or null. Used when a monitor is created or its target changes. */
 export async function targetProblem(type: string, target: string): Promise<string | null> {
+  if (type === "domain") { try { domainName(target); return null; } catch (e) { return (e as Error).message; } }
   if (allowPrivate || type === "heartbeat" || type === "dns") return null;
   let host: string | undefined;
   if (type === "http" || type === "websocket") {
@@ -311,7 +313,7 @@ const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
  * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop. With `follow: false` the
  * first response is returned as it is, redirect or not, so the caller can judge the redirect itself.
  */
-export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true }: { follow?: boolean } = {}): Promise<{ res: Response; url: string }> {
+export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, publicOnly = false }: { follow?: boolean; publicOnly?: boolean } = {}): Promise<{ res: Response; url: string }> {
   let current = url;
   let method = init.method ?? "GET";
   let body = init.body;
@@ -319,7 +321,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
   for (let hop = 0; ; hop++) {
     const u = new URL(current);
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Unsupported protocol ${u.protocol}`);
-    let { addresses } = await guardAddresses(u.hostname);
+    let { addresses } = await guardAddresses(u.hostname, publicOnly);
     const req = { ...init, method, body, headers, redirect: "manual" as const };
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
     let res: Response;
@@ -332,7 +334,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
       // only worth repeating when the name now points somewhere else
       const before = new Set(addresses);
       forgetResolved(u.hostname);
-      const fresh = (await guardAddresses(u.hostname)).addresses;
+      const fresh = (await guardAddresses(u.hostname, publicOnly)).addresses;
       if (!fresh || (fresh.length === before.size && fresh.every((a) => before.has(a)))) throw e;
       res = await pinnedFetch(current, req, fresh);
     }

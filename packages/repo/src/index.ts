@@ -11,7 +11,7 @@ export const ROLLUP_RETENTION_DAYS = 400;
 export const PUSH_DEVICE_STALE_DAYS = 180;
 export const DEFAULT_ALERT_LOG_DAYS = 30;
 
-export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket";
+export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain";
 export type MonitorStatus = "pending" | "up" | "degraded" | "down" | "paused";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type IncidentSeverity = "minor" | "major";
@@ -41,7 +41,11 @@ export type ProjectAlerting = Pick<Project, "reminderIntervalMin" | "reminderEma
 export const MAX_REMINDERS = 10;
 export const REMINDER_INTERVALS = [5, 10, 15, 30, 60] as const;
 
+export type DomainExpiry = { state: "valid" | "expiring" | "expired" | "unknown"; expiresAt: string | null; checkedAt: string; cacheUntil: string; source: string | null; error: string | null };
+export type RdapCacheEntry = { value: unknown; expiresAt: Date };
 export interface Monitor {
+  domainExpiryWarnDays?: number;
+  domainExpiry?: DomainExpiry | null;
   id: string;
   organizationId: string;
   projectId: string | null;
@@ -84,7 +88,7 @@ export interface Monitor {
 /** Fields a user can set when creating a monitor. */
 export type MonitorInput = Pick<
   Monitor,
-  | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
+  | "name" | "type" | "target" | "method" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
   | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
@@ -92,7 +96,7 @@ export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCh
 /** Only named fields change; the type is immutable. */
 export type MonitorPatch = Partial<Omit<MonitorInput, "type">> & { paused?: boolean; status?: MonitorStatus; nextCheckAt?: Date };
 /** Bookkeeping written by the checker and the heartbeat endpoint. */
-export type MonitorState = Partial<Pick<Monitor, "status" | "consecutiveFailures" | "consecutiveSlow" | "lastCheckedAt" | "nextCheckAt">>;
+export type MonitorState = Partial<Pick<Monitor, "status" | "consecutiveFailures" | "consecutiveSlow" | "lastCheckedAt" | "nextCheckAt" | "domainExpiry">>;
 
 export type ProjectOverview = { id: string; name: string; monitors: number; down: number; openIncidents: number };
 
@@ -429,6 +433,7 @@ export interface Repo {
   counts(orgId: string, projectId: string): Promise<Counts>;
   /** Monitors of the workspace (every project) that are not paused: what a plan's monitor cap counts. */
   activeMonitorCount(orgId: string): Promise<number>;
+  cachedRdap(key: string, load: () => Promise<RdapCacheEntry>, refreshAheadMs?: number): Promise<RdapCacheEntry>;
 
   /** Workspaces this user owns (for the account-deletion guard). */
   ownedWorkspaces(userId: string): Promise<OwnedWorkspace[]>;

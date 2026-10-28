@@ -13,12 +13,13 @@ import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
-  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
+  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
   method: z.enum(["GET", "HEAD", "POST"]).describe("HTTP request method; ignored for other monitor types."),
   expectedStatus: z.number().int().min(100).max(599).describe("HTTP response status that counts as healthy; an expected 3xx is checked without following the redirect."),
-  intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Hosted plans may require a longer interval."),
-  timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds."),
+  intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Domain checks are raised to at least 3600 seconds; daily checks are recommended. Hosted plans may require a longer interval."),
+  timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds; for domain checks, each IANA/registry request has this timeout and shared cache locks wait at most 3 seconds."),
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
   regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP and WebSocket only. A supplied list replaces the existing one."),
@@ -46,6 +47,7 @@ const body = z.object({
   type: fields.type.default("http"),
   target: fields.target.default(""),
   method: fields.method.default("GET"),
+  domainExpiryWarnDays: fields.domainExpiryWarnDays.default(30),
   expectedStatus: fields.expectedStatus.default(200),
   intervalSec: fields.intervalSec.default(60),
   timeoutMs: fields.timeoutMs.default(10000),
@@ -195,6 +197,7 @@ export const monitors = new Hono<AppEnv>()
   .post("/", zValidator("json", body), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
+    if (v.type === "domain") v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
     const blocked = await refuseTarget(c, v.type, v.target);
     if (blocked) return blocked;
     const badRegion = await regionProblem(c, v.type, v.regions);
@@ -227,6 +230,7 @@ export const monitors = new Hono<AppEnv>()
       if (p.data.type !== "heartbeat" && !p.data.target.trim()) { skipped.push({ index, name: p.data.name, error: "target: required" }); continue; }
       const problem = await targetProblem(p.data.type, p.data.target);
       if (problem) { skipped.push({ index, name: p.data.name, error: `target: ${problem}` }); continue; }
+      if (p.data.type === "domain") p.data.intervalSec = Math.min(86400, Math.max(p.data.intervalSec, 3600));
       valid.push(p.data);
     }
     if (valid.length) {
@@ -294,6 +298,7 @@ export const monitors = new Hono<AppEnv>()
     if (v.intervalSec !== undefined || v.paused === false) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (current) {
+        if (current.type === "domain" && v.intervalSec !== undefined) v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
         // only a faster interval is checked against the plan's floor; leaving an older, faster one in place is fine
         const faster = v.intervalSec !== undefined && v.intervalSec < current.intervalSec && current.type !== "heartbeat";
         const resuming = v.paused === false && current.status === "paused";
@@ -306,6 +311,7 @@ export const monitors = new Hono<AppEnv>()
       ...(v.paused !== undefined ? { status: v.paused ? "paused" : "pending", nextCheckAt: new Date() } : {}),
     });
     if (!row) return c.json({ error: "Not found" }, 404);
+    if (row.type === "domain" && (v.target !== undefined || v.domainExpiryWarnDays !== undefined)) { await repo.setMonitorState(row.id, { domainExpiry: null }); row.domainExpiry = null; }
     // a heartbeat's deadline depends on interval + grace, so re-derive it when either changes
     if (row.type === "heartbeat" && (v.intervalSec !== undefined || v.graceSec !== undefined) && v.paused === undefined) {
       const again = await repo.updateMonitor(c.get("orgId"), row.id, c.get("projectScope"), { nextCheckAt: nextAfter(row) });
@@ -342,7 +348,7 @@ export const monitors = new Hono<AppEnv>()
       await checkOne(repo, m, c.get("entitlements"));
       return c.json({ ok: true });
     }
-    const run = await runInRegion(region, m);
+    const run = await runInRegion(region, m, repo);
     if ("unreachable" in run) return c.json({ error: run.unreachable, code: "probe_unreachable", region }, 502);
     return c.json({ ok: true, region, result: run.outcome });
   });

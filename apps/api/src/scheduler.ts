@@ -162,7 +162,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const { out, results, note: regionNote } =
     m.type === "heartbeat"
       ? { out: { ok: false, error: "Heartbeat missed" } as CheckOutcome, results: [{ region: "auto", ok: false, error: "Heartbeat missed" }], note: undefined as string | undefined }
-      : await measure(m);
+      : await measure(m, repo);
   // the prober itself had no connectivity: the check says nothing about the monitor, so nothing is recorded or counted
   if (out.inconclusive) {
     console.warn(`check for ${m.id} discarded: ${out.error ?? "this location is offline"}`);
@@ -170,6 +170,10 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   }
   // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
   if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
+  if (out.domainExpiry) {
+    await repo.setMonitorState(m.id, { domainExpiry: out.domainExpiry });
+    m = { ...m, domainExpiry: out.domainExpiry };
+  }
   const inMaintenance = await repo.underMaintenance(m);
   // one region is one row; several are rows per region that count as a single run in the rollup
   if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
@@ -184,10 +188,10 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
     return;
   }
   const failures = out.ok ? 0 : m.consecutiveFailures + 1;
-  const slow = out.ok && !!out.latencyMs && out.latencyMs > m.slowThresholdMs;
+  const slow = m.type !== "domain" && out.ok && !!out.latencyMs && out.latencyMs > m.slowThresholdMs;
   // a failed check neither extends nor ends a slow streak
   const slowCount = !out.ok ? m.consecutiveSlow : slow ? m.consecutiveSlow + 1 : 0;
-  const status = out.ok ? (slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.status;
+  const status = out.ok ? (slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.type === "domain" ? "degraded" : m.status;
   const goingDown = status === "down" && m.status !== "down";
   const recovering = out.ok && m.status === "down";
   // a slow streak inside a maintenance window or under a down dependency opens nothing, however long it gets
@@ -280,7 +284,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   // a monitor that flaps (down, up, down…) gets one down alert per window, not one per flip
   const recent = await repo.hadIncidentSince(m.id, new Date(Date.now() - FLAP_WINDOW_MS));
   const inc = await repo.openAutoIncident(
-    { organizationId: m.organizationId, monitorId: m.id, title: `${m.name} is down`, auto: true, evaluationNote },
+    { organizationId: m.organizationId, monitorId: m.id, title: m.type === "domain" ? `${m.name}: ${m.domainExpiry?.state === "unknown" ? "domain expiry unknown" : m.domainExpiry?.state === "expired" ? "registration date passed" : "domain renewal needed"}` : `${m.name} is down`, auto: true, evaluationNote },
     { status: "investigating", body: `${consecutive(m)} consecutive failed checks. ${reason}` },
   );
   if (!inc) return; // a concurrent check opened it

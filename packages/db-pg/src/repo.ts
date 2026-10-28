@@ -246,6 +246,19 @@ export function createRepo(db: Db): Repo {
       return r[0] as never;
     },
 
+    async cachedRdap(key, load, refreshAheadMs = 0) {
+      return db.transaction(async (tx) => {
+        // Bound lock waits; a busy registry lookup must not hold another check indefinitely.
+        await tx.execute(sql`set local lock_timeout = '3000ms'`);
+        // Serialize cache fills across processes; store data only, never request-bound promises.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"rdap:" + key}))`);
+        const [hit] = await tx.select().from(schema.rdapCache).where(eq(schema.rdapCache.key, key));
+        if (hit && hit.expiresAt.getTime() > Date.now() + ((hit.value as { error?: unknown })?.error ? 0 : refreshAheadMs)) return hit;
+        const fresh = await load();
+        await tx.insert(schema.rdapCache).values({ key, ...fresh }).onConflictDoUpdate({ target: schema.rdapCache.key, set: fresh });
+        return fresh;
+      });
+    },
     async activeMonitorCount(o) {
       const r = await rows<{ n: number }>(db.execute(sql`select count(*)::int as n from monitor where organization_id = ${o} and status <> 'paused'`));
       return r[0]?.n ?? 0;
@@ -564,6 +577,7 @@ export function createRepo(db: Db): Repo {
       return !!w;
     },
     async purgeExpired() {
+      await db.delete(schema.rdapCache).where(lte(schema.rdapCache.expiresAt, new Date(Date.now() - 7 * 864e5)));
       // raw results are kept per workspace for its configured number of days; hourly rollups far longer
       await db.execute(sql`delete from check_result r using monitor m
         where m.id = r.monitor_id

@@ -373,3 +373,17 @@ describe("project name in alerts", () => {
     expect(JSON.stringify(single)).not.toContain("favicon.im");
   });
 });
+
+it("domain retry alerts retain unknown-versus-expired semantics", async () => {
+  for (const state of ["unknown", "expired", "expiring"]) {
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u, init) => { bodies.push(JSON.parse(String(init.body))); return new Response("", { status: 200 }); }));
+    const repo = {
+      claimRetries: async () => [{ delivery: { id: "domain-retry", kind: "incident.opened", attempts: 1 }, incident: { id: "i", title: "Registration", startedAt: new Date(), resolvedAt: null }, monitor: { id: "m", name: "Domain", target: "example.com", type: "domain", domainExpiry: { state, error: "Registry detail" } }, channel: { id: "c", type: "slack", enabled: true, config: { url: "https://hooks.example/domain" } } }],
+      finishDelivery: async () => {},
+    };
+    await retryDeliveries(repo as never);
+    expect(JSON.stringify(bodies)).toContain(state === "unknown" ? "expiry unknown" : state === "expired" ? "registration date passed" : "renewal needed");
+    expect(JSON.stringify(bodies)).not.toContain("is down");
+  }
+});

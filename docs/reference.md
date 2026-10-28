@@ -139,3 +139,7 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+### Domain registration expiry
+
+Community `domain` monitors accept an explicit registered domain and `domainExpiryWarnDays` (1–365, default 30). Use a daily interval; intervals are bounded to one hour–one day. RDAP uses IANA bootstrap and the registry expiration event, not registrar billing or website availability. Unknown dates fail explicitly; they are not invented or marked healthy. A shared PostgreSQL cache serializes same-key fills (known dates 26 hours, unknown fifteen minutes, bootstrap 24 hours). Expired entries are not reused as successful data. Calls require public HTTPS, refuse redirects, and cap bodies at 1 MiB. The existing incident lifecycle deduplicates early warnings and recovers after verified renewal; reminders and escalations remain opt-in project behavior. Domain alerts distinguish unknown, near-expiry and passed registry dates.

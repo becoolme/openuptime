@@ -1,3 +1,4 @@
+import { monitorState } from "../lib/domain-expiry";
 import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -7,7 +8,7 @@ import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
-const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS" };
+const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN" };
 
 export function Spark({ data, status }: { data: (number | null)[]; status: string }) {
   const pts = data.filter((v): v is number => v != null);
@@ -44,8 +45,8 @@ function IntervalTag({ monitor, onChanged }: { monitor: Monitor; onChanged: (sec
     if (pick == null) return;
     setBusy(true);
     try {
-      await api.updateMonitor(monitor.id, { intervalSec: pick });
-      onChanged(pick);
+      const updated = await api.updateMonitor(monitor.id, { intervalSec: pick });
+      onChanged(updated.intervalSec);
       setPick(null);
       setMsg({ ok: true, text: t("Interval updated") });
       setTimeout(close, 1200);
@@ -65,7 +66,7 @@ function IntervalTag({ monitor, onChanged }: { monitor: Monitor; onChanged: (sec
             <>
               <b>{t("Check every")}</b>
               {INTERVALS.map(([v, l]) => {
-                const locked = v < floor && v < monitor.intervalSec;
+                const locked = (monitor.type === "domain" && (v < 3600 || v > 86400)) || (v < floor && v < monitor.intervalSec);
                 return <button type="button" key={v} className={`iv-opt${v === monitor.intervalSec ? " on" : ""}`} disabled={locked || v === monitor.intervalSec} title={locked ? t("Not available on your plan") : undefined} onClick={() => { setMsg(null); setPick(v); }}>{t(l)}</button>;
               })}
             </>
@@ -116,17 +117,18 @@ export default function Monitors() {
   }, []);
 
   const all = items ?? [];
-  const down = all.filter((m) => m.status === "down");
+  const domainAttention = (m: Monitor) => m.type === "domain" && !m.paused && m.status !== "pending" && monitorState(m).tone !== "up";
+  const down = all.filter((m) => m.status === "down" || domainAttention(m));
   const paused = all.filter((m) => m.paused);
-  const upN = all.filter((m) => m.status === "up" || m.status === "degraded").length;
+  const upN = all.filter((m) => (m.status === "up" || m.status === "degraded") && !domainAttention(m)).length;
   const withUp = all.filter((m) => m.uptime24h != null);
   const avgUp = withUp.length ? withUp.reduce((a, m) => a + (m.uptime24h as number), 0) / withUp.length : null;
   const withLat = all.filter((m) => m.avgLatency24h != null);
   const avgLat = withLat.length ? Math.round(withLat.reduce((a, m) => a + (m.avgLatency24h as number), 0) / withLat.length) : null;
   const openInc = incidents.filter((i) => i.status !== "resolved");
   const shown = all.filter((m) => {
-    if (tab === "up" && !(m.status === "up" || m.status === "degraded")) return false;
-    if (tab === "down" && m.status !== "down") return false;
+    if (tab === "up" && (!(m.status === "up" || m.status === "degraded") || domainAttention(m))) return false;
+    if (tab === "down" && m.status !== "down" && !domainAttention(m)) return false;
     if (tab === "paused" && !m.paused) return false;
     const n = q.trim().toLowerCase();
     if (tag && !(m.tags ?? []).includes(tag)) return false;
@@ -159,7 +161,7 @@ export default function Monitors() {
         <div>
           <h1>{t("Monitors")}{everything && <ScopeChip />}</h1>
           <p className="muted">
-            {items === null ? t("Loading…") : down.length ? `${down.length} ${t("down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
+            {items === null ? t("Loading…") : down.length ? `${down.length} ${t(down.some((m) => m.type === "domain") ? "checks need attention" : "down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
           </p>
         </div>
         {!everything && <div className="acts">
@@ -256,7 +258,7 @@ export default function Monitors() {
                   {everything || m.type === "heartbeat" ? <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span> : <IntervalTag monitor={m} onChanged={(sec) => setItems((xs) => xs && xs.map((x) => (x.id === m.id ? { ...x, intervalSec: sec } : x)))} />}
                   <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
                 </div>
-                <span><span className={`pill ${m.status}`}>{t(m.status)}</span></span>
+                <span><span className={`pill ${monitorState(m).tone}`}>{t(monitorState(m).label)}</span></span>
                 <span className="spk"><Spark data={m.spark ?? []} status={m.status} /></span>
                 <span className="num">{m.uptime24h == null ? "—" : `${m.uptime24h}%`}</span>
                 <span className="num">{m.avgLatency24h == null ? "—" : `${m.avgLatency24h} ms`}</span>
@@ -291,7 +293,7 @@ const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket"];
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
-    method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
+    domainExpiryWarnDays: monitor?.domainExpiryWarnDays ?? 30, method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
@@ -372,13 +374,17 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
-            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
-              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", id === "http" ? "https://" : id === "websocket" ? "wss://" : ""); }}>
+            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
+              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", id === "http" ? "https://" : id === "websocket" ? "wss://" : ""); }}>
                 <b>{t(label)}</b><small>{t(desc)}</small>
               </button>
             ))}
           </div>
         </div>
+        {f.type === "domain" && <label className="fld">{t("Warn before expiry (days)")}
+          <input className="in mono" type="number" min={1} max={365} value={f.domainExpiryWarnDays} onChange={(e) => set("domainExpiryWarnDays", Number(e.target.value))} />
+          <span className="muted">{t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")}</span>
+        </label>}
         {f.type !== "heartbeat" && (
           <label className="fld">{t(f.type === "http" || f.type === "websocket" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
             <input className="in mono" required value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket" } as Record<string, string>)[f.type] ?? ""} />

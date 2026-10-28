@@ -20,7 +20,7 @@ type Event = {
   slow?: true;
   /** the monitor failed again soon after recovering, so an earlier incident was reopened */
   reopened?: true;
-  monitor: { id?: string; projectId?: string | null; name: string; target: string };
+  monitor: { id?: string; projectId?: string | null; name: string; target: string; type?: string; domainExpiry?: { state: string; error: string | null } | null };
   /** The monitor's project; filled in when the alert goes out. */
   project?: { id: string; name: string };
   /** The workspace has more than one project, so the project's name is shown in the alert. */
@@ -112,7 +112,10 @@ async function postLark(url: string, text: string, secret?: string) {
   if (!res.ok || code !== 0) throw new Error(`Lark responded HTTP ${res.status}${code ? ` (${code}: ${data?.msg ?? data?.StatusMessage ?? "rejected"})` : ""}`);
 }
 
-const alertText = (ev: Event) =>
+const domainHeading = (ev: Event, opened = ev.kind !== "incident.resolved") => !opened ? "{name}: domain expiry verified" : (!ev.monitor.domainExpiry || ev.monitor.domainExpiry.state === "unknown") ? "{name}: domain expiry unknown" : ev.monitor.domainExpiry?.state === "expired" ? "{name}: registration date passed" : "{name}: domain renewal needed";
+const alertText = (ev: Event) => ev.monitor.type === "domain"
+  ? `${tag(ev)}${domainHeading(ev).replace("{name}", ev.monitor.name)} — ${ev.kind === "incident.resolved" ? ev.monitor.target : ev.reason ?? ev.monitor.domainExpiry?.error ?? ev.incident.title}`
+  :
   ev.kind === "incident.opened"
     ? `${ev.slow ? "🟡" : "🔴"} ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is responding slowly" : "is down"}${ev.reopened ? " again" : ""} — ${ev.incident.title}`
     : ev.kind === "incident.reminder"
@@ -147,7 +150,7 @@ const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: Del
   kind: kind === "incident.resolved" || kind === "incident.reminder" || kind === "incident.escalated" ? kind : "incident.opened",
   count,
   incident: { id: incident.id, title: incident.title, startedAt: incident.startedAt, resolvedAt: incident.resolvedAt },
-  monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target },
+  monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target, type: monitor.type, domainExpiry: monitor.domainExpiry },
   ...(incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
   ...(reopened ? { reopened: true as const } : {}),
 });
@@ -396,11 +399,11 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         if (started) rows.push([L("Started"), utc(started)]);
         if (opened && ev.reason) rows.push([L("Error"), ev.reason]);
         if (!opened && started && ev.incident.resolvedAt) {
-          rows.push([L("Downtime"), duration(ev.incident.resolvedAt.getTime() - started.getTime(), lang)]);
+          rows.push([L(ev.monitor.type === "domain" ? "Time needing attention" : "Downtime"), duration(ev.incident.resolvedAt.getTime() - started.getTime(), lang)]);
           rows.push([L("Resolved"), utc(ev.incident.resolvedAt)]);
         }
         const still = ev.kind === "incident.reminder" || ev.kind === "incident.escalated";
-        const heading = still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered";
+        const heading = ev.monitor.type === "domain" ? domainHeading(ev, opened) : still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered";
         const intro = ev.kind === "incident.reminder"
           ? L("Nobody has acknowledged this incident yet. This is reminder {n} of {max}.", { n: String(ev.count ?? 1), max: String(MAX_REMINDERS) })
           : ev.kind === "incident.escalated"
@@ -409,7 +412,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         const mail = actionEmail({
           title: L(heading, { name: ev.monitor.name }),
           body: intro,
-          badge: opened ? (ev.slow ? { label: L("Slow"), tone: "warn" } : { label: L("Down"), tone: "down" }) : { label: L("Recovered"), tone: "up" },
+          badge: ev.monitor.type === "domain" ? { label: L(opened ? "Domain attention" : "Verified"), tone: opened ? "warn" : "up" } : opened ? (ev.slow ? { label: L("Slow"), tone: "warn" } : { label: L("Down"), tone: "down" }) : { label: L("Recovered"), tone: "up" },
           rows,
           cta: L("View incident"),
           url: `${appUrl()}/app/incidents/${ev.incident.id}`,
@@ -461,12 +464,12 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
   const all = await repo.subscribersFor(orgId, ev.monitor.id);
   const { send: subs, skipped } = await withinEmails(entitlements, orgId, all);
   const opened = ev.kind === "incident.opened";
-  const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
+  const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, ev.monitor.type === "domain" ? domainHeading(ev, opened) : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
   const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, orgId), {
     subject: (p, lang) => `[${p}] ${head(lang)}`,
     title: head,
-    body: () => ev.monitor.name,
-    badge: (lang) => (opened ? (ev.slow ? { label: tr(lang, "Slow"), tone: "warn" } : { label: tr(lang, "Down"), tone: "down" }) : { label: tr(lang, "Recovered"), tone: "up" }),
+    body: () => ev.monitor.type === "domain" ? ev.reason ?? ev.monitor.domainExpiry?.error ?? ev.monitor.name : ev.monitor.name,
+    badge: (lang) => ev.monitor.type === "domain" ? { label: tr(lang, opened ? "Domain attention" : "Verified"), tone: opened ? "warn" : "up" } : (opened ? (ev.slow ? { label: tr(lang, "Slow"), tone: "warn" } : { label: tr(lang, "Down"), tone: "down" }) : { label: tr(lang, "Recovered"), tone: "up" }),
   });
   return { ...sent, total: all.length, skipped };
 }

@@ -1,10 +1,13 @@
 import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsPrivate } from "./netguard";
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
+import type { DomainExpiry, Repo } from "@openuptime/repo";
+import { domainCheck } from "./domain-expiry";
 import { websocketCheck } from "./websocket";
 
 export type CheckInput = {
-  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket";
+  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain";
   target: string;
+  domainExpiryWarnDays?: number;
   method: string;
   expectedStatus: number;
   timeoutMs: number;
@@ -17,6 +20,7 @@ export type CheckInput = {
   wsMessage?: string | null;
 };
 export type CheckOutcome = {
+  domainExpiry?: DomainExpiry;
   ok: boolean;
   statusCode?: number;
   latencyMs?: number;
@@ -28,10 +32,11 @@ export type CheckOutcome = {
 /** How much of a response is read when looking for a keyword. A larger body is not downloaded further. */
 export const MAX_BODY_BYTES = 1_000_000;
 
-export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
+export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome> {
   const started = Date.now();
   try {
     switch (m.type) {
+      case "domain": return await domainCheck(repo, m);
       case "http": return await httpCheck(m, started);
       case "dns": return await dnsCheck(m, started);
       case "tcp": return await tcpCheck(m, started);

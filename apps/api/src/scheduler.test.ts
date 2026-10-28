@@ -449,3 +449,16 @@ describe("checkOne across regions", () => {
     expect(incidents).toHaveLength(0);
   });
 });
+
+it("domain unknown/renewal failures open one accurately titled incident, without duplicates", async () => {
+  for (const unknown of [true, false]) {
+    const { repo, incidents, states } = fakeRepo();
+    repo.cachedRdap = async key => ({ expiresAt: new Date(Date.now() + 3600_000), value: key === "bootstrap:v1" ? { data: {} } : { expiresAt: unknown ? null : new Date(Date.now() + 2 * 864e5).toISOString(), checkedAt: new Date().toISOString(), source: "https://registry.example", error: unknown ? "Registry has no date" : null } });
+    const mon = hb({ type: "domain", target: "example.com", timeoutMs: 1000 });
+    await checkOne(repo, mon);
+    await checkOne(repo, { ...mon, status: "down", consecutiveFailures: 1 });
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].title).toBe(unknown ? "API: domain expiry unknown" : "API: domain renewal needed");
+    expect(states.some(s => (s.domainExpiry as { state?: string })?.state === (unknown ? "unknown" : "expiring"))).toBe(true);
+  }
+});
