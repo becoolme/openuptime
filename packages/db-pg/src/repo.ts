@@ -16,6 +16,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
+import { recordObservation, timeCoverage } from "./coverage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -453,12 +454,25 @@ export function createRepo(db: Db): Repo {
       if (inputs.length) await db.insert(schema.monitor).values(inputs.map((v) => ({ ...v, organizationId: orgId, projectId })));
     },
     async updateMonitor(orgId, id, scope, patch) {
-      const [row] = await db
-        .update(schema.monitor)
-        .set(patch)
-        .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
-        .returning();
-      return row ?? null;
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor)
+          .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId))).for("update");
+        if (!current) return null;
+        // Every user configuration edit fences in-flight observations. Internal deadline-only writes do not.
+        const changed = Object.keys(patch).some((key) => key !== "nextCheckAt");
+        const [row] = await tx.update(schema.monitor).set({ ...patch, ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
+          .where(eq(schema.monitor.id, id)).returning();
+        if (changed) {
+          const [last] = await tx.select({ at: schema.monitorObservation.observedAt }).from(schema.monitorObservation)
+            .where(eq(schema.monitorObservation.monitorId, id)).orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
+          // A control fence must sort after the latest observation even if two application clocks disagree.
+          await tx.insert(schema.monitorObservation).values({
+            monitorId: id, observedAt: new Date(Math.max(Date.now(), last?.at.getTime() ?? 0)),
+            state: row.paused ? "paused" : "unknown", revision: row.coverageRevision,
+          });
+        }
+        return row;
+      });
     },
     async deleteMonitor(orgId, id, scope) {
       await db.delete(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)));
@@ -529,6 +543,8 @@ export function createRepo(db: Db): Repo {
         ),
       );
     },
+    recordObservation: (m, result, options) => recordObservation(db, m, result, options),
+    timeCoverage: (orgId, monitorId, scope, days, now) => timeCoverage(db, orgId, monitorId, scope, days, now),
     async recordCheck(r) {
       await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });
       await foldIntoRollup(r.monitorId, r.ok, r.latencyMs ?? null);
@@ -564,6 +580,13 @@ export function createRepo(db: Db): Repo {
       return !!w;
     },
     async purgeExpired() {
+      // Keep one predecessor per monitor as the boundary anchor, including resume/unknown fences.
+      // Retaining only old pauses would resurrect a pause after its resume was purged.
+      await db.execute(sql`delete from monitor_observation old
+        where old.observed_at < now() - interval '35 days'
+          and exists (select 1 from monitor_observation newer where newer.monitor_id = old.monitor_id
+            and newer.observed_at < now() - interval '35 days'
+            and (newer.observed_at, newer.id) > (old.observed_at, old.id))`);
       // raw results are kept per workspace for its configured number of days; hourly rollups far longer
       await db.execute(sql`delete from check_result r using monitor m
         where m.id = r.monitor_id

@@ -23,6 +23,15 @@ describe("openuptime mcp tools", () => {
     expect(r.result.tools.find((t: any) => t.name === "list_monitors").annotations.readOnlyHint).toBe(true);
   });
 
+  it("exposes bounded time reports with validated windows", async () => {
+    calls.length = 0;
+    await rpc(1, "tools/call", { name: "get_monitor_time_coverage", arguments: { id: ID, days: 30 } });
+    expect(calls[0]).toEqual({ method: "GET", path: `/api/monitors/${ID}/time-coverage?days=30` });
+    const bad = await rpc(2, "tools/call", { name: "get_monitor_time_coverage", arguments: { id: ID, days: 31 } });
+    expect(bad.result?.isError ?? !!bad.error).toBeTruthy();
+    expect(calls).toHaveLength(1);
+  });
+
   it("maps tool calls onto REST requests", async () => {
     calls.length = 0;
     await rpc(1, "tools/call", { name: "pause_monitor", arguments: { id: ID } });

@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitor-time-coverage", date: "2026-10-28", edition: "community",
+    title: { en: "Monitor time coverage", zh: "监控时间覆盖报告" },
+    summary: { en: "Inspect 7- or 30-day time coverage without counting missing observations as healthy.", zh: "查看 7 天或 30 天时间覆盖，缺失的观测不会计为正常。" },
+    points: [
+      { en: "Separate healthy, failed, degraded, paused and unknown time using bounded observations, independently of incident handling.", zh: "使用有时效的观测区分正常、故障、缓慢、暂停和未知时间，不受事故处理状态影响。" },
+      { en: "Read the report through the dashboard, API or MCP and export JSON; history before this update stays unknown.", zh: "通过控制台、API 或 MCP 读取并导出 JSON；更新前未记录的历史保持未知。" },
+      { en: "Maintenance is included; the report describes inferred coverage rather than exact outage duration or an SLA.", zh: "统计包含维护时间；报告描述观测推断的覆盖时长，不是精确停机时长或 SLA。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",

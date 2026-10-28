@@ -119,7 +119,9 @@ export async function processCheckMessage(repo: Repo, msg: CheckMessage, entitle
   const open = monitors.filter((m) => !m.paused && !pinged(m));
   const runs = open.filter((m) => token.has(m.id)).map((m) => ({ id: m.id, token: token.get(m.id)!, ...(generation.has(m.id) ? { generation: generation.get(m.id)! } : {}) }));
   const started = new Set(runs.length ? await repo.beginRuns(runs) : []);
-  await checkMany(repo, open.filter((m) => !token.has(m.id) || started.has(m.id)), entitlements);
+  await checkMany(repo, open.filter((m) => !token.has(m.id) || started.has(m.id)).map((m) => ({
+    ...m, runGeneration: generation.get(m.id),
+  })), entitlements);
 }
 
 /**
@@ -152,12 +154,12 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
   for (let i = 0; i < monitors.length; i += CONCURRENCY) {
     // one failing monitor must not take the rest of the batch down with it
     const batch = monitors.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(batch.map((m) => checkOne(repo, m, entitlements)));
+    const results = await Promise.allSettled(batch.map((m) => checkOne(repo, m, entitlements, true)));
     results.forEach((r, j) => r.status === "rejected" && console.error(`check failed for ${batch[j].id}`, r.reason));
   }
 }
 
-export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
+export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered, scheduled = false) {
   // a due heartbeat monitor means no ping arrived in time
   const { out, results, note: regionNote } =
     m.type === "heartbeat"
@@ -170,6 +172,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   }
   // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
   if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
+  if (!(await repo.recordObservation(m, out, { generation: scheduled ? m.runGeneration : undefined }))) return;
   const inMaintenance = await repo.underMaintenance(m);
   // one region is one row; several are rows per region that count as a single run in the rollup
   if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });

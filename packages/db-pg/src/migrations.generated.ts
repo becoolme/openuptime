@@ -149,5 +149,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0029_monitor_websocket",
     "when": 1793160668461,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'websocket';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"ws_message\" text;"
+  },
+  {
+    "tag": "0030_lean_mentor",
+    "when": 1793165404992,
+    "sql": "CREATE TABLE \"monitor_observation\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"monitor_id\" uuid NOT NULL,\n\t\"observed_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"state\" text NOT NULL,\n\t\"valid_until\" timestamp with time zone,\n\t\"maintenance_until\" timestamp with time zone,\n\t\"revision\" integer NOT NULL,\n\t\"generation\" integer,\n\t\"interval_sec\" integer,\n\t\"grace_sec\" integer,\n\t\"timeout_ms\" integer\n);\n--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_revision\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_generation\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_heartbeat_version\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor_observation\" ADD CONSTRAINT \"monitor_observation_monitor_id_monitor_id_fk\" FOREIGN KEY (\"monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nCREATE INDEX \"monitor_observation_time_idx\" ON \"monitor_observation\" USING btree (\"monitor_id\",\"observed_at\",\"id\");"
   }
 ];

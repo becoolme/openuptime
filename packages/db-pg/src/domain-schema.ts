@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
+  bigserial,
   boolean,
   doublePrecision,
   index,
@@ -73,6 +74,9 @@ export const monitor = pgTable(
     lastRunToken: timestamp("last_run_token", { withTimezone: true }),
     /** Claim order is independent of the interval and heartbeat deadline. */
     runGeneration: integer("run_generation").notNull().default(0),
+    coverageRevision: integer("coverage_revision").notNull().default(0),
+    coverageGeneration: integer("coverage_generation").notNull().default(0),
+    coverageHeartbeatVersion: integer("coverage_heartbeat_version").notNull().default(0),
     lastRunGeneration: integer("last_run_generation").notNull().default(0),
     paused: boolean("paused").notNull().default(false),
     heartbeatToken: text("heartbeat_token"),
@@ -104,6 +108,21 @@ export const monitor = pgTable(
   },
   (t) => [index("monitor_org_idx").on(t.organizationId), index("monitor_due_idx").on(t.nextCheckAt)],
 );
+
+/** Append-only observations and configuration fences. No historical backfill from mutable status or incidents. */
+export const monitorObservation = pgTable("monitor_observation", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  monitorId: uuid("monitor_id").notNull().references(() => monitor.id, { onDelete: "cascade" }),
+  observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
+  state: text("state").$type<"up" | "down" | "degraded" | "paused" | "unknown">().notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true }),
+  maintenanceUntil: timestamp("maintenance_until", { withTimezone: true }),
+  revision: integer("revision").notNull(),
+  generation: integer("generation"),
+  intervalSec: integer("interval_sec"),
+  graceSec: integer("grace_sec"),
+  timeoutMs: integer("timeout_ms"),
+}, (t) => [index("monitor_observation_time_idx").on(t.monitorId, t.observedAt, t.id)]);
 
 export const checkResult = pgTable(
   "check_result",

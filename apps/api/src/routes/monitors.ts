@@ -248,6 +248,14 @@ export const monitors = new Hono<AppEnv>()
     }
     return c.json({ created: valid.length, skipped }, valid.length ? 201 : 400);
   })
+  .get("/:id/time-coverage", uuidParams, async (c) => {
+    const days = c.req.query("days") ?? "7";
+    if (days !== "7" && days !== "30") return c.json({ error: "days must be 7 or 30" }, 400);
+    const report = await c.get("repo").timeCoverage(c.get("orgId"), c.req.param("id"), c.get("projectScope"), days === "7" ? 7 : 30);
+    if (!report) return c.json({ error: "Not found" }, 404);
+    c.header("cache-control", "no-store");
+    return c.json(report);
+  })
   .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));

@@ -60,6 +60,10 @@ export interface Monitor {
   nextCheckAt: Date;
   /** Internal sequence assigned atomically when a scheduled run is claimed. */
   runGeneration?: number;
+  /** Changes whenever configuration is edited; fences observations from old in-flight checks. */
+  coverageRevision?: number;
+  /** Successful-ping fence committed with coverage, independently of alert-state updates. */
+  coverageHeartbeatVersion?: number;
   paused: boolean;
   heartbeatToken: string | null;
   keyword: string | null;
@@ -477,6 +481,10 @@ export interface Repo {
   beginRuns(runs: { id: string; token: Date; generation?: number }[]): Promise<string[]>;
   /** Hand claimed monitors back, due right now, when their work could not be queued. Monitors that moved on since are left alone. */
   releaseClaims(runs: { id: string; token: Date }[]): Promise<void>;
+  /** Persist a bounded observation independently of mutable alert/incident state. False rejects a stale or duplicate run. */
+  recordObservation(m: Monitor, result: { ok: boolean; latencyMs?: number | null }, options?: { generation?: number; heartbeatPing?: boolean }): Promise<boolean>;
+  /** All durations are milliseconds; unknown is never implicitly counted as healthy. */
+  timeCoverage(orgId: string, monitorId: string, scope: Scope, days: 7 | 30, now?: Date): Promise<TimeCoverage | null>;
   /** Store a raw result and fold it into its hourly rollup. */
   recordCheck(r: NewCheck): Promise<void>;
   /**
@@ -647,3 +655,13 @@ export interface Database {
   close(timeoutSec?: number): Promise<void>;
 }
 export type OpenDatabase = (connectionString: string, opts?: { max?: number }) => Database;
+
+/** Time inferred from bounded observations, not exact outage duration or a contractual SLA. */
+export interface TimeCoverage {
+  from: string;
+  to: string;
+  totalMs: number;
+  states: { up: number; down: number; degraded: number; paused: number; unknown: number };
+  observedMaintenanceMs: number;
+  policy: "bounded-observation-v1";
+}

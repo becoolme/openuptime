@@ -1,3 +1,4 @@
+import TimeCoverage from "./TimeCoverage";
 import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
@@ -79,6 +80,7 @@ export default function MonitorDetail({ id }: { id: string }) {
       </div>
 
       {err && <p className="err">{err}</p>}
+      <TimeCoverage id={id} />
       {editing && <MonitorForm monitor={m} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
 
       <div className="kp">
