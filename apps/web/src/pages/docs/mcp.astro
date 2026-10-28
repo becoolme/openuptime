@@ -23,7 +23,11 @@ const tools: Tool[] = [
   { name: "list_status_pages", en: "Status pages.", zh: "状态页。" },
   { name: "create_status_page", en: "Create a public status page showing the given monitors.", zh: "创建公开状态页，展示指定的监控项。" },
   { name: "update_status_page", en: "Change a status page's title, theme, latency display or monitors.", zh: "修改状态页的标题、主题、延迟显示或监控项。" },
-  { name: "list_maintenance", en: "Maintenance windows.", zh: "维护窗口。" },
+  { name: "list_maintenance", en: "Maintenance occurrences, series ids and recurrence settings.", zh: "维护窗口、系列 ID 和重复设置。" },
+  { name: "create_maintenance", en: "Schedule one window or a bounded daily/weekly series in an IANA time zone.", zh: "创建一次性窗口或按指定时区每天、每周重复的有限系列。" },
+  { name: "skip_maintenance", en: "Remove one occurrence without changing the rest of its series. Owner/admin only.", zh: "跳过单次，不影响系列其他窗口。仅限所有者或管理员。" },
+  { name: "end_maintenance", en: "End the active occurrence now and retain history. Owner/admin only.", zh: "立即结束当前窗口并保留历史。仅限所有者或管理员。" },
+  { name: "cancel_maintenance_series", en: "Cancel future occurrences and end active ones, retaining completed history. Owner/admin only.", zh: "取消未来窗口并结束当前窗口，保留已完成历史。仅限所有者或管理员。" },
 ];
 ---
 <Doc titleZh="MCP：让 Claude 管理你的监控" descriptionZh="把 Claude、Cursor 等 MCP 客户端连接到 OpenUptime，用来管理监控、故障和状态页。" description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-17" toc>

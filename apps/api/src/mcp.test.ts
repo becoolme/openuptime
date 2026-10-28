@@ -33,6 +33,45 @@ describe("openuptime mcp tools", () => {
     expect(calls[2].body).toMatchObject({ name: "api", type: "http", intervalSec: 60 });
   });
 
+  it("maps maintenance scheduling and lifecycle actions with scope and complete recurrence", async () => {
+    calls.length = 0;
+    const recurrence = { frequency: "weekly", timeZone: "America/Toronto", until: "2027-04-01T00:00:00Z" };
+    const created = await rpc(1, "tools/call", { name: "create_maintenance", arguments: { name: "DB", startsAt: "2027-03-01T10:00:00Z", endsAt: "2027-03-01T11:00:00Z", recurrence, monitorIds: [ID], workspace: "w", project: ID } });
+    expect(created.result.isError).not.toBe(true);
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/api/maintenance", headers: { "x-workspace-id": "w", "x-project-id": ID }, body: { name: "DB", recurrence, monitorIds: [ID] } });
+    expect(JSON.parse(JSON.stringify(calls[0].body)).startsAt).toBe("2027-03-01T10:00:00.000Z");
+    await rpc(2, "tools/call", { name: "skip_maintenance", arguments: { id: ID } });
+    await rpc(3, "tools/call", { name: "end_maintenance", arguments: { id: ID } });
+    await rpc(4, "tools/call", { name: "cancel_maintenance_series", arguments: { seriesId: ID } });
+    expect(calls.slice(1)).toEqual([
+      { method: "DELETE", path: `/api/maintenance/${ID}` },
+      { method: "POST", path: `/api/maintenance/${ID}/end` },
+      { method: "DELETE", path: `/api/maintenance/series/${ID}` },
+    ]);
+    const { result } = await rpc(5, "tools/list");
+    const tool = result.tools.find((t: any) => t.name === "create_maintenance");
+    expect(tool.inputSchema.properties.startsAt.type).toBe("string");
+    expect(tool.inputSchema.properties.recurrence).toBeDefined();
+    for (const name of ["skip_maintenance", "end_maintenance", "cancel_maintenance_series"]) expect(result.tools.find((t: any) => t.name === name).annotations).toMatchObject({ destructiveHint: true, idempotentHint: true });
+  });
+
+  it("applies REST recurrence constraints before invoking maintenance tools", async () => {
+    calls.length = 0;
+    const base = { name: "DB", startsAt: "2027-03-01T10:00:00Z", endsAt: "2027-03-01T11:00:00Z" };
+    for (const patch of [
+      { endsAt: "2027-03-01T09:00:00Z" },
+      { recurrence: { frequency: "daily", timeZone: "Bad/Zone", until: "2027-04-01T00:00:00Z" } },
+      { recurrence: { frequency: "daily", timeZone: "UTC", until: "2029-04-01T00:00:00Z" } },
+    ]) {
+      const result = await rpc(1, "tools/call", { name: "create_maintenance", arguments: { ...base, ...patch } });
+      expect(result.result.isError).toBe(true);
+    }
+    expect(calls).toHaveLength(0);
+    const result: any = await server.handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_maintenance", arguments: base } }, call, { publicOnly: true });
+    expect(result.error ?? result.result?.isError).toBeTruthy();
+    expect(calls).toHaveLength(0);
+  });
+
   it("sends the workspace and project the agent names as headers", async () => {
     calls.length = 0;
     await rpc(1, "tools/call", { name: "list_monitors", arguments: { workspace: "w1", project: ID } });
