@@ -84,7 +84,7 @@ for (const loc of LOCALES) writeFileSync(join(root, `${loc.file}.html`), build(l
 // sitemap.xml and the Sitemap line of robots.txt need absolute URLs, so they exist only when the origin is known
 // comparison and use-case pages (src/lib/seo-pages.ts); a test keeps this list and that file in step
 const SEO_PAGES = ["/alternatives", "/alternatives/uptimerobot", "/alternatives/better-stack", "/alternatives/pingdom", "/alternatives/statuscake", "/alternatives/uptime-kuma", "/for", "/for/saas", "/for/agencies", "/for/ecommerce", "/for/devops-teams"];
-const PAGES = ["/", ...LOCALES.map((l) => l.path), ...["", "/api", "/embed", "/mcp", "/self-host", "/regions", "/backup"].flatMap((p) => [`/docs${p}`, `/zh-Hans/docs${p}`]), "/changelog", "/zh-Hans/changelog", ...SEO_PAGES.flatMap((p) => [p, `/zh-Hans${p}`]), "/privacy", "/terms", "/zh-Hans/privacy", "/zh-Hans/terms"];
+const PAGES = ["/", ...LOCALES.map((l) => l.path), ...["", "/api", "/embed", "/mcp", "/self-host", "/regions", "/backup", "/websocket"].flatMap((p) => [`/docs${p}`, `/zh-Hans/docs${p}`]), "/changelog", "/zh-Hans/changelog", ...SEO_PAGES.flatMap((p) => [p, `/zh-Hans${p}`]), "/privacy", "/terms", "/zh-Hans/privacy", "/zh-Hans/terms"];
 const robots = ["User-agent: *", "Disallow: /app", "Disallow: /zh-Hans/app", "Disallow: /api/", "Allow: /", ""];
 if (ORIGIN) {
   writeFileSync(

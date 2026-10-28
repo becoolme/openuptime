@@ -69,7 +69,7 @@ describe.skipIf(!url)("regions", () => {
     const r = await call("GET", "/regions");
     expect(r.status).toBe(200);
     expect(r.body.regions.map((x: { id: string }) => x.id)).toEqual(["auto", "us-east", "eu-central", "ap-southeast"]);
-    expect(r.body).toMatchObject({ types: ["http", "tcp"], maxPerMonitor: 2 });
+    expect(r.body).toMatchObject({ types: ["http", "tcp", "websocket"], maxPerMonitor: 2 });
   });
 
   it("puts no limit on the regions of one monitor in the community edition", async () => {

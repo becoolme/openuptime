@@ -8,7 +8,7 @@ import Doc from "../../layouts/Doc.astro";
     <h2 id="overview">Overview</h2>
     <p>By default a monitor is checked from where OpenUptime itself runs. That location is called <code>auto</code>. A region is an extra place a check can be sent from, served by a small <strong>probe</strong> that runs in that place. Regions are opt-in: a monitor uses them only when you pick regions for it, and everything else keeps running exactly as before.</p>
     <ul>
-      <li>HTTP and TCP monitors only. DNS, heartbeat and database monitors always run from <code>auto</code>.</li>
+      <li>HTTP, TCP and WebSocket monitors only. DNS, heartbeat and database monitors always run from <code>auto</code>.</li>
       <li>One monitor can list several regions. A monitor with a single non-<code>auto</code> region is checked from that region alone.</li>
       <li>Each region counts as one check of your allowance, so three regions cost three times as much per run.</li>
     </ul>
@@ -91,7 +91,7 @@ PROBE_REGIONS={
     <h2 id="overview-zh">概览</h2>
     <p>默认情况下，监控项从 OpenUptime 自身所在的位置发起检测，这个位置叫 <code>auto</code>。区域则是检测请求可以额外发出的地点，由运行在该地点的一个小型<strong>探针</strong>提供。区域是显式开启的：只有你为监控项选了区域，它才会用到，其余监控项和以前完全一样。</p>
     <ul>
-      <li>仅适用于 HTTP 和 TCP 监控项。DNS、心跳和数据库监控项始终从 <code>auto</code> 发起。</li>
+      <li>仅适用于 HTTP、TCP 和 WebSocket 监控项。DNS、心跳和数据库监控项始终从 <code>auto</code> 发起。</li>
       <li>一个监控项可以选多个区域。只选一个非 <code>auto</code> 区域时，仅从该区域检测。</li>
       <li>每个区域各计一次检查额度，因此三个区域每轮消耗三倍额度。</li>
     </ul>

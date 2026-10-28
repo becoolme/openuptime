@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -35,8 +36,12 @@ describe("probe handler", () => {
     expect((await handleProbe(await signed(check), { secret: undefined })).status).toBe(503);
   });
 
-  it("only runs http and tcp checks", async () => {
+  it("only runs http, tcp and websocket checks", async () => {
     expect((await handleProbe(await signed({ ...check, type: "postgres", target: "postgres://u:p@db.example.com/x" }), { secret })).status).toBe(400);
+    expect(parseCheck({ ...check, type: "websocket", target: "wss://example.com/socket", wsMessage: "ping" })).toMatchObject({ input: { type: "websocket", wsMessage: "ping" } });
+    expect(parseCheck({ ...check, type: "websocket", target: "wss://example.com/socket" })).toMatchObject({ input: { wsMessage: null } });
+    expect(parseCheck({ ...check, type: "websocket", wsMessage: 5 })).toHaveProperty("error");
+    expect(parseCheck({ ...check, type: "websocket", wsMessage: "x".repeat(2001) })).toHaveProperty("error");
     expect(parseCheck({ ...check, timeoutMs: 999_999 })).toHaveProperty("error");
     expect(parseCheck({ ...check, headers: { a: 1 } })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedLocation: 5 })).toHaveProperty("error");
@@ -60,6 +65,15 @@ describe("probe handler", () => {
         res.statusCode = req.url === "/down" ? 503 : 200;
         res.end("hello from the target");
       });
+      // just enough of a WebSocket server: accept the handshake and send one text frame
+      server.on("upgrade", (req, socket) => {
+        const accept = createHash("sha1").update(`${req.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+        const text = Buffer.from("hello over websocket");
+        socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+        socket.write(Buffer.concat([Buffer.from([0x81, text.length]), text]));
+        socket.on("data", () => {});
+        socket.on("error", () => {});
+      });
       await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
       url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     });
@@ -80,6 +94,14 @@ describe("probe handler", () => {
       const port = new URL(url).port;
       const res = await (await handleProbe(await signed({ ...check, type: "tcp", target: `127.0.0.1:${port}` }), { secret })).json() as { ok: boolean };
       expect(res.ok).toBe(true);
+    });
+
+    it("returns the outcome of a websocket check", async () => {
+      const target = url.replace("http:", "ws:") + "/socket";
+      const up = await (await handleProbe(await signed({ ...check, type: "websocket", target, keyword: "over websocket" }), { secret })).json() as { ok: boolean; statusCode: number };
+      expect(up).toMatchObject({ ok: true, statusCode: 101 });
+      const miss = await (await handleProbe(await signed({ ...check, type: "websocket", target, keyword: "nope" }), { secret })).json() as { ok: boolean; error: string };
+      expect(miss).toMatchObject({ ok: false, error: 'Keyword "nope" not found in the first message' });
     });
   });
 });

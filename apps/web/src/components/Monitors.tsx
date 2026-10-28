@@ -7,7 +7,7 @@ import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
-const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS" };
+const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS" };
 
 export function Spark({ data, status }: { data: (number | null)[]; status: string }) {
   const pts = data.filter((v): v is number => v != null);
@@ -284,12 +284,15 @@ const STATUS_NAMES: Record<number, string> = {
 const statusOptions = (current: number) =>
   [...new Set([...Object.keys(STATUS_NAMES).map(Number), current])].sort((a, b) => a - b).map((n) => ({ value: n, label: STATUS_NAMES[n] ? `${n} ${STATUS_NAMES[n]}` : String(n) }));
 
+/** Types whose checks can run from a probe region (the API's PROBE_TYPES). */
+const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket"];
+
 /** Create a monitor, or edit one when `monitor` is given (its type is fixed). */
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
     method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
-    keyword: monitor?.keyword ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
+    keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
     regions: monitor?.regions?.length ? monitor.regions : ["auto"],
@@ -339,12 +342,12 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     setErr("");
     setUpgrade(undefined);
     try {
-      const headers = f.type === "http" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
+      const headers = f.type === "http" || f.type === "websocket" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
       const { regions, ...rest } = f;
-      // only http and tcp checks can run from a region; leaving the field out keeps the stored value
-      const probed = (f.type === "http" || f.type === "tcp") && places.length > 1;
-      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: f.type === "http" && f.keyword ? f.keyword : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
+      const probed = PROBED.includes(f.type) && places.length > 1;
+      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         await api.updateMonitor(monitor.id, patch);
@@ -369,16 +372,16 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
-            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
-              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (!monitor && (f.target === "https://" || f.target === "")) set("target", id === "http" ? "https://" : ""); }}>
+            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
+              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", id === "http" ? "https://" : id === "websocket" ? "wss://" : ""); }}>
                 <b>{t(label)}</b><small>{t(desc)}</small>
               </button>
             ))}
           </div>
         </div>
         {f.type !== "heartbeat" && (
-          <label className="fld">{t(f.type === "http" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
-            <input className="in mono" required value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443" } as Record<string, string>)[f.type] ?? ""} />
+          <label className="fld">{t(f.type === "http" || f.type === "websocket" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
+            <input className="in mono" required value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket" } as Record<string, string>)[f.type] ?? ""} />
           </label>
         )}
         <div className="fld">{t("Check every")}
@@ -413,9 +416,15 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
           </label>
         )}
-        {f.type === "http" && (
+        {f.type === "websocket" && (
+          <label className="fld">{t("Message to send (optional)")}
+            <input className="in mono" value={f.wsMessage} onChange={(e) => set("wsMessage", e.target.value)} placeholder='{"type":"ping"}' maxLength={2000} />
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Sent once the connection is open; a message must then come back. Leave empty to check the handshake only. Put credentials in headers, not here.")}</span>
+          </label>
+        )}
+        {(f.type === "http" || f.type === "websocket") && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 10 }}>
-            <label className="fld">{t("Response must contain (optional)")}
+            <label className="fld">{t(f.type === "websocket" ? (f.wsMessage ? "Reply must contain (optional)" : "First message must contain (optional)") : "Response must contain (optional)")}
               <input className="in mono" value={f.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder="OK" />
             </label>
             <label className="fld">{t("Mode")}
@@ -423,9 +432,9 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             </label>
           </div>
         )}
-        {f.type === "http" && (
+        {(f.type === "http" || f.type === "websocket") && (
           <div className="fld">
-            {t("Request headers")}
+            {t(f.type === "websocket" ? "Handshake headers" : "Request headers")}
             {hdrs.map((r, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <input className="in mono" style={{ flex: 1, minWidth: 0 }} value={r.k} placeholder="Authorization" aria-label={t("Header name")} onChange={(e) => setHdr(i, { k: e.target.value })} />
@@ -476,14 +485,14 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             })}
           </div>
         )}
-        {(f.type === "http" || f.type === "tcp") && places.length > 1 && f.regions.length > 1 && (
+        {PROBED.includes(f.type) && places.length > 1 && f.regions.length > 1 && (
           <label className="fld">{t("Go down when")}
             <Select className="in" value={Math.min(f.minRegionsFailing, f.regions.length)} onChange={(v) => set("minRegionsFailing", v)}
               options={[{ value: 0, label: t("Most regions fail") }, ...Array.from({ length: f.regions.length }, (_, i) => ({ value: i + 1, label: t(i === 0 ? "Any region fails" : "{n} regions fail").replace("{n}", String(i + 1)) }))]} />
             <small className="faint">{t("Fewer failing regions are recorded but do not open an incident.")}</small>
           </label>
         )}
-        {(f.type === "http" || f.type === "tcp") && places.length > 1 && (
+        {PROBED.includes(f.type) && places.length > 1 && (
           <div className="fld region-fld">{t("Check from")} {Number.isFinite(maxRegions) && <span className="faint">({t("up to {n}").replace("{n}", String(maxRegions))})</span>}
             {/* collapsed to what is selected; the full list only opens on request */}
             <button type="button" className="region-sum" aria-expanded={regionsOpen} onClick={() => setRegionsOpen((o) => !o)}>
@@ -514,7 +523,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <div className="mfoot">
           {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
           <div className="mact">
-            <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * ((f.type === "http" || f.type === "tcp") ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{(f.type === "http" || f.type === "tcp") && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
+            <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * (PROBED.includes(f.type) ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{PROBED.includes(f.type) && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
             <div className="mbtns">
               <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
               <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>

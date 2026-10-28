@@ -128,7 +128,7 @@ export function hostBlocked(host: string): boolean {
   return !h.includes("."); // single label: a search-domain or compose-network name
 }
 
-const isWorkers = () => (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers";
+export const isWorkers = () => (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers";
 const isLiteral = (h: string) => h.includes(":") || V4.test(h);
 
 const resolved = new Map<string, { at: number; addrs: string[] }>();
@@ -257,14 +257,15 @@ export function hostPort(target: string, defaultPort: number): { hostname: strin
 export async function targetProblem(type: string, target: string): Promise<string | null> {
   if (allowPrivate || type === "heartbeat" || type === "dns") return null;
   let host: string | undefined;
-  if (type === "http") {
+  if (type === "http" || type === "websocket") {
     let u: URL;
     try {
       u = new URL(target);
     } catch {
       return null; // reported by the check itself, as before
     }
-    if (u.protocol !== "http:" && u.protocol !== "https:") return "Only http:// and https:// URLs can be monitored.";
+    if (type === "http" && u.protocol !== "http:" && u.protocol !== "https:") return "Only http:// and https:// URLs can be monitored.";
+    if (type === "websocket" && u.protocol !== "ws:" && u.protocol !== "wss:") return "Only ws:// and wss:// URLs can be monitored.";
     host = u.hostname;
   } else {
     host = hostPort(target, 1)?.hostname;
@@ -294,7 +295,7 @@ const CONNECT_FAILURES = new Set(["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH",
  * Does the failure (or one of the attempts inside an AggregateError, several addresses tried) come from the connect phase?
  * A timeout counts only when it is the connect syscall's own: an ETIMEDOUT while reading means the request may have been sent.
  */
-function connectFailure(e: unknown): boolean {
+export function connectFailure(e: unknown): boolean {
   const walk = (x: unknown, depth: number): boolean => {
     if (!x || typeof x !== "object" || depth > 3) return false;
     const { code, syscall, cause, errors } = x as { code?: unknown; syscall?: unknown; cause?: unknown; errors?: unknown };

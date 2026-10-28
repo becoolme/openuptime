@@ -27,6 +27,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "websocket-monitors",
+    date: "2026-10-28",
+    edition: "community",
+    title: { en: "WebSocket monitors", zh: "WebSocket 监控" },
+    summary: { en: "Monitor a ws:// or wss:// endpoint: the handshake is the check, and a message and its reply can be checked too.", zh: "可以监控 ws:// 或 wss:// 端点：以握手是否成功为准，也可以发送消息并校验回复。" },
+    points: [
+      { en: "A WebSocket monitor is up when the server completes the handshake; a refused upgrade, a redirect or a wrong accept header marks it down.", zh: "服务器完成握手即判定为正常；拒绝升级、返回重定向或 Accept 头不正确都会判定为故障。" },
+      { en: "Optionally send a text message once connected; a reply must then arrive within the timeout.", zh: "可选：连接后发送一条文本消息，回复必须在超时时间内到达。" },
+      { en: "Check the reply, or the first message the server sends, for a keyword that must or must not appear.", zh: "可以在回复（或服务器主动发来的第一条消息）中检查某个关键词必须出现或不得出现。" },
+      { en: "Headers such as Authorization are sent with the handshake, and WebSocket monitors can be checked from several regions.", zh: "Authorization 等请求头会随握手一起发送，WebSocket 监控也支持多区域检测。" },
+      { en: "Self-hosted probes need updating before they can run WebSocket checks.", zh: "自托管的探针需要更新后才能执行 WebSocket 检测。" },
+    ],
+    link: { href: "/docs/websocket", label: { en: "Read the WebSocket monitor docs", zh: "阅读 WebSocket 监控文档" } },
+  },
+  {
     id: "status-page-site-logo",
     date: "2026-10-24",
     edition: "community",

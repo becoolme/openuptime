@@ -13,20 +13,22 @@ import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis"]).describe("Check protocol; immutable after creation. HTTP checks a URL, heartbeat waits for incoming pings, and other types check a service."),
-  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. TCP: host:port. DNS: hostname. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
+  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
   method: z.enum(["GET", "HEAD", "POST"]).describe("HTTP request method; ignored for other monitor types."),
   expectedStatus: z.number().int().min(100).max(599).describe("HTTP response status that counts as healthy; an expected 3xx is checked without following the redirect."),
   intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Hosted plans may require a longer interval."),
   timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds."),
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
-  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP/TCP only. A supplied list replaces the existing one."),
-  keyword: z.string().max(500).nullable().describe("HTTP response-body text to test; null disables keyword matching."),
-  keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body must contain keyword or must not contain it."),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP and WebSocket only. A supplied list replaces the existing one."),
+  keyword: z.string().max(500).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test; null disables keyword matching."),
+  keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body (or the WebSocket message) must contain keyword or must not contain it."),
   // an absolute http(s) URL or a path; blank means "any destination"
   expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
-  headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
+  headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP (or WebSocket handshake) request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
+  // sent as one text message after the handshake; blank means "handshake only"
+  wsMessage: z.string().max(2000).transform((v) => v || null).nullable().describe("WebSocket only: text message sent once the connection is open; a message must then come back within the timeout. Not a secret: put credentials in headers. Null or empty string checks the handshake only."),
   graceSec: z.number().int().min(0).max(86400).describe("Extra seconds allowed after a heartbeat deadline before it counts as missed; used only for heartbeat monitors."),
   channelIds: z.array(z.string().uuid()).max(50).describe("Alert-channel UUIDs from list_channels. Replaces the selected channels; an empty list clears them. Newly created monitors also inherit auto-enabled channels."),
   tags: z.array(z.string().trim().min(1).max(32)).max(20).describe("Dashboard filter labels; a supplied list replaces the existing tags, and an empty list clears them."),
@@ -53,6 +55,7 @@ const body = z.object({
   keywordMode: fields.keywordMode.default("contains"),
   expectedLocation: fields.expectedLocation.default(null),
   headers: fields.headers.default({}),
+  wsMessage: fields.wsMessage.default(null),
   graceSec: fields.graceSec.default(0),
   channelIds: fields.channelIds.default([]),
   tags: fields.tags.default([]),
@@ -76,7 +79,7 @@ function normaliseImport(raw: unknown): unknown {
   if (Array.isArray(r.regions) && r.regions.length === 0) delete r.regions;
   r.keyword ??= r.keyword_value ?? r.expectedKeyword ?? undefined;
   const t = typeof r.type === "string" ? r.type.toLowerCase() : undefined;
-  if (t) r.type = ({ https: "http", keyword: "http", port: "tcp", "tcp-port": "tcp", mysql: "mysql", postgres: "postgres", postgresql: "postgres" } as Record<string, string>)[t] ?? t;
+  if (t) r.type = ({ https: "http", keyword: "http", port: "tcp", "tcp-port": "tcp", mysql: "mysql", postgres: "postgres", postgresql: "postgres", "websocket-upgrade": "websocket", ws: "websocket" } as Record<string, string>)[t] ?? t;
   const o: Record<string, unknown> = {};
   for (const k of FIELD_KEYS) if (r[k] !== undefined && r[k] !== null) o[k] = r[k];
   if (r.keyword === null) o.keyword = null;
@@ -256,7 +259,7 @@ export const monitors = new Hono<AppEnv>()
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
     // Retaining stored headers also retains their access rights: only managers may change the request around them.
-    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined) {
+    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
       if (v.headers) v.headers = restoreHeaders(v.headers, current.headers);
@@ -264,6 +267,7 @@ export const monitors = new Hono<AppEnv>()
       const retainsStored = Object.entries(current.headers).some(([key, value]) => nextHeaders[key] === value);
       const changesRequest = (v.target !== undefined && v.target !== current.target)
         || (v.method !== undefined && v.method !== current.method)
+        || (v.wsMessage !== undefined && v.wsMessage !== current.wsMessage)
         || !sameJson(nextHeaders, current.headers);
       if (retainsStored && changesRequest && !(await isManager(c))) {
         return c.json({ error: "Only workspace owners and admins can change request settings while keeping stored headers", code: "protected_request_headers" }, 403);

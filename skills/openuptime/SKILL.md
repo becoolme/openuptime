@@ -19,10 +19,11 @@ Drive an OpenUptime workspace through its MCP tools (server `openuptime`, tools 
 Call `openuptime:create_monitor` with `name`, `type` and `target` (URL, `host:port` or hostname). Omitted fields take defaults: 60 s interval, expect HTTP 200, region `auto`.
 
 - Website or API: `type: "http"`, `target: "https://api.example.com/health"`. Add `keyword` (with `keywordMode: "contains"` or `"absent"`) when a 200 alone is not proof of health.
+- WebSocket endpoint: `type: "websocket"`, `target: "wss://example.com/socket"`. The handshake alone is the check; add `wsMessage` to send a text message that must get a reply, and `keyword` to check that reply. Credentials go in `headers`, never in `wsMessage`.
 - Cron job or backup: `type: "heartbeat"`; `graceSec` is how late a ping may be. Give the user the ping URL from `openuptime:get_monitor`.
 - Database or cache: `postgres`, `mysql` or `redis` with a connection target the user provided. Never invent credentials.
 - Alerts: attach `channelIds` from `openuptime:list_channels`. A monitor without channels does not notify anyone, so say so.
-- Several regions: names come from `openuptime:list_regions`; only http and tcp monitors use them.
+- Several regions: names come from `openuptime:list_regions`; only http, tcp and websocket monitors use them.
 
 Verify with `openuptime:run_check` and report the real result, not an assumption.
 

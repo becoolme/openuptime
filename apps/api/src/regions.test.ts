@@ -4,8 +4,9 @@ import { signProbe, verifyProbe } from "./probe-protocol";
 import { effectiveRegions } from "./regions";
 
 describe("effectiveRegions", () => {
-  it("defaults to auto and only applies to http and tcp", () => {
+  it("defaults to auto and only applies to http, tcp and websocket", () => {
     expect(effectiveRegions({ type: "http", regions: [] })).toEqual(["auto"]);
+    expect(effectiveRegions({ type: "websocket", regions: ["eu-central"] })).toEqual(["eu-central"]);
     expect(effectiveRegions({ type: "http", regions: ["eu-central", "eu-central", "us-east"] })).toEqual(["eu-central", "us-east"]);
     expect(effectiveRegions({ type: "postgres", regions: ["eu-central"] })).toEqual(["auto"]);
     expect(effectiveRegions({ type: "heartbeat", regions: ["eu-central"] })).toEqual(["auto"]);

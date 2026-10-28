@@ -91,6 +91,7 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
   const body = JSON.stringify({
     type: input.type, target: input.target, method: input.method, expectedStatus: input.expectedStatus, timeoutMs: input.timeoutMs,
     keyword: input.keyword ?? null, keywordMode: input.keywordMode ?? "contains", expectedLocation: input.expectedLocation ?? null, headers: input.headers ?? {},
+    wsMessage: input.wsMessage ?? null,
   });
   try {
     const ts = Math.floor(Date.now() / 1000);

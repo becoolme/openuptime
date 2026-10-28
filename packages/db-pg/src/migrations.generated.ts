@@ -144,5 +144,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0028_left_pepper_potts",
     "when": 1792776858624,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"run_generation\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"last_run_generation\" integer DEFAULT 0 NOT NULL;"
+  },
+  {
+    "tag": "0029_monitor_websocket",
+    "when": 1793160668461,
+    "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'websocket';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"ws_message\" text;"
   }
 ];

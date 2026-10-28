@@ -3,8 +3,8 @@
 A probe runs one check on request, from wherever it is deployed. Deploy it in several places and OpenUptime can check a
 monitor from all of them, so an outage that only some of the world sees is told apart from a real one.
 
-Probes run **http** and **tcp** checks only. Database checks carry credentials and stay on the scheduler; heartbeats are
-not checks of ours at all.
+Probes run **http**, **tcp** and **websocket** checks only. Database checks carry credentials and stay on the scheduler;
+heartbeats are not checks of ours at all.
 
 ## How it fits together
 
@@ -99,7 +99,7 @@ A value is a URL, or `{ "url": …, "name": … }` to label it yourself. Nothing
 ## Develop
 
 ```bash
-pnpm test        # handler and server: signatures, validation, private-target refusal, real http/tcp checks,
+pnpm test        # handler and server: signatures, validation, private-target refusal, real http/tcp/websocket checks,
                  # and the production bundle driven over HTTP under plain Node
 pnpm typecheck
 ```

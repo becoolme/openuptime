@@ -4,7 +4,7 @@ import type { Monitor } from "@openuptime/repo";
 export const AUTO = "auto";
 
 /** Monitor types a probe can run: they need only an outbound connection and no credentials of ours. */
-export const PROBE_TYPES = ["http", "tcp"] as const;
+export const PROBE_TYPES = ["http", "tcp", "websocket"] as const;
 
 /** A region id: what a monitor stores and what `PROBE_REGIONS` is keyed by. Not tied to any hosting provider's codes. */
 export const REGION_ID = /^[a-z0-9][a-z0-9-]{1,23}$/;

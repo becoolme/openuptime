@@ -11,7 +11,7 @@ export const ROLLUP_RETENTION_DAYS = 400;
 export const PUSH_DEVICE_STALE_DAYS = 180;
 export const DEFAULT_ALERT_LOG_DAYS = 30;
 
-export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
+export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket";
 export type MonitorStatus = "pending" | "up" | "degraded" | "down" | "paused";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type IncidentSeverity = "minor" | "major";
@@ -66,6 +66,8 @@ export interface Monitor {
   keywordMode: string;
   expectedLocation: string | null;
   headers: Record<string, string>;
+  /** websocket: text sent once the connection is open; null = only the handshake (and a greeting, with a keyword) */
+  wsMessage: string | null;
   graceSec: number;
   channelIds: string[];
   tags: string[];
@@ -83,7 +85,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
-  | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCheckAt?: Date };

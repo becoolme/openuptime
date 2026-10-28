@@ -154,7 +154,7 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <p>Keys are region ids you choose (lowercase letters, digits and dashes). A value is a URL, or <code is:raw>{ "url", "name" }</code> to set the label shown in the app. URLs must be <code>https</code> (plain <code>http</code> is accepted for <code>localhost</code> only). The list appears in the app and in <code>GET /api/regions</code>, and a monitor can then pick up to its plan's limit.</p>
     <h3>How it behaves</h3>
     <ul>
-      <li>Only <strong>HTTP and TCP</strong> monitors can use regions. Other types, and heartbeats, always run from this deployment.</li>
+      <li>Only <strong>HTTP, TCP and WebSocket</strong> monitors can use regions. Other types, and heartbeats, always run from this deployment.</li>
       <li>With several regions a run counts as failed only when <strong>most of the regions that answered</strong> failed, so one region's bad route does not open an incident. Each region's result is kept, and the monitor page shows uptime and latency per region.</li>
       <li>A probe that cannot be reached is not a failed check. It is left out of the vote, and when no probe answers the check runs from this deployment instead, so a probe outage cannot blind monitoring.</li>
       <li>Each region counts as one check against any check allowance. A single request can also be sent from one region on the monitor page (or <code>POST /api/monitors/:id/check</code> with a <code>region</code>); it is not recorded and does not change the monitor's status.</li>
@@ -372,7 +372,7 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <p>键是你自己定的区域 id（小写字母、数字和连字符）。值可以是 URL，或 <code is:raw>{ "url", "name" }</code> 以设置在应用中显示的名称。URL 必须是 <code>https</code>。区域列表会出现在应用和 <code>GET /api/regions</code> 中，监控项可在套餐上限内选择多个区域。</p>
     <h3>行为说明</h3>
     <ul>
-      <li>只有 <strong>HTTP 和 TCP</strong> 监控项可以使用区域。其他类型和心跳始终从本部署发起。</li>
+      <li>只有 <strong>HTTP、TCP 和 WebSocket</strong> 监控项可以使用区域。其他类型和心跳始终从本部署发起。</li>
       <li>选择多个区域时，只有<strong>多数应答的区域</strong>都失败才判定为失败，单个区域的线路问题不会产生事件。各区域的结果都会保留，监控详情页按区域显示可用率和延迟。</li>
       <li>探针无法连通不算检测失败：它不参与表决；所有探针都没有应答时，改为从本部署发起检测，因此探针故障不会让监控失明。</li>
       <li>每个区域各计一次检查额度。也可以在监控详情页（或 <code>POST /api/monitors/:id/check</code> 并传 <code>region</code>）从某一个区域单次发起请求；该请求不会被记录，也不会改变监控状态。</li>

@@ -1,0 +1,51 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc titleZh="WebSocket 监控" descriptionZh="检查 WebSocket 端点能否完成握手，并可选地发送一条消息、校验回复内容。" description="Check that a WebSocket endpoint completes its handshake, and optionally send a message and check the reply." title="WebSocket monitors" updated="2026-10-28" toc>
+  <div lang="en">
+    <h1>WebSocket monitors</h1>
+    <p class="lede">A WebSocket monitor opens a connection to a <code>ws://</code> or <code>wss://</code> URL and checks that the server accepts it. You can also send a message and check what comes back.</p>
+    <h2 id="handshake">Handshake</h2>
+    <p>Every check starts with the opening handshake. The check passes when the server answers <code>101 Switching Protocols</code> with a correct <code>Sec-WebSocket-Accept</code> header. Anything else fails the check, with the reason in the result:</p>
+    <ul>
+      <li>another status, such as <code>401</code> or <code>404</code>: "Expected 101 Switching Protocols, got 404";</li>
+      <li>a redirect: redirects are not followed, and the error names where it pointed;</li>
+      <li>a wrong accept header, a refused connection, a TLS error or no answer within the timeout.</li>
+    </ul>
+    <p>With only a URL, that is the whole check: the connection is then closed normally (code 1000). The recorded latency is the time to complete the handshake.</p>
+    <h2 id="message">Send a message</h2>
+    <p>Fill in <strong>Message to send</strong> (up to 2000 characters) and the monitor sends it as a text frame once the connection is open. It then waits for the next message from the server. The check fails if the server closes the connection first, with the close code and reason in the error, or if nothing arrives within the timeout. The recorded latency then runs until the reply arrives.</p>
+    <p>For a server that speaks first, such as one that sends a greeting or a snapshot on connect, leave the message empty and set a keyword: the monitor waits for the first message instead.</p>
+    <h2 id="keyword">Check the reply</h2>
+    <p>Set a keyword to look for in the reply (or in the first message when nothing is sent). <strong>Contains</strong> fails the check when the keyword is missing; <strong>absent</strong> fails it when the keyword is present, which suits a reply such as <code>"status":"error"</code>. The keyword is matched as plain text, case-sensitive. Binary messages are read as UTF-8, and the first 1 MB of a message is checked; a single frame larger than 1 MB fails the check.</p>
+    <h2 id="headers">Headers and authentication</h2>
+    <p>Headers you add are sent with the handshake request, so a token goes in <code>Authorization</code> or a cookie header. Header values are masked for members who cannot manage monitors. The message to send is not: anyone who can see the monitor can read it, so keep credentials out of it. The headers the handshake itself needs (<code>Connection</code>, <code>Upgrade</code>, <code>Host</code> and the <code>Sec-WebSocket-*</code> ones) cannot be overridden.</p>
+    <h2 id="timeout">Timeout and regions</h2>
+    <p>The monitor's timeout covers the whole check: connecting, the handshake and waiting for a reply. WebSocket monitors can be checked from several <a href="/docs/regions">regions</a>, like HTTP and TCP monitors. If you run your own probes, update them before choosing regions for a WebSocket monitor: an older probe refuses the check and its region shows as unreachable.</p>
+    <h2 id="runtimes">Docker and Cloudflare Workers</h2>
+    <p>The check works the same way in both deployments. On Docker and Node, addresses that resolve to private networks are refused unless <code>ALLOW_PRIVATE_TARGETS</code> is set, as for other monitors. On Cloudflare Workers the platform makes the connection, and it refuses private addresses itself.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>WebSocket 监控</h1>
+    <p class="lede">WebSocket 监控会连接一个 <code>ws://</code> 或 <code>wss://</code> 地址，检查服务器是否接受连接。你还可以发送一条消息，并检查返回的内容。</p>
+    <h2 id="handshake-zh">握手</h2>
+    <p>每次检测都从握手开始。服务器返回 <code>101 Switching Protocols</code> 且 <code>Sec-WebSocket-Accept</code> 正确时，检测通过。其他情况都会判定失败，并在结果中写明原因：</p>
+    <ul>
+      <li>返回其他状态码，例如 <code>401</code> 或 <code>404</code>：“Expected 101 Switching Protocols, got 404”；</li>
+      <li>重定向：不会跟随重定向，错误信息会写明跳转地址；</li>
+      <li>Accept 头不正确、连接被拒绝、TLS 出错，或在超时时间内没有响应。</li>
+    </ul>
+    <p>只填写地址时，握手成功即检测完成，随后正常关闭连接（关闭码 1000）。记录的延迟是完成握手所用的时间。</p>
+    <h2 id="message-zh">发送消息</h2>
+    <p>填写 <strong>要发送的消息</strong>（最多 2000 个字符）后，连接建立后会以文本帧发出这条消息，然后等待服务器的下一条消息。如果服务器先关闭了连接（错误信息中会带上关闭码和原因），或在超时时间内没有收到消息，检测失败。此时记录的延迟会一直计到收到回复为止。</p>
+    <p>如果服务器会主动先发消息，例如连上就推送欢迎语或数据快照，可以不填消息、只设置关键词，监控会等待收到的第一条消息。</p>
+    <h2 id="keyword-zh">校验回复</h2>
+    <p>设置关键词后，会在回复中（未发送消息时则在第一条消息中）查找它。<strong>包含</strong>模式下找不到关键词即失败；<strong>不包含</strong>模式下出现关键词即失败，适合 <code>"status":"error"</code> 这类回复。关键词按纯文本匹配，区分大小写。二进制消息按 UTF-8 读取，只检查消息的前 1 MB；单个帧超过 1 MB 时检测失败。</p>
+    <h2 id="headers-zh">请求头与认证</h2>
+    <p>你添加的请求头会随握手请求一起发送，令牌可以放在 <code>Authorization</code> 或 Cookie 头中。对没有监控管理权限的成员，请求头的值会被遮盖。要发送的消息则不会：能看到监控的人都能看到它，请不要在其中放凭据。握手本身需要的请求头（<code>Connection</code>、<code>Upgrade</code>、<code>Host</code> 以及各个 <code>Sec-WebSocket-*</code>）不能被覆盖。</p>
+    <h2 id="timeout-zh">超时与区域</h2>
+    <p>监控的超时时间覆盖整次检测：建立连接、握手以及等待回复。和 HTTP、TCP 监控一样，WebSocket 监控也可以从多个<a href="/docs/regions">区域</a>检测。如果你运行自己的探针，请先更新探针再为 WebSocket 监控选择区域：旧版探针会拒绝这类检测，对应区域会显示为无法连通。</p>
+    <h2 id="runtimes-zh">Docker 与 Cloudflare Workers</h2>
+    <p>两种部署方式下检测行为一致。在 Docker 和 Node 上，解析到内网地址的目标默认会被拒绝，除非设置了 <code>ALLOW_PRIVATE_TARGETS</code>，与其他监控相同。在 Cloudflare Workers 上由平台发起连接，平台本身会拒绝内网地址。</p>
+  </div>
+</Doc>

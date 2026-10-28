@@ -2,12 +2,12 @@ import { resolveRoute } from "./routes";
 import { go } from "./locale-path";
 
 export type Monitor = {
-  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis"; target: string; method: string;
+  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket"; target: string; method: string;
   expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number;
   status: "pending" | "up" | "degraded" | "down" | "paused"; paused: boolean;
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
-  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
+  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   /** the project the monitor belongs to (the lists of the "All projects" view mix several) */
   projectId?: string | null;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;

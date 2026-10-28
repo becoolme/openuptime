@@ -1,8 +1,9 @@
 import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsPrivate } from "./netguard";
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
+import { websocketCheck } from "./websocket";
 
 export type CheckInput = {
-  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis";
+  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket";
   target: string;
   method: string;
   expectedStatus: number;
@@ -12,6 +13,8 @@ export type CheckInput = {
   /** With a redirect status expected: where the redirect must lead (an absolute URL, or a path on the target's own site). */
   expectedLocation?: string | null;
   headers?: Record<string, string>;
+  /** websocket: text sent once the connection is open; the reply must arrive (and match the keyword, when one is set). */
+  wsMessage?: string | null;
 };
 export type CheckOutcome = {
   ok: boolean;
@@ -35,6 +38,7 @@ export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
       case "postgres": return await postgresCheck(m, started);
       case "mysql": return await mysqlCheck(m, started);
       case "redis": return await redisCheck(m, started);
+      case "websocket": return await websocketCheck(m, started);
       default: return { ok: true };
     }
   } catch (e) {
@@ -46,7 +50,7 @@ export async function runCheck(m: CheckInput): Promise<CheckOutcome> {
 /** The host a check dials, or null when it has none of its own (dns checks ask a public resolver, not the target). */
 function dialedHost(m: CheckInput): string | null {
   try {
-    if (m.type === "http") return new URL(m.target).hostname;
+    if (m.type === "http" || m.type === "websocket") return new URL(m.target).hostname;
     if (m.type === "dns" || m.type === "heartbeat") return null;
     return hostPort(m.target, 1)?.hostname ?? null;
   } catch {

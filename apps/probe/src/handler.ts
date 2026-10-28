@@ -11,7 +11,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 export function parseCheck(raw: unknown): { input: CheckInput } | { error: string } {
   const o = raw as Record<string, unknown> | null;
   if (!o || typeof o !== "object" || Array.isArray(o)) return { error: "Expected a JSON object" };
-  if (o.type !== "http" && o.type !== "tcp") return { error: "type must be http or tcp" };
+  if (o.type !== "http" && o.type !== "tcp" && o.type !== "websocket") return { error: "type must be http, tcp or websocket" };
   if (typeof o.target !== "string" || !o.target || o.target.length > 2048) return { error: "target is required" };
   const method = o.method ?? "GET";
   if (method !== "GET" && method !== "HEAD" && method !== "POST") return { error: "method must be GET, HEAD or POST" };
@@ -29,10 +29,13 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   if (typeof headers !== "object" || Array.isArray(headers) || headers === null) return { error: "headers must be an object" };
   const entries = Object.entries(headers as Record<string, unknown>);
   if (entries.length > 50 || entries.some(([k, v]) => typeof v !== "string" || k.length > 100 || v.length > 2000)) return { error: "headers are not acceptable" };
+  const wsMessage = o.wsMessage ?? null;
+  if (wsMessage !== null && (typeof wsMessage !== "string" || wsMessage.length > 2000)) return { error: "wsMessage must be a string" };
   return {
     input: {
       type: o.type, target: o.target, method, expectedStatus: expectedStatus as number, timeoutMs: timeoutMs as number,
       keyword: keyword as string | null, keywordMode, expectedLocation: expectedLocation as string | null, headers: Object.fromEntries(entries) as Record<string, string>,
+      wsMessage: wsMessage as string | null,
     },
   };
 }

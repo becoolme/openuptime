@@ -17,7 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { organization, user } from "./auth-schema";
 
-export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis"]);
+export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket"]);
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);
@@ -54,7 +54,7 @@ export const monitor = pgTable(
     projectId: projectRef(),
     name: text("name").notNull(),
     type: monitorType("type").notNull().default("http"),
-    /** URL for http, host:port for tcp / postgres / mysql / redis, hostname for dns. */
+    /** URL for http, ws(s):// URL for websocket, host:port for tcp / postgres / mysql / redis, hostname for dns. */
     target: text("target").notNull(),
     method: text("method").notNull().default("GET"),
     expectedStatus: integer("expected_status").notNull().default(200),
@@ -76,13 +76,15 @@ export const monitor = pgTable(
     lastRunGeneration: integer("last_run_generation").notNull().default(0),
     paused: boolean("paused").notNull().default(false),
     heartbeatToken: text("heartbeat_token"),
-    /** http: response body must contain (or, with keywordMode "absent", must not contain) this text */
+    /** http: response body must contain (or, with keywordMode "absent", must not contain) this text; websocket: the first message back */
     keyword: text("keyword"),
     keywordMode: text("keyword_mode").notNull().default("contains"),
     /** http, with a redirect status expected: where the redirect must lead (absolute URL, or a path on the target's site) */
     expectedLocation: text("expected_location"),
     /** http: extra request headers (also used for bearer / basic auth) */
     headers: jsonb("headers").$type<Record<string, string>>().notNull().default({}),
+    /** websocket: text sent once the connection is open; a reply must then come back */
+    wsMessage: text("ws_message"),
     /** heartbeat: how long after the expected ping we wait before declaring it missed */
     graceSec: integer("grace_sec").notNull().default(0),
     /** alert only these channels; empty = every enabled channel in the org */

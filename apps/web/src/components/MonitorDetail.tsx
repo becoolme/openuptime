@@ -49,7 +49,7 @@ export default function MonitorDetail({ id }: { id: string }) {
     ...configured.map((r) => m.regionStats.find((s) => s.region === r) ?? { region: r, checks24h: 0, uptime24h: null, avgLatency24h: null, last: null }),
     ...m.regionStats.filter((s) => !configured.includes(s.region)),
   ].filter((s, i, all) => all.findIndex((x) => x.region === s.region) === i);
-  const probable = m.type === "http" || m.type === "tcp";
+  const probable = m.type === "http" || m.type === "tcp" || m.type === "websocket";
   const places = Object.keys(names);
   const showRegion = m.results.some((r) => r.region && r.region !== "auto");
   // the newest 30 rows, whole runs only where they fit; `lead` marks the first row of a run, which carries the time
@@ -189,6 +189,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               <div><span>{t("Timeout")}</span><b className="mono">{m.timeoutMs / 1000} s</b></div>
               <div><span>{t("Failures before incident")}</span><b className="mono">{m.failureThreshold}</b></div>
               {probable && <div><span>{t("Regions")}</span><b className="mono">{configured.map(regionName).join(", ")}</b></div>}
+              {m.type === "websocket" && m.wsMessage && <div><span>{t("Message sent")}</span><b className="mono">{m.wsMessage}</b></div>}
               {m.keyword && <div><span>{t("Keyword")}</span><b className="mono">{m.keywordMode === "absent" ? "≠ " : ""}{m.keyword}</b></div>}
               {m.type === "heartbeat" && <div><span>{t("Grace period")}</span><b className="mono">{every(m.graceSec ?? 0)}</b></div>}
             </div>
