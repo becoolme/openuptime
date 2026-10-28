@@ -57,6 +57,7 @@ export const monitor = pgTable(
     /** URL for http, ws(s):// URL for websocket, host:port for tcp / postgres / mysql / redis, hostname for dns. */
     target: text("target").notNull(),
     method: text("method").notNull().default("GET"),
+    requestBody: text("request_body"),
     expectedStatus: integer("expected_status").notNull().default(200),
     intervalSec: integer("interval_sec").notNull().default(60),
     timeoutMs: integer("timeout_ms").notNull().default(10000),

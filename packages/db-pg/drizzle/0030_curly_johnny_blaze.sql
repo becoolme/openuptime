@@ -1,0 +1,1 @@
+ALTER TABLE "monitor" ADD COLUMN "request_body" text;

@@ -103,3 +103,7 @@ pnpm test        # handler and server: signatures, validation, private-target re
                  # and the production bundle driven over HTTP under plain Node
 pnpm typecheck
 ```
+
+### HTTP request bodies
+
+Upgrade probes before enabling HTTP bodies or PUT/PATCH/DELETE/OPTIONS checks. The health GET advertises `http-request-body-v1`; the scheduler verifies this before sending new request semantics. Old probes are unavailable for these checks rather than silently dropping a body. If every selected probe is unavailable, existing local fallback applies. Bodies support up to 16 KiB UTF-8. Cross-origin redirects with bodies are refused to prevent forwarding credentials.

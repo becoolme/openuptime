@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "http-request-bodies", date: "2026-10-28", edition: "community",
+    title: { en: "HTTP request bodies", zh: "HTTP 请求体" },
+    summary: { en: "Monitor API endpoints with custom request bodies and additional HTTP methods.", zh: "通过自定义请求体和更多 HTTP 方法检测 API 接口。" },
+    points: [
+      { en: "Send up to 16 KiB of text with POST, PUT, PATCH, DELETE or OPTIONS and set Content-Type through request headers.", zh: "使用 POST、PUT、PATCH、DELETE 或 OPTIONS 发送最多 16 KiB 的文本，并通过请求头设置 Content-Type。" },
+      { en: "Request bodies are masked for members and viewers, and redirects cannot forward them to another origin.", zh: "成员和访客只能查看请求体掩码，重定向不会将请求体转发到其他源。" },
+      { en: "Upgrade remote probes before using request bodies; incompatible probes are reported as unavailable.", zh: "使用请求体前请升级远程探针；不兼容的探针会被标记为不可用。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",
