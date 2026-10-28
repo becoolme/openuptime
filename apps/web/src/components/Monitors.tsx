@@ -1,3 +1,4 @@
+import MonitorImport from "./MonitorImport";
 import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -87,6 +88,7 @@ export default function Monitors() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [setup, setSetup] = useState({ channels: false, pages: false });
   const [open, setOpen] = useState(false);
+  const [importText, setImportText] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "up" | "down" | "paused">("all");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
@@ -137,19 +139,11 @@ export default function Monitors() {
   async function importFile(file: File) {
     setNote(null);
     try {
-      const res = await fetch("/api/monitors/import", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: await file.text() });
-      const j = (await res.json().catch(() => ({}))) as { created?: number; skipped?: { index: number; name: string | null; error: string }[]; error?: string };
-      if (j.error) throw new Error(j.error);
-      const sk = j.skipped ?? [];
-      setNote({
-        ok: (j.created ?? 0) > 0,
-        text: `${t("Imported")} ${j.created ?? 0}${sk.length ? ` · ${t("skipped")} ${sk.length}: ${sk.slice(0, 3).map((s) => `#${s.index + 1} ${s.name ?? ""} (${s.error})`).join("; ")}${sk.length > 3 ? " …" : ""}` : ""}`,
-      });
-      load();
-      window.dispatchEvent(new Event("ou:changed"));
-    } catch (e) {
-      setNote({ ok: false, text: `${t("Import failed")}: ${(e as Error).message}` });
-    }
+      if (file.size > 4 * 1024 * 1024) throw new Error(t("Import files must be at most 4 MiB"));
+      const raw = await file.text();
+      JSON.parse(raw);
+      setImportText(raw);
+    } catch (e) { setNote({ ok: false, text: `${t("Import failed")}: ${(e as Error).message}` }); }
   }
   const tabs: ["all" | "up" | "down" | "paused", string, number][] = [["all", "All", all.length], ["up", "Up", upN], ["down", "Down", down.length], ["paused", "Paused", paused.length]];
 
@@ -169,6 +163,7 @@ export default function Monitors() {
           <button className="btn primary" onClick={() => setOpen(true)}>{t("+ New monitor")}</button>
         </div>}
       </div>
+      {importText !== null && <MonitorImport raw={importText} onClose={() => setImportText(null)} onImported={() => { load(); window.dispatchEvent(new Event("ou:changed")); }} />}
       {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
       {everything && <ProjectStrip rows={overview} />}
 

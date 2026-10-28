@@ -149,5 +149,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0029_monitor_websocket",
     "when": 1793160668461,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'websocket';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"ws_message\" text;"
+  },
+  {
+    "tag": "0030_conscious_moon_knight",
+    "when": 1793165217490,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"import_source\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"import_source_id\" text;--> statement-breakpoint\nCREATE UNIQUE INDEX \"monitor_import_source_unique\" ON \"monitor\" USING btree (\"organization_id\",\"project_id\",\"import_source\",\"import_source_id\");"
   }
 ];

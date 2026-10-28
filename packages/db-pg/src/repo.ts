@@ -11,6 +11,7 @@ import {
   type IncidentWithUpdates,
   type PushDevice,
   type Repo,
+  type ImportResult,
   type Scope,
 } from "@openuptime/repo";
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
@@ -451,6 +452,48 @@ export function createRepo(db: Db): Repo {
     },
     async createMonitors(orgId, projectId, inputs) {
       if (inputs.length) await db.insert(schema.monitor).values(inputs.map((v) => ({ ...v, organizationId: orgId, projectId })));
+    },
+    async importMonitors(orgId, projectId, inputs, options) {
+      return db.transaction(async (tx) => {
+        // A read-only preview never writes or reserves ids. Executions serialize within a workspace;
+        // the unique index remains a second safeguard against duplicate source identities.
+        if (!options.preview) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"monitor-import:" + orgId}))`);
+        const existing = await tx.select({ id: schema.monitor.id, source: schema.monitor.importSource, sourceId: schema.monitor.importSourceId })
+          .from(schema.monitor).where(and(eq(schema.monitor.organizationId, orgId), eq(schema.monitor.projectId, projectId)));
+        const key = (source: string, sourceId: string) => JSON.stringify([source, sourceId]);
+        const known = new Map(existing.map((r) => [key(r.source ?? "openuptime", r.sourceId ?? r.id), r.id as string | null]));
+        const results: ImportResult[] = inputs.map((r) => {
+          const k = key(r.source, r.sourceId);
+          if (known.has(k)) return { source: r.source, sourceId: r.sourceId, status: "duplicate", monitorId: known.get(k)! };
+          known.set(k, null);
+          return { source: r.source, sourceId: r.sourceId, status: "ready", monitorId: null };
+        });
+        const requested = results.filter((r) => r.status === "ready").length;
+        if (options.maxActive !== null) {
+          const [{ n }] = await tx.select({ n: count() }).from(schema.monitor).where(and(eq(schema.monitor.organizationId, orgId), sql`${schema.monitor.status} <> 'paused'`));
+          if (requested && n + requested > options.maxActive) return { rows: results, limit: { active: n, max: options.maxActive, requested } };
+        }
+        if (!options.preview && requested) {
+          const pending = inputs.flatMap((r, i) => results[i].status === "ready" ? [{ ...r.input, organizationId: orgId, projectId, importSource: r.source, importSourceId: r.sourceId }] : []);
+          const inserted = await tx.insert(schema.monitor).values(pending)
+            .onConflictDoNothing({ target: [schema.monitor.organizationId, schema.monitor.projectId, schema.monitor.importSource, schema.monitor.importSourceId] })
+            .returning({ id: schema.monitor.id, source: schema.monitor.importSource, sourceId: schema.monitor.importSourceId });
+          const created = new Map(inserted.map((r) => [key(r.source!, r.sourceId!), r.id]));
+          for (const [k, id] of created) known.set(k, id);
+          if (inserted.length !== pending.length) {
+            // A writer not taking the import lock may have won the unique-index race.
+            const current = await tx.select({ id: schema.monitor.id, source: schema.monitor.importSource, sourceId: schema.monitor.importSourceId })
+              .from(schema.monitor).where(and(eq(schema.monitor.organizationId, orgId), eq(schema.monitor.projectId, projectId), isNotNull(schema.monitor.importSource)));
+            for (const r of current) known.set(key(r.source!, r.sourceId!), r.id);
+          }
+          for (const r of results) {
+            const k = key(r.source, r.sourceId);
+            if (r.status === "ready") r.status = created.has(k) ? "created" : "duplicate";
+            r.monitorId = known.get(k) ?? null;
+          }
+        }
+        return { rows: results, limit: null };
+      });
     },
     async updateMonitor(orgId, id, scope, patch) {
       const [row] = await db

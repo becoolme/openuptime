@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Repo } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isManager, listedProjects, requireManager, uuidParams } from "../middleware";
@@ -66,6 +67,12 @@ const body = z.object({
 });
 
 const IMPORT_MAX = 500;
+const sourceSchema = z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9._:-]+$/);
+export const monitorImportSchema = z.object({
+  source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to json. Per-row source takes precedence."),
+  destination: z.object({ organizationId: z.string(), projectId: z.string().uuid() }).optional().describe("Preview destination. Execution refuses if the active workspace or project changed."),
+  monitors: z.array(z.record(z.string(), z.unknown())).min(1).max(IMPORT_MAX).describe("Monitor records. Give each a stable sourceId (or id). Missing ids use a hash of type, name and target. Repeated identities are skipped, never overwritten."),
+});
 const FIELD_KEYS = Object.keys(fields);
 
 /** Accepts our own export plus the common spellings of other tools (UptimeRobot, Uptime Kuma, UptimeFlare style). */
@@ -190,6 +197,77 @@ async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
 const shown = async <T extends { headers?: Record<string, string> | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
   (await isManager(c)) ? rows : rows.map((m) => (m.headers && Object.keys(m.headers).length ? { ...m, headers: maskHeaders(m.headers) } : m));
 
+/** Preview and execution share normalization and validation; only execution writes monitor rows. */
+async function importMonitors(c: Context<AppEnv>, preview: boolean) {
+  const explicitProject = c.req.header("x-project-id");
+  if (explicitProject && explicitProject !== c.get("projectId")) return c.json({ error: "The selected import project is unavailable", code: "import_project_unavailable" }, 403);
+  const raw: unknown = await c.req.json().catch(() => null);
+  const envelope = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  if (!preview && envelope.destination !== undefined) {
+    const expected = envelope.destination as { organizationId?: unknown; projectId?: unknown } | null;
+    if (expected?.organizationId !== c.get("orgId") || expected?.projectId !== c.get("projectId")) return c.json({ error: "The import destination changed; preview again", code: "import_destination_changed" }, 409);
+  }
+  const list = Array.isArray(raw) ? raw : envelope.monitors;
+  if (!Array.isArray(list) || list.length < 1 || list.length > IMPORT_MAX) return c.json({ error: `Import between 1 and ${IMPORT_MAX} monitors` }, 400);
+  const defaultSource = sourceSchema.safeParse(envelope.source ?? "json");
+  if (!defaultSource.success) return c.json({ error: "Invalid source namespace" }, 400);
+  type Row = { index: number; name: string | null; source?: string; sourceId?: string; status: string; monitorId?: string | null; error?: string; warnings: string[]; type?: string; intervalSec?: number; regions?: string[] };
+  const report: Row[] = [];
+  const candidates: { row: Row; value: z.infer<typeof body>; source: string; sourceId: string }[] = [];
+  const plan = await c.get("entitlements").plan(c.get("orgId"));
+  const aliases = new Set(["source", "sourceId", "id", "friendly_name", "friendlyName", "url", "hostname", "host", "port", "interval", "keyword_value", "expectedKeyword"]);
+  for (const [index, item] of list.entries()) {
+    const r = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const row: Row = { index, name: typeof r.name === "string" ? r.name : null, status: "skipped", warnings: [] };
+    report.push(row);
+    const parsed = body.safeParse(normaliseImport(item));
+    if (!parsed.success) { row.error = parsed.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; "); continue; }
+    const v = parsed.data;
+    row.name = v.name;
+    const source = sourceSchema.safeParse(r.source ?? defaultSource.data);
+    if (!source.success) { row.error = "Invalid source namespace"; continue; }
+    const unknown = Object.keys(r).filter((k) => !FIELD_KEYS.includes(k) && !aliases.has(k));
+    if (unknown.length) row.warnings.push(`Unsupported fields: ${unknown.sort().join(", ")}`);
+    // Never turn a secret placeholder or unsupported authentication into an unauthenticated monitor.
+    if (r.headers && typeof r.headers === "object" && Object.values(r.headers).some((v) => v === MASK)) { row.error = "Masked headers cannot be restored; supply original credentials"; continue; }
+    if (["auth", "basicAuthUser", "basicAuthPass", "username", "password", "body", "requestBody"].some((k) => !FIELD_KEYS.includes(k) && r[k] != null && r[k] !== "")) { row.error = "Unsupported authentication or request body; map it explicitly before importing"; continue; }
+    if (Array.isArray(r.channelIds) && r.channelIds.length) row.warnings.push("Source channel references are not imported; destination auto-enabled channels apply");
+    if (r.dependsOnMonitorId) row.warnings.push("Source monitor dependencies are not imported");
+    if (v.type !== "heartbeat" && !v.target.trim()) { row.error = "target: required"; continue; }
+    const problem = await targetProblem(v.type, v.target);
+    if (problem) { row.error = `target: ${problem}`; continue; }
+    let sourceId: string;
+    const identity = r.sourceId ?? r.id;
+    if (identity !== undefined) {
+      if ((typeof identity !== "string" && typeof identity !== "number") || !String(identity).trim() || String(identity).length > 200 || /[\u0000-\u001f]/.test(String(identity))) { row.error = "sourceId must be a nonempty string of at most 200 characters"; continue; }
+      sourceId = String(identity);
+    } else {
+      const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([v.type, v.name, v.target])));
+      sourceId = "sha256:" + [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      row.warnings.push("No sourceId supplied; identity is derived from type, name and target. Changing them creates a new monitor");
+    }
+    const room = plan?.maxRegions ?? Infinity;
+    const usable = (PROBE_TYPES as readonly string[]).includes(v.type) ? [...new Set(v.regions)].filter(isRegionConfigured).slice(0, room) : [];
+    const regions = usable.length ? usable : [AUTO];
+    if (JSON.stringify(v.regions) !== JSON.stringify(regions)) row.warnings.push("Regions adjusted to this deployment and plan");
+    v.regions = regions;
+    if (v.type !== "heartbeat" && v.intervalSec < (plan?.minIntervalSec ?? 0)) { v.intervalSec = plan!.minIntervalSec; row.warnings.push("Interval raised to the plan minimum"); }
+    Object.assign(row, { source: source.data, sourceId, type: v.type, intervalSec: v.intervalSec, regions: v.regions });
+    candidates.push({ row, value: v, source: source.data, sourceId });
+  }
+  const repo = c.get("repo");
+  const auto = candidates.length ? await repo.autoEnabledChannelIds(c.get("orgId"), c.get("projectId")) : [];
+  const batch = await repo.importMonitors(c.get("orgId"), c.get("projectId"), candidates.map(({ value, source, sourceId }) => ({ source, sourceId, input: newMonitor({ ...value, channelIds: auto }) })), { preview, maxActive: plan?.maxActiveMonitors ?? null });
+  batch.rows.forEach((r, i) => Object.assign(candidates[i].row, r));
+  const created = report.filter((r) => r.status === "created").length;
+  const duplicates = report.filter((r) => r.status === "duplicate").length;
+  const ready = report.filter((r) => r.status === "ready").length;
+  const skipped = report.filter((r) => r.status === "skipped").map(({ index, name, error }) => ({ index, name, error }));
+  const result = { destination: { organizationId: c.get("orgId"), projectId: c.get("projectId") }, preview, created, duplicates, ready, skipped, report, canImport: !batch.limit && candidates.length > 0, autoChannelCount: auto.length, limit: batch.limit };
+  if (batch.limit && !preview) return c.json({ ...result, error: "Import exceeds the active monitor limit", code: "monitor_limit", upgradeUrl: plan?.upgradeUrl }, 402);
+  return c.json(result, preview || (!created && duplicates) ? 200 : created ? 201 : 400);
+}
+
 export const monitors = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await shown(c, await c.get("repo").listMonitors(c.get("orgId"), await listedProjects(c)))))
   .post("/", zValidator("json", body), async (c) => {
@@ -209,45 +287,12 @@ export const monitors = new Hono<AppEnv>()
   // JSON backup of this project's monitors; feed it back to POST /import (here or in another workspace)
   .get("/export", async (c) => {
     const rows = await c.get("repo").exportMonitors(c.get("orgId"), c.get("projectId"));
-    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]])));
+    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]]).concat([["source", m.importSource ?? "openuptime"], ["sourceId", m.importSourceId ?? m.id]])));
     c.header("content-disposition", 'attachment; filename="openuptime-monitors.json"');
     return c.json({ version: 1, exportedAt: new Date().toISOString(), monitors });
   })
-  .post("/import", async (c) => {
-    const raw = (await c.req.json().catch(() => null)) as unknown;
-    const list = Array.isArray(raw) ? raw : (raw as { monitors?: unknown } | null)?.monitors;
-    if (!Array.isArray(list)) return c.json({ error: "Expected a JSON array of monitors, or an object with a `monitors` array" }, 400);
-    if (list.length === 0 || list.length > IMPORT_MAX) return c.json({ error: `Import between 1 and ${IMPORT_MAX} monitors at a time` }, 400);
-    const valid: z.infer<typeof body>[] = [];
-    const skipped: { index: number; name: string | null; error: string }[] = [];
-    for (const [index, item] of list.entries()) {
-      const p = body.safeParse(normaliseImport(item));
-      const name = typeof (item as { name?: unknown })?.name === "string" ? (item as { name: string }).name : null;
-      if (!p.success) { skipped.push({ index, name, error: p.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; ") }); continue; }
-      if (p.data.type !== "heartbeat" && !p.data.target.trim()) { skipped.push({ index, name: p.data.name, error: "target: required" }); continue; }
-      const problem = await targetProblem(p.data.type, p.data.target);
-      if (problem) { skipped.push({ index, name: p.data.name, error: `target: ${problem}` }); continue; }
-      valid.push(p.data);
-    }
-    if (valid.length) {
-      // regions that do not exist here (a file from another deployment) or that the plan has no room for fall back
-      // rather than failing the whole file; a monitor left with none runs on auto
-      const room = (await c.get("entitlements").plan(c.get("orgId")))?.maxRegions ?? Infinity;
-      for (const v of valid) {
-        const usable = (PROBE_TYPES as readonly string[]).includes(v.type) ? [...new Set(v.regions)].filter(isRegionConfigured).slice(0, room) : [];
-        v.regions = usable.length ? usable : [AUTO];
-      }
-      // an interval below the plan's floor is raised to it rather than failing the whole file
-      const floor = (await c.get("entitlements").plan(c.get("orgId")))?.minIntervalSec ?? 0;
-      for (const v of valid) if (v.type !== "heartbeat" && v.intervalSec < floor) v.intervalSec = floor;
-      const refused = await overPlan(c, { add: valid.length });
-      if (refused) return refused;
-      const repo = c.get("repo");
-      const auto = await repo.autoEnabledChannelIds(c.get("orgId"), c.get("projectId"));
-      await repo.createMonitors(c.get("orgId"), c.get("projectId"), valid.map((v) => newMonitor({ ...v, channelIds: auto })));
-    }
-    return c.json({ created: valid.length, skipped }, valid.length ? 201 : 400);
-  })
+  .post("/import/preview", bodyLimit({ maxSize: 4 * 1024 * 1024 }), (c) => importMonitors(c, true))
+  .post("/import", bodyLimit({ maxSize: 4 * 1024 * 1024 }), (c) => importMonitors(c, false))
   .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));

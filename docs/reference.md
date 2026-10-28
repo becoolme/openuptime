@@ -139,3 +139,7 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+### Monitor import identity
+
+`POST /api/monitors/import/preview` validates the same array or `{source, monitors}` envelope as execution, without creating monitors. Review per-row warnings, capacity and duplicate status, then send the same data to `POST /api/monitors/import`, with the returned `destination` to guard against changing workspace/project. Each item should have a stable `sourceId` (or `id`) within a source namespace; missing IDs are derived from type/name/target. Import identity is unique within organization/project/source. Repeated and concurrent executions skip identities instead of updating existing monitors. Deletion removes the identity so the row may be imported again. Exports carry provenance, including native monitor IDs. Preview reserves no capacity and execution revalidates. Invalid rows are skipped; plan over-capacity rejects the whole batch. Source channels and dependencies cannot be mapped and produce warnings. Masked credentials and unsupported authentication/body configuration are rejected.

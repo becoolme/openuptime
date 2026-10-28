@@ -42,6 +42,9 @@ export const MAX_REMINDERS = 10;
 export const REMINDER_INTERVALS = [5, 10, 15, 30, 60] as const;
 
 export interface Monitor {
+  /** Immutable import provenance; scoped to this organization and project. */
+  importSource?: string | null;
+  importSourceId?: string | null;
   id: string;
   organizationId: string;
   projectId: string | null;
@@ -88,6 +91,9 @@ export type MonitorInput = Pick<
   | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
+export type ImportMonitor = { source: string; sourceId: string; input: NewMonitor };
+export type ImportResult = { source: string; sourceId: string; status: "ready" | "created" | "duplicate"; monitorId: string | null };
+export type ImportBatch = { rows: ImportResult[]; limit: { active: number; max: number; requested: number } | null };
 export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCheckAt?: Date };
 /** Only named fields change; the type is immutable. */
 export type MonitorPatch = Partial<Omit<MonitorInput, "type">> & { paused?: boolean; status?: MonitorStatus; nextCheckAt?: Date };
@@ -457,6 +463,7 @@ export interface Repo {
   monitorDetail(monitorId: string): Promise<MonitorDetail>;
   createMonitor(orgId: string, projectId: string, input: NewMonitor): Promise<Monitor>;
   createMonitors(orgId: string, projectId: string, inputs: NewMonitor[]): Promise<void>;
+  importMonitors(orgId: string, projectId: string, inputs: ImportMonitor[], options: { preview: boolean; maxActive: number | null }): Promise<ImportBatch>;
   updateMonitor(orgId: string, id: string, scope: Scope, patch: MonitorPatch): Promise<Monitor | null>;
   deleteMonitor(orgId: string, id: string, scope: Scope): Promise<void>;
   /** Which of `ids` belong to the workspace (and the key's projects). */

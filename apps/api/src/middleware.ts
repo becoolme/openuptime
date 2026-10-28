@@ -31,7 +31,8 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
       throw new HTTPException(401, { message: "This authorization was revoked" });
     }
     if (grant) {
-      const write = !["GET", "HEAD", "OPTIONS"].includes(c.req.method);
+      const previewImport = c.req.method === "POST" && c.req.path === "/api/monitors/import/preview";
+      const write = !["GET", "HEAD", "OPTIONS"].includes(c.req.method) && !previewImport;
       if (!grant.scopes.includes(write ? "mcp:write" : "mcp:read") && !(write ? false : grant.scopes.includes("mcp:write"))) {
         throw new HTTPException(403, { message: `This token lacks the ${write ? "mcp:write" : "mcp:read"} scope` });
       }
