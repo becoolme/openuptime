@@ -20,6 +20,7 @@ const fields = {
   intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Hosted plans may require a longer interval."),
   timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds."),
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
+  recoveryThreshold: z.number().int().min(1).max(10).describe("Consecutive successful runs (or heartbeat pings) required to recover from down. Default 1; a multi-region vote counts once. Does not delay latency-only recovery."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
   regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP and WebSocket only. A supplied list replaces the existing one."),
   keyword: z.string().max(500).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test; null disables keyword matching."),
@@ -50,6 +51,7 @@ const body = z.object({
   intervalSec: fields.intervalSec.default(60),
   timeoutMs: fields.timeoutMs.default(10000),
   failureThreshold: fields.failureThreshold.default(3),
+  recoveryThreshold: fields.recoveryThreshold.default(1),
   regions: fields.regions.default(["auto"]),
   keyword: fields.keyword.default(null),
   keywordMode: fields.keywordMode.default("contains"),

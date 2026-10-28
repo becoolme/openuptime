@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "recovery-threshold", date: "2026-10-28", edition: "community",
+    title: { en: "Wait for stable recovery", zh: "确认稳定恢复后再通知" },
+    summary: { en: "Require several consecutive successes before an outage recovers.", zh: "可要求连续多次成功后才结束宕机，减少反复恢复通知。" },
+    points: [
+      { en: "Choose one to ten successful checks or heartbeat pings; the default remains one.", zh: "可设置一到十次成功检测或心跳，默认仍为一次。" },
+      { en: "A multi-region vote counts as one run; failed checks reset the streak while raw uptime data continues to reflect each result.", zh: "每轮多区域投票计一次，失败后重新累计；可用率仍按原始检测结果计算。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",

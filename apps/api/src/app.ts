@@ -23,7 +23,7 @@ import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { availableRegions } from "./probes";
 import { PROBE_TYPES } from "./regions";
-import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
+import { resolveIncident, runDueChecks } from "./scheduler";
 
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
   const edition = options.edition ?? community;
@@ -139,10 +139,13 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     // a paused monitor stays paused: the ping is acknowledged but changes nothing
     if (m.status === "paused") return c.json({ ok: true, paused: true });
     await repo.recordCheck({ monitorId: m.id, ok: true });
-    const wasDown = m.status === "down";
+    const updated = await repo.recordHeartbeatSuccess(m.id);
+    if (!updated) return c.json({ ok: true, paused: true });
+    const wasDown = updated.status === "down";
+    const ready = (updated.consecutiveSuccesses ?? 0) >= (updated.recoveryThreshold ?? 1);
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
-    await repo.setMonitorState(m.id, { ...(wasDown ? {} : { status: "up" as const }), consecutiveFailures: 0, lastCheckedAt: new Date(), nextCheckAt: nextAfter(m) });
-    if (wasDown) {
+    if (!wasDown) await repo.setMonitorState(m.id, { status: "up" });
+    if (wasDown && ready) {
       await resolveIncident(repo, m, false, c.get("entitlements"));
       await repo.setMonitorState(m.id, { status: "up" });
     }

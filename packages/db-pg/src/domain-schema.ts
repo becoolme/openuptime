@@ -62,6 +62,8 @@ export const monitor = pgTable(
     timeoutMs: integer("timeout_ms").notNull().default(10000),
     /** consecutive failures before an incident is opened */
     failureThreshold: integer("failure_threshold").notNull().default(3),
+    recoveryThreshold: integer("recovery_threshold").notNull().default(1),
+    consecutiveSuccesses: integer("consecutive_successes").notNull().default(0),
     regions: text("regions").array().notNull().default(["auto"]),
     status: monitorStatus("status").notNull().default("pending"),
     /** When `status` last changed: the start of the current streak, which bounds what counts as handled during it. */

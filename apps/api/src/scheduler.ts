@@ -157,6 +157,13 @@ async function checkMany(repo: Repo, due: Monitor[], entitlements: Entitlements)
   }
 }
 
+/** Only conclusive successful runs count. Bound the streak so healthy monitors never overflow it. */
+export function recoveryProgress(m: Pick<Monitor, "recoveryThreshold" | "consecutiveSuccesses">, ok: boolean) {
+  const threshold = m.recoveryThreshold ?? 1;
+  const successes = ok ? Math.min((m.consecutiveSuccesses ?? 0) + 1, threshold) : 0;
+  return { successes, ready: successes >= threshold };
+}
+
 export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlements = unmetered) {
   // a due heartbeat monitor means no ping arrived in time
   const { out, results, note: regionNote } =
@@ -180,18 +187,19 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   // during maintenance keep recording results but leave status, failure count and incidents alone
   if (inMaintenance && !out.ok) {
     console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE}`);
-    await repo.setMonitorState(m.id, { lastCheckedAt: new Date(), ...next });
+    await repo.setMonitorState(m.id, { lastCheckedAt: new Date(), consecutiveSuccesses: 0, ...next });
     return;
   }
   const failures = out.ok ? 0 : m.consecutiveFailures + 1;
+  const recovery = recoveryProgress(m, out.ok);
   const slow = out.ok && !!out.latencyMs && out.latencyMs > m.slowThresholdMs;
   // a failed check neither extends nor ends a slow streak
   const slowCount = !out.ok ? m.consecutiveSlow : slow ? m.consecutiveSlow + 1 : 0;
-  const status = out.ok ? (slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.status;
+  const status = out.ok ? (m.status === "down" && !recovery.ready ? "down" : slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.status;
   const goingDown = status === "down" && m.status !== "down";
-  const recovering = out.ok && m.status === "down";
+  const recovering = out.ok && m.status === "down" && recovery.ready;
   // a slow streak inside a maintenance window or under a down dependency opens nothing, however long it gets
-  const wantsSlowIncident = slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
+  const wantsSlowIncident = status !== "down" && slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
   const parentDown = (goingDown || wantsSlowIncident || (!out.ok && status === "down")) && (await dependencyDown(repo, m));
   if (wantsSlowIncident && inMaintenance) console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE} (latency incident)`);
   if ((goingDown || wantsSlowIncident) && parentDown) console.info(`monitor ${m.id}: ${SUPPRESSED_DEPENDENCY}`);
@@ -209,6 +217,7 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const pending = opensOutage || recovering || slowTrips || slowClears;
   await repo.setMonitorState(m.id, {
     consecutiveFailures: failures,
+    consecutiveSuccesses: recovery.successes,
     ...(pending ? {} : { status, consecutiveSlow: finalSlow }),
     ...(m.type === "heartbeat" ? {} : { lastCheckedAt: new Date() }),
     ...next,

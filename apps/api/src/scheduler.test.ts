@@ -347,6 +347,67 @@ describe("checkOne across regions", () => {
     return { ...f, recorded };
   }
 
+  it("waits for consecutive successful votes and resets after a failed vote", async () => {
+    const { repo, incidents, states, recorded } = repoWithRecords();
+    incidents.push({ id: "out", title: "down", auto: true, severity: "major", resolved: false });
+    const monitor = web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 0 });
+    const run = async (ok: boolean) => {
+      probes({ "us-east": { ok }, "eu-central": { ok }, "ap-southeast": { ok: true } });
+      const start = states.length;
+      await checkOne(repo, monitor);
+      for (const state of states.slice(start)) Object.assign(monitor, state);
+    };
+    await run(true);
+    expect(monitor).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
+    expect(incidents[0].resolved).toBe(false);
+    await run(false);
+    expect(monitor).toMatchObject({ status: "down", consecutiveSuccesses: 0 });
+    await run(true);
+    expect(incidents[0].resolved).toBe(false);
+    await run(true);
+    expect(monitor).toMatchObject({ status: "up", consecutiveSuccesses: 2 });
+    expect(incidents[0].resolved).toBe(true);
+    expect(recorded.many).toHaveLength(4);
+  });
+
+  it("can recover to degraded without opening a latency incident before recovery", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const { repo, states, incidents } = fakeRepo();
+    const m = web({ status: "down", recoveryThreshold: 2, slowThresholdMs: 1, slowAlertAfter: 1 });
+    await checkOne(repo, m);
+    expect(states.at(-1)).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
+    expect(incidents).toHaveLength(0);
+    await checkOne(repo, { ...m, consecutiveSuccesses: 1 });
+    expect(states.at(-1)).toMatchObject({ status: "degraded" });
+    expect(incidents).toHaveLength(1);
+  });
+
+  it("breaks a recovery streak on a maintenance-suppressed failure", async () => {
+    const { repo, states, incidents } = fakeRepo({ maintenance: true });
+    await checkOne(repo, hb({ status: "down", recoveryThreshold: 3, consecutiveSuccesses: 2 }));
+    expect(states.at(-1)).toMatchObject({ consecutiveSuccesses: 0 });
+    expect(states.at(-1)).not.toHaveProperty("status");
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("leaves latency-only recovery immediate and retries failed outage resolution", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const { repo, states, incidents } = fakeRepo();
+    incidents.push({ id: "slow", title: "slow", auto: true, severity: "minor", resolved: false });
+    await checkOne(repo, web({ status: "degraded", consecutiveSlow: 3, recoveryThreshold: 5 }));
+    expect(states.at(-1)).toMatchObject({ status: "up" });
+    expect(incidents[0].resolved).toBe(true);
+    incidents.push({ id: "down", title: "down", auto: true, severity: "major", resolved: false });
+    const original = repo.resolveIncident;
+    repo.resolveIncident = async () => { throw new Error("db unavailable"); };
+    const start = states.length;
+    await expect(checkOne(repo, web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 1 }))).rejects.toThrow("db unavailable");
+    expect(states.slice(start).some((s) => s.status === "up")).toBe(false);
+    repo.resolveIncident = original;
+    await checkOne(repo, web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 2 }));
+    expect(incidents[1].resolved).toBe(true);
+  });
+
   it("records one row per region and one run, and stays up when only one region fails", async () => {
     probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: false } });
     const { repo, incidents, states, recorded } = repoWithRecords();

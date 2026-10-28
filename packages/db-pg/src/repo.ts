@@ -455,7 +455,7 @@ export function createRepo(db: Db): Repo {
     async updateMonitor(orgId, id, scope, patch) {
       const [row] = await db
         .update(schema.monitor)
-        .set(patch)
+        .set({ ...patch, ...(patch.paused !== undefined ? { consecutiveSuccesses: 0 } : {}) })
         .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
         .returning();
       return row ?? null;
@@ -474,6 +474,16 @@ export function createRepo(db: Db): Repo {
     async monitorByHeartbeatToken(token) {
       const [m] = await db.select().from(schema.monitor).where(eq(schema.monitor.heartbeatToken, token));
       return m ?? null;
+    },
+
+    async recordHeartbeatSuccess(id) {
+      const [row] = await db.update(schema.monitor).set({
+        consecutiveSuccesses: sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})`,
+        consecutiveFailures: 0,
+        lastCheckedAt: new Date(),
+        nextCheckAt: sql`now() + make_interval(secs => ${schema.monitor.intervalSec} + ${schema.monitor.graceSec})`,
+      }).where(and(eq(schema.monitor.id, id), eq(schema.monitor.paused, false))).returning();
+      return row ?? null;
     },
 
     // ── checking ───────────────────────────────────────────────────────────────

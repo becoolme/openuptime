@@ -188,6 +188,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               <div><span>{t("Interval")}</span><b className="mono">{every(m.intervalSec)}</b></div>
               <div><span>{t("Timeout")}</span><b className="mono">{m.timeoutMs / 1000} s</b></div>
               <div><span>{t("Failures before incident")}</span><b className="mono">{m.failureThreshold}</b></div>
+              <div><span>{t("Successes before recovery")}</span><b className="mono">{m.recoveryThreshold ?? 1}</b></div>
               {probable && <div><span>{t("Regions")}</span><b className="mono">{configured.map(regionName).join(", ")}</b></div>}
               {m.type === "websocket" && m.wsMessage && <div><span>{t("Message sent")}</span><b className="mono">{m.wsMessage}</b></div>}
               {m.keyword && <div><span>{t("Keyword")}</span><b className="mono">{m.keywordMode === "absent" ? "≠ " : ""}{m.keyword}</b></div>}

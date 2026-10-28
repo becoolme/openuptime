@@ -12,6 +12,7 @@ expectedStatus integer 100-599                               (default 200)
 intervalSec    integer 60-86400                              (default 60)
 timeoutMs      integer 1000-30000                            (default 10000)
 failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
+recoveryThreshold integer 1-10 successful runs or heartbeat pings before recovering from down (default 1)
 regions        string[], ids from GET /regions                 (default ["auto"]; http, tcp and websocket monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
@@ -29,6 +30,8 @@ minRegionsFailing integer 0-20, several regions: how many must fail before the m
 const groups: Group[] = [
   {
     id: "monitors", en: "Monitors", zh: "监控项",
+    noteEn: "Recovery threshold controls outage recovery only. Each successful multi-region vote counts once; each accepted heartbeat ping counts once. A failed check resets the streak, including failures suppressed by maintenance. Inconclusive checks do not count. Slow successful responses count and can recover to degraded; latency-only recovery is unchanged. Pausing or resuming resets the success streak. Raw check results and uptime statistics are still recorded immediately.",
+    noteZh: "恢复阈值仅控制宕机恢复。每轮成功的多区域投票计一次，每次接受的心跳计一次。失败检测会清零连续成功次数，包括维护期内被抑制的失败；无法判定的检测不计数。慢响应只要成功也计入，可能恢复为性能下降；单独的延迟事故恢复逻辑不变。暂停或恢复检测会清零成功次数。原始检测结果和可用率统计仍即时记录。",
     eps: [
       { m: "GET", p: "/monitors", en: "List the project's monitors, with 24-hour uptime, average latency and a latency sparkline.", zh: "列出当前项目的监控项，附带 24 小时可用率、平均延迟和延迟走势。",
         res: `[{ id, name, type, target, method, expectedStatus, intervalSec, timeoutMs, failureThreshold, regions,\n   status, consecutiveFailures, lastCheckedAt, nextCheckAt, paused, heartbeatToken, keyword, keywordMode,\n   headers, graceSec, ..., uptime24h, avgLatency24h, spark }]` },
