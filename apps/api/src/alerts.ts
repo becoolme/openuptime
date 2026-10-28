@@ -157,13 +157,27 @@ const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) =
   return channel.type === "email" && to ? userLang(repo, to, fallback ?? (await orgLang(repo, channel.organizationId))) : (fallback ?? "en");
 };
 
+const ROUTING_UNAVAILABLE = "alert routing policy unavailable";
+async function authorizeChannel(channel: AlertChannel, ev: Event, entitlements: Entitlements, at: Date) {
+  let allowed: boolean;
+  try {
+    if (!entitlements.allowAlertChannel) throw new Error(ROUTING_UNAVAILABLE);
+    allowed = await entitlements.allowAlertChannel(channel.organizationId, {
+      projectId: ev.monitor.projectId ?? null, monitorId: ev.monitor.id ?? null,
+      incidentId: ev.incident.id, kind: ev.kind, at, channelId: channel.id,
+    });
+  } catch { throw new Error(ROUTING_UNAVAILABLE); }
+  if (!allowed) throw new Skipped("skipped: not selected by alert routing policy");
+}
+
 /**
  * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
  * `meter` charges an email against the workspace allowance; retries are not charged again.
  */
-async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices) {
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices, routingAt?: Date) {
   const attempts = d.attempts + 1;
   try {
+    if (routingAt) await authorizeChannel(channel, ev, meter ?? unmetered, routingAt);
     if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
     await deliver(channel, ev, alertText(ev), lang, repo, pushed);
     await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
@@ -186,7 +200,7 @@ async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attem
 export const wasDelivered = (r: { status?: string | null; ok?: boolean }) => (r.status ? r.status !== "skipped" && r.status !== "failed" : r.ok !== false);
 
 /** Try failed incident alerts again. Each channel's own delivery row is updated; nothing here throws. */
-export async function retryDeliveries(repo: Repo, limit = 10) {
+export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Entitlements = unmetered) {
   const due: DeliveryRetry[] = await repo.claimRetries(limit);
   // a phone is pushed once per event, also when several of its retries are due in the same round
   const pushedBy = new Map<string, PushedDevices>();
@@ -218,7 +232,8 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
     const ev = await withProject(repo, incident.organizationId, eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened));
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
-    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined, pushedBy.get(eventKey));
+    const pendingRouting = delivery.error === ROUTING_UNAVAILABLE;
+    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
   }
   return due.length;
 }
@@ -232,24 +247,7 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
   const ev = await withProject(repo, orgId, event);
   const fallback = channels.some((c) => c.type === "email") ? await orgLang(repo, orgId) : "en";
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name, ...extra };
-  let live = channels.filter((c) => c.enabled);
-  if (entitlements.selectAlertChannels && live.length) {
-    let selected: Set<string>;
-    let policyFailed = false;
-    try {
-      selected = new Set(await entitlements.selectAlertChannels(orgId, {
-        projectId: ev.monitor.projectId ?? null, monitorId: ev.monitor.id ?? null,
-        incidentId: ev.incident.id, kind: ev.kind, at: new Date(), channelIds: live.map((c) => c.id),
-      }));
-    } catch {
-      selected = new Set(); policyFailed = true;
-    }
-    const why = policyFailed ? "skipped: alert routing policy unavailable" : "skipped: not selected by alert routing policy";
-    const excluded = live.filter((c) => !selected.has(c.id));
-    await repo.logDeliveries(excluded.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: why, statusMessage: why })));
-    // Intersect with existing candidates; a policy cannot add another project's channel or enable a disabled one.
-    live = live.filter((c) => selected.has(c.id));
-  }
+  const live = channels.filter((c) => c.enabled);
   const off = channels.filter((c) => !c.enabled);
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
   // a phone is pushed once per event, however many push channels reach it
@@ -261,11 +259,14 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
       const row = rows.find((r) => r.channelId === c.id);
       if (!row) {
         // no row to claim: send anyway, only the history is missing
-        await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
+        await (async () => {
+          if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
+          await deliver(c, ev, alertText(ev), lang, repo, pushed);
+        })().catch((e) => console.error(`alert via ${c.name} failed`, e));
         return;
       }
       const claimed = await repo.claimDelivery(row.id);
-      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed);
+      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed, entitlements.allowAlertChannel ? claimed.createdAt ?? new Date() : undefined);
     }),
   );
 }
