@@ -487,7 +487,14 @@ export async function notifyIncidentUpdate(
   update: { status: string; body: string },
   entitlements: Entitlements = unmetered,
 ) {
-  const { send: subs } = await subscriberAllowance(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId));
+  let subs: SubscriberTarget[];
+  try {
+    ({ send: subs } = await subscriberAllowance(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId)));
+  } catch {
+    // The update is already saved. Fail closed without turning a notification outage into a retry of the update.
+    console.error("incident update subscriber policy unavailable");
+    return;
+  }
   const label = (lang: Lang) => tr(lang, update.status === "resolved" ? "Resolved" : update.status[0].toUpperCase() + update.status.slice(1));
   await mailSubscribers(subs, await mayHideBranding(entitlements, inc.organizationId), {
     subject: (p, lang) => `[${p}] ${label(lang)}: ${inc.title}`,
