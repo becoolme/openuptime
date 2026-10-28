@@ -1,12 +1,12 @@
 import type { Database } from "@openuptime/repo";
 import type { Tool } from "@openuptime/mcp-rest";
-import type { Hono } from "hono";
+import type { Hono, MiddlewareHandler } from "hono";
 import { unmetered, type Entitlements } from "./entitlements";
 import type { AppEnv, Bindings } from "./env";
 
 /**
  * The seam between this open-source core and a hosted edition. Everything a hosted build adds (plans, billing, usage
- * tables) plugs in through these three hooks, so it lives in files of its own and never edits the core.
+ * tables) plugs in through these hooks, so it lives in files of its own and never edits the core.
  */
 export interface Edition {
   /** Reported by `GET /api/config` so clients can label the deployment. Absent means "community". */
@@ -16,6 +16,14 @@ export interface Edition {
    * request; an implementation keeps its state in tables, not in memory.
    */
   entitlements(ctx: { database: Database; env: Bindings }): Entitlements;
+  /**
+   * Optional request middleware, registered after per-request database/auth setup and before CORS and every route.
+   * Await next() to observe the final response and authenticated context when the route establishes one.
+   * Await all database work before returning: request cleanup closes the connection after this middleware unwinds.
+   * Runs for public/auth routes and nested MCP REST calls too. No authentication is implied at entry.
+   * This is an extension seam, not an audit store or an atomic mutation/audit transaction.
+   */
+  requestMiddleware?: MiddlewareHandler<AppEnv>;
   /**
    * Extra routes. `app` is the root (public ones such as a payment webhook); `authed` sits under `/api` behind the
    * normal session / API key check.

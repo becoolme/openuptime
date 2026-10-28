@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "edition-request-middleware", date: "2026-10-28", edition: "community",
+    title: { en: "Edition request extensions", zh: "版本请求扩展" },
+    summary: { en: "Custom editions can wrap existing API requests through a supported middleware hook.", zh: "自定义版本可以通过受支持的中间件接口扩展现有 API 请求处理。" },
+    points: [
+      { en: "The hook surrounds public, authentication and authenticated routes, including internal REST calls made by MCP tools.", zh: "接口覆盖公开、认证及已登录路由，也包括 MCP 工具发起的内部 REST 请求。" },
+      { en: "Authenticated requests expose verified session, API-key or OAuth attribution without exposing credentials.", zh: "已认证请求提供经验证的会话、API key 或 OAuth 归因信息，不暴露凭据值。" },
+      { en: "Extensions can await the result while the request database remains open; Community behavior stays unchanged without an extension.", zh: "扩展可以在请求数据库关闭前等待处理结果；不配置扩展时，Community 行为保持不变。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",
