@@ -90,6 +90,7 @@ Each public status page offers email subscriptions (double opt-in, one-click uns
 | Type | Config |
 | --- | --- |
 | Slack | incoming webhook URL |
+| Discord | channel webhook URL; create it in the channel’s Integrations settings. Alerts do not trigger mentions. |
 | Lark / Feishu | custom bot webhook URL (`open.larksuite.com` or `open.feishu.cn`), optional signing secret |
 | Webhook | URL (receives a JSON POST) |
 | Telegram | bot token + chat ID |

@@ -17,7 +17,7 @@ export type IncidentStatus = "investigating" | "identified" | "monitoring" | "re
 export type IncidentSeverity = "minor" | "major";
 /** "internal" incident updates are for the team only and never reach status pages, feeds or subscribers. */
 export type UpdateVisibility = "public" | "internal";
-export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push";
+export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push" | "discord";
 
 /** Project ids a limited API key may touch; `null` = no limit (sessions and unrestricted keys). */
 export type Scope = string[] | null;

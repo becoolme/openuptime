@@ -328,6 +328,15 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       need(cfg.url, "webhook URL");
       await post(cfg.url!, { text });
       break;
+    case "discord": {
+      need(cfg.url, "webhook URL");
+      const endpoint = new URL(cfg.url!);
+      // Wait for Discord to confirm creation, instead of accepting a fire-and-forget response.
+      endpoint.searchParams.set("wait", "true");
+      const content = text.length <= 2000 ? text : `${text.slice(0, 1999).replace(/[\uD800-\uDBFF]$/, "")}…`;
+      await post(endpoint.href, { content, allowed_mentions: { parse: [] } });
+      break;
+    }
     case "lark":
       need(cfg.url, "webhook URL");
       await postLark(cfg.url!, text, cfg.secret || undefined);
