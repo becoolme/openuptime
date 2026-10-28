@@ -68,7 +68,21 @@ export type Bindings = {
 
 export type Auth = ReturnType<typeof createAuth>;
 
+/** Verified credential metadata only: never contains a token, API-key value, cookie or session secret. */
+export type RequestIdentity = { kind: "session" } | { kind: "api-key"; credentialId: string } | { kind: "oauth"; clientId: string };
+export type RequestPrincipal = Readonly<RequestIdentity & {
+  userId: string;
+  orgId: string;
+  /** Selected project, or the middleware's fallback in the all-projects view. */
+  projectId: string;
+  allProjects: boolean;
+  /** Effective allowed project IDs for this workspace, null for unrestricted membership. */
+  projectScope: readonly string[] | null;
+}>;
+
 export type Variables = {
+  /** Present only after requireOrg has successfully verified identity, membership and selected project access. */
+  requestPrincipal?: RequestPrincipal;
   repo: Repo;
   database: Database;
   auth: Auth;

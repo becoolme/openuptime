@@ -2,6 +2,8 @@ import { openDatabase } from "@openuptime/db-pg";
 import { createHash, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
+import { community } from "./edition";
+import type { RequestPrincipal } from "./env";
 
 // An authorized agent (MCP over OAuth) sees only the workspaces and projects the user ticked in the picker, and
 // nothing of anybody else's. Runs only when TEST_DATABASE_URL points at a database (shared with the other e2e tests).
@@ -11,7 +13,10 @@ const env = { DATABASE_URL: url, BETTER_AUTH_SECRET: "test-secret-test-secret-te
 const JSON_HEADERS = { "content-type": "application/json" };
 
 describe.skipIf(!url)("an agent sees only what the user authorized", () => {
-  const app = createApp(openDatabase);
+  const observed: { path: string; principal?: RequestPrincipal }[] = [];
+  const app = createApp(openDatabase, { edition: { ...community, requestMiddleware: async (c, next) => {
+    await next(); observed.push({ path: c.req.path, principal: c.get("requestPrincipal") });
+  } } });
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(`${ORIGIN}${path}`, init), env as never);
 
   async function signUp(label: string) {
@@ -107,9 +112,13 @@ describe.skipIf(!url)("an agent sees only what the user authorized", () => {
     expect(seen.workspaces).toEqual([{ id: home.id, name: expect.any(String), projects: [{ id: alpha, name: expect.any(String) }] }]);
     expect((await agent("GET", "/projects")).body.map((p: any) => p.id)).toEqual([alpha]);
     expect((await agent("GET", "/monitors")).body.map((m: any) => m.name)).toEqual(["Alpha monitor"]);
+    expect(observed.at(-1)?.principal).toMatchObject({ kind: "oauth", clientId: client.client_id, orgId: home.id, projectId: alpha, projectScope: [alpha] });
+    expect(observed.at(-1)?.principal?.userId).toBeTruthy();
+    expect(JSON.stringify(observed.at(-1)?.principal)).not.toContain(token);
 
     // what it is refused: the sibling project, the other workspaces, and somebody else's
     expect((await agent("GET", "/monitors", undefined, { "x-project-id": beta })).status).toBe(403);
+    expect(observed.at(-1)?.principal).toBeUndefined();
     expect((await agent("GET", `/monitors/${betaMon}`)).status).toBe(404);
     expect((await agent("PATCH", `/monitors/${betaMon}`, { name: "hijacked" })).status).toBe(404);
     // delete is idempotent (204) but scoped: the sibling project's monitor survives it
@@ -146,7 +155,10 @@ describe.skipIf(!url)("an agent sees only what the user authorized", () => {
     expect(lwText).toContain(home.id);
     expect(lwText).toContain(alpha);
     for (const hidden of [beta, other.id, bobHome.id]) expect(lwText).not.toContain(hidden);
+    observed.length = 0;
     const lm = await call("list_monitors");
+    expect(observed.find((e) => e.path === "/api/monitors")?.principal).toMatchObject({ kind: "oauth", clientId: client.client_id, orgId: home.id, projectScope: [alpha] });
+    expect(observed.find((e) => e.path === "/api/mcp")?.principal).toBeUndefined();
     expect(lm.content[0].text).toContain("Alpha monitor");
     expect(lm.content[0].text).not.toContain("Beta monitor");
     expect((await call("list_monitors", { project: beta })).isError).toBe(true);
@@ -167,6 +179,8 @@ describe.skipIf(!url)("an agent sees only what the user authorized", () => {
     expect(twoBody.workspaces.find((w: any) => w.id === home.id).projects.map((p: any) => p.id)).toEqual([alpha]);
     expect(JSON.stringify(twoBody)).not.toContain(beta);
     expect(JSON.stringify(twoBody)).not.toContain(bobHome.id);
+    expect((await req("/api/monitors", { headers: { authorization: `Bearer ${token2}`, "x-workspace-id": other.id } })).status).toBe(200);
+    expect(observed.at(-1)?.principal).toMatchObject({ kind: "oauth", clientId: client.client_id, orgId: other.id, projectScope: null });
 
     // a grant naming somebody else's workspace is dropped at consent time, not honoured
     const sneaky = await authorize(`${home.id}|${alpha};${bobHome.id}`);

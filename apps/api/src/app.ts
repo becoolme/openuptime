@@ -52,6 +52,9 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     }
   });
 
+  // Register before routes, including auth and MCP. Request cleanup remains the outermost middleware.
+  if (edition.requestMiddleware) app.use("*", edition.requestMiddleware);
+
   const privateCors = cors({
     origin: (origin, c) => (origin === c.env.WEB_ORIGIN ? origin : null),
     credentials: true,

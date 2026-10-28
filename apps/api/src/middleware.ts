@@ -2,7 +2,7 @@ import type { Repo, Scope } from "@openuptime/repo";
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
-import type { AppEnv } from "./env";
+import type { AppEnv, RequestIdentity } from "./env";
 import { currentSession } from "./auth";
 import { verifyOAuthToken } from "./oauth";
 
@@ -18,6 +18,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   let userId = session?.user.id;
   let orgId = (session?.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId ?? undefined;
 
+  let identity: RequestIdentity | undefined = session ? { kind: "session" } : undefined;
   let fromKey = false;
   let scope: Scope = null;
   let granted: AppEnv["Variables"]["workspaceGrant"] = null;
@@ -35,6 +36,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
       if (!grant.scopes.includes(write ? "mcp:write" : "mcp:read") && !(write ? false : grant.scopes.includes("mcp:write"))) {
         throw new HTTPException(403, { message: `This token lacks the ${write ? "mcp:write" : "mcp:read"} scope` });
       }
+      identity = { kind: "oauth", clientId: grant.clientId! };
       userId = grant.userId;
       fromKey = true;
       // an agent may be given several workspaces (or all of them): it says which one it works in per request
@@ -52,6 +54,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
     } else if (raw) {
       const res = await auth.api.verifyApiKey({ body: { key: raw } }).catch(() => null);
       if (res?.valid && res.key) {
+        identity = { kind: "api-key", credentialId: res.key.id };
         userId = res.key.referenceId;
         fromKey = true;
         const meta = res.key.metadata as { organizationId?: string; projectIds?: unknown } | null;
@@ -62,7 +65,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
       }
     }
   }
-  if (!userId) throw new HTTPException(401, { message: "Unauthorized" });
+  if (!userId || !identity) throw new HTTPException(401, { message: "Unauthorized" });
 
   const repo = c.get("repo");
   const asked = c.req.header("x-project-id") ?? cookieValue(c.req.header("cookie"), "ou_project");
@@ -84,6 +87,10 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
   c.set("workspaceGrant", granted ?? (fromKey ? new Map([[orgId, scope]]) : null));
   c.set("userId", userId);
   c.set("orgId", orgId);
+  c.set("requestPrincipal", Object.freeze({
+    ...identity, userId, orgId, projectId, allProjects,
+    projectScope: scope ? Object.freeze([...scope]) : null,
+  }));
   await next();
 });
 
