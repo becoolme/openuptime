@@ -37,6 +37,36 @@ describe("sendMaintenanceReminders", () => {
   });
   afterEach(() => setMailTransport(undefined));
 
+  it("retries a failed policy without sending and still processes later claimed windows", async () => {
+    const f = fake();
+    const sent: string[] = [];
+    setMailTransport(async (mail) => { sent.push(mail.to); });
+    const second = { ...claim, window: { ...claim.window, id: "w2" }, subscribers: [{ ...claim.subscribers[0], email: "later@example.com" }] };
+    f.repo.claimMaintenanceReminders = async () => [claim, second] as never;
+    const spend = vi.fn(async (_org: string, n: number) => n);
+    const entitlements = { ...f.entitlements, spendEmails: spend, canNotifySubscriber: async (_org: string, sub: { email: string }) => {
+      if (sub.email !== "later@example.com") throw new Error("private policy credential");
+      return true;
+    } };
+    await sendMaintenanceReminders(f.repo, entitlements);
+    expect(f.released).toEqual(["w1"]);
+    expect(sent).toEqual(["later@example.com"]);
+    expect(spend).toHaveBeenCalledTimes(1);
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining("private policy credential"));
+  });
+
+  it("bounds policy retries and does not retry an explicit policy denial", async () => {
+    const f = fake();
+    const sent = vi.fn(); setMailTransport(sent);
+    const broken = { ...f.entitlements, canNotifySubscriber: async () => { throw new Error("unavailable"); } };
+    for (let i = 0; i < 5; i++) await sendMaintenanceReminders(f.repo, broken);
+    expect(f.released).toEqual(["w1", "w1", "w1"]);
+    expect(sent).not.toHaveBeenCalled();
+    const denied = fake();
+    await sendMaintenanceReminders(denied.repo, { ...denied.entitlements, canNotifySubscriber: async () => false });
+    expect(denied.released).toEqual([]);
+  });
+
   it("keeps the claim when the plan's email allowance leaves nobody to mail", async () => {
     const f = fake(0);
     await sendMaintenanceReminders(f.repo, f.entitlements);
