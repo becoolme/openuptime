@@ -34,7 +34,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Send monitor alerts to a Discord channel using its webhook.", zh: "通过频道 Webhook 将监控告警发送到 Discord。" },
     points: [
       { en: "Add a Discord channel in Alerting and send a test before connecting monitors.", zh: "在告警设置中添加 Discord 渠道，发送测试消息后再关联监控。" },
-      { en: "Outages, recoveries, reminders and escalations use the existing delivery log and retry handling; message text cannot ping users or roles.", zh: "故障、恢复、提醒和升级通知沿用投递记录与重试机制；消息文本不会触发用户或角色提及通知。" },
+      { en: "Outages, recoveries and escalations use the existing delivery log and retry handling; message text cannot ping users or roles.", zh: "故障、恢复和升级通知沿用投递记录与重试机制；消息文本不会触发用户或角色提及通知。" },
     ],
   },
   {
