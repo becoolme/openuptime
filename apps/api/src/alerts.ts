@@ -508,7 +508,17 @@ const REMINDER_ATTEMPTS = 3;
  */
 export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitlements = unmetered) {
   for (const r of await repo.claimMaintenanceReminders(20)) {
-    const { send: subs } = await subscriberAllowance(entitlements, r.page.organizationId, r.subscribers);
+    let subs: SubscriberTarget[];
+    try {
+      ({ send: subs } = await subscriberAllowance(entitlements, r.page.organizationId, r.subscribers));
+    } catch {
+      // A temporary policy outage is not a denial. Send nothing, return this claim within the same bounded
+      // retry budget as mail failures, and continue so one page cannot strand the rest of the claimed batch.
+      console.error("maintenance subscriber policy unavailable");
+      const retry = await repo.withinLimit(`maint-reminder:${r.window.id}:${r.page.id}`, REMINDER_ATTEMPTS, 24 * 3600).catch(() => false);
+      if (retry) await repo.releaseMaintenanceReminder(r.window.id, r.page.id).catch((e) => console.error("maintenance reminder release failed", e));
+      continue;
+    }
     // the plan allows no more mail: nothing to send and nothing to retry, so the claim stays
     if (!subs.length) continue;
     const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, r.page.organizationId), {
