@@ -29,6 +29,7 @@ describe("alert routing policy", () => {
   it.each(["incident.opened", "incident.resolved", "incident.reminder", "incident.escalated"] as const)("selects eligible recipients for %s and records exclusions", async (kind) => {
     const policy = vi.fn(async (_org: string, input: { channelId: string }) => input.channelId === "two");
     const result = await run(policy, kind);
+    expect(result.queued.every((r) => r.error === "alert routing policy unavailable")).toBe(true);
     expect(result.finished.filter((r) => r.status === "sent").map((r) => r.id)).toEqual(["two"]);
     expect(policy).toHaveBeenCalledWith("org", { projectId: "project", monitorId: "monitor", incidentId: "incident", kind, at, channelId: "one" });
     expect(result.finished).toContainEqual(expect.objectContaining({ id: "one", status: "skipped", message: "skipped: not selected by alert routing policy" }));

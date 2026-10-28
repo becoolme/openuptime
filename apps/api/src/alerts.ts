@@ -252,7 +252,9 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
   // a phone is pushed once per event, however many push channels reach it
   const pushed: PushedDevices = new Map();
-  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false })));
+  // Persist the pending authorization before claiming: worker recovery must not bypass the policy.
+  // A completed provider attempt replaces this marker; interrupted attempts retain it for safe reevaluation.
+  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, ...(entitlements.allowAlertChannel ? { error: ROUTING_UNAVAILABLE } : {}) })));
   await Promise.all(
     live.map(async (c) => {
       const lang = await languageFor(repo, c, fallback);

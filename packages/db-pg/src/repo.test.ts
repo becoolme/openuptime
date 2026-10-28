@@ -534,6 +534,21 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
     expect((await Promise.all([repo.claimDelivery(stuck.id), repo.claimDelivery(stuck.id)])).filter(Boolean)).toHaveLength(1);
   });
 
+  it("preserves a pending routing decision through orphan and interrupted-worker recovery", async () => {
+    const inc = await incident();
+    const marker = "alert routing policy unavailable";
+    const orphan = await queue(inc.id, { error: marker });
+    const interrupted = await queue(inc.id, { error: marker });
+    await repo.claimDelivery(interrupted.id);
+    await db.update(schema.alertDelivery).set({ createdAt: ago(10) }).where(eq(schema.alertDelivery.id, orphan.id));
+    await db.update(schema.alertDelivery).set({ claimedAt: ago(10) }).where(eq(schema.alertDelivery.id, interrupted.id));
+    await repo.sweepStuckDeliveries({ stuckSec: 300, maxAttempts: 3 });
+    const recovered = (await repo.claimRetries(100)).filter((r) => [orphan.id, interrupted.id].includes(r.delivery.id));
+    expect(recovered).toHaveLength(2);
+    expect(recovered.every((r) => r.delivery.error === marker)).toBe(true);
+    for (const r of recovered) await repo.finishDelivery(r.delivery.id, { status: "skipped", error: "policy denied", message: "policy denied" });
+  });
+
   describe("reminders", () => {
     beforeAll(async () => {
       await db.update(schema.project).set({ reminderIntervalMin: 5 }).where(eq(schema.project.id, projectId));
