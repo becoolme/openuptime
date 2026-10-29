@@ -253,6 +253,13 @@
       "when": 1793294603831,
       "tag": "0035_windy_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793294902494,
+      "tag": "0036_sparkling_thunderball",
+      "breakpoints": true
     }
   ]
 }

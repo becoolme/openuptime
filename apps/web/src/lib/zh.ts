@@ -2,6 +2,9 @@
 export const zh: Record<string, string> = {
   "Send alerts through a Discord channel webhook.": "通过 Discord 频道的 Webhook 发送告警。",
   "Send alerts to a Teams Workflow webhook set to “Anyone” authentication; messages are capped at 4000 characters.": "通过身份验证设为“任何人”的 Teams 工作流 Webhook 发送告警；消息最长 4000 个字符。",
+  "Publish alerts to an ntfy topic.": "将告警发布到 ntfy 主题。",
+  "ntfy server URL": "ntfy 服务器 URL", "Topic": "主题", "Access token (optional)": "访问令牌（可选）", "Notification priority": "通知优先级",
+
   // nav / chrome
   Monitors: "监控", Incidents: "事件", "Status pages": "状态页", Alerting: "告警", Team: "团队", "API keys": "API 密钥", Settings: "设置", "Account settings": "账户设置",
   "Sign out": "退出登录", "Sign in": "登录", "Create account": "创建账号", "Create an account": "创建账号",

@@ -26,6 +26,16 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  { id: "ntfy-alerts", date: "2026-10-29", edition: "community",
+    title: { en: "ntfy alerts", zh: "ntfy 告警" },
+    summary: { en: "Publish monitor alerts to ntfy.sh or your own ntfy server.", zh: "将监控告警发布到 ntfy.sh 或自己的 ntfy 服务器。" },
+    points: [
+      { en: "Configure a topic, optional access token and priority, then send a test message.", zh: "配置主题、可选访问令牌和优先级，并发送测试消息。" },
+      { en: "Incident notifications use delivery history and retries; long messages are shortened without becoming attachments.", zh: "事件通知沿用投递记录与重试；长消息会截短，不会变成附件。" },
+      { en: "The topic is masked like a secret, a token is only sent to https servers, and clearing the token field removes it.", zh: "主题会像密钥一样被遮蔽，令牌只会发送到 https 服务器，清空令牌输入框即可移除令牌。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the channels API docs", zh: "阅读告警渠道 API 文档" } },
+  },
   {
     id: "recovery-threshold", date: "2026-10-29", edition: "community",
     title: { en: "Wait for stable recovery", zh: "确认稳定恢复后再通知" },

@@ -92,6 +92,7 @@ Each public status page offers email subscriptions (double opt-in, one-click uns
 | Slack | incoming webhook URL |
 | Discord | channel webhook URL; create it in the channel’s Integrations settings. Alerts do not trigger mentions. |
 | Microsoft Teams | Workflow webhook URL accepting an Adaptive Card message envelope. Use “When a Teams webhook request is received” with “Anyone” authentication; authenticated tenant/user triggers and legacy MessageCard connectors are not supported. A successful delivery means the workflow accepted the request, not that its later posting action completed. |
+| ntfy | server origin URL (for example `https://ntfy.sh`), topic, optional bearer access token, priority string `1`–`5` (default `3`). Topic: 1–64 letters, digits, `_` or `-`. Redirects are refused; the public-target network policy applies to self-hosted servers too, so a server on a private address is refused unless private targets are allowed. An access token requires an `https://` server and printable ASCII; an empty token removes it. The topic is masked in API responses. Long messages are truncated below 4096 UTF-8 bytes. Receives outage, recovery and escalation alerts; periodic incident reminders intentionally remain limited to push and project-opted-in email, as with other webhook channels. |
 | Lark / Feishu | custom bot webhook URL (`open.larksuite.com` or `open.feishu.cn`), optional signing secret |
 | Webhook | URL (receives a JSON POST) |
 | Telegram | bot token + chat ID |

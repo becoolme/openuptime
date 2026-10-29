@@ -457,6 +457,27 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       }
       break;
     }
+    case "ntfy": {
+      need(cfg.url && cfg.topic, "server URL or topic");
+      // Keep the UTF-8 message under ntfy's default 4096-byte limit, without creating an attachment.
+      let content = "";
+      let bytes = 0;
+      for (const character of text) {
+        const size = new TextEncoder().encode(character).length;
+        if (bytes + size > 4000) { content += "…"; break; }
+        content += character; bytes += size;
+      }
+      let res: Response;
+      try {
+        const init = json({ topic: cfg.topic, message: content, title: "OpenUptime", priority: Number(cfg.priority || "3") });
+        res = (await guardedFetch(cfg.url!, { ...init, headers: { ...init.headers, ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}) } }, { follow: false })).res;
+      } catch (e) {
+        throw new Error((e as Error).name === "TimeoutError" ? `${hostOf(cfg.url!)} timed out` : `Could not reach ${hostOf(cfg.url!)}`);
+      }
+      await res.body?.cancel().catch(() => {});
+      if (!res.ok) throw new Error(`${hostOf(cfg.url!)} responded HTTP ${res.status}`);
+      break;
+    }
     case "lark":
       need(cfg.url, "webhook URL");
       await postLark(cfg.url!, text, cfg.secret || undefined);

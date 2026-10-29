@@ -41,6 +41,24 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     expect((await call("POST", "/channels", { type: "teams", name: "Missing", config: {} })).status).toBe(400);
     expect((await call("POST", "/channels", { type: "teams", name: "Private", config: { url: "http://127.0.0.1/hook" } })).status).toBe(400);
     expect((await call("DELETE", `/channels/${teams.body.id}`)).status).toBe(204);
+    const ntfy = await call("POST", "/channels", { type: "ntfy", name: "ntfy", config: { url: "https://ntfy.sh", topic: "ops", token: "test-token" } });
+    expect(ntfy.status).toBe(201);
+    expect(ntfy.body.config).toEqual({ url: "https://ntfy.sh", topic: "ops", token: "test-token", priority: "3" });
+    expect((await call("GET", "/channels")).body).toContainEqual(expect.objectContaining({ id: ntfy.body.id, type: "ntfy" }));
+    expect((await call("PATCH", `/channels/${ntfy.body.id}`, { config: { url: "https://ntfy.sh", topic: "ops", priority: "5" } })).status).toBe(200);
+    for (const config of [{ url: "https://ntfy.sh", topic: "bad/topic" }, { url: "https://ntfy.sh", topic: "ops", priority: "6" }, { url: "http://127.0.0.1", topic: "ops" }, { url: "https://ntfy.sh/topic", topic: "ops" }]) {
+      expect((await call("POST", "/channels", { type: "ntfy", name: "Invalid", config })).status).toBe(400);
+    }
+    // a token needs https and printable ASCII; an emptied token field removes it
+    expect((await call("POST", "/channels", { type: "ntfy", name: "Plain", config: { url: "http://ntfy.example.com", topic: "ops", token: "t" } })).status).toBe(400);
+    expect((await call("POST", "/channels", { type: "ntfy", name: "Accent", config: { url: "https://ntfy.sh", topic: "ops", token: "tökén" } })).status).toBe(400);
+    const tokened = await call("POST", "/channels", { type: "ntfy", name: "Tokened", config: { url: "https://ntfy.sh", topic: "ops", token: "  secret  " } });
+    expect(tokened.body.config.token).toBe("secret");
+    const cleared = await call("PATCH", `/channels/${tokened.body.id}`, { config: { url: "https://ntfy.sh", topic: "ops", priority: "3", token: "" } });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.config).toEqual({ url: "https://ntfy.sh", topic: "ops", priority: "3" });
+    expect((await call("DELETE", `/channels/${tokened.body.id}`)).status).toBe(204);
+    expect((await call("DELETE", `/channels/${ntfy.body.id}`)).status).toBe(204);
     const monitor = { name: "Site", type: "http", target: "https://example.com" };
 
     const plain = (await call("POST", "/channels", { type: "email", name: "Plain", config: { to: "a@example.com" } })).body;

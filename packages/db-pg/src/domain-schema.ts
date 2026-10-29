@@ -22,7 +22,7 @@ export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degrade
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);
 export const incidentSeverity = pgEnum("incident_severity", ["minor", "major"]);
-export const channelType = pgEnum("channel_type", ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams"]);
+export const channelType = pgEnum("channel_type", ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy"]);
 
 /** A project groups monitors, status pages, channels and maintenance inside one workspace (organization). */
 export const project = pgTable(

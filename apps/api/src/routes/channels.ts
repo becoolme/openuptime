@@ -8,7 +8,7 @@ import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
 
-const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams"] as const;
+const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy"] as const;
 type ChannelType = (typeof TYPES)[number];
 
 const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL");
@@ -18,6 +18,13 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
   slack: z.object({ url }),
   discord: z.object({ url }),
   teams: z.object({ url }),
+  ntfy: z.object({
+    url: url.refine((v) => { const u = new URL(v); return u.pathname === "/" && !u.search && !u.hash && !u.username && !u.password; }, "Use the server origin without a topic, query or credentials"),
+    topic: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Use 1–64 letters, digits, underscores or hyphens"),
+    // printable ASCII only: anything else cannot be sent in a header and would surface as "Could not reach host"; empty clears it
+    token: z.string().trim().max(500).regex(/^[\x20-\x7E]*$/, "Use printable ASCII characters only").transform((v) => v || undefined).optional(),
+    priority: z.enum(["1", "2", "3", "4", "5"]).default("3"),
+  }).refine((v) => !v.token || v.url.toLowerCase().startsWith("https://"), { path: ["token"], message: "An access token is only sent to an https:// server" }),
   webhook: z.object({ url }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),
   telegram: z.object({ botToken: z.string().trim().min(1).max(200), chatId: z.string().trim().min(1).max(100) }),

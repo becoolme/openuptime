@@ -179,5 +179,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0035_windy_stepford_cuckoos",
     "when": 1793294603831,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"recovery_threshold\" integer DEFAULT 1 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"consecutive_successes\" integer DEFAULT 0 NOT NULL;"
+  },
+  {
+    "tag": "0036_sparkling_thunderball",
+    "when": 1793294902494,
+    "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'ntfy';"
   }
 ];

@@ -6,7 +6,7 @@
 export const MASK = "••••••••";
 
 /** Channel settings that are credentials (the URL of a Slack or Lark hook is one: whoever has it can post). */
-const SECRET_KEYS = new Set(["url", "secret", "botToken", "routingKey"]);
+const SECRET_KEYS = new Set(["url", "secret", "botToken", "routingKey", "token", "topic"]);
 
 const maskUrl = (u: string) => {
   try {
