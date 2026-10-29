@@ -85,10 +85,13 @@ function resolveUrl(location: string, base: string): string | null {
 async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const problem = requestBodyProblem(m);
   if (problem) return { ok: false, error: problem };
+  const headers = new Headers({ "user-agent": checkUserAgent(), accept: "*/*", ...m.headers });
+  // The runtime owns framing: user-provided lengths can disagree with UTF-8 bytes.
+  headers.delete("content-length");
   const expectRedirect = REDIRECT_STATUSES.includes(m.expectedStatus);
   const { res, url } = await guardedFetch(
     m.target,
-    { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers: { "user-agent": checkUserAgent(), accept: "*/*", ...m.headers } },
+    { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers },
     { follow: !expectRedirect, protectBody: true },
   );
   // when redirects were followed, say where we ended up: a 404 usually comes from the final hop, not the URL typed

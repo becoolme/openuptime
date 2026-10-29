@@ -336,8 +336,12 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
+  const bodyBytes = new TextEncoder().encode(f.requestBody).byteLength;
+  const bodyTooLarge = f.type === "http" && !["GET", "HEAD"].includes(f.method) && bodyBytes > 16384;
+
   async function submit(e: React.SyntheticEvent) {
     e.preventDefault();
+    if (bodyTooLarge) { setErr(t("Request body exceeds 16 KiB.")); return; }
     setBusy(true);
     setErr("");
     setUpgrade(undefined);
@@ -412,7 +416,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         )}
         {f.type === "http" && !["GET", "HEAD"].includes(f.method) && (
           <label className="fld">{t("Request body (optional)")}
-            <textarea className="in mono" value={f.requestBody} onChange={(e) => set("requestBody", e.target.value)} rows={5} maxLength={16384} />
+            <textarea className="in mono" value={f.requestBody} onChange={(e) => set("requestBody", e.target.value)} rows={5} maxLength={16384} aria-invalid={bodyTooLarge} />
+            <span className={bodyTooLarge ? "err" : "muted"}>{t("{n} / 16384 UTF-8 bytes").replace("{n}", String(bodyBytes))}</span>
             <span className="muted">{t("Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.")}</span>
           </label>
         )}
@@ -532,7 +537,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * (PROBED.includes(f.type) ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{PROBED.includes(f.type) && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
             <div className="mbtns">
               <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+              <button className="btn primary" disabled={busy || bodyTooLarge}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
             </div>
           </div>
         </div>

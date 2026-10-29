@@ -91,6 +91,8 @@ export const zh: Record<string, string> = {
   "Could not subscribe. Try again.": "订阅失败，请重试。",
   "You’re subscribed. We’ll email you about incidents.": "订阅成功，有事件时我们会发邮件通知你。",
   "You’ve been unsubscribed.": "已取消订阅。",
+  "Request body exceeds 16 KiB.": "请求体超过 16 KiB。",
+  "{n} / 16384 UTF-8 bytes": "{n} / 16384 UTF-8 字节",
   "Request body (optional)": "请求体（可选）",
   "Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.": "最多 16 KiB 的 UTF-8 文本。请在请求头中设置 Content-Type。成员和访客只能看到掩码。检测会重复发送，请使用安全的测试接口。",
   "Request headers": "请求头",

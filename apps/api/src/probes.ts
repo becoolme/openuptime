@@ -97,6 +97,7 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
   });
   try {
     // Old probes ignore unknown fields: verify support BEFORE sending a payload.
+    // Do not cache positive capabilities: a rollback must stop payload delivery immediately.
     if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
       const capabilities: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;

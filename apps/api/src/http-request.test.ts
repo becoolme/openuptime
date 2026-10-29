@@ -8,10 +8,12 @@ import { configureProbes, runInRegion } from "./probes";
 import { verifyProbe, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "./probe-protocol";
 
 describe("HTTP request bodies", () => {
+  const lengths: (string | undefined)[] = [];
   const seen: { method: string; body: string; contentType?: string }[] = [];
   const server = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
+    lengths.push(req.headers["content-length"]);
     seen.push({ method: req.method!, body, contentType: req.headers["content-type"] });
     if (req.url === "/redirect") { res.writeHead(307, { location: "/echo" }); res.end(); }
     else if (req.url === "/get") { res.writeHead(303, { location: "/echo" }); res.end(); }
@@ -28,6 +30,13 @@ describe("HTTP request bodies", () => {
     const requestBody = '{"text":"你好"}';
     expect(await runCheck({ type: "http", target: base, method, requestBody, headers: { "content-type": "application/json" }, expectedStatus: 200, timeoutMs: 1000 })).toMatchObject({ ok: true });
     expect(seen.at(-1)).toEqual({ method, body: requestBody, contentType: "application/json" });
+  });
+  it("lets the runtime calculate byte lengths instead of trusting custom Content-Length", async () => {
+    expect(await runCheck({ type: "http", target: base, method: "POST", requestBody: "你好", headers: { "Content-Length": "1" }, expectedStatus: 200, timeoutMs: 1000 })).toMatchObject({ ok: true });
+    expect(seen.at(-1)?.body).toBe("你好");
+    expect(lengths.at(-1)).toBe("6");
+    expect(await runCheck({ type: "http", target: base, method: "GET", headers: { "content-length": "99" }, expectedStatus: 200, timeoutMs: 1000 })).toMatchObject({ ok: true });
+    expect(lengths.at(-1)).not.toBe("99");
   });
   it("preserves bodies for same-origin 307 and clears body headers for 303", async () => {
     const input = { type: "http" as const, method: "POST", requestBody: "a=1", headers: { "content-type": "application/x-www-form-urlencoded" }, expectedStatus: 200, timeoutMs: 1000 };
@@ -66,6 +75,12 @@ describe("HTTP request bodies", () => {
         return Response.json({ ok: true });
       });
       expect(await runInRegion("test", input)).toMatchObject({ outcome: { ok: true } });
+      // A successful preflight must not authorize a later request after a probe rollback.
+      fetch.mockImplementation(async () => Response.json({ ok: true }));
+      const beforeRollback = fetch.mock.calls.length;
+      expect(await runInRegion("test", input)).toMatchObject({ unreachable: expect.stringContaining("upgrade required") });
+      expect(fetch).toHaveBeenCalledTimes(beforeRollback + 1);
+
     } finally { vi.unstubAllGlobals(); configureProbes({}); }
   });
 });
