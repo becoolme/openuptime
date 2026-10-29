@@ -8,7 +8,7 @@ import { effectiveRegions } from "./regions";
  * Usage is measured in credits: one check that makes an outbound request is one credit (see `creditCost`).
  */
 export interface Entitlements {
-  /** Optional routing policy for each eligible channel. A failed decision is retried at the original routing time. */
+  /** Optional routing policy for each eligible channel. Only true approves; failed decisions retry at the original time. */
   allowAlertChannel?(workspaceId: string, input: {
     projectId: string | null; monitorId: string | null; incidentId: string;
     kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";

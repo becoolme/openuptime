@@ -167,7 +167,7 @@ async function authorizeChannel(channel: AlertChannel, ev: Event, entitlements: 
       incidentId: ev.incident.id, kind: ev.kind, at, channelId: channel.id,
     });
   } catch { throw new Error(ROUTING_UNAVAILABLE); }
-  if (!allowed) throw new Skipped("skipped: not selected by alert routing policy");
+  if (allowed !== true) throw new Skipped("skipped: not selected by alert routing policy");
 }
 
 /**

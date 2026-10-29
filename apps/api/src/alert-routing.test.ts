@@ -39,6 +39,11 @@ describe("alert routing policy", () => {
   it("keeps default routing without a policy", async () => {
     expect((await run()).finished.filter((r) => r.status === "sent").map((r) => r.id)).toEqual(["one", "two"]);
   });
+  it.each([{ allowed: false }, "true", 1, null, undefined])("rejects non-boolean policy approval %j", async (value) => {
+    const result = await run(async () => value as never);
+    expect(result.fetch).not.toHaveBeenCalled();
+    expect(result.finished.every((r) => r.status === "skipped")).toBe(true);
+  });
   it("retains unavailable decisions for retry, without leaking errors or sending before authorization", async () => {
     const result = await run(async () => { throw new Error("secret token"); });
     expect(result.fetch).not.toHaveBeenCalled();
