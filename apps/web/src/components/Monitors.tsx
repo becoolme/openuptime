@@ -431,7 +431,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         )}
         <label className="fld">{t("Successes before recovery")}
           <Select className="in" value={f.recoveryThreshold} onChange={(v) => set("recoveryThreshold", v)} options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
-          <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once; slow responses may recover to degraded.")}</span>
+          <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.")}</span>
         </label>
         {f.type === "http" && REDIRECTS.includes(f.expectedStatus) && (
           <label className="fld">{t("Redirect must lead to (optional)")}

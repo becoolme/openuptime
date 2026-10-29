@@ -13,7 +13,7 @@ import {
   type Repo,
   type Scope,
 } from "@openuptime/repo";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
 
@@ -487,11 +487,16 @@ export function createRepo(db: Db): Repo {
     },
 
     async recordRecoveryProgress(m, ok) {
+      // Write only when something changes: a failure clears a non-zero streak, a success counts while the outage lasts.
+      // A healthy monitor's checks (nearly all of them) then cost a read instead of a row update.
       const [row] = await db.update(schema.monitor).set({
         consecutiveSuccesses: ok ? sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})` : 0,
-      }).where(and(eq(schema.monitor.id, m.id), eq(schema.monitor.paused, false)))
+      }).where(and(eq(schema.monitor.id, m.id), eq(schema.monitor.paused, false), ok ? eq(schema.monitor.status, "down") : ne(schema.monitor.consecutiveSuccesses, 0)))
         .returning({ successes: schema.monitor.consecutiveSuccesses, threshold: schema.monitor.recoveryThreshold });
-      return row ? { successes: row.successes, ready: row.successes >= row.threshold } : null;
+      if (row) return { successes: row.successes, ready: row.successes >= row.threshold };
+      const [cur] = await db.select({ paused: schema.monitor.paused, successes: schema.monitor.consecutiveSuccesses, threshold: schema.monitor.recoveryThreshold })
+        .from(schema.monitor).where(eq(schema.monitor.id, m.id));
+      return !cur || cur.paused ? null : { successes: cur.successes, ready: cur.successes >= cur.threshold };
     },
 
     async completeRecovery(m, status, consecutiveSlow) {

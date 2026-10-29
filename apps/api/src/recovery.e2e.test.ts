@@ -39,6 +39,7 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       await call("POST", ping);
       expect((await call("GET", path)).body).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
       expect(await db.repo.hasOpenIncident(created.body.id, false)).toBe(true);
+      // Saying "not paused" about a monitor that is running is not a resume: it keeps its status and its recovery progress.
       expect((await call("PATCH", path, { paused: false })).body).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
       await missed();
       expect((await call("GET", path)).body.consecutiveSuccesses).toBe(0);
@@ -63,6 +64,11 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       expect(await db.repo.hasOpenIncident(created.body.id, false)).toBe(true);
       await call("PATCH", path, { paused: true });
       expect((await call("POST", ping)).body.paused).toBe(true);
+      // A check run by hand on a paused monitor leaves its status and counters alone.
+      const pausedBefore = (await call("GET", path)).body;
+      await missed();
+      expect((await call("GET", path)).body).toMatchObject({ status: pausedBefore.status, consecutiveFailures: pausedBefore.consecutiveFailures, consecutiveSuccesses: 0 });
+      expect(pausedBefore.status).toBe("paused");
       expect((await call("GET", path)).body.consecutiveSuccesses).toBe(0);
       await call("PATCH", path, { paused: false });
       expect((await call("GET", path)).body.consecutiveSuccesses).toBe(0);

@@ -27,15 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
-    id: "recovery-threshold", date: "2026-10-28", edition: "community",
+    id: "recovery-threshold", date: "2026-10-29", edition: "community",
     title: { en: "Wait for stable recovery", zh: "确认稳定恢复后再通知" },
-    summary: { en: "Require several consecutive successes before an outage recovers.", zh: "可要求连续多次成功后才结束宕机，减少反复恢复通知。" },
+    summary: { en: "Require several consecutive successes before an outage is marked as recovered.", zh: "可要求连续多次成功后才结束宕机，减少反复恢复通知。" },
     points: [
-      { en: "Choose one to ten successful checks or heartbeat pings; the default remains one.", zh: "可设置一到十次成功检测或心跳，默认仍为一次。" },
-      { en: "Repeating the current pause setting preserves progress; delayed ping handlers cannot overwrite a newer missed check.", zh: "重复提交当前暂停设置不会清空恢复进度；延迟返回的心跳不会覆盖更新的缺失检测。" },
-      { en: "A multi-region vote counts as one run; failed checks reset the streak while raw uptime data continues to reflect each result.", zh: "每轮多区域投票计一次，失败后重新累计；可用率仍按原始检测结果计算。" },
-      { en: "Overlapping checks count against the latest recovery streak, so an older check cannot restore a streak cleared by a failure.", zh: "同时进行的检测按最新恢复计数累计，旧检测不会恢复已被失败清零的成功记录。" },
+      { en: "Choose between one and ten successful checks or heartbeat pings before an outage ends; the default stays at one.", zh: "可设置结束宕机前需要一到十次成功检测或心跳，默认仍为一次。" },
+      { en: "A failed check starts the count over, and a multi-region check counts as one success, while uptime figures still reflect every individual result.", zh: "检测失败会让计数重新开始，多区域检测只算一次成功，可用率仍按每次实际结果计算。" },
+      { en: "Every heartbeat ping counts, even several arriving close together.", zh: "每次心跳都会计数，即使几次心跳间隔很短。" },
+      { en: "Running a check by hand on a paused monitor no longer changes its status, and saving a running monitor as not paused keeps its status and progress.", zh: "对已暂停的监控手动检测不再改变其状态；把正在运行的监控保存为未暂停也不会重置状态和恢复进度。" },
     ],
+    link: { href: "/docs/api#monitors", label: { en: "Read about the recovery threshold", zh: "阅读恢复阈值说明" } },
   },
   {
     id: "http-request-bodies", date: "2026-10-29", edition: "community",
