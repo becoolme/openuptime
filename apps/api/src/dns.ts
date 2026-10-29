@@ -2,11 +2,25 @@ import type { CheckInput, CheckOutcome } from "./checker";
 import { readCapped } from "./netguard";
 
 const TYPES = { A: 1, AAAA: 28, CNAME: 5, MX: 15, TXT: 16, NS: 2 } as const;
-const name = (s: string) => s.toLowerCase().replace(/\.$/, "");
+// WHATWG hostname parsing supplies IDNA in both Node and Workers; keep DNS-only
+// names such as _dmarc and the root valid without interpreting URL syntax.
+const name = (s: string) => {
+  const raw = s.trim().toLowerCase().replace(/\.$/, "");
+  if (!raw || /[\s/:@?#\\]/.test(raw)) return raw;
+  try { return new URL(`https://${raw}`).hostname; } catch { return raw; }
+};
 
 function exactValue(value: string, type: keyof typeof TYPES): string {
+  if (type === "A") {
+    const parts = value.trim().split(".");
+    if (parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)) return parts.map(Number).join(".");
+    return value.trim();
+  }
   if (type === "CNAME" || type === "NS") return name(value.trim());
-  if (type === "MX") return value.trim().replace(/\s+/g, " ").toLowerCase().replace(/\.$/, "");
+  if (type === "MX") {
+    const parts = /^(\d+)\s+(\S+)$/.exec(value.trim());
+    return parts ? `${Number(parts[1])} ${name(parts[2])}` : value.trim();
+  }
   if (type === "AAAA") {
     try { return new URL(`http://[${value.trim()}]/`).hostname; } catch { return value; }
   }
@@ -24,7 +38,7 @@ function isAnswer(v: unknown): v is Answer {
 export async function dnsCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
   const type = m.dnsRecordType ?? "A";
   const done = (error?: string): CheckOutcome => ({ ok: !error, latencyMs: Date.now() - started, ...(error ? { error } : {}) });
-  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(m.target)}&type=${type}`;
+  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name(m.target))}&type=${type}`;
   const res = await fetch(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(m.timeoutMs), redirect: "error" });
   if (!res.ok) {
     await res.body?.cancel();

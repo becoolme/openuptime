@@ -32,6 +32,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Monitor A, AAAA, CNAME, MX, TXT and NS records with optional value matching.", zh: "支持监控 A、AAAA、CNAME、MX、TXT 和 NS 记录，并可校验期望值。" },
     points: [
       { en: "Require one answer to match an exact value or contain text; unrelated record types no longer count as success.", zh: "可要求至少一条记录完全匹配期望值或包含指定文本；其他类型的记录不再被误判为成功。" },
+      { en: "Unicode domain names use IDNA; exact IPv4 values ignore surrounding whitespace and normalize dotted decimal octets.", zh: "Unicode 域名按 IDNA 规范化；IPv4 完全匹配会忽略首尾空白并规范化点分十进制数值。" },
       { en: "Configure DNS checks in the dashboard, API or MCP, and preserve their settings when exporting and importing monitors.", zh: "可通过控制台、API 或 MCP 配置 DNS 检测，导入导出时会保留这些设置。" },
     ],
   },

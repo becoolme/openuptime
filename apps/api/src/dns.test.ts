@@ -30,10 +30,15 @@ describe("DNS record assertions", () => {
     expect(await dnsCheck(input, Date.now())).toMatchObject({ ok: true });
   });
   it("matches any selected answer and canonicalizes domain names, MX and IPv6", async () => {
-    for (const [type, code, value, expected] of [["NS", 2, "NS.EXAMPLE.COM.", "ns.example.com"], ["MX", 15, "10 MAIL.EXAMPLE.COM.", "10 mail.example.com"], ["AAAA", 28, "2001:db8::1", "2001:0db8:0:0:0:0:0:1"]] as const) {
+    for (const [type, code, value, expected] of [["A", 1, "192.0.2.1", " 192.000.002.01 "], ["NS", 2, "NS.EXAMPLE.COM.", "ns.example.com"], ["MX", 15, "10 MAIL.EXAMPLE.COM.", "10 mail.example.com"], ["MX", 15, "10 mail.xn--bcher-kva.de.", "10 mail.bücher.de"], ["AAAA", 28, "2001:db8::1", "2001:0db8:0:0:0:0:0:1"]] as const) {
       reply([answer(code, "other"), answer(code, value)]);
       expect(await dnsCheck({ ...input, dnsRecordType: type, dnsExpectedValue: expected }, Date.now())).toMatchObject({ ok: true });
     }
+  });
+  it("normalizes Unicode targets and CNAME owners with IDNA", async () => {
+    const f = reply([answer(5, "edge.xn--bcher-kva.de.", "xn--bcher-kva.de."), answer(1, "192.0.2.1", "edge.xn--bcher-kva.de.")]);
+    expect(await dnsCheck({ ...input, target: " BÜCHER.de. ", dnsExpectedValue: "192.0.2.1" }, Date.now())).toMatchObject({ ok: true });
+    expect(f.mock.calls[0][0]).toContain("name=xn--bcher-kva.de&type=A");
   });
   it("keeps TXT presentation and substring matching case-sensitive", async () => {
     for (const [expected, mode, ok] of [['"v=spf1 -all"', "exact", true], ["v=spf1 -all", "exact", false], ["spf1", "contains", true], ["SPF1", "contains", false]] as const) {

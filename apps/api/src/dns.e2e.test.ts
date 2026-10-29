@@ -36,6 +36,12 @@ describe.skipIf(!url)("DNS monitor persistence and backups", () => {
       expect((await call("PATCH", path, { dnsExpectedValue: "", dnsRecordType: "TXT", dnsMatchMode: "contains" })).body).toMatchObject({ dnsExpectedValue: null, dnsRecordType: "TXT", dnsMatchMode: "contains" });
       const bare = await call("POST", "/monitors", { name: "Default", type: "dns", target: "example.org" });
       expect(bare.body).toMatchObject({ dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" });
+      const defaults = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" };
+      const http = await call("POST", "/monitors", { name: "HTTP", type: "http", target: "https://1.1.1.1/", ...settings });
+      expect(http.body).toMatchObject(defaults);
+      expect((await call("PATCH", `/monitors/${http.body.id}`, settings)).body).toMatchObject(defaults);
+      expect((await call("POST", "/monitors/import", [{ name: "Imported HTTP", type: "http", target: "https://1.1.1.1/", ...settings }])).status).toBe(201);
+      expect((await call("GET", "/monitors")).body.find((m: any) => m.name === "Imported HTTP")).toMatchObject(defaults);
       expect((await call("PATCH", path, { dnsRecordType: "ANY" })).status).toBe(400);
       expect((await call("POST", "/monitors/import", [{ name: "Invalid", type: "dns", target: "example.com", dnsMatchMode: "regex" }])).status).toBe(400);
     } finally { await db.close(1); }

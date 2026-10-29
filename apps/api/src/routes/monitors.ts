@@ -106,8 +106,10 @@ const patchBody = z.object(fields).partial().omit({ type: true }).extend({ pause
 export const monitorCreateSchema = body;
 export const monitorPatchSchema = patchBody;
 
+const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
+  ...(v.type !== "dns" ? DNS_DEFAULTS : {}),
   heartbeatToken: v.type === "heartbeat" ? crypto.randomUUID().replace(/-/g, "") : null,
   // a new heartbeat monitor must not be "missed" before its first ping is even due
   ...(v.type === "heartbeat" ? { nextCheckAt: nextAfter({ ...v, type: "heartbeat" as const }) } : {}),
@@ -264,6 +266,11 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    if (v.dnsRecordType !== undefined || v.dnsExpectedValue !== undefined || v.dnsMatchMode !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      if (current.type !== "dns") Object.assign(v, DNS_DEFAULTS);
+    }
     // Retaining stored headers also retains their access rights: only managers may change the request around them.
     if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
