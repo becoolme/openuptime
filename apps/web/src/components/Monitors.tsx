@@ -300,6 +300,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     requestBody: monitor?.requestBody ?? "", method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
+    recoveryThreshold: monitor?.recoveryThreshold ?? 1,
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
     regions: monitor?.regions?.length ? monitor.regions : ["auto"],
@@ -428,6 +429,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <span className="muted">{t("Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.")}</span>
           </label>
         )}
+        <label className="fld">{t("Successes before recovery")}
+          <Select className="in" value={f.recoveryThreshold} onChange={(v) => set("recoveryThreshold", v)} options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
+          <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once; slow responses may recover to degraded.")}</span>
+        </label>
         {f.type === "http" && REDIRECTS.includes(f.expectedStatus) && (
           <label className="fld">{t("Redirect must lead to (optional)")}
             <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />

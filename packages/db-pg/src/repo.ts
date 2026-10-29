@@ -453,12 +453,22 @@ export function createRepo(db: Db): Repo {
       if (inputs.length) await db.insert(schema.monitor).values(inputs.map((v) => ({ ...v, organizationId: orgId, projectId })));
     },
     async updateMonitor(orgId, id, scope, patch) {
-      const [row] = await db
-        .update(schema.monitor)
-        .set(patch)
-        .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
-        .returning();
-      return row ?? null;
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor)
+          .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId))).for("update");
+        if (!current) return null;
+        const changedPause = patch.paused !== undefined && patch.paused !== current.paused;
+        const effective = { ...patch };
+        if (patch.paused !== undefined && !changedPause) {
+          // The route derives these controls from paused; repeating the current value is not a resume.
+          delete effective.status;
+          delete effective.nextCheckAt;
+        }
+        const [row] = await tx.update(schema.monitor)
+          .set({ ...effective, ...(changedPause ? { consecutiveSuccesses: 0 } : {}) })
+          .where(eq(schema.monitor.id, id)).returning();
+        return row;
+      });
     },
     async deleteMonitor(orgId, id, scope) {
       await db.delete(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)));
@@ -474,6 +484,42 @@ export function createRepo(db: Db): Repo {
     async monitorByHeartbeatToken(token) {
       const [m] = await db.select().from(schema.monitor).where(eq(schema.monitor.heartbeatToken, token));
       return m ?? null;
+    },
+
+    async recordRecoveryProgress(m, ok) {
+      const [row] = await db.update(schema.monitor).set({
+        consecutiveSuccesses: ok ? sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})` : 0,
+      }).where(and(eq(schema.monitor.id, m.id), eq(schema.monitor.paused, false)))
+        .returning({ successes: schema.monitor.consecutiveSuccesses, threshold: schema.monitor.recoveryThreshold });
+      return row ? { successes: row.successes, ready: row.successes >= row.threshold } : null;
+    },
+
+    async completeRecovery(m, status, consecutiveSlow) {
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor).where(eq(schema.monitor.id, m.id)).for("update");
+        if (!current || current.paused || current.status !== "down" || current.consecutiveSuccesses < current.recoveryThreshold) return null;
+        const at = new Date();
+        const resolved = await tx.update(schema.incident)
+          .set({ status: "resolved", resolvedAt: at, nextReminderAt: null, nextEscalationAt: null })
+          .where(and(eq(schema.incident.monitorId, m.id), isNull(schema.incident.resolvedAt), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`))
+          .returning();
+        if (resolved.length) await tx.insert(schema.incidentUpdate).values(resolved.map((inc) => ({ incidentId: inc.id, status: "resolved" as const, body: "Checks are passing again." })));
+        await tx.update(schema.monitor).set({ status, consecutiveSlow, statusChangedAt: at }).where(eq(schema.monitor.id, m.id));
+        return resolved;
+      });
+    },
+
+    async recordHeartbeatSuccess(id) {
+      const [row] = await db.update(schema.monitor).set({
+        // Decide from the locked current row. A later miss must not be overwritten by a delayed ping handler.
+        status: sql`case when ${schema.monitor.status} = 'down' then ${schema.monitor.status} else 'up'::monitor_status end`,
+        statusChangedAt: sql`case when ${schema.monitor.status} not in ('down', 'up') then now() else ${schema.monitor.statusChangedAt} end`,
+        consecutiveSuccesses: sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})`,
+        consecutiveFailures: 0,
+        lastCheckedAt: new Date(),
+        nextCheckAt: sql`now() + make_interval(secs => ${schema.monitor.intervalSec} + ${schema.monitor.graceSec})`,
+      }).where(and(eq(schema.monitor.id, id), eq(schema.monitor.paused, false))).returning();
+      return row ?? null;
     },
 
     // ── checking ───────────────────────────────────────────────────────────────

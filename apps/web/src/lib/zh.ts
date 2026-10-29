@@ -30,6 +30,8 @@ export const zh: Record<string, string> = {
   "Authorized agents": "已授权的 Agent", "Apps you let manage OpenUptime on your behalf (MCP / OAuth).": "你授权代为管理 OpenUptime 的应用（MCP / OAuth）。",
   "DNS record type": "DNS 记录类型", "Expected DNS value (optional)": "期望 DNS 值（可选）", "DNS value match": "DNS 值匹配方式", "Exact value": "完全匹配", "Contains text": "包含文本",
   "Leave empty to accept any record of this type. TXT includes quotes; MX includes priority, e.g. 10 mail.example.com.": "留空时接受此类型的任意记录。TXT 包含引号；MX 包含优先级，例如 10 mail.example.com。",
+  "Successes before recovery": "恢复前连续成功次数",
+  "Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once; slow responses may recover to degraded.": "结束宕机前需要的连续成功检测或心跳次数。每轮多区域投票计为一次；慢响应可能恢复为性能下降。",
   // monitors
   "+ New monitor": "+ 新建监控", "New monitor": "新建监控", "Create monitor": "创建监控", "Cancel": "取消", "Close": "关闭", "What is a dependency?": "什么是依赖？", "A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.": "依赖是指这个监控所依赖的另一个监控，例如网关或你的网络。被依赖的监控宕机期间，这个监控不会重复告警同一次故障。",
   "Loading…": "加载中…", "down right now": "个正在故障", "Everything is up.": "一切正常。", "Nothing is being watched yet.": "还没有任何监控。",

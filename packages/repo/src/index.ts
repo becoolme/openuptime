@@ -55,6 +55,8 @@ export interface Monitor {
   intervalSec: number;
   timeoutMs: number;
   failureThreshold: number;
+  recoveryThreshold?: number;
+  consecutiveSuccesses?: number;
   regions: string[];
   status: MonitorStatus;
   consecutiveFailures: number;
@@ -89,7 +91,7 @@ export interface Monitor {
 /** Fields a user can set when creating a monitor. */
 export type MonitorInput = Pick<
   Monitor,
-  | "name" | "type" | "target" | "method" | "requestBody" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
+  | "name" | "type" | "target" | "method" | "requestBody" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
   | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
@@ -97,7 +99,7 @@ export type NewMonitor = MonitorInput & { heartbeatToken?: string | null; nextCh
 /** Only named fields change; the type is immutable. */
 export type MonitorPatch = Partial<Omit<MonitorInput, "type">> & { paused?: boolean; status?: MonitorStatus; nextCheckAt?: Date };
 /** Bookkeeping written by the checker and the heartbeat endpoint. */
-export type MonitorState = Partial<Pick<Monitor, "status" | "consecutiveFailures" | "consecutiveSlow" | "lastCheckedAt" | "nextCheckAt">>;
+export type MonitorState = Partial<Pick<Monitor, "status" | "consecutiveFailures" | "consecutiveSuccesses" | "consecutiveSlow" | "lastCheckedAt" | "nextCheckAt">>;
 
 export type ProjectOverview = { id: string; name: string; monitors: number; down: number; openIncidents: number };
 
@@ -469,6 +471,12 @@ export interface Repo {
   /** Which of `ids` belong to the workspace (and the key's projects). */
   ownedMonitorIds(orgId: string, ids: string[], scope: Scope): Promise<string[]>;
   monitorByHeartbeatToken(token: string): Promise<Monitor | null>;
+  /** Atomically count a ping and renew its deadline; null if the monitor is paused or gone. */
+  recordHeartbeatSuccess(id: string): Promise<Monitor | null>;
+  /** Count a completed result against the latest stored streak, not its pre-check snapshot. */
+  recordRecoveryProgress(m: Monitor, ok: boolean): Promise<{ successes: number; ready: boolean } | null>;
+  /** Lock and verify the latest recovery streak, then resolve outage incidents and change state atomically. */
+  completeRecovery(m: Monitor, status: "up" | "degraded", consecutiveSlow: number): Promise<Incident[] | null>;
 
   // ── checking ─────────────────────────────────────────────────────────────────
   /**

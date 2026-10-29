@@ -3,7 +3,7 @@ import { go } from "./locale-path";
 
 export type Monitor = {
   id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket"; target: string; method: string; requestBody?: string | null;
-  expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number;
+  expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number; recoveryThreshold?: number; consecutiveSuccesses?: number;
   status: "pending" | "up" | "degraded" | "down" | "paused"; paused: boolean;
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];

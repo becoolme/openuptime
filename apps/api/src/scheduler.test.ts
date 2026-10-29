@@ -112,6 +112,19 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       return { id: "old", startedAt: new Date(Date.now() - 3_600_000), resolvedAt: null, title: "API is down" };
     },
     outageHandledByPerson: async () => !!opts.handled,
+    recordRecoveryProgress: async (m: Monitor, ok: boolean) => {
+      const successes = ok ? Math.min((m.consecutiveSuccesses ?? 0) + 1, m.recoveryThreshold ?? 1) : 0;
+      states.push({ consecutiveSuccesses: successes });
+      return { successes, ready: successes >= (m.recoveryThreshold ?? 1) };
+    },
+    completeRecovery: async (m: Monitor, status: "up" | "degraded", consecutiveSlow: number) => {
+      const resolved = [];
+      for (const inc of await repo.openIncidents(m.id, false)) {
+        if (await repo.resolveIncident(inc.id, "Checks are passing again.")) resolved.push({ ...inc, resolvedAt: new Date() });
+      }
+      await repo.setMonitorState(m.id, { status, consecutiveSlow });
+      return resolved;
+    },
     recordCheck: async () => {},
     recordRegionResults: async () => {},
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
@@ -176,7 +189,7 @@ describe("checkOne", () => {
     const { repo, states } = fakeRepo();
     // a heartbeat gets a due time from the grace period; nothing else sets one here
     await checkOne(repo, hb());
-    expect(states[0]).toHaveProperty("nextCheckAt");
+    expect(states.some((s) => s.nextCheckAt instanceof Date)).toBe(true);
   });
 });
 
@@ -346,6 +359,126 @@ describe("checkOne across regions", () => {
     (f.repo as unknown as Record<string, unknown>).recordRegionResults = async (monitorId: string, results: never, summary: never) => void recorded.many.push({ monitorId, results, summary });
     return { ...f, recorded };
   }
+
+  it("waits for consecutive successful votes and resets after a failed vote", async () => {
+    const { repo, incidents, states, recorded } = repoWithRecords();
+    incidents.push({ id: "out", title: "down", auto: true, severity: "major", resolved: false });
+    const monitor = web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 0 });
+    const run = async (ok: boolean) => {
+      probes({ "us-east": { ok }, "eu-central": { ok }, "ap-southeast": { ok: true } });
+      const start = states.length;
+      await checkOne(repo, monitor);
+      for (const state of states.slice(start)) Object.assign(monitor, state);
+    };
+    await run(true);
+    expect(monitor).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
+    expect(incidents[0].resolved).toBe(false);
+    await run(false);
+    expect(monitor).toMatchObject({ status: "down", consecutiveSuccesses: 0 });
+    await run(true);
+    expect(incidents[0].resolved).toBe(false);
+    await run(true);
+    expect(monitor).toMatchObject({ status: "up", consecutiveSuccesses: 2 });
+    expect(incidents[0].resolved).toBe(true);
+    expect(recorded.many).toHaveLength(4);
+  });
+
+  it("does not recover using a success streak captured before a concurrent failure", async () => {
+    const { repo, incidents } = fakeRepo();
+    incidents.push({ id: "out", title: "down", auto: true, severity: "major", resolved: false });
+    const current = web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 1, regions: ["us-east"] });
+    repo.setMonitorState = async (_id, state) => { Object.assign(current, state); };
+    repo.recordRecoveryProgress = async (_m, ok) => {
+      current.consecutiveSuccesses = ok ? Math.min((current.consecutiveSuccesses ?? 0) + 1, current.recoveryThreshold ?? 1) : 0;
+      return { successes: current.consecutiveSuccesses, ready: current.consecutiveSuccesses >= (current.recoveryThreshold ?? 1) };
+    };
+    configureProbes({ PROBE_REGIONS: JSON.stringify({ "us-east": url("us-east") }), PROBE_SECRET: "s" });
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => { started = resolve; });
+    let finish!: (response: Response) => void;
+    const slow = new Promise<Response>((resolve) => { finish = resolve; });
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      if (++calls === 1) { started(); return slow; }
+      return new Response(JSON.stringify({ ok: false, statusCode: 503, latencyMs: 80 }));
+    });
+    const pending = checkOne(repo, { ...current });
+    await waiting;
+    await checkOne(repo, { ...current });
+    expect(current.consecutiveSuccesses).toBe(0);
+    finish(new Response(JSON.stringify({ ok: true, statusCode: 200, latencyMs: 80 })));
+    await pending;
+    expect(current.consecutiveSuccesses).toBe(1);
+    expect(current.status).toBe("down");
+    expect(incidents[0].resolved).toBe(false);
+  });
+
+  it("rechecks the streak when committing recovery after a newer failure", async () => {
+    const { repo, incidents } = fakeRepo();
+    incidents.push({ id: "out", title: "down", auto: true, severity: "major", resolved: false });
+    const current = web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 1 });
+    repo.setMonitorState = async (_id, state) => { Object.assign(current, state); };
+    repo.recordRecoveryProgress = async (_m, ok) => {
+      current.consecutiveSuccesses = ok ? Math.min((current.consecutiveSuccesses ?? 0) + 1, current.recoveryThreshold ?? 1) : 0;
+      return { successes: current.consecutiveSuccesses, ready: current.consecutiveSuccesses >= (current.recoveryThreshold ?? 1) };
+    };
+    let reached!: () => void;
+    const ready = new Promise<void>((resolve) => { reached = resolve; });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const commit = repo.completeRecovery;
+    repo.completeRecovery = async (...args) => {
+      reached(); await gate;
+      if ((current.consecutiveSuccesses ?? 0) < (current.recoveryThreshold ?? 1)) return null;
+      return commit(...args);
+    };
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const pending = checkOne(repo, { ...current });
+    await ready;
+    probes({ "us-east": { ok: false }, "eu-central": { ok: false }, "ap-southeast": { ok: false } });
+    await checkOne(repo, { ...current });
+    release(); await pending;
+    expect(current).toMatchObject({ status: "down", consecutiveSuccesses: 0 });
+    expect(incidents[0].resolved).toBe(false);
+  });
+
+  it("can recover to degraded without opening a latency incident before recovery", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const { repo, states, incidents } = fakeRepo();
+    const m = web({ status: "down", recoveryThreshold: 2, slowThresholdMs: 1, slowAlertAfter: 1 });
+    await checkOne(repo, m);
+    expect(Object.assign({}, ...states)).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
+    expect(incidents).toHaveLength(0);
+    await checkOne(repo, { ...m, consecutiveSuccesses: 1 });
+    expect(states.at(-1)).toMatchObject({ status: "degraded" });
+    expect(incidents).toHaveLength(1);
+  });
+
+  it("breaks a recovery streak on a maintenance-suppressed failure", async () => {
+    const { repo, states, incidents } = fakeRepo({ maintenance: true });
+    await checkOne(repo, hb({ status: "down", recoveryThreshold: 3, consecutiveSuccesses: 2 }));
+    expect(Object.assign({}, ...states)).toMatchObject({ consecutiveSuccesses: 0 });
+    expect(states.at(-1)).not.toHaveProperty("status");
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("leaves latency-only recovery immediate and retries failed outage resolution", async () => {
+    probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: true } });
+    const { repo, states, incidents } = fakeRepo();
+    incidents.push({ id: "slow", title: "slow", auto: true, severity: "minor", resolved: false });
+    await checkOne(repo, web({ status: "degraded", consecutiveSlow: 3, recoveryThreshold: 5 }));
+    expect(states.at(-1)).toMatchObject({ status: "up" });
+    expect(incidents[0].resolved).toBe(true);
+    incidents.push({ id: "down", title: "down", auto: true, severity: "major", resolved: false });
+    const original = repo.resolveIncident;
+    repo.resolveIncident = async () => { throw new Error("db unavailable"); };
+    const start = states.length;
+    await expect(checkOne(repo, web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 1 }))).rejects.toThrow("db unavailable");
+    expect(states.slice(start).some((s) => s.status === "up")).toBe(false);
+    repo.resolveIncident = original;
+    await checkOne(repo, web({ status: "down", recoveryThreshold: 2, consecutiveSuccesses: 2 }));
+    expect(incidents[1].resolved).toBe(true);
+  });
 
   it("records one row per region and one run, and stays up when only one region fails", async () => {
     probes({ "us-east": { ok: true }, "eu-central": { ok: true }, "ap-southeast": { ok: false } });
