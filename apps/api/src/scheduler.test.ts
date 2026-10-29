@@ -125,6 +125,7 @@ function fakeRepo(opts: { failCreate?: () => boolean; maintenance?: boolean; mon
       await repo.setMonitorState(m.id, { status, consecutiveSlow });
       return resolved;
     },
+    recordObservation: async () => true,
     recordCheck: async () => {},
     recordRegionResults: async () => {},
     setMonitorState: async (_id: string, s: Record<string, unknown>) => void states.push(s),
@@ -163,6 +164,24 @@ const hb = (over: Partial<Monitor> = {}) =>
   ({ id: "m1", organizationId: "o", projectId: "p", name: "API", type: "heartbeat", target: "", intervalSec: 60, graceSec: 30, status: "up", consecutiveFailures: 0, consecutiveSlow: 0, failureThreshold: 1, slowThresholdMs: 1000, slowAlertAfter: 3, channelIds: [], paused: false, ...over }) as Monitor;
 
 describe("checkOne", () => {
+  it("drops a fenced observation before recording history or changing incidents", async () => {
+    const { repo, states, incidents } = fakeRepo();
+    repo.recordObservation = async () => false;
+    const record = vi.fn(); repo.recordCheck = record;
+    await checkOne(repo, hb());
+    expect(record).not.toHaveBeenCalled(); expect(states).toHaveLength(0); expect(incidents).toHaveLength(0);
+  });
+
+  it("carries the queue generation rather than a newer generation loaded from the monitor", async () => {
+    const due = new Date("2026-10-28T00:00:00Z");
+    const m = hb({ runGeneration: 8, nextCheckAt: due });
+    const { repo } = fakeRepo({ monitors: [m] });
+    repo.beginRuns = async () => [m.id];
+    const record = vi.fn(async () => false); repo.recordObservation = record;
+    await processCheckMessage(repo, { ids: [m.id], at: [due.toISOString()], generations: [7] });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ runGeneration: 7 }), expect.objectContaining({ ok: false }), { generation: 7 });
+  });
+
   it("opens an outage even while a latency incident is open, and supersedes the latency one", async () => {
     const { repo, incidents } = fakeRepo();
     incidents.push({ id: "slow", title: "slow", auto: true, severity: "minor", resolved: false });
@@ -565,7 +584,9 @@ describe("checkOne across regions", () => {
     vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause: { code: "ENOTFOUND" } }); });
     resetSelfCheck();
     const { repo, incidents, recorded, states } = repoWithRecords();
+    const observation = vi.fn(async () => true); repo.recordObservation = observation;
     await checkOne(repo, web({ target: "https://93.184.216.34/", regions: ["us-east"], failureThreshold: 1 }));
+    expect(observation).not.toHaveBeenCalled();
     expect(recorded.single).toHaveLength(0);
     expect(recorded.many).toHaveLength(0);
     expect(states).toHaveLength(0);

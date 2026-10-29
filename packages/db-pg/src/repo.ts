@@ -17,6 +17,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
+import { coverageTime, recordHeartbeatObservation, recordObservation, timeCoverage } from "./coverage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -502,6 +503,7 @@ export function createRepo(db: Db): Repo {
         const [current] = await tx.select().from(schema.monitor)
           .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId))).for("update");
         if (!current) return null;
+        // Only actual changes to measurement or freshness invalidate observation coverage.
         const changedPause = patch.paused !== undefined && patch.paused !== current.paused;
         const effective = { ...patch };
         if (patch.paused !== undefined && !changedPause) {
@@ -509,9 +511,23 @@ export function createRepo(db: Db): Repo {
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const [row] = await tx.update(schema.monitor)
-          .set({ ...effective, ...(changedPause ? { consecutiveSuccesses: 0 } : {}) })
+        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage"];
+        const comparable = (key: string, value: unknown) => JSON.stringify(
+          key === "regions" && Array.isArray(value) ? [...value].sort() : value,
+          (_name, part) => part && typeof part === "object" && !Array.isArray(part)
+            ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part,
+        );
+        const changed = Object.entries(effective).some(([key, value]) => measured.includes(key)
+          && comparable(key, value) !== comparable(key, current[key as keyof typeof current]));
+        const [row] = await tx.update(schema.monitor).set({ ...effective, ...(changedPause ? { consecutiveSuccesses: 0 } : {}), ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
           .where(eq(schema.monitor.id, id)).returning();
+        if (changed) {
+          const at = await coverageTime(tx, id);
+          await tx.insert(schema.monitorObservation).values({
+            monitorId: id, observedAt: at,
+            state: row.paused ? "paused" : "unknown", revision: row.coverageRevision,
+          });
+        }
         return row;
       });
     },
@@ -625,6 +641,9 @@ export function createRepo(db: Db): Repo {
         ),
       );
     },
+    recordObservation: (m, result, options) => recordObservation(db, m, result, options),
+    recordHeartbeatObservation: (m) => recordHeartbeatObservation(db, m),
+    timeCoverage: (orgId, monitorId, scope, days, now) => timeCoverage(db, orgId, monitorId, scope, days, now),
     async recordCheck(r) {
       await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });
       await foldIntoRollup(r.monitorId, r.ok, r.latencyMs ?? null);
@@ -660,6 +679,13 @@ export function createRepo(db: Db): Repo {
       return !!w;
     },
     async purgeExpired() {
+      // Keep one predecessor per monitor as the boundary anchor, including resume/unknown fences.
+      // Retaining only old pauses would resurrect a pause after its resume was purged.
+      await db.execute(sql`delete from monitor_observation old
+        where old.observed_at < now() - interval '35 days'
+          and exists (select 1 from monitor_observation newer where newer.monitor_id = old.monitor_id
+            and newer.observed_at < now() - interval '35 days'
+            and (newer.observed_at, newer.id) > (old.observed_at, old.id))`);
       // raw results are kept per workspace for its configured number of days; hourly rollups far longer
       await db.execute(sql`delete from check_result r using monitor m
         where m.id = r.monitor_id

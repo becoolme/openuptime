@@ -267,6 +267,13 @@
       "when": 1793295208348,
       "tag": "0037_secret_roxanne_simpson",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793295556040,
+      "tag": "0038_living_calypso",
+      "breakpoints": true
     }
   ]
 }

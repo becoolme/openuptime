@@ -184,7 +184,14 @@ export type ProjectAlerting = {
   escalation: { channelIds: string[]; escalateAfterMin: number }[];
 };
 
+export type TimeCoverage = {
+  from: string; to: string; totalMs: number;
+  states: Record<"up" | "down" | "degraded" | "paused" | "unknown", number>;
+  observedMaintenanceMs: number; policy: "bounded-observation-v1";
+};
+
 export const api = {
+  timeCoverage: (id: string, days: 7 | 30) => req<TimeCoverage>(`/monitors/${id}/time-coverage?days=${days}`),
   monitors: () => req<Monitor[]>("/monitors"),
   monitor: (id: string) => req<Monitor & { results: CheckResult[]; regionStats: RegionStat[] }>(`/monitors/${id}`),
   regions: () => req<RegionList>("/regions"),

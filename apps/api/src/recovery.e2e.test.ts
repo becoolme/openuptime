@@ -33,7 +33,8 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       expect(exported.body.monitors[0]).not.toHaveProperty("consecutiveSuccesses");
       expect((await call("POST", "/monitors/import", { monitors: exported.body.monitors.map(({ source, sourceId, ...m }: any) => m) })).body).toMatchObject({ created: 1 });
       expect((await call("GET", "/monitors")).body.every((m: any) => m.recoveryThreshold === 2)).toBe(true);
-      const missed = async () => { await checkOne(db.repo, (await db.repo.getMonitor(orgId, created.body.id, null))!); };
+      // a miss only happens once the ping's validity has run out; a miss inside it is discarded as stale
+      const missed = async () => { await db.query("update monitor_observation set valid_until = now() - interval '1 second' where monitor_id = $1", [created.body.id]); await checkOne(db.repo, (await db.repo.getMonitor(orgId, created.body.id, null))!); };
       await missed();
       expect((await call("GET", path)).body.status).toBe("down");
       await call("POST", ping);
@@ -51,8 +52,8 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       const gate = new Promise<void>((resolve) => { release = resolve; });
       const racing = createApp((connection, options) => {
         const database = openDatabase(connection, options);
-        return { ...database, repo: { ...database.repo, recordHeartbeatSuccess: async (id) => {
-          const result = await database.repo.recordHeartbeatSuccess(id);
+        return { ...database, repo: { ...database.repo, recordHeartbeatObservation: async (monitor) => {
+          const result = await database.repo.recordHeartbeatObservation(monitor);
           entered(); await gate; return result;
         } } };
       });

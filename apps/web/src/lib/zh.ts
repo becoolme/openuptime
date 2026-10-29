@@ -6,6 +6,16 @@ export const zh: Record<string, string> = {
   "Send alerts to a Teams Workflow webhook set to “Anyone” authentication; messages are capped at 4000 characters.": "通过身份验证设为“任何人”的 Teams 工作流 Webhook 发送告警；消息最长 4000 个字符。",
   "Publish alerts to an ntfy topic.": "将告警发布到 ntfy 主题。",
   "ntfy server URL": "ntfy 服务器 URL", "Topic": "主题", "Access token (optional)": "访问令牌（可选）", "Notification priority": "通知优先级",
+  "7 days": "7 天",
+  "30 days": "30 天",
+  "unknown": "未知",
+  "Time coverage": "时间覆盖报告",
+  "Time inferred from fresh checks, not exact outage duration. Missing history stays unknown. Maintenance is included.": "根据有效期内的检测推断时间，不代表精确停机时长。缺失历史计为未知，维护时间包含在内。",
+  "Coverage window": "统计时间窗",
+  "Load report": "加载报告",
+  "Paused and unknown time are separate. The export includes exact millisecond totals and observed maintenance labels.": "暂停与未知时间单独统计。导出包含毫秒数和已观测的维护标记。",
+  "Export JSON report": "导出 JSON 报告",
+  "{n} hours": "{n} 小时",
 
   // nav / chrome
   Monitors: "监控", Incidents: "事件", "Status pages": "状态页", Alerting: "告警", Team: "团队", "API keys": "API 密钥", Settings: "设置", "Account settings": "账户设置",

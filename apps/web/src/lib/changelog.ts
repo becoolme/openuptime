@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitor-time-coverage", date: "2026-10-29", edition: "community",
+    title: { en: "Monitor time coverage", zh: "监控时间覆盖报告" },
+    summary: { en: "See how much of the last 7 or 30 days a monitor was up, down, degraded, paused or unknown.", zh: "查看监控项在过去 7 天或 30 天内处于正常、故障、缓慢、暂停或未知状态的时长。" },
+    points: [
+      { en: "Time with no fresh check result counts as unknown and is never shown as healthy.", zh: "没有有效检测结果的时间计为未知，不会显示为正常。" },
+      { en: "Open the report from a monitor's page, read it through the API or MCP, or export it as JSON.", zh: "可在监控项页面查看报告，也可通过 API 或 MCP 读取，或导出为 JSON。" },
+      { en: "History from before this update stays unknown.", zh: "此次更新之前的历史保持为未知。" },
+      { en: "Maintenance time is included, and the report estimates coverage from check results rather than exact outage length or an SLA.", zh: "统计包含维护时间；报告根据检测结果推断覆盖时长，不是精确的停机时长或 SLA。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "monitor-import-preview", date: "2026-10-29", edition: "community",
     title: { en: "Preview monitor imports", zh: "监控项导入预览" },
     summary: { en: "Review import warnings and duplicates before creating monitors.", zh: "创建监控项前，先查看导入警告和重复项。" },
