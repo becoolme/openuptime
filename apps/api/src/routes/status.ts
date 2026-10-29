@@ -211,8 +211,13 @@ async function statusAccess(c: Context<AppEnv>, next: () => Promise<void>) {
   c.header("cache-control", "private, no-store");
   const page = await c.get("repo").statusPageBySlug(slug);
   if (!page) return c.json({ error: "Not found" }, 404);
-  const access = await policy(page, c.req.raw);
-  if (!access.allowed) return c.json({ error: "Not found" }, 404);
+  let access: Awaited<ReturnType<typeof policy>>;
+  try { access = await policy(page, c.req.raw); }
+  catch {
+    console.error("status page access policy unavailable");
+    return c.json({ error: "Unavailable" }, 503);
+  }
+  if (access?.allowed !== true) return c.json({ error: "Not found" }, 404);
   // Always bypass external caches for policy-enabled deployments: a formerly public page may change access.
   await next();
   c.header("cache-control", "private, no-store");

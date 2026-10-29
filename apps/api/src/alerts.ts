@@ -139,10 +139,14 @@ async function withinEmails<T>(entitlements: Entitlements, orgId: string, subs: 
 /** Authorization is separate from quota: policy failure must never fall back to sending. */
 async function subscriberAllowance(entitlements: Entitlements, orgId: string, subs: SubscriberTarget[]) {
   const allowed: SubscriberTarget[] = [];
-  for (const sub of subs) {
-    if (!entitlements.canNotifySubscriber || await entitlements.canNotifySubscriber(orgId, sub)) allowed.push(sub);
+  for (let offset = 0; offset < subs.length; offset += 8) {
+    const batch = subs.slice(offset, offset + 8);
+    const decisions = await Promise.all(batch.map(async (sub) => !entitlements.canNotifySubscriber || await entitlements.canNotifySubscriber(orgId, sub) === true));
+    allowed.push(...batch.filter((_sub, index) => decisions[index]));
   }
-  return withinEmails(entitlements, orgId, allowed);
+  const quota = await withinEmails(entitlements, orgId, allowed);
+  const denied = subs.length - allowed.length;
+  return { ...quota, denied, skipped: quota.skipped + denied };
 }
 
 /** Attempts per alert, the first one included. The first retry is queued a minute after the failure, the next five minutes later. */
@@ -267,9 +271,14 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
   const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId, withDisabled: true });
   await fanOut(repo, orgId, ev, channels, entitlements);
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name };
-  const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch((e) => { console.error("subscriber notify failed", e); return null; });
+  const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch(async () => {
+    const error = "subscriber notification unavailable";
+    console.error(error);
+    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: false, status: "failed", error, statusMessage: `failed: ${error}` }]);
+    return null;
+  });
   if (subs && subs.total > 0) {
-    const error = subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null;
+    const error = subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${subs.denied ? "skipped: subscriber access policy or email allowance" : SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null;
     await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: !error, error, status: !error ? "sent" : subs.failed ? "failed" : "skipped", statusMessage: error && (subs.failed ? `failed: ${error}` : error) }]);
   }
 }
@@ -468,7 +477,13 @@ async function mailSubscribers(
 async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitlements: Entitlements) {
   if (!ev.monitor.id) return null;
   const all = await repo.subscribersFor(orgId, ev.monitor.id);
-  const { send: subs, skipped } = await subscriberAllowance(entitlements, orgId, all);
+  let allowance: Awaited<ReturnType<typeof subscriberAllowance>>;
+  try { allowance = await subscriberAllowance(entitlements, orgId, all); }
+  catch {
+    console.error("subscriber policy unavailable");
+    return { total: all.length, failed: all.length, error: "subscriber policy unavailable", skipped: 0, denied: 0 };
+  }
+  const { send: subs, skipped, denied } = allowance;
   const opened = ev.kind === "incident.opened";
   const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
   const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, orgId), {
@@ -477,7 +492,7 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
     body: () => ev.monitor.name,
     badge: (lang) => (opened ? (ev.slow ? { label: tr(lang, "Slow"), tone: "warn" } : { label: tr(lang, "Down"), tone: "down" }) : { label: tr(lang, "Recovered"), tone: "up" }),
   });
-  return { ...sent, total: all.length, skipped };
+  return { ...sent, total: all.length, skipped, denied };
 }
 
 /** A manual incident update (investigating → identified → … → resolved) goes to the same subscribers. */
