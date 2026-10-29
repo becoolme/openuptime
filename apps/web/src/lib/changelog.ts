@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "teams-alerts", date: "2026-10-29", edition: "community",
+    title: { en: "Microsoft Teams alerts", zh: "Microsoft Teams 告警" },
+    summary: { en: "Send monitor alerts through a Teams Workflow webhook.", zh: "通过 Teams 工作流 Webhook 接收监控告警。" },
+    points: [
+      { en: "Add a channel with a Workflow webhook URL whose authentication is set to “Anyone”, then send a test before connecting monitors.", zh: "添加身份验证设为“任何人”的工作流 Webhook URL，发送测试消息后再关联监控。" },
+      { en: "Monitor names and URLs are shown as plain text, so characters such as * _ and [ ] do not change the formatting; messages over 4000 characters are shortened.", zh: "监控名称和网址按纯文本显示，* _ [ ] 等字符不会改变格式；超过 4000 个字符的消息会被截短。" },
+      { en: "Outages, recoveries and escalations use the existing delivery history and retries; delivery confirms webhook acceptance, not completion of the workflow.", zh: "故障、恢复和升级通知沿用现有投递记录与重试；投递成功表示 Webhook 已接收，不代表工作流已执行完成。" },
+      { en: "If Teams answers 401 or 403, the delivery history says the Workflow must not require sign-in.", zh: "如果 Teams 返回 401 或 403，投递记录会提示该工作流不能要求登录验证。" },
+    ],
+  },
+  {
     id: "discord-alerts",
     date: "2026-10-29",
     edition: "community",

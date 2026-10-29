@@ -93,6 +93,24 @@ async function post(url: string, body: unknown) {
   if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
 }
 
+/** Teams rejects a message body over 4000 characters. */
+const TEAMS_LIMIT = 4000;
+/**
+ * Backslash-escape the Markdown control characters Adaptive Card TextBlocks interpret, then cap the length (escapes included).
+ * Both JS and the limit count UTF-16 code units; iterating by code point keeps a surrogate pair (emoji) from being cut in half.
+ */
+export function teamsText(text: string): string {
+  // each piece is one whole code point with its escape, so a cut can neither split a surrogate pair nor leave a lone backslash
+  const pieces = Array.from(text, (ch) => (/[\\*_\[\]()`]/.test(ch) ? `\\${ch}` : ch));
+  if (pieces.reduce((n, piece) => n + piece.length, 0) <= TEAMS_LIMIT) return pieces.join("");
+  let out = "";
+  for (const piece of pieces) {
+    if (out.length + piece.length > TEAMS_LIMIT - 1) break;
+    out += piece;
+  }
+  return `${out}…`;
+}
+
 /**
  * Lark / Feishu custom bot. The hook answers 200 even when it refuses a message, so the body's `code` decides; an optional
  * signing secret is sent as `sign = base64(HMAC-SHA256(key = "<timestamp>\n<secret>", message = ""))`.
@@ -420,6 +438,23 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       // dropping a trailing lone high surrogate keeps the cut from splitting an emoji into invalid text.
       const content = text.length <= 2000 ? text : `${text.slice(0, 1999).replace(/[\uD800-\uDBFF]$/, "")}…`;
       await post(endpoint.href, { content, allowed_mentions: { parse: [] } });
+      break;
+    }
+    case "teams": {
+      need(cfg.url, "webhook URL");
+      // Workflow webhooks accept the Adaptive Card message envelope. TextBlock text is rendered as Markdown, so
+      // monitor names and URLs are escaped and cannot format the message or inject links.
+      try {
+        await post(cfg.url!, { type: "message", attachments: [{
+          contentType: "application/vnd.microsoft.card.adaptive", contentUrl: null,
+          content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.2",
+            body: [{ type: "TextBlock", text: teamsText(text), wrap: true }], msteams: { width: "Full" } },
+        }] });
+      } catch (e) {
+        // The Workflow trigger must allow "Anyone"; a tenant/user-authenticated trigger answers 401 or 403 to us.
+        if (/HTTP (401|403)\b/.test((e as Error).message)) throw new Error(`${(e as Error).message} (the Teams Workflow must be triggerable by “Anyone”; authenticated triggers are not supported)`);
+        throw e;
+      }
       break;
     }
     case "lark":

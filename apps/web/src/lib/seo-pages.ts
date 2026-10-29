@@ -60,8 +60,8 @@ export const OU = {
     "公开状态页，支持分组、事件历史、邮件订阅、RSS 与可嵌入的状态徽章",
   ),
   alerts: l(
-    "Email, Slack, Discord, Lark / Feishu, Telegram, PagerDuty and webhooks; per-monitor routing, repeat reminders, escalation until acknowledged; iOS push",
-    "邮件、Slack、Discord、飞书 / Lark、Telegram、PagerDuty 与 Webhook；按监控项路由、重复提醒、未确认时逐级升级；iOS 推送",
+    "Email, Slack, Discord, Microsoft Teams, Lark / Feishu, Telegram, PagerDuty and webhooks; per-monitor routing, repeat reminders, escalation until acknowledged; iOS push",
+    "邮件、Slack、Discord、Microsoft Teams、飞书 / Lark、Telegram、PagerDuty 与 Webhook；按监控项路由、重复提醒、未确认时逐级升级；iOS 推送",
   ),
   automation: l(
     "REST API, JSON import and export of monitors, and an MCP server for AI agents (OAuth)",
@@ -754,8 +754,8 @@ export const SEGMENTS: Segment[] = [
       "为其他团队和客户所依赖的服务维护内部或公开的状态页。按组件对监控项分组，在事件经过调查中、已定位、观察中和已解决的过程中发布更新，并让订阅者通过邮件或 RSS 关注。",
     ),
     alerting: l(
-      "Alert channels are Slack, Discord, Lark / Feishu, Telegram, PagerDuty, webhooks and email. A webhook receives a JSON POST, so it can feed a chat bot or your own tooling. Delivery results are logged per channel so you can see which alert went out and which failed.",
-      "告警渠道包括 Slack、Discord、飞书 / Lark、Telegram、PagerDuty、Webhook 和邮件。Webhook 会收到一个 JSON POST，可接入聊天机器人或你自己的工具。每个渠道的发送结果都会记录，方便查看哪条告警已发出、哪条失败。",
+      "Alert channels are Slack, Discord, Microsoft Teams, Lark / Feishu, Telegram, PagerDuty, webhooks and email. A webhook receives a JSON POST, so it can feed a chat bot or your own tooling. Delivery results are logged per channel so you can see which alert went out and which failed.",
+      "告警渠道包括 Slack、Discord、Microsoft Teams、飞书 / Lark、Telegram、PagerDuty、Webhook 和邮件。Webhook 会收到一个 JSON POST，可接入聊天机器人或你自己的工具。每个渠道的发送结果都会记录，方便查看哪条告警已发出、哪条失败。",
     ),
     limits: [
       l("No on-call rotation schedules or phone-call paging; escalation is by channel and minutes unacknowledged.", "没有值班排班表和电话告警；升级按渠道和未确认的分钟数进行。"),

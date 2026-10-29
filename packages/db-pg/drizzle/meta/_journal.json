@@ -232,6 +232,13 @@
       "when": 1793294006831,
       "tag": "0032_careless_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793294166579,
+      "tag": "0033_brief_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

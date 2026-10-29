@@ -164,5 +164,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0032_careless_oracle",
     "when": 1793294006831,
     "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'discord';"
+  },
+  {
+    "tag": "0033_brief_kulan_gath",
+    "when": 1793294166579,
+    "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'teams';"
   }
 ];

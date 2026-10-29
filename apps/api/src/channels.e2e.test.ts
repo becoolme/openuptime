@@ -33,6 +33,14 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     expect((await call("POST", "/channels", { type: "discord", name: "Missing", config: {} })).status).toBe(400);
     expect((await call("POST", "/channels", { type: "discord", name: "Private", config: { url: "http://127.0.0.1/hook" } })).status).toBe(400);
     expect((await call("DELETE", `/channels/${discord.body.id}`)).status).toBe(204);
+    const teams = await call("POST", "/channels", { type: "teams", name: "Teams", config: { url: "https://example.com/api/webhooks/123/test-token", ignored: "drop" } });
+    expect(teams.status).toBe(201);
+    expect(teams.body.config).toEqual({ url: "https://example.com/api/webhooks/123/test-token" });
+    expect((await call("GET", "/channels")).body).toContainEqual(expect.objectContaining({ id: teams.body.id, type: "teams" }));
+    expect((await call("PATCH", `/channels/${teams.body.id}`, { config: { url: "https://example.com/api/webhooks/123/replacement" } })).status).toBe(200);
+    expect((await call("POST", "/channels", { type: "teams", name: "Missing", config: {} })).status).toBe(400);
+    expect((await call("POST", "/channels", { type: "teams", name: "Private", config: { url: "http://127.0.0.1/hook" } })).status).toBe(400);
+    expect((await call("DELETE", `/channels/${teams.body.id}`)).status).toBe(204);
     const monitor = { name: "Site", type: "http", target: "https://example.com" };
 
     const plain = (await call("POST", "/channels", { type: "email", name: "Plain", config: { to: "a@example.com" } })).body;
