@@ -159,5 +159,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0031_pale_ben_parker",
     "when": 1793293879992,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"dns_record_type\" text DEFAULT 'A' NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"dns_expected_value\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"dns_match_mode\" text DEFAULT 'exact' NOT NULL;"
+  },
+  {
+    "tag": "0032_careless_oracle",
+    "when": 1793294006831,
+    "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'discord';"
   }
 ];

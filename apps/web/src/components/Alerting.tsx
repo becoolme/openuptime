@@ -5,6 +5,7 @@ import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 
 const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
+  { id: "discord", label: "Discord", desc: "Send alerts through a Discord channel webhook." },
   { id: "slack", label: "Slack", desc: "Post to a channel with an incoming webhook." },
   { id: "lark", label: "Lark / Feishu", desc: "Post to a group with a custom bot." },
   { id: "email", label: "Email", desc: "Send alerts to an address or on-call alias." },
@@ -18,6 +19,7 @@ const svg = (d: React.ReactNode) => (
 );
 /** Generic glyphs per channel type (not brand logos). */
 const ICONS: Record<Channel["type"], React.ReactNode> = {
+  discord: svg(<><rect x="3" y="5" width="18" height="14" rx="5" /><path d="M8 11h.01M16 11h.01M8 15c2 1 6 1 8 0" /></>),
   slack: svg(<path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16" />),
   lark: svg(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />),
   email: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>),
@@ -218,8 +220,8 @@ export default function Alerting() {
               ))}
             </div>}
             <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : "#ops-alerts"} /></label>
-            {(f.type === "slack" || f.type === "webhook" || f.type === "lark") && (
-              <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
+            {(f.type === "slack" || f.type === "webhook" || f.type === "lark" || f.type === "discord") && (
+              <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "discord" ? "https://discord.com/api/webhooks/…" : f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
             )}
             {f.type === "lark" && (
               <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>

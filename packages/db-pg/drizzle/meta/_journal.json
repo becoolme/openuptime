@@ -225,6 +225,13 @@
       "when": 1793293879992,
       "tag": "0031_pale_ben_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793294006831,
+      "tag": "0032_careless_oracle",
+      "breakpoints": true
     }
   ]
 }
