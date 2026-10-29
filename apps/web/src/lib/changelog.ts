@@ -31,6 +31,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Custom deployments can apply one access policy to status pages, feeds and subscriber notifications.", zh: "定制部署可以为状态页、订阅源和订阅通知设置统一的访问策略。" },
     points: [
       { en: "Policy-enabled status responses bypass shared caches, and server-rendered pages preserve visitor cookies and private caching rules.", zh: "启用策略的状态页响应绕过共享缓存，服务端渲染会保留访客 Cookie 并遵循私有缓存规则。" },
+      { en: "Subscriber policies require explicit approval, run with bounded concurrency, and record denials or sanitized failures in alert history.", zh: "订阅策略仅接受明确授权，限制并发执行数量，并在告警历史记录拒绝或脱敏后的失败。" },
       { en: "Default Community pages remain public; these hooks do not add membership, invitations or a private-page UI.", zh: "Community 默认状态页仍公开；扩展接口不包含成员管理、邀请或私有页面界面。" },
     ],
   },
