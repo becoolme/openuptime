@@ -12,6 +12,12 @@ export interface Entitlements {
   statusPageAccess?(page: StatusPage, request: Request): Promise<{ allowed: boolean }>;
   /** Recheck a subscriber immediately before notification. Missing means allowed; exceptions fail closed. */
   canNotifySubscriber?(workspaceId: string, subscriber: SubscriberTarget): Promise<boolean>;
+  /** Optional routing policy for each eligible channel. Only true approves; failed decisions retry at the original time. */
+  allowAlertChannel?(workspaceId: string, input: {
+    projectId: string | null; monitorId: string | null; incidentId: string;
+    kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";
+    at: Date; channelId: string;
+  }): Promise<boolean>;
   /**
    * Take `credits` for work that is about to run. Resolves with how many were granted, between 0 and `credits`:
    * fewer than asked means the allowance for the current period is used up and the rest must not run.

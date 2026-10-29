@@ -187,3 +187,10 @@ Policy approvals must be the boolean `true`; truthy objects or strings are denie
 这些只是扩展接口，不是私有状态页产品。增加访问控制的部署需要自行处理身份与邀请、验证订阅邮箱归属、启用策略时清除已缓存的公开响应，并对自己的自定义域名代理应用同一策略。
 
 策略的批准值必须是布尔 `true`，真值对象或字符串一律视为拒绝。订阅者检查每批最多八个，全部资格检查完成后才消耗额度或发送邮件。事件自动通知被拒绝或策略出错时，告警历史会记录为跳过/失败；策略异常只记录固定类别的诊断信息，不记录原始消息。
+### Alert routing policies
+
+An edition may implement `Entitlements.allowAlertChannel(workspaceId, input)`. It receives one already-eligible channel ID, project, monitor, incident, event kind and the original delivery time. Return true to deliver or false to record a skipped delivery. A policy cannot add another channel or enable a disabled one. This applies to initial incident/recovery delivery and the existing reminder/escalation paths, after their normal eligibility rules (reminders remain push, plus opted-in email).
+
+Policy exceptions retain a failed delivery and retry every two minutes without using up the normal three-attempt budget, so an outage of the policy does not fail alerts permanently; a delivery older than six hours is given up. The cause of a policy exception is written to the server log only. If a delivery row cannot be created at all there is nothing to retry: the alert is not sent, the loss is logged as `ALERT NOT SENT` and a failed row is recorded when the database allows it. Retries reevaluate pending decisions at the original delivery time and do not send while the policy is unavailable; once authorized, provider retries retain the original recipient without reevaluating routing. Routing failures use a generic reason without provider details. A routing failure is charged no email quota. Subscriber email and direct channel tests are separate. As with existing delivery, if the database cannot create a delivery row there is no durable retry; even the direct-send fallback still checks the policy.
+
+The default has no policy. This is a general interface, not an on-call scheduler; an integration must validate membership/ownership and present empty or unavailable coverage to operators.

@@ -88,7 +88,7 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
   // alerts a dead worker left half-sent go back in line before the retries are picked up
   await step("delivery sweep", () => sweepDeliveries(repo));
   // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
-  await step("alert retry", () => retryDeliveries(repo, queue ? 10 : 3));
+  await step("alert retry", () => retryDeliveries(repo, queue ? 10 : 3, entitlements));
   // incidents nobody has acknowledged: repeat the alert, escalate to the next level
   await step("alert reminders", () => sendReminders(repo, entitlements, queue ? 10 : 3));
   await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));

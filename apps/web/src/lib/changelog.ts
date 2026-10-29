@@ -26,6 +26,16 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  { id: "alert-routing-policy", date: "2026-10-29", edition: "community",
+    title: { en: "Alert routing policy hook", zh: "告警路由策略扩展" },
+    summary: { en: "Custom deployments can select which eligible channels receive an incident notification.", zh: "定制部署可以从符合条件的渠道中选择事件通知接收方。" },
+    points: [
+      { en: "Policies run before sending, record skipped channels, and retry unavailable decisions without changing the original routing time.", zh: "策略在发送前执行，记录跳过的渠道；策略暂不可用时会重试，并保留原路由时间。" },
+      { en: "Only an explicit boolean approval permits sending; malformed policy results are denied.", zh: "只有明确的布尔值 true 才允许发送，策略返回格式错误时拒绝发送。" },
+      { en: "While a policy is unavailable, alerts keep waiting for a decision instead of failing after three tries.", zh: "策略暂不可用期间，告警会持续等待决定，不再三次尝试后直接失败。" },
+      { en: "The default routing is unchanged; the hook does not add on-call schedules or rotation management.", zh: "默认路由保持原样；扩展接口不包含值班排班或轮换管理。" },
+    ],
+  },
   { id: "status-delivery-policy", date: "2026-10-29", edition: "community",
     title: { en: "Status delivery policy hooks", zh: "状态页分发策略扩展" },
     summary: { en: "Custom deployments can apply one access policy to status pages, feeds and subscriber notifications.", zh: "定制部署可以为状态页、订阅源和订阅通知设置统一的访问策略。" },

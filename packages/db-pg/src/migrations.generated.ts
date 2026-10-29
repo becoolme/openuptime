@@ -149,5 +149,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0029_monitor_websocket",
     "when": 1793160668461,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'websocket';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"ws_message\" text;"
+  },
+  {
+    "tag": "0030_mean_lady_mastermind",
+    "when": 1793293771087,
+    "sql": "ALTER TABLE \"alert_delivery\" ADD COLUMN \"email_quota_attempted\" boolean DEFAULT false NOT NULL;"
   }
 ];

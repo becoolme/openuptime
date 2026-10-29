@@ -915,6 +915,13 @@ export function createRepo(db: Db): Repo {
         .returning();
       return (row as AlertDelivery) ?? null;
     },
+    async markDeliveryEmailQuotaAttempt(id, attempts) {
+      const t = schema.alertDelivery;
+      const rows = await db.update(t).set({ emailQuotaAttempted: true })
+        .where(and(eq(t.id, id), eq(t.status, "sending"), eq(t.attempts, attempts)))
+        .returning({ id: t.id });
+      return rows.length > 0;
+    },
     async finishDelivery(id, r) {
       const t = schema.alertDelivery;
       const again = r.status === "failed" && r.retryInSec != null;
@@ -925,8 +932,8 @@ export function createRepo(db: Db): Repo {
           ok: r.status === "sent",
           error: r.error,
           statusMessage: r.message,
-          // a skip is not an attempt
-          attempts: r.status === "skipped" ? t.attempts : sql`${t.attempts} + 1`,
+          // a skip is not an attempt, and neither is a routing decision that could not be made
+          attempts: r.status === "skipped" || r.keepAttempts ? t.attempts : sql`${t.attempts} + 1`,
           nextAttemptAt: again ? sql`now() + make_interval(secs => ${r.retryInSec})` : null,
         })
         .where(and(eq(t.id, id), eq(t.status, "sending")));

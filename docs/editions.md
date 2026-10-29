@@ -70,3 +70,14 @@ Use route/field allowlists for any logging. Raw URLs can contain heartbeat or su
 MCP 工具通过内部 REST 请求执行，每次请求都有独立的上下文、连接和接口调用。外层 MCP 的 HTTP 200 不证明变更成功。未来审计应识别实际获授权的 REST 操作、区分尝试与结果、防止重复记录外层传输，并规定持久化失败的行为。此扩展本身不是审计存储，也不与业务变更处于同一原子事务。
 
 日志应使用路由及字段白名单。原始 URL 可能包含心跳或订阅 token；请求/响应正文、Cookie、认证头及任意错误字符串可能包含密钥。此扩展不增加正文采集、日志存储、计费或保留策略。
+## Routed email recovery
+
+When an edition supplies `allowAlertChannel`, pending routing authorization is stored before delivery starts. Orphaned and interrupted deliveries recheck the policy at their original routing time. Before attempting email quota, the current delivery attempt persists a separate checkpoint. Recovery still authorizes routing but does not spend quota again, so interruption after spending the last email credit cannot turn an unsent alert into a quota skip. A checkpoint failure sends nothing and retries authorization; a stale worker cannot checkpoint a newer claim.
+
+The checkpoint precedes the quota call. A crash in between can leave one email uncharged; an interrupted quota call may also have an unknown result. Recovery favors delivery without a second charge, consistent with the existing fail-open email ledger policy. This is not exactly-once accounting or exactly-once email delivery. Deployments needing exact quota accounting must implement a transactional, delivery-ID-based reservation in their ledger.
+
+### 路由邮件恢复
+
+版本提供 `allowAlertChannel` 时，发送前会持久化待校验的路由状态。孤立或中断的投递恢复时，使用原路由时间重新授权。调用邮件额度服务前，当前投递尝试会单独记录扣额阶段；恢复仍校验路由，但不重复扣额，因此用掉最后一封额度后中断，不会让尚未发送的告警因额度不足而被跳过。阶段写入失败时不发送，并保留授权重试；旧任务不能修改新领取任务的阶段。
+
+阶段记录先于扣额调用，两者之间中断可能少计一封邮件；扣额调用中断时，其结果也可能未知。恢复优先避免再次扣额并继续投递，这与现有邮件账本异常时继续发送的策略一致，不保证精确一次计费或精确一次投递。需要严格额度一致性的部署，应在账本中按投递 ID 实现事务化、幂等的额度预留。

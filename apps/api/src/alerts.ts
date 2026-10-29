@@ -171,13 +171,56 @@ const languageFor = async (repo: Repo, channel: AlertChannel, fallback?: Lang) =
 };
 
 /**
+ * Marker for "the routing policy could not decide yet". It is both the error shown in the delivery row and the control
+ * flag: a pending or retried row whose `error` equals this still needs a routing decision before anything is sent, so
+ * retries and worker recovery re-ask the policy at the original time. A provider attempt replaces the marker, which
+ * is how a row that is already authorized is told apart. The coupling is deliberate: a separate flag column would have
+ * to be kept in step by every writer of `error` (queueing, finishing, the stuck-row sweep) for no gain.
+ */
+const ROUTING_UNAVAILABLE = "alert routing policy unavailable";
+/**
+ * A policy outage does not use up the normal attempt budget (MAX_ATTEMPTS, about six minutes): the alert keeps waiting for
+ * a decision, every ROUTING_RETRY_SEC, and is only given up once it is older than ROUTING_WINDOW_SEC.
+ */
+const ROUTING_RETRY_SEC = 120;
+const ROUTING_WINDOW_SEC = 6 * 3600;
+class RoutingUnavailable extends Error { constructor() { super(ROUTING_UNAVAILABLE); } }
+async function authorizeChannel(channel: AlertChannel, ev: Event, entitlements: Entitlements, at: Date) {
+  let allowed: boolean;
+  try {
+    if (!entitlements.allowAlertChannel) throw new RoutingUnavailable();
+    allowed = await entitlements.allowAlertChannel(channel.organizationId, {
+      projectId: ev.monitor.projectId ?? null, monitorId: ev.monitor.id ?? null,
+      incidentId: ev.incident.id, kind: ev.kind, at, channelId: channel.id,
+    });
+  } catch (cause) {
+    // the generic marker is all that reaches the delivery row; the cause (which may carry provider detail) stays in the server log
+    if (!(cause instanceof RoutingUnavailable)) console.error(`alert routing policy failed for channel ${channel.id}`, cause);
+    throw new RoutingUnavailable();
+  }
+  if (allowed !== true) throw new Skipped("skipped: not selected by alert routing policy");
+}
+
+/**
  * Send one delivery that this worker has already claimed (status `sending`) and record the outcome. Never throws.
  * `meter` charges an email against the workspace allowance; retries are not charged again.
  */
-async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts">, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices) {
+async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attempts" | "emailQuotaAttempted"> & Partial<Pick<AlertDelivery, "createdAt">>, channel: AlertChannel, ev: Event, lang: Lang, meter?: Entitlements, pushed?: PushedDevices, routingAt?: Date) {
   const attempts = d.attempts + 1;
   try {
-    if (meter && channel.type === "email" && (await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
+    if (routingAt) await authorizeChannel(channel, ev, meter ?? unmetered, routingAt);
+    if (meter && channel.type === "email" && !d.emailQuotaAttempted) {
+      if (routingAt) {
+        // Persist before spending: a worker can disappear after charging but before calling the provider.
+        // Recovery still reauthorizes routing, but must not charge the same delivery again.
+        // A crash immediately after this checkpoint may leave one email uncharged (quota is fail-open).
+        let owned: boolean;
+        try { owned = await repo.markDeliveryEmailQuotaAttempt(d.id, d.attempts); }
+        catch (cause) { console.error(`alert quota checkpoint failed for delivery ${d.id}`, cause); throw new RoutingUnavailable(); }
+        if (!owned) return false;
+      }
+      if ((await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
+    }
     await deliver(channel, ev, alertText(ev), lang, repo, pushed);
     await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
     return true;
@@ -188,6 +231,13 @@ async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attem
     }
     console.error(`alert via ${channel.name} failed`, e);
     const why = reason(e);
+    if (e instanceof RoutingUnavailable && RETRIED_KINDS.has(d.kind)) {
+      const ageSec = d.createdAt ? (Date.now() - new Date(d.createdAt).getTime()) / 1000 : 0;
+      const waiting = ageSec < ROUTING_WINDOW_SEC;
+      const message = waiting ? `failed: ${why} (not counted as an attempt, trying again in ${ROUTING_RETRY_SEC / 60} min)` : `failed: ${why} (gave up after ${ROUTING_WINDOW_SEC / 3600} hours)`;
+      await repo.finishDelivery(d.id, { status: "failed", error: why, message, retryInSec: waiting ? ROUTING_RETRY_SEC : null, keepAttempts: waiting }).catch((x) => console.error("could not record a failed alert", x));
+      return false;
+    }
     const retryInSec = !RETRIED_KINDS.has(d.kind) || attempts >= MAX_ATTEMPTS ? null : attempts === 1 ? FIRST_RETRY_DELAY_SEC : RETRY_DELAY_SEC;
     const message = retryInSec == null ? `failed: ${why}${RETRIED_KINDS.has(d.kind) ? ` (gave up after ${attempts} attempts)` : ""}` : `failed: ${why} (attempt ${attempts} of ${MAX_ATTEMPTS}, trying again in ${retryInSec >= 120 ? `${retryInSec / 60} min` : `${retryInSec} s`})`;
     await repo.finishDelivery(d.id, { status: "failed", error: why, message, retryInSec }).catch((x) => console.error("could not record a failed alert", x));
@@ -199,7 +249,7 @@ async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attem
 export const wasDelivered = (r: { status?: string | null; ok?: boolean }) => (r.status ? r.status !== "skipped" && r.status !== "failed" : r.ok !== false);
 
 /** Try failed incident alerts again. Each channel's own delivery row is updated; nothing here throws. */
-export async function retryDeliveries(repo: Repo, limit = 10) {
+export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Entitlements = unmetered) {
   const due: DeliveryRetry[] = await repo.claimRetries(limit);
   // a phone is pushed once per event, also when several of its retries are due in the same round
   const pushedBy = new Map<string, PushedDevices>();
@@ -231,7 +281,8 @@ export async function retryDeliveries(repo: Repo, limit = 10) {
     const ev = await withProject(repo, incident.organizationId, eventOf(delivery.kind, incident, monitor, delivery.kind === "incident.escalated" ? incident.escalationLevel : incident.reminderCount, reopened));
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
-    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), undefined, pushedBy.get(eventKey));
+    const pendingRouting = delivery.error === ROUTING_UNAVAILABLE;
+    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
   }
   return due.length;
 }
@@ -250,18 +301,32 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
   await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
   // a phone is pushed once per event, however many push channels reach it
   const pushed: PushedDevices = new Map();
-  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false })));
+  // Persist the pending authorization before claiming: worker recovery must not bypass the policy.
+  // A completed provider attempt replaces this marker; interrupted attempts retain it for safe reevaluation.
+  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, ...(entitlements.allowAlertChannel ? { error: ROUTING_UNAVAILABLE } : {}) })));
   await Promise.all(
     live.map(async (c) => {
       const lang = await languageFor(repo, c, fallback);
       const row = rows.find((r) => r.channelId === c.id);
       if (!row) {
         // no row to claim: send anyway, only the history is missing
+        try {
+          if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
+        } catch (e) {
+          if (e instanceof Skipped) {
+            await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: e.message, statusMessage: e.message }]).catch(() => {});
+            return;
+          }
+          // No row means no durable retry, so a policy failure here loses this alert: say so loudly and try to leave a trace.
+          console.error(`ALERT NOT SENT via ${c.name} (${c.id}): routing policy failed and the delivery could not be queued for retry`, e);
+          await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "failed", error: ROUTING_UNAVAILABLE, statusMessage: `failed: ${ROUTING_UNAVAILABLE} (could not be queued for retry)` }]).catch(() => {});
+          return;
+        }
         await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
         return;
       }
       const claimed = await repo.claimDelivery(row.id);
-      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed);
+      if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed, entitlements.allowAlertChannel ? claimed.createdAt ?? new Date() : undefined);
     }),
   );
 }
