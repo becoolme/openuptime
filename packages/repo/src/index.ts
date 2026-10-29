@@ -49,6 +49,8 @@ export interface Monitor {
   type: MonitorType;
   target: string;
   method: string;
+  /** HTTP payload; may contain secrets, visible only to managers. */
+  requestBody?: string | null;
   expectedStatus: number;
   intervalSec: number;
   timeoutMs: number;
@@ -87,7 +89,7 @@ export interface Monitor {
 /** Fields a user can set when creating a monitor. */
 export type MonitorInput = Pick<
   Monitor,
-  | "name" | "type" | "target" | "method" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
+  | "name" | "type" | "target" | "method" | "requestBody" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "regions"
   | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;

@@ -1,3 +1,5 @@
+import { readCapped } from "./netguard";
+import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import type { Monitor, RegionResult } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe } from "./probe-protocol";
@@ -91,9 +93,20 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
   const body = JSON.stringify({
     type: input.type, target: input.target, method: input.method, expectedStatus: input.expectedStatus, timeoutMs: input.timeoutMs,
     keyword: input.keyword ?? null, keywordMode: input.keywordMode ?? "contains", expectedLocation: input.expectedLocation ?? null, headers: input.headers ?? {},
-    wsMessage: input.wsMessage ?? null,
+    wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
   });
   try {
+    // Old probes ignore unknown fields: verify support BEFORE sending a payload.
+    // Do not cache positive capabilities: a rollback must stop payload delivery immediately.
+    if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) {
+      const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+      const capabilities: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;
+      if (!health.ok) await health.body?.cancel();
+      const advertised = (capabilities as { capabilities?: unknown } | null)?.capabilities;
+      if (!Array.isArray(advertised) || !advertised.includes(HTTP_REQUEST_CAPABILITY)) {
+        return { region, unreachable: "Probe upgrade required for HTTP request bodies and methods" };
+      }
+    }
     const ts = Math.floor(Date.now() / 1000);
     const res = await fetch(probe.url, {
       method: "POST",

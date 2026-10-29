@@ -297,7 +297,7 @@ const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket"];
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
-    method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
+    requestBody: monitor?.requestBody ?? "", method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
@@ -343,8 +343,12 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
+  const bodyBytes = new TextEncoder().encode(f.requestBody).byteLength;
+  const bodyTooLarge = f.type === "http" && !["GET", "HEAD"].includes(f.method) && bodyBytes > 16384;
+
   async function submit(e: React.SyntheticEvent) {
     e.preventDefault();
+    if (bodyTooLarge) { setErr(t("Request body exceeds 16 KiB.")); return; }
     setBusy(true);
     setErr("");
     setUpgrade(undefined);
@@ -354,7 +358,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const { regions, dnsRecordType, dnsExpectedValue, dnsMatchMode, ...rest } = f;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      const payload = { ...rest, requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         await api.updateMonitor(monitor.id, patch);
@@ -404,7 +408,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <div style={{ display: "grid", gridTemplateColumns: f.type === "http" ? "1fr 1fr" : "1fr", gap: 10 }}>
             {f.type === "http" && (
               <label className="fld">{t("Method")}
-                <Select className="in mono" value={f.method} onChange={(v) => set("method", v)} options={["GET", "HEAD", "POST"].map((m) => ({ value: m, label: m }))} />
+                <Select className="in mono" value={f.method} onChange={(v) => set("method", v)} options={["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].map((m) => ({ value: m, label: m }))} />
               </label>
             )}
             {f.type === "http" && (
@@ -416,6 +420,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
               <Select className="in" value={f.failureThreshold} onChange={(v) => set("failureThreshold", v)} options={[1, 2, 3, 5, 10].map((n) => ({ value: n, label: String(n) }))} />
             </label>
           </div>
+        )}
+        {f.type === "http" && !["GET", "HEAD"].includes(f.method) && (
+          <label className="fld">{t("Request body (optional)")}
+            <textarea className="in mono" value={f.requestBody} onChange={(e) => set("requestBody", e.target.value)} rows={5} maxLength={16384} aria-invalid={bodyTooLarge} />
+            <span className={bodyTooLarge ? "err" : "muted"}>{t("{n} / 16384 UTF-8 bytes").replace("{n}", String(bodyBytes))}</span>
+            <span className="muted">{t("Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.")}</span>
+          </label>
         )}
         {f.type === "http" && REDIRECTS.includes(f.expectedStatus) && (
           <label className="fld">{t("Redirect must lead to (optional)")}
@@ -545,7 +556,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * (PROBED.includes(f.type) ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{PROBED.includes(f.type) && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
             <div className="mbtns">
               <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+              <button className="btn primary" disabled={busy || bodyTooLarge}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
             </div>
           </div>
         </div>

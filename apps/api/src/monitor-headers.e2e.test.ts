@@ -45,6 +45,30 @@ describe.skipIf(!url)("monitor request permissions", () => {
       expect((await call(member.cookie, "PATCH", path, { target: "https://1.1.1.1/health", headers: { "X-Check": "new-member-supplied-value" } })).status).toBe(200);
       expect((await call(member.cookie, "PATCH", path, { headers: {} })).status).toBe(200);
       expect((await call(member.cookie, "PATCH", path, { target: "https://8.8.8.8/health" })).status).toBe(200);
+      const withBody = await call(owner.cookie, "POST", "/monitors", { name: "Body", type: "http", target: "https://1.1.1.1/health", method: "POST", requestBody: "token=fixture-secret" });
+      expect(withBody.status).toBe(201);
+      const bodyPath = `/monitors/${withBody.body.id}`;
+      expect((await call(member.cookie, "GET", bodyPath)).body.requestBody).toBe(MASK);
+      expect((await call(owner.cookie, "GET", bodyPath)).body.requestBody).toBe("token=fixture-secret");
+      expect((await call(member.cookie, "GET", "/monitors")).body.find((m: any) => m.id === withBody.body.id).requestBody).toBe(MASK);
+      const maskedExport = (await call(member.cookie, "GET", "/monitors/export")).body;
+      expect(maskedExport.monitors.find((m: any) => m.name === "Body").requestBody).toBe(MASK);
+      expect((await call(owner.cookie, "POST", "/monitors/import", [maskedExport.monitors.find((m: any) => m.name === "Body")])).body).toMatchObject({ created: 0, skipped: [{ error: expect.stringContaining("masked request body") }] });
+      for (const patch of [{ target: "https://8.8.8.8/" }, { method: "PUT" }, { headers: { Host: "elsewhere.example" } }, { target: "https://8.8.8.8/", requestBody: MASK }]) {
+        expect(await call(member.cookie, "PATCH", bodyPath, patch)).toMatchObject({ status: 403 });
+      }
+      expect((await call(member.cookie, "PATCH", bodyPath, { name: "Body renamed", requestBody: MASK })).status).toBe(200);
+      expect((await db.repo.getMonitor(orgId, withBody.body.id, null))?.requestBody).toBe("token=fixture-secret");
+      expect((await call(owner.cookie, "PATCH", bodyPath, { method: "GET" })).status).toBe(400);
+      expect((await call(owner.cookie, "PATCH", bodyPath, { requestBody: "你".repeat(5462) })).status).toBe(400);
+      expect((await call(member.cookie, "PATCH", bodyPath, { target: "https://8.8.8.8/", requestBody: null })).status).toBe(200);
+      expect((await call(owner.cookie, "POST", "/monitors", { name: "Invalid GET", target: "https://1.1.1.1/", requestBody: "x" })).status).toBe(400);
+      expect((await call(owner.cookie, "POST", "/monitors", { name: "Invalid TCP", type: "tcp", target: "1.1.1.1:80", method: "POST", requestBody: "x" })).status).toBe(400);
+      const exported = (await call(owner.cookie, "GET", "/monitors/export")).body.monitors.find((m: any) => m.name === "Body renamed");
+      exported.requestBody = '{"ok":true}'; exported.method = "PATCH";
+      expect((await call(owner.cookie, "POST", "/monitors/import", [exported])).body).toMatchObject({ created: 1, skipped: [] });
+      const imported = (await call(owner.cookie, "GET", "/monitors")).body.find((m: any) => m.id !== withBody.body.id && m.name === "Body renamed");
+      expect(imported).toMatchObject({ method: "PATCH", requestBody: '{"ok":true}' });
     } finally {
       await db.close(1);
     }

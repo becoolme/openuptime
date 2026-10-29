@@ -22,7 +22,7 @@ async function signed(body: unknown, o: { secret?: string; ts?: number } = {}) {
 describe("probe handler", () => {
   it("answers a health GET without credentials", async () => {
     const res = await handleProbe(new Request("http://probe/"), { secret, region: "fra1" });
-    expect(await res.json()).toEqual({ ok: true, region: "fra1" });
+    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1"] });
   });
 
   it("is not an open proxy: unsigned, wrongly signed and stale requests are refused", async () => {
@@ -46,6 +46,14 @@ describe("probe handler", () => {
     expect(parseCheck({ ...check, headers: { a: 1 } })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedLocation: 5 })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedStatus: 301, expectedLocation: "/new" })).toMatchObject({ input: { expectedLocation: "/new" } });
+  });
+
+  it("validates HTTP body semantics before running a check", () => {
+    expect(parseCheck({ ...check, method: "PATCH", requestBody: '{"ok":true}' })).toMatchObject({ input: { method: "PATCH", requestBody: '{"ok":true}' } });
+    expect(parseCheck({ ...check, requestBody: "secret" })).toHaveProperty("error");
+    expect(parseCheck({ ...check, method: "POST", requestBody: "你".repeat(5462) })).toHaveProperty("error");
+    expect(parseCheck({ ...check, method: "POST", requestBody: 123 })).toHaveProperty("error");
+    expect(parseCheck({ ...check, type: "tcp", method: "POST", requestBody: "secret" })).toHaveProperty("error");
   });
 
   it("will not be aimed at a private address", async () => {

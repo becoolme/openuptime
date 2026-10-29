@@ -70,7 +70,7 @@ Clients authorize with OAuth 2.1 (dynamic client registration + PKCE; discovery 
 
 ## Monitoring features
 
-- **HTTP** checks: expected status, optional keyword (must contain / must not contain), custom request headers (use for bearer/basic auth).
+- **HTTP** checks: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS; optional request bodies up to 16 KiB UTF-8 for methods other than GET/HEAD; expected status, optional keyword (must contain / must not contain), custom request headers (use for bearer/basic auth).
 - **TCP**, **DNS**, **Heartbeat** (with a grace period before a missed ping counts as a failure).
 - **PostgreSQL**, **MySQL / MariaDB**, **Redis** reachability probes (handshake / `PING`; no credentials are sent).
 - **Response-time alerts**: per-monitor "slow" threshold (default 1500 ms) marks a monitor degraded; optionally open a minor incident after N consecutive slow checks.
@@ -120,7 +120,7 @@ Behaviour that changed and can surprise an existing install. Run `pnpm db:migrat
 
 - **Private targets are refused.** Monitors and alert webhooks that resolve to private, loopback or link-local addresses fail unless `ALLOW_PRIVATE_TARGETS=true`. Docker users who monitor services on their own network need that setting.
 - **Credentials are masked for members.** Channel configs and monitor headers show `••••••••` to non-admins; owners and admins see the real values.
-- **Stored request headers are protected.** Changing a monitor's target, method or headers while retaining a stored header value requires an owner or admin; members can replace all headers with their own values or remove them.
+- **Stored request headers and bodies are protected.** Changing a monitor's target, method, headers or body while retaining a stored header value or body requires an owner or admin; members can replace all headers with their own values or remove them.
 - **Authentication endpoints are rate limited** per client address and per email (HTTP 429). Behind a reverse proxy set `TRUST_PROXY=true`, otherwise every visitor shares one address.
 - **Secrets are validated at start** in Docker: `BETTER_AUTH_SECRET` and `CRON_SECRET` must not be the `change-me…` placeholder and need at least 16 characters.
 - **One automatic incident per monitor and kind.** Migration `0016` merges duplicate open incidents and adds a unique index.

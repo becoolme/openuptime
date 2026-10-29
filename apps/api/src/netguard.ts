@@ -311,7 +311,7 @@ const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
  * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop. With `follow: false` the
  * first response is returned as it is, redirect or not, so the caller can judge the redirect itself.
  */
-export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true }: { follow?: boolean } = {}): Promise<{ res: Response; url: string }> {
+export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, protectBody = false }: { follow?: boolean; protectBody?: boolean } = {}): Promise<{ res: Response; url: string }> {
   let current = url;
   let method = init.method ?? "GET";
   let body = init.body;
@@ -342,6 +342,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects");
     const next = new URL(location, current);
     if (next.origin !== u.origin) {
+      if (protectBody && body != null && body !== "") throw new Error("Cross-origin redirect refused for a request with a body");
       headers = new Headers(headers);
       for (const h of SENSITIVE) headers.delete(h);
     }
@@ -349,6 +350,8 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === "POST")) {
       method = method === "HEAD" ? "HEAD" : "GET";
       body = undefined;
+      headers.delete("content-type");
+      headers.delete("content-length");
     }
     current = next.toString();
   }
