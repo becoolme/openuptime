@@ -27,6 +27,12 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "migration-history-validation", date: "2026-10-29", edition: "community",
+    title: { en: "Validate migration history", zh: "校验数据库迁移历史" },
+    summary: { en: "Migrations stop with an error when a build does not match the database history.", zh: "部署版本与数据库迁移历史不一致时，迁移会明确报错并停止。" },
+    points: [{ en: "Out-of-order or changed migrations are no longer silently skipped; both migration entry points serialize concurrent runs.", zh: "乱序或被修改的迁移不会再被静默跳过，两种迁移入口均串行处理并发运行。" }],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",

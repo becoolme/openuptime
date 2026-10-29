@@ -139,3 +139,15 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+## Migration history and concurrent schema PRs
+
+Schema PRs must be merged one at a time. After another schema PR merges, rebase the remaining PR, preserve its schema changes, remove only its unapplied generated SQL/journal/snapshot additions, then run `pnpm db:generate` and `node scripts/gen-migrations.mjs`. Renaming a SQL file or editing a timestamp is insufficient: the snapshot `prevId` chain and timestamp order must follow the current base. Test both a fresh database and an upgrade from the previously deployed version.
+
+Both migration entry points validate that the database's applied timestamps and SQL SHA-256 hashes form an exact prefix of the build's migrations, under the same transaction advisory lock. A divergent or newer history is an error, not a skipped migration. SQL identity is byte-exact, including line endings: do not edit or normalize previously applied SQL. Restore the matching historical files and regenerate only pending migrations; never bypass this error by deleting or manually marking migration history rows.
+
+### 迁移历史与并行开发
+
+含数据库变更的 PR 必须逐个合并。每合并一个，其余 PR 应更新到最新基线，保留 schema 修改，仅移除自己尚未部署的生成产物，再执行 `pnpm db:generate` 和 `node scripts/gen-migrations.mjs`。仅改文件编号或时间戳不够，snapshot 的 prevId 链和时间戳顺序必须衔接最新基线；同时验证空库安装与已部署版本升级。
+
+两个迁移入口在同一事务锁下验证数据库历史的时间戳和 SQL SHA-256 是否为当前版本的精确前缀。分叉或数据库历史超前时明确报错，不能静默跳过。SQL 校验包含换行等字节，不能修改已部署的历史文件；应恢复匹配的历史文件并重新生成待部署迁移，不得通过删除或手工标记历史记录绕过错误。
