@@ -1,5 +1,6 @@
 import { createMcpServer, defineTool, type Tool } from "@openuptime/mcp-rest";
 import { z } from "zod";
+import { maintenanceMcpSchema } from "./routes/maintenance";
 import { monitorCreateSchema, monitorPatchSchema, monitorImportSchema } from "./routes/monitors";
 
 /**
@@ -51,7 +52,7 @@ export const TOOLS: Tool[] = [
     schema: monitorPatchSchema.extend({ id }),
     build: ({ id, ...rest }) => ({ method: "PATCH", path: `/api/monitors/${id}`, body: rest }),
   },
-  { name: "pause_monitor", description: "Stop scheduled checks and alerts for one monitor, preserving its configuration and history; returns the paused monitor. Use this for a pause-only change, or update_monitor to combine a pause with configuration edits. For planned downtime that should still run checks, schedule maintenance through the app or REST API instead. Use resume_monitor to restart checking.", schema: z.object({ id }), build: (a) => ({ method: "PATCH", path: `/api/monitors/${a.id}`, body: { paused: true } }) },
+  { name: "pause_monitor", description: "Stop scheduled checks and alerts for one monitor, preserving its configuration and history; returns the paused monitor. Use this for a pause-only change, or update_monitor to combine a pause with configuration edits. For planned downtime that should still run checks, use create_maintenance. Use resume_monitor to restart checking.", schema: z.object({ id }), build: (a) => ({ method: "PATCH", path: `/api/monitors/${a.id}`, body: { paused: true } }) },
   { name: "resume_monitor", description: "Restart checking a paused monitor and return its record with pending status. Use this for a resume-only change; use update_monitor for combined configuration edits. Its next check becomes due immediately and may create incidents or send alerts. Hosted active-monitor limits are checked again; existing history is retained.", schema: z.object({ id }), build: (a) => ({ method: "PATCH", path: `/api/monitors/${a.id}`, body: { paused: false } }) },
   {
     name: "run_check",
@@ -114,7 +115,27 @@ export const TOOLS: Tool[] = [
     build: ({ id, ...rest }) => ({ method: "PATCH", path: `/api/status-pages/${id}`, body: rest }),
   },
   { name: "list_channels", description: "Discover alert-channel UUIDs and delivery types (email, webhook, Slack and others) in the selected project. Use the ids with create_monitor/update_monitor.channelIds to route alerts. Returns channel records, not a delivery test. Channel creation and secret configuration are managed through the app or REST API.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/channels" }) },
-  { name: "list_maintenance", description: "Read maintenance windows in the selected project, including schedule and monitor associations. Use this authenticated list for planning; list_public_status_page_maintenance only shows windows for a published page slug. This tool does not schedule downtime; use the app or REST API to create or remove windows.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/maintenance" }) },
+  {
+    name: "create_maintenance", schema: maintenanceMcpSchema,
+    description: "Schedule one maintenance window or a daily/weekly series in the selected project. Checks continue but covered monitors do not open incidents during each window. Returns the first occurrence; list_maintenance shows all occurrences with id and seriesId. Each recurring start follows the initial local clock time in its IANA zone, through an inclusive end within 366 days; gaps move forward and overlaps use the later instant. Duration is fixed elapsed time, at most 24 hours. Creation is not idempotent: repeating it creates another series.",
+    build: (a) => ({ method: "POST", path: "/api/maintenance", body: a }),
+  },
+  {
+    name: "skip_maintenance", schema: z.object({ id }), destructive: true, idempotent: true,
+    description: "Delete one maintenance occurrence by its id from list_maintenance. Use for skipping a future occurrence; other occurrences in its series remain. This removes the record and its reminder. Requires workspace owner/admin. For an active window, prefer end_maintenance to retain history.",
+    build: (a) => ({ method: "DELETE", path: `/api/maintenance/${a.id}` }),
+  },
+  {
+    name: "end_maintenance", schema: z.object({ id }), destructive: true, idempotent: true,
+    description: "End an active maintenance occurrence now while preserving its history. Monitoring alerts can resume; future occurrences remain scheduled. Requires workspace owner/admin. Does nothing if the occurrence is already ended or has not started.",
+    build: (a) => ({ method: "POST", path: `/api/maintenance/${a.id}/end` }),
+  },
+  {
+    name: "cancel_maintenance_series", schema: z.object({ seriesId: id.describe("The seriesId from a recurring list_maintenance record, not an occurrence id.") }), destructive: true, idempotent: true,
+    description: "Cancel future occurrences of a maintenance series and end any active occurrence, preserving completed history. Requires workspace owner/admin. Already claimed or sent reminders cannot be recalled. Repeating this action has no additional effect.",
+    build: (a) => ({ method: "DELETE", path: `/api/maintenance/series/${a.seriesId}` }),
+  },
+  { name: "list_maintenance", description: "Read maintenance windows in the selected project, including schedule and monitor associations. Use this authenticated list for planning; list_public_status_page_maintenance only shows windows for a published page slug. Records include recurrence metadata and seriesId. Use create_maintenance to schedule, skip_maintenance for one occurrence, end_maintenance for an active occurrence, or cancel_maintenance_series for the remaining series.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/maintenance" }) },
 ];
 
 /**
@@ -161,7 +182,7 @@ export const SERVER_INFO = { name: "openuptime", version: "1.0.0" };
 export const createServer = (extraTools: Tool[] = []) => createMcpServer({
   info: SERVER_INFO,
   instructions:
-    "Manage monitor configuration, investigate incidents and publish status pages. Start with list_workspaces to discover accessible workspace/project ids, then the resource list tool for UUIDs. Private tools accept optional workspace/project selectors and use the caller's existing OAuth/API-key permissions; public-status tools use a slug and no credentials. Omitted patch fields stay unchanged; supplied lists replace prior lists. Use pause_monitor/resume_monitor for pause-only changes and post_incident_update for incident status changes or subscriber messages. Alert-channel and maintenance configuration is managed in the app or REST API; these tools expose discovery/read access to those resources.",
+    "Manage monitor configuration, investigate incidents and publish status pages. Start with list_workspaces to discover accessible workspace/project ids, then the resource list tool for UUIDs. Private tools accept optional workspace/project selectors and use the caller's existing OAuth/API-key permissions; public-status tools use a slug and no credentials. Omitted patch fields stay unchanged; supplied lists replace prior lists. Use pause_monitor/resume_monitor for pause-only changes and post_incident_update for incident status changes or subscriber messages. Use create_maintenance and the maintenance end/skip/cancel tools to manage planned downtime; alert-channel configuration remains managed in the app or REST API.",
   tools: [...TOOLS, ...extraTools, ...PUBLIC_TOOLS],
   context: {
     shape: whereShape,

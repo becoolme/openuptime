@@ -201,3 +201,7 @@ An edition may implement `Entitlements.allowAlertChannel(workspaceId, input)`. I
 Policy exceptions retain a failed delivery and retry every two minutes without using up the normal three-attempt budget, so an outage of the policy does not fail alerts permanently; a delivery older than six hours is given up. The cause of a policy exception is written to the server log only. If a delivery row cannot be created at all there is nothing to retry: the alert is not sent, the loss is logged as `ALERT NOT SENT` and a failed row is recorded when the database allows it. Retries reevaluate pending decisions at the original delivery time and do not send while the policy is unavailable; once authorized, provider retries retain the original recipient without reevaluating routing. Routing failures use a generic reason without provider details. A routing failure is charged no email quota. Subscriber email and direct channel tests are separate. As with existing delivery, if the database cannot create a delivery row there is no durable retry; even the direct-send fallback still checks the policy.
 
 The default has no policy. This is a general interface, not an on-call scheduler; an integration must validate membership/ownership and present empty or unavailable coverage to operators.
+
+Ending a maintenance window and cancelling a series are idempotent: an already ended, missing, or out-of-scope resource is a successful no-op. Success does not imply a row was changed.
+
+结束维护或取消系列是幂等操作：已结束、不存在或不在权限范围内的资源均不作修改并返回成功，成功响应不表示一定修改了记录。

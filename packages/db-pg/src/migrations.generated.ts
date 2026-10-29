@@ -194,5 +194,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0038_living_calypso",
     "when": 1793295556040,
     "sql": "CREATE TABLE \"monitor_observation\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"monitor_id\" uuid NOT NULL,\n\t\"observed_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"state\" text NOT NULL,\n\t\"valid_until\" timestamp with time zone,\n\t\"maintenance_until\" timestamp with time zone,\n\t\"revision\" integer NOT NULL,\n\t\"generation\" integer,\n\t\"interval_sec\" integer,\n\t\"grace_sec\" integer,\n\t\"timeout_ms\" integer\n);\n--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_revision\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_generation\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"coverage_heartbeat_version\" integer DEFAULT 0 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor_observation\" ADD CONSTRAINT \"monitor_observation_monitor_id_monitor_id_fk\" FOREIGN KEY (\"monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nCREATE INDEX \"monitor_observation_time_idx\" ON \"monitor_observation\" USING btree (\"monitor_id\",\"observed_at\",\"id\");"
+  },
+  {
+    "tag": "0039_loving_dakota_north",
+    "when": 1793295779944,
+    "sql": "ALTER TABLE \"maintenance_window\" ADD COLUMN \"series_id\" uuid;--> statement-breakpoint\nALTER TABLE \"maintenance_window\" ADD COLUMN \"recurrence\" jsonb;--> statement-breakpoint\nCREATE INDEX \"maintenance_series_idx\" ON \"maintenance_window\" USING btree (\"organization_id\",\"series_id\");"
   }
 ];

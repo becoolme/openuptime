@@ -287,7 +287,11 @@ export interface WorkspaceSettings {
   monthlyReport: boolean;
 }
 
+export type MaintenanceRecurrence = { frequency: "daily" | "weekly"; timeZone: string; until: string };
+
 export interface MaintenanceWindow {
+  seriesId?: string | null;
+  recurrence?: MaintenanceRecurrence | null;
   id: string;
   organizationId: string;
   projectId: string | null;
@@ -298,7 +302,7 @@ export interface MaintenanceWindow {
   monitorIds: string[];
   createdAt: Date;
 }
-export type NewMaintenance = Pick<MaintenanceWindow, "name" | "startsAt" | "endsAt" | "monitorIds">;
+export type NewMaintenance = Pick<MaintenanceWindow, "name" | "startsAt" | "endsAt" | "monitorIds" | "recurrence">;
 
 export interface StatusPage {
   id: string;
@@ -624,6 +628,8 @@ export interface Repo {
   listMaintenance(orgId: string, projectId: string): Promise<MaintenanceWindow[]>;
   createMaintenance(orgId: string, projectId: string, w: NewMaintenance): Promise<MaintenanceWindow>;
   deleteMaintenance(orgId: string, id: string, scope: Scope): Promise<void>;
+  endMaintenance(orgId: string, id: string, scope: Scope): Promise<void>;
+  cancelMaintenanceSeries(orgId: string, seriesId: string, scope: Scope): Promise<void>;
 
   // ── status pages ─────────────────────────────────────────────────────────────
   listStatusPages(orgId: string, projectId: string): Promise<StatusPage[]>;
@@ -649,7 +655,7 @@ export interface Repo {
    * A pending row takes the newest locale and component choice; a confirmed row is never changed, whoever asks again.
    */
   addSubscriber(s: { pageId: string; email: string; token: string; locale: string; monitorIds?: string[] }): Promise<{ locale: string | null; token: string; confirmed: boolean; created: boolean }>;
-  /** Maintenance windows touching the page (its monitors', plus workspace-wide ones) that end after `since`, newest start first. */
+  /** Maintenance windows touching the page (its monitors', plus workspace-wide ones) that end after `since`, active/upcoming first, closest to now first. */
   pageMaintenance(page: StatusPage, o: { since?: Date; limit: number }): Promise<MaintenanceWindow[]>;
   /** Windows that start within their page's reminder lead time, each claimed once per page; claimed rows come back with their subscribers. */
   claimMaintenanceReminders(limit: number): Promise<MaintenanceReminder[]>;

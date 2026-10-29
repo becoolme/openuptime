@@ -311,13 +311,15 @@ export const maintenanceWindow = pgTable(
     organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
     projectId: projectRef(),
     name: text("name").notNull(),
+    seriesId: uuid("series_id"),
+    recurrence: jsonb("recurrence").$type<import("@openuptime/repo").MaintenanceRecurrence>(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     /** empty = all monitors in the org */
     monitorIds: uuid("monitor_ids").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("maintenance_org_idx").on(t.organizationId, t.startsAt)],
+  (t) => [index("maintenance_org_idx").on(t.organizationId, t.startsAt), index("maintenance_series_idx").on(t.organizationId, t.seriesId)],
 );
 
 export const statusPage = pgTable(

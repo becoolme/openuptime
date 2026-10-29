@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "recurring-maintenance", date: "2026-10-29", edition: "community",
+    title: { en: "Repeat maintenance windows", zh: "周期维护窗口" },
+    summary: { en: "Schedule daily or weekly maintenance in a named time zone with an end date.", zh: "可按指定时区安排每日或每周的维护，并设置截止日期。" },
+    points: [
+      { en: "A repeating window keeps the same local start time across daylight-saving changes, and each occurrence shows on status pages.", zh: "周期维护的开始时间按当地时间保持不变，会随夏令时调整，每次维护都会显示在状态页上。" },
+      { en: "Skip one occurrence, end an active window early, or cancel the rest of a series without losing finished windows.", zh: "可跳过单次维护、提前结束正在进行的窗口，或取消系列的其余部分，已完成的窗口会保留。" },
+      { en: "The same actions are available through the API and MCP tools.", zh: "API 和 MCP 工具也提供同样的操作。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the maintenance API docs", zh: "阅读维护 API 文档" } },
+  },
+  {
     id: "monitor-time-coverage", date: "2026-10-29", edition: "community",
     title: { en: "Monitor time coverage", zh: "监控时间覆盖报告" },
     summary: { en: "See how much of the last 7 or 30 days a monitor was up, down, degraded, paused or unknown.", zh: "查看监控项在过去 7 天或 30 天内处于正常、故障、缓慢、暂停或未知状态的时长。" },

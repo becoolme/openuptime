@@ -47,6 +47,11 @@ export const zh: Record<string, string> = {
   "Leave empty to accept any record of this type. TXT includes quotes; MX includes priority, e.g. 10 mail.example.com.": "留空时接受此类型的任意记录。TXT 包含引号；MX 包含优先级，例如 10 mail.example.com。",
   "Successes before recovery": "恢复前连续成功次数",
   "Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.": "结束宕机前需要的连续成功检测或心跳次数。每轮多区域投票计为一次，每次心跳都会计数（即使几次同时到达）；慢响应可能恢复为性能下降。",
+  "Skip once": "跳过本次", "End now": "立即结束", "Cancel series": "取消系列", "Repeat": "重复", "Does not repeat": "不重复", "Daily": "每天", "Weekly": "每周", "Recurrence time zone": "重复时区", "Repeat until": "重复至",
+  "Start, end and repeat-until inputs use your browser time zone.": "开始、结束和重复截止时间均按浏览器时区输入。",
+  "Cancel future occurrences and end any active window in this series?": "取消此系列未来的维护窗口，并结束当前正在进行的窗口？",
+  "Repeats at the first start's local clock time in this zone. Duration stays fixed; skipped spring times move forward and repeated autumn times use the later occurrence.": "按首次开始时间在所选时区的当地时刻重复。实际持续时长不变；夏令时跳过的时刻向后顺延，重复的时刻选择后一次。",
+  "Choose an end within 366 days; each window may last up to 24 hours. Skip individual occurrences or cancel the series below.": "截止时间须在首次开始后的 366 天内，每次最多持续 24 小时。可跳过单次或取消整个系列。",
   // monitors
   "+ New monitor": "+ 新建监控", "New monitor": "新建监控", "Create monitor": "创建监控", "Cancel": "取消", "Close": "关闭", "What is a dependency?": "什么是依赖？", "A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.": "依赖是指这个监控所依赖的另一个监控，例如网关或你的网络。被依赖的监控宕机期间，这个监控不会重复告警同一次故障。",
   "Loading…": "加载中…", "down right now": "个正在故障", "Everything is up.": "一切正常。", "Nothing is being watched yet.": "还没有任何监控。",

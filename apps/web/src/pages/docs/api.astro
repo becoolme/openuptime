@@ -99,12 +99,14 @@ const groups: Group[] = [
   },
   {
     id: "maintenance", en: "Maintenance", zh: "维护窗口",
-    noteEn: "While a window is active, the monitors it covers keep being checked but open no incidents and send no alerts. An empty monitorIds list covers every monitor in the workspace.",
-    noteZh: "维护窗口生效期间，所覆盖的监控项仍会被检测，但不会创建事件或发送告警。monitorIds 为空表示覆盖工作区内所有监控项。",
+    noteEn: "While a window is active, the monitors it covers keep being checked but open no incidents and send no alerts. An empty monitorIds list covers every monitor in the selected project. Recurrence is daily or weekly in an IANA time zone, through an inclusive until instant within 366 days. Duration is fixed elapsed time (at most 24 hours). The first start is exactly the supplied instant; later starts follow its local wall-clock time. DST gaps shift forward using the prior offset; overlaps use the later instant. All occurrences are created together, each with an independent reminder identity. Canceling does not recall reminders already claimed for delivery or sent.",
+    noteZh: "维护窗口生效期间，所覆盖的监控项仍会被检测，但不会创建事件或发送告警。monitorIds 为空表示覆盖当前项目内所有监控项。可按 IANA 时区每天或每周重复，截止时刻包含在内且须在首次开始后 366 天内。每次实际持续时长固定，最多 24 小时。首次开始严格采用传入时刻；后续按当地墙钟时间重复。夏令时跳时使用跳时前偏移量向后顺延，重复时刻选择后一次。所有窗口同时生成，每次有独立提醒标识。取消不会撤回已领取待发送或已发送的提醒。",
     eps: [
-      { m: "GET", p: "/maintenance", en: "The project's latest 200 windows, by start time descending.", zh: "当前项目最新的 200 个维护窗口，按开始时间倒序。", res: `[{ id, name, startsAt, endsAt, monitorIds, createdAt, projectId }]` },
-      { m: "POST", p: "/maintenance", en: "Schedule a window. Returns 201.", zh: "创建维护窗口。返回 201。", req: `name        string, 1-120\nstartsAt    ISO 8601 date-time\nendsAt      ISO 8601 date-time, after startsAt\nmonitorIds  uuid[], max 500   (default [])` },
-      { m: "DELETE", p: "/maintenance/:id", en: "Delete a window. Returns 204.", zh: "删除维护窗口。返回 204。" },
+      { m: "GET", p: "/maintenance", en: "Up to 1000 project windows, active/upcoming first and closest to now first.", zh: "最多返回 1000 个项目维护窗口，当前及未来窗口优先，并按距离当前时间排序。", res: `[{ id, name, startsAt, endsAt, monitorIds, createdAt, projectId, seriesId, recurrence }]` },
+      { m: "POST", p: "/maintenance", en: "Schedule one window or a bounded recurring series. Returns 201 with the first occurrence; use GET /maintenance to list all.", zh: "创建一次性窗口或有限周期系列。返回 201 和首次窗口；通过 GET /maintenance 查看全部。", req: `name        string, 1-120\nstartsAt    ISO 8601 date-time\nendsAt      ISO 8601 date-time, after startsAt\nmonitorIds  uuid[], max 500   (default [])\nrecurrence  null (default), or { frequency: "daily" | "weekly", timeZone: "America/Toronto", until: "2027-01-01T00:00:00Z" }` },
+      { m: "POST", p: "/maintenance/:id/end", en: "End an active occurrence now, retaining history. Idempotent. Returns { ok: true }.", zh: "立即结束当前窗口并保留历史。可重复调用，返回 { ok: true }。" },
+      { m: "DELETE", p: "/maintenance/series/:id", en: "Cancel a series by seriesId: remove future occurrences and end active ones, preserving completed windows. Idempotent, returns 204.", zh: "按 seriesId 取消系列：删除未来窗口并结束当前窗口，保留已完成历史。可重复调用，返回 204。" },
+      { m: "DELETE", p: "/maintenance/:id", en: "Delete one occurrence (skip it); the rest of its series is unchanged. Returns 204.", zh: "删除单次窗口（跳过本次），不影响系列其他窗口。返回 204。" },
     ],
   },
   {

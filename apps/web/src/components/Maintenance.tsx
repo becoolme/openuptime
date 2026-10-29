@@ -8,7 +8,7 @@ const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000)
 export default function Maintenance() {
   const [items, setItems] = useState<Window[] | null>(null);
   const [monitors, setMonitors] = useState<Monitor[]>([]);
-  const [f, setF] = useState({ name: "", startsAt: local(new Date()), endsAt: local(new Date(Date.now() + 3600_000)), monitorIds: [] as string[] });
+  const [f, setF] = useState({ name: "", startsAt: local(new Date()), endsAt: local(new Date(Date.now() + 3600_000)), monitorIds: [] as string[], frequency: "none", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", until: local(new Date(Date.now() + 90 * 86400_000)) });
   const [err, setErr] = useState("");
   const [busy, run] = useBusy();
   const [removing, setRemoving] = useState("");
@@ -20,7 +20,7 @@ export default function Maintenance() {
     setErr("");
     await run(async () => {
       try {
-        await api.createMaintenance({ name: f.name, monitorIds: f.monitorIds, startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString() });
+        await api.createMaintenance({ name: f.name, monitorIds: f.monitorIds, startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString(), recurrence: f.frequency === "none" ? null : { frequency: f.frequency as "daily" | "weekly", timeZone: f.timeZone, until: new Date(f.until).toISOString() } });
         setF({ ...f, name: "", monitorIds: [] });
         await load();
       } catch (e) { setErr((e as Error).message); }
@@ -37,18 +37,25 @@ export default function Maintenance() {
     <>
       <div className="ph"><div><h1>{t("Maintenance")}</h1><p className="muted">{t("Checks keep running, but no incidents or alerts are created during a window.")}</p></div></div>
       <div className="card tbl" style={{ marginBottom: 24 }}>
-        <div className="tr th" style={{ gridTemplateColumns: "minmax(0,1.8fr) minmax(0,1fr) 110px 100px" }}><span>{t("Window")}</span><span>{t("Covers")}</span><span>{t("State")}</span><span /></div>
+        <div className="tr th" style={{ gridTemplateColumns: "minmax(0,1.8fr) minmax(0,1fr) 110px 150px" }}><span>{t("Window")}</span><span>{t("Covers")}</span><span>{t("State")}</span><span /></div>
         {items?.length === 0 && <div className="tr" style={{ gridTemplateColumns: "1fr" }}><span className="muted">{t("No maintenance windows.")}</span></div>}
         {items?.map((w) => (
-          <div className="tr" key={w.id} style={{ gridTemplateColumns: "minmax(0,1.8fr) minmax(0,1fr) 110px 100px" }}>
-            <div><b style={{ fontWeight: 600 }}>{w.name}</b><small><span style={{ whiteSpace: "nowrap" }}>{fmt(w.startsAt)}</span> <span style={{ whiteSpace: "nowrap" }}>→ {fmt(w.endsAt)}</span></small></div>
+          <div className="tr" key={w.id} style={{ gridTemplateColumns: "minmax(0,1.8fr) minmax(0,1fr) 110px 150px" }}>
+            <div><b style={{ fontWeight: 600 }}>{w.name}</b><small><span style={{ whiteSpace: "nowrap" }}>{fmt(w.startsAt)}</span> <span style={{ whiteSpace: "nowrap" }}>→ {fmt(w.endsAt)}</span></small>{w.recurrence && <small>{t(w.recurrence.frequency === "daily" ? "Daily" : "Weekly")} · {w.recurrence.timeZone}</small>}</div>
             <span className="muted">{names(w)}</span>
             <span><span className={`pill ${state(w) === "active" ? "degraded" : ""}`}>{t(state(w))}</span></span>
-            <button className="btn sm" disabled={removing === w.id} onClick={async () => {
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}><button className="btn sm" disabled={removing === w.id} onClick={async () => {
               if (!confirm(t("Remove this window?"))) return;
               setRemoving(w.id);
               try { await api.deleteMaintenance(w.id); await load(); } catch (e) { setErr((e as Error).message); } finally { setRemoving(""); }
-            }}>{removing === w.id ? t("Removing…") : t("Remove")}</button>
+            }}>{removing === w.id ? t("Removing…") : t(w.seriesId && state(w) === "upcoming" ? "Skip once" : "Remove")}</button>
+            {state(w) === "active" && <button className="btn sm" disabled={removing === w.id} onClick={async () => {
+              setRemoving(w.id); try { await api.endMaintenance(w.id); await load(); } catch (e) { setErr((e as Error).message); } finally { setRemoving(""); }
+            }}>{t("End now")}</button>}
+            {w.seriesId && state(w) !== "ended" && <button className="btn sm" disabled={removing === w.id} onClick={async () => {
+              if (!confirm(t("Cancel future occurrences and end any active window in this series?"))) return;
+              setRemoving(w.id); try { await api.cancelMaintenanceSeries(w.seriesId!); await load(); } catch (e) { setErr((e as Error).message); } finally { setRemoving(""); }
+            }}>{t("Cancel series")}</button>}</div>
           </div>
         ))}
       </div>
@@ -59,6 +66,17 @@ export default function Maintenance() {
           <label className="fld">{t("Starts")}<input className="in" type="datetime-local" required value={f.startsAt} onChange={(e) => setF({ ...f, startsAt: e.target.value })} /></label>
           <label className="fld">{t("Ends")}<input className="in" type="datetime-local" required value={f.endsAt} onChange={(e) => setF({ ...f, endsAt: e.target.value })} /></label>
         </div>
+        <p className="muted">{t("Start, end and repeat-until inputs use your browser time zone.")}</p>
+        <label className="fld">{t("Repeat")}<select className="in" value={f.frequency} onChange={(e) => setF({ ...f, frequency: e.target.value })}>
+          <option value="none">{t("Does not repeat")}</option><option value="daily">{t("Daily")}</option><option value="weekly">{t("Weekly")}</option>
+        </select></label>
+        {f.frequency !== "none" && <>
+          <label className="fld">{t("Recurrence time zone")}<input className="in" required value={f.timeZone} onChange={(e) => setF({ ...f, timeZone: e.target.value })} placeholder="America/Toronto" /></label>
+          <p className="muted">{t("Repeats at the first start's local clock time in this zone. Duration stays fixed; skipped spring times move forward and repeated autumn times use the later occurrence.")}</p>
+          <p className="mono">{(() => { try { return new Date(f.startsAt).toLocaleString([], { timeZone: f.timeZone, dateStyle: "medium", timeStyle: "short" }); } catch { return "—"; } })()}</p>
+          <label className="fld">{t("Repeat until")}<input className="in" type="datetime-local" required value={f.until} onChange={(e) => setF({ ...f, until: e.target.value })} /></label>
+          <p className="muted">{t("Choose an end within 366 days; each window may last up to 24 hours. Skip individual occurrences or cancel the series below.")}</p>
+        </>}
         {monitors.length > 0 && (
           <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 6 }}>
             <legend style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 6 }}>{t("Monitors")} <span className="faint">({t("none selected = all monitors")})</span></legend>
