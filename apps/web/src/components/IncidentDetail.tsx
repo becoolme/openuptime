@@ -96,7 +96,7 @@ export default function IncidentDetail({ id }: { id: string }) {
             <div className="cc-h"><h3>{t("Root cause and postmortem")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Private until you publish it")}</span></div>
             <label className="fld">{t("Root cause")}<input className="in" maxLength={500} value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder={t("One sentence on what went wrong")} /></label>
             <label className="fld">{t("Postmortem")}<textarea className="in" style={{ height: 160, padding: 12 }} maxLength={20000} value={postmortem} onChange={(e) => setPostmortem(e.target.value)} placeholder={t("What happened, the impact, and what we will change")} /></label>
-            <label className="fld" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} />{t("Publish to the status page")}</label>
+            <label className="fld" style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 8 }}><input type="checkbox" style={{ width: "auto", margin: 0, flex: "none" }} checked={publish} onChange={(e) => setPublish(e.target.checked)} />{t("Publish to the status page")}</label>
             <small className="faint">{t("Shown on the status page once the incident is resolved. Resolving alone, automatic recovery included, never publishes it.")}</small>
             <div className="formact">{saved && <span className="faint" style={{ fontSize: 13 }}>{t("Saved")}</span>}<button className="btn primary sm" disabled={saving}>{saving ? t("Saving…") : t("Save")}</button></div>
           </form>
