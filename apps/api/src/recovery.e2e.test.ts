@@ -31,7 +31,7 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       const exported = await call("GET", "/monitors/export");
       expect(exported.body.monitors[0].recoveryThreshold).toBe(2);
       expect(exported.body.monitors[0]).not.toHaveProperty("consecutiveSuccesses");
-      expect((await call("POST", "/monitors/import", exported.body)).body).toMatchObject({ created: 1 });
+      expect((await call("POST", "/monitors/import", { monitors: exported.body.monitors.map(({ source, sourceId, ...m }: any) => m) })).body).toMatchObject({ created: 1 });
       expect((await call("GET", "/monitors")).body.every((m: any) => m.recoveryThreshold === 2)).toBe(true);
       const missed = async () => { await checkOne(db.repo, (await db.repo.getMonitor(orgId, created.body.id, null))!); };
       await missed();

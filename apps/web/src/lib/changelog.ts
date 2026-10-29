@@ -26,6 +26,20 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  {
+    id: "monitor-import-preview", date: "2026-10-29", edition: "community",
+    title: { en: "Preview monitor imports", zh: "监控项导入预览" },
+    summary: { en: "Review import warnings and duplicates before creating monitors.", zh: "创建监控项前，先查看导入警告和重复项。" },
+    points: [
+      { en: "Preview validates records and plan capacity without creating monitors or sending alerts.", zh: "预览会验证记录和套餐容量，不创建监控项，也不发送告警。" },
+      { en: "Stable source IDs ignore surrounding whitespace and make repeated and concurrent imports safe; existing monitors are skipped rather than overwritten.", zh: "稳定的来源 ID 忽略首尾空白，可避免重复或并发导入产生重复记录，已有监控项会跳过，不会覆盖。" },
+      { en: "Review per-record outcomes through the dashboard, REST API or MCP, including unsupported fields and region adjustments.", zh: "在控制台、REST API 或 MCP 中查看逐条结果，包括不支持的字段和区域调整。" },
+      { en: "Records with masked headers, or with an unsupported body or authentication field (such as basic_auth_user or oauth_token), are now skipped instead of being imported without their credentials.", zh: "带有已遮蔽请求头、或不支持的请求体和认证字段（如 basic_auth_user、oauth_token）的记录现在会被跳过，不会在丢失凭据的情况下导入。" },
+      { en: "A skipped duplicate shows the monitor that already holds its source ID, with a warning if its name or target differs; the preview names the destination project.", zh: "被跳过的重复记录会显示已占用该来源 ID 的监控项，名称或目标不同时给出提示；预览中会显示目标项目名称。" },
+      { en: "Importing past your plan's active monitor limit is refused with the same error fields as creating one monitor, and the batch detail under capacity.", zh: "导入超出套餐的活跃监控项上限时，返回的错误字段与创建单个监控项时相同，批量详情放在 capacity 中。" },
+    ],
+    link: { href: "/docs/api#monitors", label: { en: "Read the import API docs", zh: "阅读导入 API 文档" } },
+  },
   { id: "ntfy-alerts", date: "2026-10-29", edition: "community",
     title: { en: "ntfy alerts", zh: "ntfy 告警" },
     summary: { en: "Publish monitor alerts to ntfy.sh or your own ntfy server.", zh: "将监控告警发布到 ntfy.sh 或自己的 ntfy 服务器。" },

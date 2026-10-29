@@ -70,11 +70,11 @@ describe.skipIf(!url)("an agent sees only what the user authorized", () => {
     });
     const client: any = await reg.json();
     const prm: any = await (await req("/.well-known/oauth-protected-resource/api/mcp")).json();
-    const authorize = async (pick: string, rejected = false) => {
+    const authorize = async (pick: string, rejected = false, scopes = "mcp:read mcp:write") => {
       const verifier = randomBytes(32).toString("base64url");
       const challenge = createHash("sha256").update(verifier).digest("base64url");
       const picked = `; ou_grant=${encodeURIComponent(`${challenge}~${pick}`)}`;
-      const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: redirect, scope: "mcp:read mcp:write", state: "s", code_challenge: challenge, code_challenge_method: "S256", resource: prm.resource });
+      const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: redirect, scope: scopes, state: "s", code_challenge: challenge, code_challenge_method: "S256", resource: prm.resource });
       const a = await req(`/api/auth/oauth2/authorize?${q}`, { headers: { cookie: adaCookie }, redirect: "manual" });
       let loc = a.headers.get("location") ?? ((await a.clone().json().catch(() => ({}))) as any).url;
       if (!loc) throw new Error(`authorize -> ${a.status} ${await a.clone().text()}`);
@@ -101,6 +101,13 @@ describe.skipIf(!url)("an agent sees only what the user authorized", () => {
       expect(tok.status).toBe(200);
       return ((await tok.json()) as any).access_token as string;
     };
+    const readToken = await authorize(`${home.id}|${alpha}`, false, "mcp:read");
+    const importData = { source: "oauth-test", monitors: [{ sourceId: "1", name: "Preview only", target: "https://1.1.1.1/" }] };
+    const preview = await req("/api/monitors/import/preview", { method: "POST", headers: { ...JSON_HEADERS, authorization: `Bearer ${readToken}` }, body: JSON.stringify(importData) });
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({ created: 0, ready: 1 });
+    expect((await req("/api/monitors/import", { method: "POST", headers: { ...JSON_HEADERS, authorization: `Bearer ${readToken}` }, body: JSON.stringify(importData) })).status).toBe(403);
+    expect((await req("/api/monitors/import/preview", { method: "POST", headers: { ...JSON_HEADERS, authorization: `Bearer ${readToken}`, "x-project-id": beta }, body: JSON.stringify(importData) })).status).toBe(403);
     const token = await authorize(`${home.id}|${alpha}`);
     const agent = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
       const r = await req(`/api${path}`, { method, headers: { ...JSON_HEADERS, authorization: `Bearer ${token}`, ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });

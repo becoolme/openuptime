@@ -184,5 +184,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0036_sparkling_thunderball",
     "when": 1793294902494,
     "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'ntfy';"
+  },
+  {
+    "tag": "0037_secret_roxanne_simpson",
+    "when": 1793295208348,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"import_source\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"import_source_id\" text;--> statement-breakpoint\nCREATE UNIQUE INDEX \"monitor_import_source_unique\" ON \"monitor\" USING btree (\"organization_id\",\"project_id\",\"import_source\",\"import_source_id\");"
   }
 ];

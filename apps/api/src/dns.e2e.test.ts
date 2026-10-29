@@ -29,7 +29,7 @@ describe.skipIf(!url)("DNS monitor persistence and backups", () => {
       expect((await call("GET", path)).body).toMatchObject(settings);
       const exported = await call("GET", "/monitors/export");
       expect(exported.body.monitors[0]).toMatchObject(settings);
-      expect((await call("POST", "/monitors/import", exported.body)).body).toMatchObject({ created: 1, skipped: [] });
+      expect((await call("POST", "/monitors/import", { monitors: exported.body.monitors.map(({ source, sourceId, ...m }: any) => m) })).body).toMatchObject({ created: 1, skipped: [] });
       const list = await call("GET", "/monitors");
       expect(list.body).toHaveLength(2);
       for (const row of list.body) expect(row).toMatchObject(settings);

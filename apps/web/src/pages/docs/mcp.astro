@@ -9,6 +9,8 @@ const tools: Tool[] = [
   { name: "list_monitors", en: "Monitors with status, uptime and latency.", zh: "监控项及其状态、可用率和延迟。" },
   { name: "get_monitor", en: "One monitor with recent checks and uptime.", zh: "单个监控项及最近的检测和可用率。" },
   { name: "create_monitor", en: "Create an http, tcp, websocket, dns, heartbeat, postgres, mysql or redis monitor.", zh: "创建 http、tcp、websocket、dns、heartbeat、postgres、mysql 或 redis 监控。" },
+  { name: "preview_monitor_import", en: "Preview monitor import validation, duplicate identities, warnings and plan capacity without writes.", zh: "预览监控导入的校验、重复身份、警告和套餐容量，不写入数据。" },
+  { name: "import_monitors", en: "Import reviewed records using stable source/sourceId values and the preview destination; duplicates are skipped. Source IDs ignore surrounding whitespace.", zh: "使用稳定的 source/sourceId 和预览目标导入已审阅记录，跳过重复项；来源 ID 忽略首尾空白。" },
   { name: "update_monitor", en: "Change fields of a monitor.", zh: "修改监控项字段。" },
   { name: "pause_monitor / resume_monitor", en: "Stop or restart checks and alerts.", zh: "暂停或恢复检测与告警。" },
   { name: "run_check", en: "Run a check right now and record the result. With a region, a one-off request from that region that is not recorded.", zh: "立即执行一次检测并记录结果。传入 region 时，仅从该区域发出一次不记录的请求。" },

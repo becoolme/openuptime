@@ -52,6 +52,8 @@ export const monitor = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
     projectId: projectRef(),
+    importSource: text("import_source"),
+    importSourceId: text("import_source_id"),
     name: text("name").notNull(),
     type: monitorType("type").notNull().default("http"),
     /** URL for http, ws(s):// URL for websocket, host:port for tcp / postgres / mysql / redis, hostname for dns. */
@@ -108,7 +110,7 @@ export const monitor = pgTable(
     minRegionsFailing: integer("min_regions_failing").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("monitor_org_idx").on(t.organizationId), index("monitor_due_idx").on(t.nextCheckAt)],
+  (t) => [index("monitor_org_idx").on(t.organizationId), index("monitor_due_idx").on(t.nextCheckAt), uniqueIndex("monitor_import_source_unique").on(t.organizationId, t.projectId, t.importSource, t.importSourceId)],
 );
 
 export const checkResult = pgTable(

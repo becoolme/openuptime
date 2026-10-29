@@ -33,6 +33,17 @@ describe("openuptime mcp tools", () => {
     expect(calls[2].body).toMatchObject({ name: "api", type: "http", intervalSec: 60 });
   });
 
+  it("exposes a read-only preview and a scoped import with unchanged identities", async () => {
+    calls.length = 0;
+    const input = { source: "backup:prod", monitors: [{ sourceId: "12", name: "API", target: "https://1.1.1.1/" }] };
+    await rpc(1, "tools/call", { name: "preview_monitor_import", arguments: input });
+    await rpc(2, "tools/call", { name: "import_monitors", arguments: { ...input, destination: { organizationId: "org", projectId: ID } } });
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/api/monitors/import/preview", body: input });
+    expect(calls[1]).toMatchObject({ method: "POST", path: "/api/monitors/import", body: { ...input, destination: { organizationId: "org", projectId: ID } } });
+    const { result } = await rpc(3, "tools/list");
+    expect(result.tools.find((t: any) => t.name === "preview_monitor_import").annotations.readOnlyHint).toBe(true);
+  });
+
   it("sends the workspace and project the agent names as headers", async () => {
     calls.length = 0;
     await rpc(1, "tools/call", { name: "list_monitors", arguments: { workspace: "w1", project: ID } });

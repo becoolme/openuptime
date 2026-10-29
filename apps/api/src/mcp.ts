@@ -1,6 +1,6 @@
 import { createMcpServer, defineTool, type Tool } from "@openuptime/mcp-rest";
 import { z } from "zod";
-import { monitorCreateSchema, monitorPatchSchema } from "./routes/monitors";
+import { monitorCreateSchema, monitorPatchSchema, monitorImportSchema } from "./routes/monitors";
 
 /**
  * Model Context Protocol server (Streamable HTTP, stateless, JSON responses) at POST /api/mcp; the protocol and the
@@ -35,6 +35,8 @@ export const TOOLS: Tool[] = [
     build: (a) => ({ method: "POST", path: "/api/projects", body: a }),
   },
   { name: "list_monitors", description: "Read monitor summaries for the selected project, including ids, current status, uptime and latency. Use this to find a monitor before changing it or to scan for outages; use get_monitor for recent check history. Secret HTTP header values and request bodies are masked unless the caller may manage the workspace.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/monitors" }) },
+  { name: "preview_monitor_import", description: "Validate a monitor import without creating or changing monitors. Returns source identity, duplicate/ready/skipped status, warnings, destination and plan capacity. Supply stable source/sourceId values. No checks or alerts run; target validation may resolve DNS. Review the report before import_monitors.", schema: monitorImportSchema, readOnly: true, build: (a) => ({ method: "POST", path: "/api/monitors/import/preview", body: a }) },
+  { name: "import_monitors", description: "Create valid monitors from a reviewed import. Reuse the source/sourceId values from preview_monitor_import and pass the destination it returned (optional, but without it a changed workspace or project is not detected). Duplicate identities in this workspace/project are skipped, never updated; concurrent retries do not create duplicates. Monitors start checking and inherit auto-enabled alert channels. Returns a per-row report; invalid rows are skipped and plan capacity can block the whole batch.", schema: monitorImportSchema, build: (a) => ({ method: "POST", path: "/api/monitors/import", body: a }) },
   { name: "get_monitor", description: "Read one monitor's configuration, recent check history and uptime statistics by its UUID from list_monitors. Use this to investigate a specific monitor; list_monitors is the summary view and run_check performs a new check. Returns the monitor plus history; secret HTTP headers and request bodies are masked for callers without management access.", schema: z.object({ id }), readOnly: true, build: (a) => ({ method: "GET", path: `/api/monitors/${a.id}` }) },
   {
     name: "create_monitor",

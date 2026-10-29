@@ -66,7 +66,7 @@ describe.skipIf(!url)("monitor request permissions", () => {
       expect((await call(owner.cookie, "POST", "/monitors", { name: "Invalid TCP", type: "tcp", target: "1.1.1.1:80", method: "POST", requestBody: "x" })).status).toBe(400);
       const exported = (await call(owner.cookie, "GET", "/monitors/export")).body.monitors.find((m: any) => m.name === "Body renamed");
       exported.requestBody = '{"ok":true}'; exported.method = "PATCH";
-      expect((await call(owner.cookie, "POST", "/monitors/import", [exported])).body).toMatchObject({ created: 1, skipped: [] });
+      expect((await call(owner.cookie, "POST", "/monitors/import", [{ ...exported, source: undefined, sourceId: undefined }])).body).toMatchObject({ created: 1, skipped: [] });
       const imported = (await call(owner.cookie, "GET", "/monitors")).body.find((m: any) => m.id !== withBody.body.id && m.name === "Body renamed");
       expect(imported).toMatchObject({ method: "PATCH", requestBody: '{"ok":true}' });
     } finally {
