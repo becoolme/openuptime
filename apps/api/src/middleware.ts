@@ -65,6 +65,7 @@ export const requireOrg = createMiddleware<AppEnv>(async (c, next) => {
       }
     }
   }
+  // identity is always set with userId; checking it here narrows its type for the principal below
   if (!userId || !identity) throw new HTTPException(401, { message: "Unauthorized" });
 
   const repo = c.get("repo");

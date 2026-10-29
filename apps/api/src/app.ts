@@ -52,9 +52,6 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     }
   });
 
-  // Register before routes, including auth and MCP. Request cleanup remains the outermost middleware.
-  if (edition.requestMiddleware) app.use("*", edition.requestMiddleware);
-
   const privateCors = cors({
     origin: (origin, c) => (origin === c.env.WEB_ORIGIN ? origin : null),
     credentials: true,
@@ -67,6 +64,11 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
 
   // discovery documents are public and read by browser-based agent clients too
   app.use("/.well-known/*", cors({ origin: "*", allowMethods: ["GET"] }));
+
+  // Register after CORS and before the routes (auth and MCP included), so a response or exception from the hook still
+  // carries CORS headers. CORS answers preflights itself, so they never reach the hook. Request cleanup remains the
+  // outermost middleware. The hook also sees /health and /internal/* requests.
+  if (edition.requestMiddleware) app.use("*", edition.requestMiddleware);
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", (c) => c.json({ ok: true }));

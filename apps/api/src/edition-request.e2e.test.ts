@@ -112,6 +112,17 @@ describe.skipIf(!url)("edition request middleware lifecycle", () => {
     expect((await thrown.raw("/health")).status).toBe(403); expect(thrown.closed.size).toBe(1);
   });
 
+  it("keeps CORS headers on hook refusals and answers preflight without the hook", async () => {
+    const h = harness({ requestMiddleware: async () => { throw new HTTPException(403, { message: "Refused" }); } });
+    const denied = await h.raw("/api/me", { headers: { origin } });
+    expect(denied.status).toBe(403); expect(denied.headers.get("access-control-allow-origin")).toBe(origin);
+    const early = harness({ requestMiddleware: async (c) => c.json({ error: "Unavailable" }, 503) });
+    const blocked = await early.raw("/api/me", { headers: { origin } });
+    expect(blocked.status).toBe(503); expect(blocked.headers.get("access-control-allow-origin")).toBe(origin);
+    const preflight = await early.raw("/api/me", { method: "OPTIONS", headers: { origin, "access-control-request-method": "GET" } });
+    expect(preflight.status).toBe(204); expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+  });
+
   it("keeps concurrent request identity and database state separate", async () => {
     const h = harness(); const cookie = await h.signup(); h.events.length = 0;
     const [signedIn, anonymous] = await Promise.all([h.raw("/api/me", { headers: { cookie } }), h.raw("/api/me")]);

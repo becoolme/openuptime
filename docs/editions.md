@@ -37,7 +37,7 @@ next to ours without touching `Repo`.
 
 ## Request middleware extensions
 
-An edition may supply `requestMiddleware`, a standard `MiddlewareHandler<AppEnv>`. It is registered after the per-request database, repository, auth and entitlements are created, and before CORS and every route. This placement covers existing public routes, Better Auth routes, authenticated REST routes, edition routes and MCP transport routes. Without the hook, Community behavior is unchanged.
+An edition may supply `requestMiddleware`, a standard `MiddlewareHandler<AppEnv>`. It is registered after the per-request database, repository, auth and entitlements are created, and after CORS, and before every route. This placement covers existing public routes, Better Auth routes, authenticated REST routes, edition routes and MCP transport routes, and also `/health` and the `/internal/*` scheduler and migration routes; check `c.req.path` and return early or call `next()` for the ones you do not want to touch, because a refusal there would block health checks and cron. A response or exception from the hook carries CORS headers; CORS preflight (`OPTIONS`) requests are answered by CORS and never reach the hook. Without the hook, Community behavior is unchanged.
 
 The hook must leave request and response streams usable by downstream handlers. Do not consume `c.req.raw` directly; any strictly necessary, bounded inspection must use a clone and respect the route’s body limits. Prefer route-level validated fields rather than recording raw bodies.
 
@@ -55,7 +55,7 @@ Use route/field allowlists for any logging. Raw URLs can contain heartbeat or su
 
 ### 请求中间件扩展
 
-版本可以提供标准的 `MiddlewareHandler<AppEnv>` 类型 `requestMiddleware`。它在请求级数据库、仓库、认证及额度对象初始化之后，在 CORS 与所有路由之前注册，因此覆盖公开、Better Auth、已认证 REST、版本扩展及 MCP 路由。不配置时 Community 行为保持不变。
+版本可以提供标准的 `MiddlewareHandler<AppEnv>` 类型 `requestMiddleware`。它在请求级数据库、仓库、认证及额度对象初始化之后、CORS 之后、所有路由之前注册，因此覆盖公开、Better Auth、已认证 REST、版本扩展及 MCP 路由，也包括 `/health` 和 `/internal/*` 定时任务与迁移路由；不想处理的路径请检查 `c.req.path` 后直接调用 `next()`，否则在这些路由上拒绝请求会阻断健康检查和定时任务。接口返回的响应或抛出的异常会带上 CORS 头；CORS 预检（`OPTIONS`）请求由 CORS 直接应答，不会进入该接口。不配置时 Community 行为保持不变。
 
 接口必须保持请求及响应流可供后续处理器读取，不能直接消耗 `c.req.raw`；确需有限度检查时使用副本并遵守路由正文大小限制，优先读取路由已经验证的字段，不记录原始正文。
 

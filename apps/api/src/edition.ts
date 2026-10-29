@@ -17,7 +17,7 @@ export interface Edition {
    */
   entitlements(ctx: { database: Database; env: Bindings }): Entitlements;
   /**
-   * Optional request middleware, registered after per-request database/auth setup and before CORS and every route.
+   * Optional request middleware, registered after per-request database/auth setup and CORS, and before every route.
    * Await next() to observe the final response and authenticated context when the route establishes one.
    * Await all database work before returning: request cleanup closes the connection after this middleware unwinds.
    * Runs for public/auth routes and nested MCP REST calls too. No authentication is implied at entry.
