@@ -91,6 +91,7 @@ pnpm install</code></pre>
     <h3>3. Create the schema</h3>
     <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
     <p>It never issues <code>CREATE SCHEMA</code>, so a database role without database-level <code>CREATE</code> works too. Run it again after every upgrade.</p>
+    <p>Before an upgrade you can check the database without changing it: <code>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm --filter @openuptime/db-pg exec node migrate-plain.mjs --check</code> verifies the applied history matches this version and lists the migrations that would run. Migrations run in one transaction, so <code>CREATE INDEX CONCURRENTLY</code> is not supported, and an enum value added in one migration cannot be used by a later migration in the same run.</p>
     <h3>4. Point the config at your domain</h3>
     <p>In <code>apps/api/wrangler.jsonc</code> set <code>routes</code> (<code>your-domain/api/*</code>), <code>BETTER_AUTH_URL</code> and <code>WEB_ORIGIN</code> (both <code>https://your-domain</code>) and <code>EMAIL_FROM</code>. Remove the <code>placement</code> block, or set it to your own database host.</p>
     <p>In <code>apps/web/wrangler.jsonc</code> set the custom-domain <code>routes</code> pattern and <code>PRODUCT_URL</code> (where "Powered by" links to; use your own origin).</p>
@@ -309,6 +310,7 @@ pnpm install</code></pre>
     <h3>3. 创建数据库结构</h3>
     <pre><code is:raw>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm db:migrate</code></pre>
     <p>它不会执行 <code>CREATE SCHEMA</code>，所以没有数据库级 <code>CREATE</code> 权限的角色也能运行。每次升级后重新执行即可。</p>
+    <p>升级前可以只读检查数据库：<code>DATABASE_URL="postgres://user:pass@host:5432/db" pnpm --filter @openuptime/db-pg exec node migrate-plain.mjs --check</code> 会验证已执行的迁移历史与当前版本一致，并列出将要执行的迁移，不会修改数据库。迁移在同一个事务中执行，因此不支持 <code>CREATE INDEX CONCURRENTLY</code>，同一次运行中也不能使用前一个迁移刚新增的枚举值。</p>
     <h3>4. 把配置指向你的域名</h3>
     <p>在 <code>apps/api/wrangler.jsonc</code> 中设置 <code>routes</code>（<code>你的域名/api/*</code>）、<code>BETTER_AUTH_URL</code> 和 <code>WEB_ORIGIN</code>（都填 <code>https://你的域名</code>）以及 <code>EMAIL_FROM</code>。删除 <code>placement</code> 块，或改成你自己的数据库主机。</p>
     <p>在 <code>apps/web/wrangler.jsonc</code> 中设置自定义域名的 <code>routes</code>，以及 <code>PRODUCT_URL</code>（"Powered by" 链接的目标，填你自己的地址）。</p>

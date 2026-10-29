@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Db } from "./client";
+import { validateMigrationHistory } from "./migration-history.mjs";
 import { MIGRATIONS } from "./migrations.generated";
 
 /**
@@ -13,11 +14,10 @@ export async function migrate(db: Db, migrations = MIGRATIONS) {
   return sql.begin(async (tx) => {
     await tx`select pg_advisory_xact_lock(hashtext('openuptime:migrate'))`;
     await tx`create table if not exists public.__drizzle_migrations (id serial primary key, hash text not null, created_at bigint)`;
-    const [last] = await tx`select created_at from public.__drizzle_migrations order by created_at desc limit 1`;
-    const lastAt = last ? Number(last.created_at) : -1;
+    const history = await tx<{ created_at: string; hash: string }[]>`select created_at, hash from public.__drizzle_migrations order by id`;
+    const pending = validateMigrationHistory(migrations, history);
     const applied: string[] = [];
-    for (const m of migrations) {
-      if (m.when <= lastAt) continue;
+    for (const m of pending) {
       for (const stmt of m.sql.split("--> statement-breakpoint")) if (stmt.trim()) await tx.unsafe(stmt);
       await tx`insert into public.__drizzle_migrations (hash, created_at) values (${createHash("sha256").update(m.sql).digest("hex")}, ${m.when})`;
       applied.push(m.tag);
