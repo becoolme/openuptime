@@ -16,7 +16,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
-import { recordObservation, timeCoverage } from "./coverage";
+import { coverageTime, recordHeartbeatObservation, recordObservation, timeCoverage } from "./coverage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -458,16 +458,21 @@ export function createRepo(db: Db): Repo {
         const [current] = await tx.select().from(schema.monitor)
           .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId))).for("update");
         if (!current) return null;
-        // Every user configuration edit fences in-flight observations. Internal deadline-only writes do not.
-        const changed = Object.keys(patch).some((key) => key !== "nextCheckAt");
+        // Only actual changes to measurement or freshness invalidate observation coverage.
+        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage"];
+        const comparable = (key: string, value: unknown) => JSON.stringify(
+          key === "regions" && Array.isArray(value) ? [...value].sort() : value,
+          (_name, part) => part && typeof part === "object" && !Array.isArray(part)
+            ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part,
+        );
+        const changed = Object.entries(patch).some(([key, value]) => measured.includes(key)
+          && comparable(key, value) !== comparable(key, current[key as keyof typeof current]));
         const [row] = await tx.update(schema.monitor).set({ ...patch, ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
           .where(eq(schema.monitor.id, id)).returning();
         if (changed) {
-          const [last] = await tx.select({ at: schema.monitorObservation.observedAt }).from(schema.monitorObservation)
-            .where(eq(schema.monitorObservation.monitorId, id)).orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
-          // A control fence must sort after the latest observation even if two application clocks disagree.
+          const at = await coverageTime(tx, id);
           await tx.insert(schema.monitorObservation).values({
-            monitorId: id, observedAt: new Date(Math.max(Date.now(), last?.at.getTime() ?? 0)),
+            monitorId: id, observedAt: at,
             state: row.paused ? "paused" : "unknown", revision: row.coverageRevision,
           });
         }
@@ -544,6 +549,7 @@ export function createRepo(db: Db): Repo {
       );
     },
     recordObservation: (m, result, options) => recordObservation(db, m, result, options),
+    recordHeartbeatObservation: (m) => recordHeartbeatObservation(db, m),
     timeCoverage: (orgId, monitorId, scope, days, now) => timeCoverage(db, orgId, monitorId, scope, days, now),
     async recordCheck(r) {
       await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });

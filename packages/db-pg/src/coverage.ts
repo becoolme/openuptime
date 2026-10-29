@@ -3,25 +3,50 @@ import type { Monitor, Scope, TimeCoverage } from "@openuptime/repo";
 import type { Db } from "./client";
 import * as schema from "./schema";
 
-/** Store the configuration that actually produced the observation. Never re-interpret old data with today's config. */
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** Bound application clock skew by the database clock; repair impossible future events on the next write. */
+export async function coverageTime(tx: Tx, monitorId: string, completedAt = new Date()): Promise<Date> {
+  const [clock] = await tx.execute<{ at: Date }>(sql`select clock_timestamp() as at`);
+  const dbAt = new Date(clock.at);
+  await tx.update(schema.monitorObservation).set({
+    observedAt: dbAt,
+    validUntil: sql`case when ${schema.monitorObservation.validUntil} is null then null else ${schema.monitorObservation.validUntil} - (${schema.monitorObservation.observedAt} - ${dbAt.toISOString()}::timestamptz) end`,
+  }).where(and(eq(schema.monitorObservation.monitorId, monitorId), gt(schema.monitorObservation.observedAt, dbAt)));
+  const [last] = await tx.select({ at: schema.monitorObservation.observedAt }).from(schema.monitorObservation)
+    .where(eq(schema.monitorObservation.monitorId, monitorId)).orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
+  return new Date(Math.max(Math.min(completedAt.getTime(), dbAt.getTime()), last?.at.getTime() ?? 0));
+}
+
 export async function recordObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<boolean> {
+  return !!(await appendObservation(db, snapshot, result, options));
+}
+
+/** A ping is evidence for the current configuration and renews its deadline in the same transaction. */
+export function recordHeartbeatObservation(db: Db, snapshot: Monitor): Promise<Monitor | null> {
+  return appendObservation(db, snapshot, { ok: true }, { heartbeatPing: true });
+}
+
+/** Store the configuration that actually produced the observation. Never re-interpret old data with today's config. */
+async function appendObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<Monitor | null> {
   // Capture completion before waiting on the lock: database congestion must not extend freshness.
-  const at = new Date();
+  const completedAt = new Date();
   return db.transaction(async (tx) => {
     const [current] = await tx.select().from(schema.monitor).where(eq(schema.monitor.id, snapshot.id)).for("update");
-    if (!current || current.paused || current.coverageRevision !== (snapshot.coverageRevision ?? 0)) return false;
+    if (!current || current.paused || (!options.heartbeatPing && current.coverageRevision !== (snapshot.coverageRevision ?? 0))) return null;
+    if (options.heartbeatPing && current.type !== "heartbeat") return null;
     const generation = options.generation;
-    if (generation !== undefined && (!Number.isSafeInteger(generation) || generation <= 0 || generation !== current.runGeneration || generation <= current.coverageGeneration)) return false;
+    if (generation !== undefined && (!Number.isSafeInteger(generation) || generation <= 0 || generation > current.runGeneration || generation <= current.coverageGeneration)) return null;
+    const at = await coverageTime(tx, current.id, completedAt);
     const [last] = await tx.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, snapshot.id))
       .orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
-    if (last && last.observedAt > at) return false;
     // The ping fence is committed with the observation, not the later mutable lastCheckedAt/incident updates.
-    if (current.type === "heartbeat" && !options.heartbeatPing && current.coverageHeartbeatVersion !== (snapshot.coverageHeartbeatVersion ?? 0)) return false;
+    if (current.type === "heartbeat" && !options.heartbeatPing && current.coverageHeartbeatVersion !== (snapshot.coverageHeartbeatVersion ?? 0)) return null;
     // A scheduler may load the new ping version before the ping handler updates nextCheckAt.
     // Check the committed observation under the same lock, not that mutable deadline.
     if (current.type === "heartbeat" && !options.heartbeatPing && !result.ok
       && last?.revision === current.coverageRevision && (last.state === "up" || last.state === "degraded")
-      && last.validUntil && last.validUntil > at) return false;
+      && last.validUntil && last.validUntil > at) return null;
     const durationMs = current.type === "heartbeat"
       ? (current.intervalSec + current.graceSec) * 1000
       : current.intervalSec * 1000 + current.timeoutMs + 60_000;
@@ -38,11 +63,20 @@ export async function recordObservation(db: Db, snapshot: Monitor, result: { ok:
       validUntil: new Date(at.getTime() + durationMs), maintenanceUntil,
       revision: current.coverageRevision, generation, intervalSec: current.intervalSec, graceSec: current.graceSec, timeoutMs: current.timeoutMs,
     });
-    if (generation !== undefined || options.heartbeatPing) await tx.update(schema.monitor).set({
+    if (options.heartbeatPing) {
+      const [updated] = await tx.update(schema.monitor).set({
+        coverageHeartbeatVersion: current.coverageHeartbeatVersion + 1,
+        consecutiveFailures: 0, lastCheckedAt: at,
+        nextCheckAt: sql`clock_timestamp() + make_interval(secs => ${schema.monitor.intervalSec} + ${schema.monitor.graceSec})`,
+        status: current.status === "down" ? "down" : "up",
+        ...(current.status !== "down" && current.status !== "up" ? { statusChangedAt: at } : {}),
+      }).where(eq(schema.monitor.id, current.id)).returning();
+      return updated;
+    }
+    if (generation !== undefined) await tx.update(schema.monitor).set({
       ...(generation !== undefined ? { coverageGeneration: generation } : {}),
-      ...(options.heartbeatPing ? { coverageHeartbeatVersion: current.coverageHeartbeatVersion + 1 } : {}),
     }).where(eq(schema.monitor.id, current.id));
-    return true;
+    return current;
   });
 }
 

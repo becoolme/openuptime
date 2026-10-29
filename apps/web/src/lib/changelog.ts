@@ -35,6 +35,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "A fresh heartbeat keeps its full validity even when its scheduling deadline has not yet been updated.", zh: "即使调度截止时间尚未更新，新心跳在有效期内也不会被误记为故障。" },
       { en: "Read the report through the dashboard, API or MCP and export JSON; history before this update stays unknown.", zh: "通过控制台、API 或 MCP 读取并导出 JSON；更新前未记录的历史保持未知。" },
       { en: "Maintenance is included; the report describes inferred coverage rather than exact outage duration or an SLA.", zh: "统计包含维护时间；报告描述观测推断的覆盖时长，不是精确停机时长或 SLA。" },
+      { en: "Overlapping leases preserve unfinished checks; heartbeat deadlines update atomically and metadata edits retain coverage.", zh: "认领重叠时保留仍在执行的检测；心跳续期原子提交，元数据编辑保留覆盖记录。" },
     ],
   },
   {

@@ -481,6 +481,8 @@ export interface Repo {
   beginRuns(runs: { id: string; token: Date; generation?: number }[]): Promise<string[]>;
   /** Hand claimed monitors back, due right now, when their work could not be queued. Monitors that moved on since are left alone. */
   releaseClaims(runs: { id: string; token: Date }[]): Promise<void>;
+  /** Atomically accept a ping using current configuration and renew its deadline; null if paused or deleted. */
+  recordHeartbeatObservation(m: Monitor): Promise<Monitor | null>;
   /** Persist a bounded observation independently of mutable alert/incident state. False rejects a stale or duplicate run. */
   recordObservation(m: Monitor, result: { ok: boolean; latencyMs?: number | null }, options?: { generation?: number; heartbeatPing?: boolean }): Promise<boolean>;
   /** All durations are milliseconds; unknown is never implicitly counted as healthy. */

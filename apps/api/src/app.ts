@@ -23,7 +23,7 @@ import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { availableRegions } from "./probes";
 import { PROBE_TYPES } from "./regions";
-import { nextAfter, resolveIncident, runDueChecks } from "./scheduler";
+import { resolveIncident, runDueChecks } from "./scheduler";
 
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
   const edition = options.edition ?? community;
@@ -138,13 +138,13 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     if (!m) return c.json({ error: "Unknown token" }, 404);
     // a paused monitor stays paused: the ping is acknowledged but changes nothing
     if (m.status === "paused") return c.json({ ok: true, paused: true });
-    if (!(await repo.recordObservation(m, { ok: true }, { heartbeatPing: true }))) return c.json({ ok: true, ignored: true });
+    const accepted = await repo.recordHeartbeatObservation(m);
+    if (!accepted) return c.json({ ok: true, paused: true });
     await repo.recordCheck({ monitorId: m.id, ok: true });
-    const wasDown = m.status === "down";
+    const wasDown = accepted.status === "down";
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
-    await repo.setMonitorState(m.id, { ...(wasDown ? {} : { status: "up" as const }), consecutiveFailures: 0, lastCheckedAt: new Date(), nextCheckAt: nextAfter(m) });
     if (wasDown) {
-      await resolveIncident(repo, m, false, c.get("entitlements"));
+      await resolveIncident(repo, accepted, false, c.get("entitlements"));
       await repo.setMonitorState(m.id, { status: "up" });
     }
     return c.json({ ok: true });

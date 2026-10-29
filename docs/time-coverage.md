@@ -16,20 +16,24 @@ UTC 时间窗为请求时刻结束的 `[from, to)`。一次观测从检测完成
 
 ## State and maintenance / 状态与维护
 
-The report returns milliseconds for `up`, `down`, `degraded`, `paused` and `unknown`; these sum to `totalMs`. Pause is recorded from the configuration change until resume, independently of any in-flight check. Resume and other configuration edits invalidate previous coverage and start unknown time until a fresh check. Existing paused monitors have unknown history until a pause/control event is recorded. Freshness does not carry across changed configuration. The report intentionally does not combine degraded, paused or unknown time into a percentage.
+The report returns milliseconds for `up`, `down`, `degraded`, `paused` and `unknown`; these sum to `totalMs`. Pause is recorded from the configuration change until resume, independently of any in-flight check. Resume and actual measurement/freshness configuration changes invalidate previous coverage and start unknown time until a fresh check. Existing paused monitors have unknown history until a pause/control event is recorded. Freshness does not carry across changed configuration. The report intentionally does not combine degraded, paused or unknown time into a percentage.
 
 Maintenance is **included**. `observedMaintenanceMs` is an overlapping label: observations captured while a maintenance window was active retain its then-known end time. A window starting between checks is not retroactively reconstructed, and later editing/deleting a window does not rewrite the recorded label. This is not an exact maintenance occurrence ledger and must not be subtracted from the denominator. Precise maintenance exclusion needs a separate occurrence history.
 
-各状态返回毫秒数，总和等于 `totalMs`。暂停从配置变更开始记录，持续到恢复，不受正在执行的检测影响。恢复及其他配置编辑会使旧观测失效，在新检测到来前计为未知。原本已暂停的监控，在记录控制事件前的历史仍为未知。报告不将缓慢、暂停或未知时间合成为一个可用率。
+各状态返回毫秒数，总和等于 `totalMs`。暂停从配置变更开始记录，持续到恢复，不受正在执行的检测影响。恢复及实际检测/有效期配置变更会使旧观测失效，在新检测到来前计为未知。原本已暂停的监控，在记录控制事件前的历史仍为未知。报告不将缓慢、暂停或未知时间合成为一个可用率。
 
 统计**包含维护**。`observedMaintenanceMs` 是与状态重叠的标记，保存检测发生时已生效维护窗口的当时结束时间。不会回推两次检测之间开始的维护；后续修改或删除维护也不会重写已保存标记。它不是精确的维护执行记录，不能直接从分母扣除。精确排除维护需要独立的执行历史。
 
 ## Storage and concurrency / 存储与并发
 
-Observation append and generation updates lock the monitor in one transaction. Configuration changes increment a revision and append a control event in one transaction. Old configuration results and duplicate/older scheduled generations are discarded. A heartbeat that wins a race with a missed-heartbeat check prevents the stale miss from adding coverage. Its committed observation also rejects a newly loaded miss until expiry, even if the handler has not updated the scheduling deadline yet. Manual checks may create fresh observations; unrecorded regional spot checks do not.
+Observation append and generation updates lock the monitor in one transaction. Actual measurement/freshness changes increment a revision and append a control event in one transaction. Old configuration results and duplicate/older scheduled generations are discarded. A heartbeat that wins a race with a missed-heartbeat check prevents the stale miss from adding coverage. Its committed observation also rejects a newly loaded miss until expiry, even if the handler has not updated the scheduling deadline yet. Manual checks may create fresh observations; unrecorded regional spot checks do not.
 
 Observations are kept for 35 days plus the latest older event per monitor as a boundary anchor. Expired observations never extend through missing data; the retained predecessor also prevents an old pause from reappearing after a resume is purged. Monitor/workspace deletion cascades to this history. Storage grows with check frequency (one row per recorded run); aggregate queries run inside PostgreSQL rather than loading a month's observations into an API worker. Raw-check retention does not control this separate 35-day history.
 
-写入观测与检测序号更新在同一事务内锁定监控；修改配置与增加版本号、写入控制事件也在同一事务内完成。旧配置结果、重复或过时的调度序号被拒绝。心跳先于缺失判断写入时，过时的缺失观测不会进入历史。即使心跳处理尚未更新调度截止时间，已提交的观测也会在有效期内拒绝新加载的缺失判断。手动完整检测可以产生新观测；单区域临时测试不会。
+写入观测与检测序号更新在同一事务内锁定监控；实际检测配置变更与增加版本号、写入控制事件也在同一事务内完成。旧配置结果、重复或过时的调度序号被拒绝。心跳先于缺失判断写入时，过时的缺失观测不会进入历史。即使心跳处理尚未更新调度截止时间，已提交的观测也会在有效期内拒绝新加载的缺失判断。手动完整检测可以产生新观测；单区域临时测试不会。
 
 保留 35 天观测及每个监控最后一条更早的事件作为时间窗边界锚点。过期观测不会延续到缺失区间；保留最后事件也避免删除恢复事件后旧暂停重新生效。删除监控/工作区时级联删除历史。存储量与检测频率成正比（每次记录的检测一行）；统计由 PostgreSQL 聚合，避免 API Worker 读取整月明细。原始检测保留设置不影响这份独立的 35 天历史。
+
+Metadata edits (such as names, tags and notification settings) and unchanged values do not invalidate coverage. A newer lease alone never discards an unfinished run: only a completed newer generation fences older results. Heartbeat observations and deadline renewal commit together using the latest configuration, so a concurrent configuration edit cannot swallow a valid ping. Application timestamps are bounded by database time; impossible future events from earlier clock skew are clipped on the next write so they cannot block monitoring indefinitely.
+
+修改名称、标签、通知设置等元数据，或重复提交相同配置，不会清空覆盖。新一轮认领不会丢弃仍在执行的上一轮检测，只有已完成的更新代次会拒绝旧结果。心跳观测与续期使用最新配置在同一事务提交，避免并发编辑吞掉有效心跳。应用时间戳不超过数据库时间；历史时钟漂移造成的未来事件在后续写入时校正，避免持续阻塞检测。

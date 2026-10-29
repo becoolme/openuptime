@@ -67,6 +67,49 @@ describe.skipIf(!url)("bounded observation time coverage", () => {
     clock(20); expect(await repo.recordObservation(m, { ok: true })).toBe(true);
   });
 
+  it("accepts an unfinished claimed generation even after the next generation is leased", async () => {
+    const m = await monitor({ runGeneration: 2 });
+    clock(0);
+    expect(await repo.recordObservation(m, { ok: false }, { generation: 1 })).toBe(true);
+    expect((await db.select().from(schema.monitor).where(eq(schema.monitor.id, m.id)))[0].coverageGeneration).toBe(1);
+    clock(1); expect(await repo.recordObservation(m, { ok: true }, { generation: 2 })).toBe(true);
+    expect(await repo.recordObservation(m, { ok: false }, { generation: 1 })).toBe(false);
+  });
+
+  it("preserves coverage across metadata and unchanged measurement edits", async () => {
+    const m = await monitor({ headers: { accept: "text/plain", "x-test": "fixture" }, regions: ["us-east", "eu-central"] });
+    clock(0); await repo.recordObservation(m, { ok: true });
+    clock(20);
+    const edited = (await repo.updateMonitor(orgId, m.id, null, { name: "Renamed", tags: ["prod"], intervalSec: m.intervalSec, target: m.target, headers: { "x-test": "fixture", accept: "text/plain" }, regions: ["eu-central", "us-east"] }))!;
+    expect(edited.coverageRevision).toBe(m.coverageRevision);
+    expect(await db.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, m.id))).toHaveLength(1);
+    expect((await repo.timeCoverage(orgId, m.id, null, 7, at(50)))?.states.up).toBe(50000);
+    expect((await repo.updateMonitor(orgId, m.id, null, { intervalSec: 120 }))?.coverageRevision).toBe(m.coverageRevision + 1);
+  });
+
+  it("accepts a heartbeat against current configuration even if the request loaded an older revision", async () => {
+    const m = await monitor({ type: "heartbeat", intervalSec: 60 });
+    clock(0); await repo.updateMonitor(orgId, m.id, null, { intervalSec: 120 });
+    const ping = await repo.recordHeartbeatObservation(m);
+    expect(ping).toMatchObject({ status: "up", intervalSec: 120, coverageHeartbeatVersion: 1 });
+    expect(ping?.lastCheckedAt).toEqual(at(0));
+    const [event] = await db.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, m.id));
+    expect(event).toBeDefined();
+    await repo.updateMonitor(orgId, m.id, null, { paused: true });
+    expect(await repo.recordHeartbeatObservation(m)).toBeNull();
+  });
+
+  it("repairs a future event instead of rejecting all later observations", async () => {
+    const m = await monitor();
+    const future = new Date(Date.now() + 86400_000);
+    await db.insert(schema.monitorObservation).values({ monitorId: m.id, observedAt: future, state: "paused", revision: 0 });
+    expect(await repo.recordObservation(m, { ok: false })).toBe(true);
+    const rows = await db.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, m.id));
+    expect(rows.every((r) => r.observedAt.getTime() <= Date.now())).toBe(true);
+    expect(rows.some((r) => r.state === "down")).toBe(true);
+    expect(await repo.recordObservation(m, { ok: true })).toBe(true);
+  });
+
   it("uses heartbeat grace, rejects a missed check racing a new ping, and leaves expired coverage unknown", async () => {
     const m = await monitor({ type: "heartbeat", intervalSec: 60, graceSec: 15 });
     clock(0); await repo.recordObservation(m, { ok: true }, { heartbeatPing: true });
@@ -74,19 +117,19 @@ describe.skipIf(!url)("bounded observation time coverage", () => {
     const r = (await repo.timeCoverage(orgId, m.id, null, 7, at(100)))!;
     expect(r.states.up).toBe(75000); expect(r.states.down).toBe(0);
     expect(r.states.unknown).toBe(r.totalMs - 75000);
-    // Even if lastCheckedAt was never updated (a process died), a newly loaded missed check is accepted.
+    // The ping deadline and observation commit together; expired observations allow a later miss.
     clock(100); const loaded = (await repo.getMonitor(orgId, m.id, null))!;
-    expect(loaded.lastCheckedAt).toBeNull();
+    expect(loaded.lastCheckedAt).toEqual(at(0));
     expect(await repo.recordObservation(loaded, { ok: false })).toBe(true);
   });
 
-  it("rejects a fresh-version miss before the ping handler updates its expired deadline", async () => {
+  it("renews the deadline atomically and rejects a fresh-version miss until observation expiry", async () => {
     const m = await monitor({ type: "heartbeat", intervalSec: 60, graceSec: 15, nextCheckAt: at(-60), runGeneration: 1 });
     clock(0); expect(await repo.recordObservation(m, { ok: true }, { heartbeatPing: true })).toBe(true);
     const loaded = (await repo.getMonitor(orgId, m.id, null))!;
     expect(loaded.coverageHeartbeatVersion).toBe(1);
-    expect(loaded.nextCheckAt).toEqual(at(-60));
-    expect(loaded.lastCheckedAt).toBeNull();
+    expect(loaded.nextCheckAt.getTime()).toBeGreaterThan(at(-60).getTime());
+    expect(loaded.lastCheckedAt).toEqual(at(0));
     clock(1); expect(await repo.recordObservation(loaded, { ok: false }, { generation: 1 })).toBe(false);
     clock(74); expect(await repo.recordObservation(loaded, { ok: false }, { generation: 1 })).toBe(false);
     expect((await db.select().from(schema.monitor).where(eq(schema.monitor.id, m.id)))[0].coverageGeneration).toBe(0);
