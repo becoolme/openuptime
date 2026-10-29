@@ -32,7 +32,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Review import warnings and duplicates before creating monitors.", zh: "创建监控项前，先查看导入警告和重复项。" },
     points: [
       { en: "Preview validates records and plan capacity without creating monitors or sending alerts.", zh: "预览会验证记录和套餐容量，不创建监控项，也不发送告警。" },
-      { en: "Stable source IDs make repeated and concurrent imports safe; existing monitors are skipped rather than overwritten.", zh: "稳定的来源 ID 可避免重复或并发导入产生重复记录，已有监控项会跳过，不会覆盖。" },
+      { en: "Stable source IDs ignore surrounding whitespace and make repeated and concurrent imports safe; existing monitors are skipped rather than overwritten.", zh: "稳定的来源 ID 忽略首尾空白，可避免重复或并发导入产生重复记录，已有监控项会跳过，不会覆盖。" },
       { en: "Review per-record outcomes through the dashboard, REST API or MCP, including unsupported fields and region adjustments.", zh: "在控制台、REST API 或 MCP 中查看逐条结果，包括不支持的字段和区域调整。" },
     ],
   },

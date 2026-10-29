@@ -46,6 +46,18 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     expect((await call("POST", "/monitors/import", { ...input, destination: { ...preview.body.destination, projectId: crypto.randomUUID() } })).status).toBe(409);
   });
 
+  it("normalizes source identity whitespace and recognizes legacy padded IDs", async () => {
+    const call = await account();
+    const input = { source: "test", monitors: [row("  item-1  "), row("item-1")] };
+    expect((await call("POST", "/monitors/import/preview", input)).body).toMatchObject({ ready: 1, duplicates: 1 });
+    expect((await call("POST", "/monitors/import", input)).body).toMatchObject({ created: 1, duplicates: 1 });
+    const [saved] = (await call("GET", "/monitors")).body;
+    expect(saved.importSourceId).toBe("item-1");
+    await db!.query("update monitor set import_source_id=$1 where id=$2", ["  item-1  ", saved.id]);
+    expect((await call("POST", "/monitors/import", { source: "test", monitors: [row("item-1")] })).body).toMatchObject({ created: 0, duplicates: 1 });
+    expect((await call("GET", "/monitors")).body).toHaveLength(1);
+  });
+
   it("scopes identities to source, project and workspace without allowing foreign projects", async () => {
     const a = await account(); const b = await account();
     const input = { source: "account:a", monitors: [row("same")] };
@@ -86,6 +98,16 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     const execute = await call("POST", "/monitors/import", input);
     expect(execute.body).toMatchObject({ created: 1 });
     expect(execute.body.skipped).toHaveLength(5);
+  });
+
+  it("rejects SSL monitor types unsupported by the Community schema", async () => {
+    const call = await account();
+    const input = { source: "test", monitors: [row("ssl", { type: "ssl" })] };
+    const preview = await call("POST", "/monitors/import/preview", input);
+    expect(preview.body).toMatchObject({ ready: 0, created: 0, canImport: false });
+    expect(preview.body.skipped).toHaveLength(1);
+    expect((await call("POST", "/monitors/import", input)).status).toBe(400);
+    expect((await call("GET", "/monitors")).body).toHaveLength(0);
   });
 
   it("previews plan adjustments and checks capacity only for genuinely new identities", async () => {

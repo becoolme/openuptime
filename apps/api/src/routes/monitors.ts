@@ -71,7 +71,7 @@ const sourceSchema = z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9._:-]+$/
 export const monitorImportSchema = z.object({
   source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to json. Per-row source takes precedence."),
   destination: z.object({ organizationId: z.string(), projectId: z.string().uuid() }).optional().describe("Preview destination. Execution refuses if the active workspace or project changed."),
-  monitors: z.array(z.record(z.string(), z.unknown())).min(1).max(IMPORT_MAX).describe("Monitor records. Give each a stable sourceId (or id). Missing ids use a hash of type, name and target. Repeated identities are skipped, never overwritten."),
+  monitors: z.array(z.record(z.string(), z.unknown())).min(1).max(IMPORT_MAX).describe("Monitor records. Give each a stable sourceId (or id). Source IDs ignore surrounding whitespace. Missing ids use a hash of type, name and target. Repeated identities are skipped, never overwritten."),
 });
 const FIELD_KEYS = Object.keys(fields);
 
@@ -239,8 +239,8 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     let sourceId: string;
     const identity = r.sourceId ?? r.id;
     if (identity !== undefined) {
-      if ((typeof identity !== "string" && typeof identity !== "number") || !String(identity).trim() || String(identity).length > 200 || /[\u0000-\u001f]/.test(String(identity))) { row.error = "sourceId must be a nonempty string of at most 200 characters"; continue; }
-      sourceId = String(identity);
+      if ((typeof identity !== "string" && typeof identity !== "number") || !String(identity).trim() || String(identity).trim().length > 200 || /[\u0000-\u001f]/.test(String(identity))) { row.error = "sourceId must be a nonempty string of at most 200 characters"; continue; }
+      sourceId = String(identity).trim();
     } else {
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([v.type, v.name, v.target])));
       sourceId = "sha256:" + [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");

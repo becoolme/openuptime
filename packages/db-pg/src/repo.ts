@@ -460,7 +460,8 @@ export function createRepo(db: Db): Repo {
         if (!options.preview) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"monitor-import:" + orgId}))`);
         const existing = await tx.select({ id: schema.monitor.id, source: schema.monitor.importSource, sourceId: schema.monitor.importSourceId })
           .from(schema.monitor).where(and(eq(schema.monitor.organizationId, orgId), eq(schema.monitor.projectId, projectId)));
-        const key = (source: string, sourceId: string) => JSON.stringify([source, sourceId]);
+        // Normalize legacy rows too, so pre-fix padded identities remain deduplicated.
+        const key = (source: string, sourceId: string) => JSON.stringify([source, sourceId.trim()]);
         const known = new Map(existing.map((r) => [key(r.source ?? "openuptime", r.sourceId ?? r.id), r.id as string | null]));
         const results: ImportResult[] = inputs.map((r) => {
           const k = key(r.source, r.sourceId);
