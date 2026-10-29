@@ -39,7 +39,11 @@ next to ours without touching `Repo`.
 
 An edition may supply `requestMiddleware`, a standard `MiddlewareHandler<AppEnv>`. It is registered after the per-request database, repository, auth and entitlements are created, and before CORS and every route. This placement covers existing public routes, Better Auth routes, authenticated REST routes, edition routes and MCP transport routes. Without the hook, Community behavior is unchanged.
 
+The hook must leave request and response streams usable by downstream handlers. Do not consume `c.req.raw` directly; any strictly necessary, bounded inspection must use a clone and respect the route’s body limits. Prefer route-level validated fields rather than recording raw bodies.
+
 Await `next()` to run downstream middleware and the handler. Afterwards `c.res.status` is the final status produced by Hono's error handling, and `c.get("userId")` / `c.get("orgId")` are available only when the downstream route established that authenticated context. The hook does **not** authenticate callers: public requests and Better Auth's own handlers may have no such context. Never infer identity or authority from arbitrary request headers or path parameters.
+
+Routes that do not run `requireOrg` (including OAuth workspace picking and authorization setup) intentionally have no `requestPrincipal`; a session alone does not establish an authorized workspace.
 
 After `requireOrg` succeeds, `c.get("requestPrincipal")` is a frozen snapshot of verified attribution: `kind` (`session`, `api-key`, or `oauth`), `userId`, the effective `orgId`, `projectId`, `allProjects`, and `projectScope`. API keys include only their non-secret database `credentialId`; OAuth includes the verified `clientId`. No token, key value or session secret is included. Identity, workspace membership and project access must all succeed before this snapshot is set. A later business validation failure can still have a verified principal; an authentication/scope refusal cannot. This records the effective workspace selection, not an untrusted caller-supplied workspace header. In the all-projects view the project ID is a fallback; use `allProjects` and `projectScope` to interpret it.
 
@@ -52,6 +56,10 @@ Use route/field allowlists for any logging. Raw URLs can contain heartbeat or su
 ### 请求中间件扩展
 
 版本可以提供标准的 `MiddlewareHandler<AppEnv>` 类型 `requestMiddleware`。它在请求级数据库、仓库、认证及额度对象初始化之后，在 CORS 与所有路由之前注册，因此覆盖公开、Better Auth、已认证 REST、版本扩展及 MCP 路由。不配置时 Community 行为保持不变。
+
+接口必须保持请求及响应流可供后续处理器读取，不能直接消耗 `c.req.raw`；确需有限度检查时使用副本并遵守路由正文大小限制，优先读取路由已经验证的字段，不记录原始正文。
+
+未执行 `requireOrg` 的路由（包括 OAuth 工作区选择和授权准备）有意不提供 `requestPrincipal`；仅有登录会话不等于已经验证工作区访问权限。
 
 通过 `await next()` 执行后续处理，再读取 Hono 错误处理后的最终 `c.res.status`。只有后续路由完成认证上下文设置时，`userId` / `orgId` 才存在；公开请求及 Better Auth 自身的处理器可能不设置这些字段。此接口不替代认证，不能根据任意请求头或路径参数认定身份与权限。
 
