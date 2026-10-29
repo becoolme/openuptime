@@ -274,7 +274,7 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
   const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch(async () => {
     const error = "subscriber notification unavailable";
     console.error(error);
-    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: false, status: "failed", error, statusMessage: `failed: ${error}` }]);
+    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: false, status: "failed", error, statusMessage: `failed: ${error}` }]).catch(() => console.error("subscriber delivery log failed"));
     return null;
   });
   if (subs && subs.total > 0) {

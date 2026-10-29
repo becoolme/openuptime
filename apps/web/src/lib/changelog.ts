@@ -26,7 +26,7 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
-  { id: "status-delivery-policy", date: "2026-10-28", edition: "community",
+  { id: "status-delivery-policy", date: "2026-10-29", edition: "community",
     title: { en: "Status delivery policy hooks", zh: "状态页分发策略扩展" },
     summary: { en: "Custom deployments can apply one access policy to status pages, feeds and subscriber notifications.", zh: "定制部署可以为状态页、订阅源和订阅通知设置统一的访问策略。" },
     points: [

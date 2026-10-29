@@ -34,6 +34,13 @@ describe("status access boundary", () => {
     expect(policy).toHaveBeenCalled();
     expect(board).not.toHaveBeenCalled();
   });
+  it("shows the policy an anonymous request for public MCP reads", async () => {
+    const { app, policy } = setup(true);
+    expect((await app.request("/api/public/status/acme?via=mcp")).status).toBe(200);
+    const seen = policy.mock.calls[0][1];
+    expect(seen.headers.get("cookie")).toBeNull(); expect(seen.headers.get("authorization")).toBeNull();
+    expect(new URL(seen.url).searchParams.get("via")).toBe("mcp");
+  });
   it("checks subscriptions before processing the email", async () => {
     const { app } = setup(false);
     const res = await app.request("/api/public/status/acme/subscribe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "a@example.com" }) });
@@ -116,6 +123,12 @@ describe("subscriber policy failure reporting", () => {
     await dispatchAlert(repo, "o", ev, [], { ...unmetered, spendEmails: spend, canNotifySubscriber: async () => value as never });
     expect(spend).not.toHaveBeenCalled();
     expect(logged).toContainEqual(expect.objectContaining({ status: "skipped", error: expect.stringContaining("subscriber access policy") }));
+  });
+  it("does not let a failing delivery log escape when subscriber notification fails", async () => {
+    const repo = { listProjects: async () => [], channelsToAlert: async () => [], logDeliveries: async (rows: { channelName?: string }[]) => { if (rows.some((r) => r.channelName === "Status page subscribers")) throw new Error("log down"); }, queueDeliveries: async () => [], subscribersFor: async () => { throw new Error("db down"); } } as never;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try { await expect(dispatchAlert(repo, "o", ev, [], unmetered)).resolves.toBeUndefined(); }
+    finally { log.mockRestore(); }
   });
   it("bounds policy concurrency while avoiding serial evaluation of large lists", async () => {
     const { repo, logged } = setupSubscribers(25);

@@ -170,8 +170,20 @@ Both migration entry points validate that the database's applied timestamps and 
 
 ### Status distribution policies
 
-Edition implementations may supply `Entitlements.statusPageAccess(page, request)` and `canNotifySubscriber(workspaceId, subscriber)`. The default has neither hook and keeps public behavior. The access hook runs before board/history cache reads on all slug routes, including feeds, badges and subscription creation. Denials return 404; exceptions do not allow access. Deployments with a policy bypass shared caches and use private/no-store responses even for publicly allowed pages. SSR forwards visitor cookies. Token confirmation/unsubscribe routes remain available; subscriber eligibility is rechecked before incident/update/maintenance emails and before spending quota.
+Edition implementations may supply `Entitlements.statusPageAccess(page, request)` and `canNotifySubscriber(workspaceId, subscriber)`. The default has neither hook and keeps public behavior. The access hook runs before board/history cache reads on all slug routes, including feeds, badges and subscription creation. Denials return 404; exceptions do not allow access. Deployments with a policy bypass shared caches and use private/no-store responses even for publicly allowed pages. The server-rendered status page forwards the visitor's `cookie` and `authorization` headers and their host in `x-forwarded-host`; the request URL a policy sees is internal (`https://openuptime.internal/...`), so read the host from that header. If the policy itself fails, the page answers 503 `Unavailable` (private, no-store) rather than 404. Token confirmation/unsubscribe routes remain available; subscriber eligibility is rechecked before incident/update/maintenance emails and before spending quota.
 
 These are extension interfaces, not a private-status product. A deployment adding access controls must handle identity/invitations, authorize subscriber email ownership, purge any already-cached public response when enabling the policy, and apply the same policy to its own custom-domain proxies.
 
+The public MCP tools (`/api/mcp/public`, `?via=mcp`) send no credentials, so an access policy sees an anonymous request: a page it protects is refused to those tools unless the policy admits anonymous requests marked `via=mcp`.
+
 Policy approvals must be the boolean `true`; truthy objects or strings are denied. Subscriber checks run in batches of at most eight, and the complete eligibility pass finishes before quota is spent or mail is sent. Automatic incident notification denials and policy failures produce skipped/failed alert-history entries; policy exceptions are logged only as fixed diagnostic categories, never their raw message.
+
+### 状态分发策略
+
+版本实现可以提供 `Entitlements.statusPageAccess(page, request)` 和 `canNotifySubscriber(workspaceId, subscriber)`。默认两者都不设置，保持公开行为。访问策略在所有 slug 路由（包括订阅源、徽章和创建订阅）读取看板或历史缓存之前执行；拒绝返回 404，异常不会放行。启用策略的部署绕过共享缓存，即使页面允许访问也使用 private/no-store。服务端渲染的状态页会转发访客的 `cookie` 和 `authorization` 请求头，以及访客访问的主机（`x-forwarded-host`）；策略看到的请求 URL 是内部地址（`https://openuptime.internal/...`），请从该请求头读取主机。策略本身出错时页面返回 503 `Unavailable`（private, no-store），而不是 404。确认和退订令牌路由仍可使用；发送事件、更新或维护邮件前，以及消耗额度前，会重新检查订阅者资格。
+
+公开 MCP 工具（`/api/mcp/public`，`?via=mcp`）不携带任何凭据，访问策略看到的是匿名请求：除非策略放行带 `via=mcp` 的匿名请求，否则受策略保护的页面对这些工具一律拒绝。
+
+这些只是扩展接口，不是私有状态页产品。增加访问控制的部署需要自行处理身份与邀请、验证订阅邮箱归属、启用策略时清除已缓存的公开响应，并对自己的自定义域名代理应用同一策略。
+
+策略的批准值必须是布尔 `true`，真值对象或字符串一律视为拒绝。订阅者检查每批最多八个，全部资格检查完成后才消耗额度或发送邮件。事件自动通知被拒绝或策略出错时，告警历史会记录为跳过/失败；策略异常只记录固定类别的诊断信息，不记录原始消息。

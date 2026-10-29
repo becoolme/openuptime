@@ -100,7 +100,7 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><code>list_public_status_page_maintenance</code>: scheduled and ongoing maintenance windows.</li>
     </ul>
     <p>Existing clients may still call the legacy names <code>status_page_overview</code>, <code>status_page_incidents</code> and <code>status_page_maintenance</code>; discovery lists the names above.</p>
-    <p>The owner of a page can turn the MCP tools off with <strong>Allow the public MCP tools to read this page</strong> in the status page editor; the page, its feeds and <code>llms.txt</code> stay public. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
+    <p>The owner of a page can turn the MCP tools off with <strong>Allow the public MCP tools to read this page</strong> in the status page editor; the page, its feeds and <code>llms.txt</code> stay public. These tools send no credentials: if a custom deployment protects status pages with an access policy, the tools are refused for those pages. Discovery document: <code>/.well-known/mcp.json</code> lists both endpoints. Each page also has a short <code>llms.txt</code> at <code>/api/public/status/&lt;slug&gt;/llms.txt</code>.</p>
     <h2 id="examples">Example prompts</h2>
     <ul>
       <li>“Add an HTTP monitor for https://api.example.com/health that checks every minute, and put it on a new status page.”</li>
@@ -195,7 +195,7 @@ url = "https://openuptime.app/api/mcp"</code></pre>
       <li><code>list_public_status_page_maintenance</code>：计划中和进行中的维护窗口。</li>
     </ul>
     <p>已有客户端仍可调用旧名称 <code>status_page_overview</code>、<code>status_page_incidents</code> 和 <code>status_page_maintenance</code>；工具发现返回上面的新名称。</p>
-    <p>页面所有者可在状态页编辑界面关闭 <strong>允许公开的 MCP 工具读取此页面</strong>，这只影响 MCP 工具；页面、订阅源和 <code>llms.txt</code> 仍然公开。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
+    <p>页面所有者可在状态页编辑界面关闭 <strong>允许公开的 MCP 工具读取此页面</strong>，这只影响 MCP 工具；页面、订阅源和 <code>llms.txt</code> 仍然公开。这些工具不携带任何凭据：如果定制部署用访问策略保护了状态页，这些工具对受保护的页面会被拒绝。发现文档 <code>/.well-known/mcp.json</code> 列出两个端点。每个状态页还有一份简短的 <code>llms.txt</code>，地址是 <code>/api/public/status/&lt;slug&gt;/llms.txt</code>。</p>
     <h2 id="examples-zh">示例提示词</h2>
     <ul>
       <li>“给 https://api.example.com/health 加一个 HTTP 监控，每分钟检测一次，并放到一个新的状态页上。”</li>
