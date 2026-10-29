@@ -26,6 +26,18 @@ export interface ChangelogEntry {
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  {
+    id: "dns-record-assertions", date: "2026-10-29", edition: "community",
+    title: { en: "Check DNS record values", zh: "校验 DNS 记录值" },
+    summary: { en: "Monitor A, AAAA, CNAME, MX, TXT and NS records with optional value matching.", zh: "支持监控 A、AAAA、CNAME、MX、TXT 和 NS 记录，并可校验期望值。" },
+    points: [
+      { en: "Require one answer to match an exact value or contain text; unrelated record types no longer count as success.", zh: "可要求至少一条记录完全匹配期望值或包含指定文本；其他类型的记录不再被误判为成功。" },
+      { en: "Unicode domain names use IDNA; exact IPv4 values ignore surrounding whitespace and normalize dotted decimal octets.", zh: "Unicode 域名按 IDNA 规范化；IPv4 完全匹配会忽略首尾空白并规范化点分十进制数值。" },
+      { en: "Configure DNS checks in the dashboard, API or MCP, and preserve their settings when exporting and importing monitors.", zh: "可通过控制台、API 或 MCP 配置 DNS 检测，导入导出时会保留这些设置。" },
+      { en: "Existing DNS monitors now need an address record: a name that only has a CNAME, or no A record at all, now fails, so some monitors may start alerting after you upgrade.", zh: "已有的 DNS 监控现在要求存在地址（A）记录：只有 CNAME 或没有 A 记录的域名会判定为失败，升级后部分监控可能开始告警。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the monitor API docs", zh: "阅读监控 API 文档" } },
+  },
   { id: "alert-routing-policy", date: "2026-10-29", edition: "community",
     title: { en: "Alert routing policy hook", zh: "告警路由策略扩展" },
     summary: { en: "Custom deployments can select which eligible channels receive an incident notification.", zh: "定制部署可以从符合条件的渠道中选择事件通知接收方。" },

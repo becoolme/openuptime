@@ -154,5 +154,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0030_mean_lady_mastermind",
     "when": 1793293771087,
     "sql": "ALTER TABLE \"alert_delivery\" ADD COLUMN \"email_quota_attempted\" boolean DEFAULT false NOT NULL;"
+  },
+  {
+    "tag": "0031_pale_ben_parker",
+    "when": 1793293879992,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"dns_record_type\" text DEFAULT 'A' NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"dns_expected_value\" text;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"dns_match_mode\" text DEFAULT 'exact' NOT NULL;"
   }
 ];

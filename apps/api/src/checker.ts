@@ -1,5 +1,6 @@
 import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsPrivate } from "./netguard";
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
+import { dnsCheck } from "./dns";
 import { websocketCheck } from "./websocket";
 
 export type CheckInput = {
@@ -15,6 +16,9 @@ export type CheckInput = {
   headers?: Record<string, string>;
   /** websocket: text sent once the connection is open; the reply must arrive (and match the keyword, when one is set). */
   wsMessage?: string | null;
+  dnsRecordType?: "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS";
+  dnsExpectedValue?: string | null;
+  dnsMatchMode?: "exact" | "contains";
 };
 export type CheckOutcome = {
   ok: boolean;
@@ -113,15 +117,6 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     ok, statusCode: res.status, latencyMs,
     error: ok ? undefined : wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response`,
   };
-}
-
-// DNS-over-HTTPS keeps this runnable on Workers, where there is no raw resolver.
-async function dnsCheck(m: CheckInput, started: number): Promise<CheckOutcome> {
-  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(m.target)}&type=A`;
-  const res = await fetch(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(m.timeoutMs) });
-  const data = (await res.json()) as { Status: number; Answer?: unknown[] };
-  const ok = data.Status === 0 && (data.Answer?.length ?? 0) > 0;
-  return { ok, latencyMs: Date.now() - started, error: ok ? undefined : `DNS status ${data.Status}, no answer` };
 }
 
 /** Cloudflare's socket API. The import fails anywhere else (Node, tests), whatever the runtime words the error as. */

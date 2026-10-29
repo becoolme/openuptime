@@ -29,6 +29,9 @@ const fields = {
   headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP (or WebSocket handshake) request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
   // sent as one text message after the handshake; blank means "handshake only"
   wsMessage: z.string().max(2000).transform((v) => v || null).nullable().describe("WebSocket only: text message sent once the connection is open; a message must then come back within the timeout. Not a secret: put credentials in headers. Null or empty string checks the handshake only."),
+  dnsRecordType: z.enum(["A", "AAAA", "CNAME", "MX", "TXT", "NS"]).describe("DNS record type; default A. Queries Cloudflare's public DoH resolver."),
+  dnsExpectedValue: z.string().max(2000).transform((v) => v || null).nullable().describe("Optional DNS answer value. At least one answer of the selected type must match. TXT uses quoted DNS presentation; MX includes priority. Empty or null accepts any answer of that type."),
+  dnsMatchMode: z.enum(["exact", "contains"]).describe("DNS answer match: exact or case-sensitive substring. Hostnames in CNAME/NS and MX exact matches ignore case and trailing dots."),
   graceSec: z.number().int().min(0).max(86400).describe("Extra seconds allowed after a heartbeat deadline before it counts as missed; used only for heartbeat monitors."),
   channelIds: z.array(z.string().uuid()).max(50).describe("Alert-channel UUIDs from list_channels. Replaces the selected channels; an empty list clears them. Newly created monitors also inherit auto-enabled channels."),
   tags: z.array(z.string().trim().min(1).max(32)).max(20).describe("Dashboard filter labels; a supplied list replaces the existing tags, and an empty list clears them."),
@@ -56,6 +59,9 @@ const body = z.object({
   expectedLocation: fields.expectedLocation.default(null),
   headers: fields.headers.default({}),
   wsMessage: fields.wsMessage.default(null),
+  dnsRecordType: fields.dnsRecordType.default("A"),
+  dnsExpectedValue: fields.dnsExpectedValue.default(null),
+  dnsMatchMode: fields.dnsMatchMode.default("exact"),
   graceSec: fields.graceSec.default(0),
   channelIds: fields.channelIds.default([]),
   tags: fields.tags.default([]),
@@ -100,8 +106,10 @@ const patchBody = z.object(fields).partial().omit({ type: true }).extend({ pause
 export const monitorCreateSchema = body;
 export const monitorPatchSchema = patchBody;
 
+const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
+  ...(v.type !== "dns" ? DNS_DEFAULTS : {}),
   heartbeatToken: v.type === "heartbeat" ? crypto.randomUUID().replace(/-/g, "") : null,
   // a new heartbeat monitor must not be "missed" before its first ping is even due
   ...(v.type === "heartbeat" ? { nextCheckAt: nextAfter({ ...v, type: "heartbeat" as const }) } : {}),
@@ -258,6 +266,11 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    if (v.dnsRecordType !== undefined || v.dnsExpectedValue !== undefined || v.dnsMatchMode !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      if (current.type !== "dns") Object.assign(v, DNS_DEFAULTS);
+    }
     // Retaining stored headers also retains their access rights: only managers may change the request around them.
     if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));

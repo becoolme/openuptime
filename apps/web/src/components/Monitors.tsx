@@ -299,6 +299,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
     method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
+    dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
     regions: monitor?.regions?.length ? monitor.regions : ["auto"],
@@ -350,10 +351,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     try {
       const headers = f.type === "http" || f.type === "websocket" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
-      const { regions, ...rest } = f;
+      const { regions, dnsRecordType, dnsExpectedValue, dnsMatchMode, ...rest } = f;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      const payload = { ...rest, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         await api.updateMonitor(monitor.id, patch);
@@ -422,6 +423,18 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
           </label>
         )}
+        {f.type === "dns" && <>
+          <label className="fld">{t("DNS record type")}
+            <Select className="in" value={f.dnsRecordType} onChange={(v) => set("dnsRecordType", v)} options={(["A", "AAAA", "CNAME", "MX", "TXT", "NS"] as const).map((v) => ({ value: v, label: v }))} />
+          </label>
+          <label className="fld">{t("Expected DNS value (optional)")}
+            <input className="in mono" value={f.dnsExpectedValue} onChange={(e) => set("dnsExpectedValue", e.target.value)} maxLength={2000} />
+            <span className="muted">{t("Leave empty to accept any record of this type. TXT includes quotes; MX includes priority, e.g. 10 mail.example.com.")}</span>
+          </label>
+          <label className="fld">{t("DNS value match")}
+            <Select className="in" value={f.dnsMatchMode} onChange={(v) => set("dnsMatchMode", v)} options={[{ value: "exact", label: t("Exact value") }, { value: "contains", label: t("Contains text") }]} />
+          </label>
+        </>}
         {f.type === "websocket" && (
           <label className="fld">{t("Message to send (optional)")}
             <input className="in mono" value={f.wsMessage} onChange={(e) => set("wsMessage", e.target.value)} placeholder='{"type":"ping"}' maxLength={2000} />

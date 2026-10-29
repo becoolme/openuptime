@@ -18,6 +18,9 @@ keywordMode    "contains" | "absent"                         (default "contains"
 expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus: the redirect is not followed; Location must equal this URL or path (default null = any)
 headers        { [name: string]: string }  http, or the websocket handshake (default {})
 wsMessage      string | null, max 2000  websocket: text sent once connected; a message must come back within timeoutMs (default null = handshake only; not a secret)
+dnsRecordType  "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS" (default "A")
+dnsExpectedValue string | null, max 2000 (default null = any answer of selected type)
+dnsMatchMode   "exact" | "contains" (default "exact")
 graceSec       integer 0-86400, heartbeat grace period       (default 0)
 channelIds     uuid[], max 50                                (default [])
 tags           string[], max 20 items of up to 32 chars      (default [])
@@ -29,6 +32,8 @@ minRegionsFailing integer 0-20, several regions: how many must fail before the m
 const groups: Group[] = [
   {
     id: "monitors", en: "Monitors", zh: "监控项",
+    noteEn: "DNS checks query Cloudflare's public DNS-over-HTTPS resolver from auto. At least one answer of the selected record type must exist and match the optional expected value. Unicode targets and DNS hostnames use IDNA. Exact CNAME/NS and MX matching ignores hostname case and trailing dots; IPv6 forms are normalized. Exact IPv4 values trim surrounding whitespace and normalize dotted decimal octets; DNS assertion fields are ignored on other monitor types. Substring matches trim the expected text and ignore case, except for TXT; other exact values are case-sensitive. TXT uses DNS presentation including quotes; MX includes priority (10 mail.example.com.). NXDOMAIN, no matching records, truncated answers and resolver errors fail the check. Existing DNS monitors default to A with no value assertion, so a name that only has a CNAME (no address) or no A record now fails, where any answer used to pass.",
+    noteZh: "DNS 检测从 auto 位置请求 Cloudflare 公共 DNS-over-HTTPS 解析器。必须至少存在一条指定类型的记录，并匹配可选期望值。Unicode 目标及 DNS 域名按 IDNA 规范化。CNAME、NS 和 MX 的完全匹配忽略域名大小写及末尾的点；IPv6 地址会规范化。IPv4 完全匹配忽略首尾空白并规范化点分十进制数值；其他监控类型会忽略 DNS 断言字段。包含匹配会去掉期望值首尾空白，且除 TXT 外忽略大小写；其他完全匹配区分大小写。TXT 使用带引号的 DNS 表示形式；MX 包含优先级（10 mail.example.com.）。域名不存在、无符合类型的记录、响应截断或解析器错误均判定为失败。已有 DNS 监控默认检测 A 记录，不校验具体值；因此只有 CNAME（没有地址）或没有 A 记录的域名现在会判定为失败，而此前任何应答都算通过。",
     eps: [
       { m: "GET", p: "/monitors", en: "List the project's monitors, with 24-hour uptime, average latency and a latency sparkline.", zh: "列出当前项目的监控项，附带 24 小时可用率、平均延迟和延迟走势。",
         res: `[{ id, name, type, target, method, expectedStatus, intervalSec, timeoutMs, failureThreshold, regions,\n   status, consecutiveFailures, lastCheckedAt, nextCheckAt, paused, heartbeatToken, keyword, keywordMode,\n   headers, graceSec, ..., uptime24h, avgLatency24h, spark }]` },
