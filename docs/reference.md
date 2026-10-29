@@ -90,7 +90,7 @@ Each public status page offers email subscriptions (double opt-in, one-click uns
 | Type | Config |
 | --- | --- |
 | Slack | incoming webhook URL |
-| ntfy | server origin URL (for example `https://ntfy.sh`), topic, optional bearer access token, priority string `1`–`5` (default `3`). Topic: 1–64 letters, digits, `_` or `-`. Redirects are refused; the public-target network policy applies to self-hosted servers too. Long messages are truncated below 4096 UTF-8 bytes. |
+| ntfy | server origin URL (for example `https://ntfy.sh`), topic, optional bearer access token, priority string `1`–`5` (default `3`). Topic: 1–64 letters, digits, `_` or `-`. Redirects are refused; the public-target network policy applies to self-hosted servers too. Long messages are truncated below 4096 UTF-8 bytes. Receives outage, recovery and escalation alerts; periodic incident reminders intentionally remain limited to push and project-opted-in email, as with other webhook channels. |
 | Lark / Feishu | custom bot webhook URL (`open.larksuite.com` or `open.feishu.cn`), optional signing secret |
 | Webhook | URL (receives a JSON POST) |
 | Telegram | bot token + chat ID |
@@ -140,3 +140,5 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+ntfy 接收故障、恢复和升级通知；与其他 webhook 渠道一致，周期事故提醒仍仅发送到 push 和项目明确开启的 email 渠道。此版本不扩展提醒的接收范围。
