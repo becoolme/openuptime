@@ -139,3 +139,7 @@ The API tests that need a database are skipped when `TEST_DATABASE_URL` is unset
 because the OAuth/MCP end-to-end test applies the migrations itself.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, the web build, migrations and the tests against a Postgres service.
+
+Ending a maintenance window and cancelling a series are idempotent: an already ended, missing, or out-of-scope resource is a successful no-op. Success does not imply a row was changed.
+
+结束维护或取消系列是幂等操作：已结束、不存在或不在权限范围内的资源均不作修改并返回成功，成功响应不表示一定修改了记录。

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, createRepo, eq, schema } from "./index";
 
 const url = process.env.DATABASE_URL;
@@ -51,6 +51,22 @@ describe.skipIf(!url)("recurring maintenance", () => {
     expect(left).toHaveLength(2);
     expect(left.every((w) => +w.endsAt <= Date.now())).toBe(true);
     expect(left.find((w) => w.id === windows[0].id)!.endsAt).toEqual(windows[0].endsAt);
+  });
+  it("uses the database clock when the application clock is behind", async () => {
+    const now = Date.now();
+    for (const action of ["end", "cancel"] as const) {
+      const start = new Date(now - 1800_000);
+      const windows = await series(start.toISOString(), new Date(now + 86400_000).toISOString(), "UTC");
+      vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(now - 86400_000));
+      try {
+        if (action === "end") await repo.endMaintenance(orgId, windows[0].id, [projectId]);
+        else await repo.cancelMaintenanceSeries(orgId, windows[0].seriesId!, [projectId]);
+      } finally { vi.useRealTimers(); }
+      const [ended] = await db.select().from(schema.maintenanceWindow).where(eq(schema.maintenanceWindow.id, windows[0].id));
+      expect(+ended.endsAt).toBeGreaterThanOrEqual(+ended.startsAt);
+      expect(+ended.endsAt).toBeGreaterThanOrEqual(now);
+      expect(+ended.endsAt).toBeLessThanOrEqual(Date.now());
+    }
   });
   it("claims each occurrence reminder once even with concurrent consumers", async () => {
     const now = Date.now();

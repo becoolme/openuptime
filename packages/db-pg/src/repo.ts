@@ -1171,14 +1171,14 @@ export function createRepo(db: Db): Repo {
       return result.sort((a, b) => +a.startsAt - +b.startsAt)[0];
     },
     async endMaintenance(orgId, id, scope) {
-      await db.update(schema.maintenanceWindow).set({ endsAt: new Date() })
+      await db.update(schema.maintenanceWindow).set({ endsAt: sql`now()` })
         .where(and(eq(schema.maintenanceWindow.id, id), eq(schema.maintenanceWindow.organizationId, orgId), inScope(scope, schema.maintenanceWindow.projectId), lte(schema.maintenanceWindow.startsAt, sql`now()`), gte(schema.maintenanceWindow.endsAt, sql`now()`)));
     },
     async cancelMaintenanceSeries(orgId, seriesId, scope) {
       await db.transaction(async (tx) => {
         const owned = and(eq(schema.maintenanceWindow.organizationId, orgId), eq(schema.maintenanceWindow.seriesId, seriesId), inScope(scope, schema.maintenanceWindow.projectId));
         await tx.delete(schema.maintenanceWindow).where(and(owned, gte(schema.maintenanceWindow.startsAt, sql`now()`)));
-        await tx.update(schema.maintenanceWindow).set({ endsAt: new Date() }).where(and(owned, lt(schema.maintenanceWindow.startsAt, sql`now()`), gte(schema.maintenanceWindow.endsAt, sql`now()`)));
+        await tx.update(schema.maintenanceWindow).set({ endsAt: sql`now()` }).where(and(owned, lt(schema.maintenanceWindow.startsAt, sql`now()`), gte(schema.maintenanceWindow.endsAt, sql`now()`)));
       });
     },
     async deleteMaintenance(orgId, id, scope) {

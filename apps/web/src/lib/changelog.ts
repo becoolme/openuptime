@@ -31,6 +31,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     title: { en: "Repeat maintenance windows", zh: "周期维护窗口" },
     summary: { en: "Schedule daily or weekly maintenance in a named time zone with a fixed end date.", zh: "可按指定时区安排每日或每周维护，并设置截止日期。" },
     points: [
+      { en: "Ending maintenance uses the database clock so application clock drift cannot create an invalid window.", zh: "结束维护使用数据库时钟，避免应用时钟偏差造成无效窗口。" },
       { en: "Skip one occurrence, end an active window, or cancel future windows while preserving completed history.", zh: "可跳过单次、提前结束当前窗口，或取消未来窗口并保留已完成历史。" },
       { en: "Each occurrence appears on status pages and has its own reminder identity; local start times follow daylight-saving changes.", zh: "每次维护独立显示在状态页，并有独立提醒标识；开始时间遵循当地夏令时变化。" },
     ],
