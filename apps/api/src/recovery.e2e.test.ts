@@ -39,11 +39,28 @@ describe.skipIf(!url)("Recovery thresholds through the API", () => {
       await call("POST", ping);
       expect((await call("GET", path)).body).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
       expect(await db.repo.hasOpenIncident(created.body.id, false)).toBe(true);
+      expect((await call("PATCH", path, { paused: false })).body).toMatchObject({ status: "down", consecutiveSuccesses: 1 });
       await missed();
       expect((await call("GET", path)).body.consecutiveSuccesses).toBe(0);
       await Promise.all([call("POST", ping), call("POST", ping)]);
       expect((await call("GET", path)).body).toMatchObject({ status: "up", consecutiveSuccesses: 2 });
       expect(await db.repo.hasOpenIncident(created.body.id, false)).toBe(false);
+      let entered!: () => void; let release!: () => void;
+      const ready = new Promise<void>((resolve) => { entered = resolve; });
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const racing = createApp((connection, options) => {
+        const database = openDatabase(connection, options);
+        return { ...database, repo: { ...database.repo, recordHeartbeatSuccess: async (id) => {
+          const result = await database.repo.recordHeartbeatSuccess(id);
+          entered(); await gate; return result;
+        } } };
+      });
+      const delayedPing = racing.fetch(new Request(`${origin}/api${ping}`, { method: "POST" }), env as never);
+      await ready;
+      try { await missed(); } finally { release(); }
+      expect((await delayedPing).status).toBe(200);
+      expect((await call("GET", path)).body.status).toBe("down");
+      expect(await db.repo.hasOpenIncident(created.body.id, false)).toBe(true);
       await call("PATCH", path, { paused: true });
       expect((await call("POST", ping)).body.paused).toBe(true);
       expect((await call("GET", path)).body.consecutiveSuccesses).toBe(0);

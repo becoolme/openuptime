@@ -144,7 +144,6 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     const wasDown = updated.status === "down";
     const ready = (updated.consecutiveSuccesses ?? 0) >= (updated.recoveryThreshold ?? 1);
     // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
-    if (!wasDown) await repo.setMonitorState(m.id, { status: "up" });
     if (wasDown && ready) {
       await completeRecovery(repo, updated, "up", 0, c.get("entitlements"));
     }

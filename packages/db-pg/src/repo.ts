@@ -453,12 +453,22 @@ export function createRepo(db: Db): Repo {
       if (inputs.length) await db.insert(schema.monitor).values(inputs.map((v) => ({ ...v, organizationId: orgId, projectId })));
     },
     async updateMonitor(orgId, id, scope, patch) {
-      const [row] = await db
-        .update(schema.monitor)
-        .set({ ...patch, ...(patch.paused !== undefined ? { consecutiveSuccesses: 0 } : {}) })
-        .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
-        .returning();
-      return row ?? null;
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor)
+          .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId))).for("update");
+        if (!current) return null;
+        const changedPause = patch.paused !== undefined && patch.paused !== current.paused;
+        const effective = { ...patch };
+        if (patch.paused !== undefined && !changedPause) {
+          // The route derives these controls from paused; repeating the current value is not a resume.
+          delete effective.status;
+          delete effective.nextCheckAt;
+        }
+        const [row] = await tx.update(schema.monitor)
+          .set({ ...effective, ...(changedPause ? { consecutiveSuccesses: 0 } : {}) })
+          .where(eq(schema.monitor.id, id)).returning();
+        return row;
+      });
     },
     async deleteMonitor(orgId, id, scope) {
       await db.delete(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)));
@@ -501,6 +511,9 @@ export function createRepo(db: Db): Repo {
 
     async recordHeartbeatSuccess(id) {
       const [row] = await db.update(schema.monitor).set({
+        // Decide from the locked current row. A later miss must not be overwritten by a delayed ping handler.
+        status: sql`case when ${schema.monitor.status} = 'down' then ${schema.monitor.status} else 'up'::monitor_status end`,
+        statusChangedAt: sql`case when ${schema.monitor.status} not in ('down', 'up') then now() else ${schema.monitor.statusChangedAt} end`,
         consecutiveSuccesses: sql`least(${schema.monitor.consecutiveSuccesses} + 1, ${schema.monitor.recoveryThreshold})`,
         consecutiveFailures: 0,
         lastCheckedAt: new Date(),

@@ -979,6 +979,8 @@ describe.skipIf(!url)("atomic recovery progress", () => {
     expect(results.map((r) => r!.successes).sort()).toEqual([1, 2]);
     expect(await repo.recordRecoveryProgress(m, false)).toEqual({ successes: 0, ready: false });
     expect(await repo.recordRecoveryProgress({ ...m, consecutiveSuccesses: 2 }, true)).toEqual({ successes: 1, ready: false });
+    const noOp = await repo.updateMonitor(orgId, m.id, null, { paused: false, status: "pending", nextCheckAt: new Date() });
+    expect(noOp).toMatchObject({ consecutiveSuccesses: 1, status: "down" });
     const incident = await repo.openAutoIncident({ organizationId: orgId, monitorId: m.id, title: "Down", auto: true }, { status: "investigating", body: "Failed" });
     expect(incident).not.toBeNull();
     await repo.recordRecoveryProgress(m, true);
