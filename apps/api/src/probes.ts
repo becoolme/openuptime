@@ -1,6 +1,6 @@
 import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
-import type { Monitor, RegionResult } from "@openuptime/repo";
+import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe } from "./probe-protocol";
 import { AUTO, REGION_ID, REGION_NAMES, effectiveRegions } from "./regions";
@@ -89,9 +89,9 @@ const capable = new Map<string, number>();
 /** Forgets which probes were seen supporting request bodies (tests, and a configuration reload). */
 export function resetProbeCapabilities() { capable.clear(); }
 
-export async function runInRegion(region: string, input: CheckInput): Promise<RegionRun> {
+export async function runInRegion(region: string, input: CheckInput, repo?: Repo): Promise<RegionRun> {
   if (region === AUTO) {
-    const outcome = await runCheck(input);
+    const outcome = await runCheck(input, repo);
     return outcome.inconclusive ? { region, unreachable: "This location is offline" } : { region, outcome };
   }
   const probe = regions.get(region);
@@ -185,19 +185,19 @@ export function combine(runs: RegionRun[], minFailing = 0): Measured | null {
  * Run a monitor's check from the regions it asks for. A monitor on `auto` (the default) never touches a probe. If no
  * probe answers, the check falls back to this location so a probe outage cannot blind monitoring.
  */
-export async function measure(m: Monitor): Promise<Measured> {
+export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   const regions = effectiveRegions(m);
   if (regions.length === 1 && regions[0] === AUTO) {
-    const out = await runCheck(m);
+    const out = await runCheck(m, repo);
     if (out.inconclusive) return inconclusive(out);
     return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
   }
-  const runs = await Promise.all(regions.map((r) => runInRegion(r, m)));
+  const runs = await Promise.all(regions.map((r) => runInRegion(r, m, repo)));
   const lost = runs.flatMap((r) => ("unreachable" in r ? [`${r.region}: ${r.unreachable}`] : []));
   if (lost.length) console.warn(`probes unavailable for ${m.id}: ${lost.join("; ")}`);
   const combined = combine(runs, m.minRegionsFailing);
   if (combined) return combined;
-  const out = await runCheck(m);
+  const out = await runCheck(m, repo);
   if (out.inconclusive) return inconclusive(out);
   return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
 }

@@ -1,5 +1,6 @@
 import TimeCoverage from "./TimeCoverage";
 import { adoptProject, backToAll, navigate } from "../lib/nav";
+import { monitorState } from "../lib/domain-expiry";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
@@ -60,9 +61,16 @@ export default function MonitorDetail({ id }: { id: string }) {
   return (
     <>
       <p className="crumb-back"><a href="/app" className="muted" onClick={backToAll}>{t("← Monitors")}</a></p>
+      {m.type === "domain" && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+        <strong>{t("Domain registration expiry")}</strong>
+        <p>{t("Registry expiration date")}: {m.domainExpiry?.expiresAt ?? t("Unknown expiry")}</p>
+        <p>{t("Registry data fetched")}: {m.domainExpiry?.checkedAt ?? "—"} · {t("Cache valid until")}: {m.domainExpiry?.cacheUntil ?? "—"}</p>
+        {m.domainExpiry?.error && <p className="err">{m.domainExpiry.error}</p>}
+        <p className="muted">{t("This checks the registry registration date, not website availability or your registrar billing deadline. Unknown means no usable date could be obtained.")}</p>
+      </div>}
       <div className="ph">
         <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 className="ph-title">{m.name} <span className={`pill ${m.status}`}>{t(m.status)}</span></h1>
+          <h1 className="ph-title">{m.name} <span className={`pill ${monitorState(m).tone}`}>{t(monitorState(m).label)}</span></h1>
           <p className="muted mono ph-sub">
             <span className="ph-url" title={m.target || m.type}>{m.type === "http" ? `${m.method} ` : ""}{m.target || m.type}</span>
           </p>

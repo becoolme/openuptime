@@ -18,6 +18,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne
 import type { Db } from "./client";
 import * as schema from "./schema";
 import { coverageTime, recordHeartbeatObservation, recordObservation, timeCoverage } from "./coverage";
+import { publicMonitorStatus } from "./public-monitor-status";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -248,6 +249,19 @@ export function createRepo(db: Db): Repo {
       return r[0] as never;
     },
 
+    async cachedRdap(key, load, refreshAheadMs = 0) {
+      return db.transaction(async (tx) => {
+        // Bound lock waits; a busy registry lookup must not hold another check indefinitely.
+        await tx.execute(sql`set local lock_timeout = '3000ms'`);
+        // Serialize cache fills across processes; store data only, never request-bound promises.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"rdap:" + key}))`);
+        const [hit] = await tx.select().from(schema.rdapCache).where(eq(schema.rdapCache.key, key));
+        if (hit && hit.expiresAt.getTime() > Date.now() + ((hit.value as { error?: unknown })?.error ? 0 : refreshAheadMs)) return hit;
+        const fresh = await load();
+        await tx.insert(schema.rdapCache).values({ key, ...fresh }).onConflictDoUpdate({ target: schema.rdapCache.key, set: fresh });
+        return fresh;
+      });
+    },
     async activeMonitorCount(o) {
       const r = await rows<{ n: number }>(db.execute(sql`select count(*)::int as n from monitor where organization_id = ${o} and status <> 'paused'`));
       return r[0]?.n ?? 0;
@@ -519,7 +533,8 @@ export function createRepo(db: Db): Repo {
         );
         const changed = Object.entries(effective).some(([key, value]) => measured.includes(key)
           && comparable(key, value) !== comparable(key, current[key as keyof typeof current]));
-        const [row] = await tx.update(schema.monitor).set({ ...effective, ...(changedPause ? { consecutiveSuccesses: 0 } : {}), ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
+        const resetExpiry = (effective.target !== undefined && effective.target !== current.target) || (effective.domainExpiryWarnDays !== undefined && effective.domainExpiryWarnDays !== current.domainExpiryWarnDays);
+        const [row] = await tx.update(schema.monitor).set({ ...effective, ...(resetExpiry ? { domainExpiry: null } : {}), ...(changedPause ? { consecutiveSuccesses: 0 } : {}), ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
           .where(eq(schema.monitor.id, id)).returning();
         if (changed) {
           const at = await coverageTime(tx, id);
@@ -655,6 +670,14 @@ export function createRepo(db: Db): Repo {
       );
       await foldIntoRollup(monitorId, summary.ok, summary.latencyMs ?? null);
     },
+    async acceptDomainExpiry(snapshot, expiry) {
+      // Conditional UPDATE is atomic with target/threshold edits and their metadata invalidation.
+      const rows = await db.update(schema.monitor).set({ domainExpiry: expiry }).where(and(
+        eq(schema.monitor.id, snapshot.id), eq(schema.monitor.type, "domain"), eq(schema.monitor.paused, false),
+        eq(schema.monitor.target, snapshot.target), eq(schema.monitor.domainExpiryWarnDays, snapshot.domainExpiryWarnDays ?? 30),
+      )).returning({ id: schema.monitor.id });
+      return rows.length === 1;
+    },
     async setMonitorState(id, state) {
       // a changed status starts a new streak
       const changed = state.status ? { statusChangedAt: sql`case when ${schema.monitor.status} is distinct from ${state.status} then now() else ${schema.monitor.statusChangedAt} end` } : {};
@@ -686,6 +709,7 @@ export function createRepo(db: Db): Repo {
           and exists (select 1 from monitor_observation newer where newer.monitor_id = old.monitor_id
             and newer.observed_at < now() - interval '35 days'
             and (newer.observed_at, newer.id) > (old.observed_at, old.id))`);
+      await db.delete(schema.rdapCache).where(lte(schema.rdapCache.expiresAt, new Date(Date.now() - 7 * 864e5)));
       // raw results are kept per workspace for its configured number of days; hourly rollups far longer
       await db.execute(sql`delete from check_result r using monitor m
         where m.id = r.monitor_id
@@ -1424,9 +1448,10 @@ export function createRepo(db: Db): Repo {
             id: m.id,
             name: m.name,
             group: c.groupName,
-            status: m.status,
-            uptime90d: total ? Math.round((ok / total) * 10000) / 100 : null,
-            days: mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
+            status: publicMonitorStatus(m),
+            // Registration checks are not service uptime samples.
+            uptime90d: m.type === "domain" ? null : total ? Math.round((ok / total) * 10000) / 100 : null,
+            days: m.type === "domain" ? [] : mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
           };
         }),
         incidents: await withUpdates(open),

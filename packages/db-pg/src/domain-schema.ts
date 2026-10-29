@@ -16,9 +16,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { DomainExpiry } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
-export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket"]);
+export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain"]);
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);
@@ -61,6 +62,8 @@ export const monitor = pgTable(
     target: text("target").notNull(),
     method: text("method").notNull().default("GET"),
     requestBody: text("request_body"),
+    domainExpiryWarnDays: integer("domain_expiry_warn_days").notNull().default(30),
+    domainExpiry: jsonb("domain_expiry").$type<DomainExpiry>(),
     expectedStatus: integer("expected_status").notNull().default(200),
     intervalSec: integer("interval_sec").notNull().default(60),
     timeoutMs: integer("timeout_ms").notNull().default(10000),
@@ -131,6 +134,8 @@ export const monitorObservation = pgTable("monitor_observation", {
   graceSec: integer("grace_sec"),
   timeoutMs: integer("timeout_ms"),
 }, (t) => [index("monitor_observation_time_idx").on(t.monitorId, t.observedAt, t.id)]);
+
+export const rdapCache = pgTable("rdap_cache", { key: text("key").primaryKey(), value: jsonb("value").$type<unknown>().notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull() }, (t) => [index("rdap_cache_expiry_idx").on(t.expiresAt)]);
 
 export const checkResult = pgTable(
   "check_result",

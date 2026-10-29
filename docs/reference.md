@@ -205,3 +205,7 @@ The default has no policy. This is a general interface, not an on-call scheduler
 Ending a maintenance window and cancelling a series are idempotent: an already ended, missing, or out-of-scope resource is a successful no-op. Success does not imply a row was changed.
 
 结束维护或取消系列是幂等操作：已结束、不存在或不在权限范围内的资源均不作修改并返回成功，成功响应不表示一定修改了记录。
+
+### Domain registration expiry
+
+Community `domain` monitors accept an explicit registered domain and `domainExpiryWarnDays` (1–365, default 30). Use a daily interval; intervals are bounded to one hour–one day. RDAP uses IANA bootstrap and registry expiration events, not registrar billing or website availability. Unknown registry dates fail explicitly; confirmed probe-side network faults are inconclusive and never cached or counted. Shared PostgreSQL cache fills serialize by key. Known dates expire after 26 hours but refresh when fewer than 24 hours remain, so effective reuse is about two hours and daily checks normally refetch; unknown registry results cache for fifteen minutes, bootstrap data for 24 hours. Expired entries are never reused as healthy. Calls require public HTTPS, refuse redirects, and cap bodies at 1 MiB. Domain incidents distinguish unknown, near-expiry and passed registration dates and recover after verified renewal. Public status projects unknown dates as unknown and expiry warnings as degraded, excludes registration checks from uptime percentages, and never uses them to suppress dependent service alerts.

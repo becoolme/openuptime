@@ -199,5 +199,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0039_loving_dakota_north",
     "when": 1793295779944,
     "sql": "ALTER TABLE \"maintenance_window\" ADD COLUMN \"series_id\" uuid;--> statement-breakpoint\nALTER TABLE \"maintenance_window\" ADD COLUMN \"recurrence\" jsonb;--> statement-breakpoint\nCREATE INDEX \"maintenance_series_idx\" ON \"maintenance_window\" USING btree (\"organization_id\",\"series_id\");"
+  },
+  {
+    "tag": "0040_gray_ultimates",
+    "when": 1793296005371,
+    "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'domain';--> statement-breakpoint\nCREATE TABLE \"rdap_cache\" (\n\t\"key\" text PRIMARY KEY NOT NULL,\n\t\"value\" jsonb NOT NULL,\n\t\"expires_at\" timestamp with time zone NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"domain_expiry_warn_days\" integer DEFAULT 30 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"domain_expiry\" jsonb;--> statement-breakpoint\nCREATE INDEX \"rdap_cache_expiry_idx\" ON \"rdap_cache\" USING btree (\"expires_at\");"
   }
 ];

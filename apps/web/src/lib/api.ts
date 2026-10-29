@@ -2,7 +2,9 @@ import { resolveRoute } from "./routes";
 import { go } from "./locale-path";
 
 export type Monitor = {
-  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket"; target: string; method: string; requestBody?: string | null;
+  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain"; target: string; method: string; requestBody?: string | null;
+  domainExpiryWarnDays?: number;
+  domainExpiry?: { state: "valid" | "expiring" | "expired" | "unknown"; expiresAt: string | null; checkedAt: string; cacheUntil: string; source: string | null; error: string | null } | null;
   expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number; recoveryThreshold?: number; consecutiveSuccesses?: number;
   status: "pending" | "up" | "degraded" | "down" | "paused"; paused: boolean;
   lastCheckedAt: string | null; heartbeatToken: string | null;

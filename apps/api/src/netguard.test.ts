@@ -146,3 +146,8 @@ describe("checks and redirects", () => {
     }
   });
 });
+
+it("RDAP public-only requests cannot bypass SSRF protection with ALLOW_PRIVATE_TARGETS", async () => {
+  configureNetGuard({ ALLOW_PRIVATE_TARGETS: "true" });
+  await expect(guardedFetch("https://127.0.0.1/rdap", {}, { follow: false, publicOnly: true })).rejects.toThrow(/private|internal/);
+});

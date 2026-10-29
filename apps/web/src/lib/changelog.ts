@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "domain-registration-expiry", date: "2026-10-29", edition: "community",
+    title: { en: "Domain registration expiry", zh: "域名注册到期检测" },
+    summary: { en: "Get a warning before a domain registration runs out.", zh: "域名注册到期前提前收到提醒。" },
+    points: [
+      { en: "Add a domain monitor and choose a warning window from 1 to 365 days; when the expiry date cannot be read, the monitor shows unknown, never healthy.", zh: "添加域名监控并设置 1 至 365 天的预警窗口；无法获取到期日时显示为未知，不会视为正常。" },
+      { en: "Domain checks run between once an hour and once a day, and the expiry date is looked up through RDAP.", zh: "域名检测的间隔为每小时一次至每天一次，到期日通过 RDAP 查询。" },
+      { en: "Alerts tell apart an unknown date, an upcoming expiry and a registration that has already expired.", zh: "告警区分日期未知、即将到期和已经过期三种情况。" },
+      { en: "Public status pages show unknown registration data separately from service outages.", zh: "公开状态页将未知的注册信息与服务中断分开显示。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "recurring-maintenance", date: "2026-10-29", edition: "community",
     title: { en: "Repeat maintenance windows", zh: "周期维护窗口" },
     summary: { en: "Schedule daily or weekly maintenance in a named time zone with an end date.", zh: "可按指定时区安排每日或每周的维护，并设置截止日期。" },

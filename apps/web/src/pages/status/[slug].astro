@@ -8,7 +8,7 @@ import { siteLogo } from "../../lib/brand";
 type Status = {
   page: { title: string; slug: string; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number };
   bucket?: "hour" | "day";
-  overall: "operational" | "degraded" | "outage";
+  overall: "operational" | "degraded" | "outage" | "unknown";
   components: { id: string; name: string; group?: string | null; status: string; uptime90d: number | null; days: { day: string; uptime: number }[] }[];
   incidents: { id: string; number?: number | null; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
 };
@@ -48,8 +48,8 @@ const base = `${Astro.url.origin}`;
 const canon = `${base}${zhPage ? "/zh-Hans" : ""}/status/${slug}`;
 
 const t = (x: string) => translate((Astro.locals.lang ?? "en"), x);
-const headline = t({ operational: "Everything is running smoothly.", degraded: "Some systems are degraded.", outage: "We’re experiencing an outage." }[data.overall]);
-const overallText = (o: string) => (o === "operational" ? t("All systems operational") : o === "outage" ? t("Major outage") : t("Partial degradation"));
+const headline = t({ operational: "Everything is running smoothly.", degraded: "Some systems are degraded.", outage: "We’re experiencing an outage.", unknown: "Some component states are unknown." }[data.overall]);
+const overallText = (o: string) => (o === "operational" ? t("All systems operational") : o === "outage" ? t("Major outage") : o === "unknown" ? t("Status unknown") : t("Partial degradation"));
 const groupNames = [...new Set(data.components.map((c) => c.group || "Services"))];
 const withUp = data.components.filter((c) => c.uptime90d != null);
 const avgUp = withUp.length ? withUp.reduce((a, c) => a + (c.uptime90d as number), 0) / withUp.length : null;
@@ -85,7 +85,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
     <main class="pub-wrap">
       <section class="pub-hd">
         <div>
-          <span class={`pill ${data.overall === "outage" ? "down" : data.overall === "degraded" ? "degraded" : "up"}`}>{overallText(data.overall)}</span>
+          <span class={`pill ${data.overall === "outage" ? "down" : data.overall === "degraded" ? "degraded" : data.overall === "unknown" ? "unknown" : "up"}`}>{overallText(data.overall)}</span>
           <h1>{headline}</h1>
         </div>
         {avgUp != null && (
@@ -138,8 +138,8 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
                 {data.components.filter((c) => (c.group || "Services") === g).map((c) => (
                   <div class="pub-row">
                     <div class="pub-row-h">
-                      <span class="pub-row-n"><i class={`sd ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : "d"}`}></i>{c.name}</span>
-                      <span class="pub-row-v"><span class={`pub-s ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : "d"}`}>{t(c.status)}</span><b>{c.uptime90d ?? "—"}%</b></span>
+                      <span class="pub-row-n"><i class={`sd ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : c.status === "unknown" ? "unknown" : "d"}`}></i>{c.name}</span>
+                      <span class="pub-row-v"><span class={`pub-s ${c.status === "up" || c.status === "operational" ? "" : c.status === "degraded" ? "w" : c.status === "unknown" ? "unknown" : "d"}`}>{t(c.status)}</span><b>{c.uptime90d ?? "—"}%</b></span>
                     </div>
                     <div class="bars">
                       {slots(c.days).map((d) => <i class={d.uptime == null ? "n" : dayClass(d.uptime)} title={d.uptime == null ? `${d.day} · ${t("No data")}` : `${d.day} · ${(d.uptime * 100).toFixed(2)}%`} />)}

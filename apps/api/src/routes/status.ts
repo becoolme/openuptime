@@ -168,17 +168,18 @@ export function purgePublicStatus() {
   historyCache.clear();
 }
 
-type Overall = "operational" | "degraded" | "outage";
+type Overall = "operational" | "degraded" | "outage" | "unknown";
 const LABELS: Record<Overall, { en: string; zh: string }> = {
   operational: { en: "All systems operational", zh: "所有系统运行正常" },
   degraded: { en: "Partial degradation", zh: "部分服务降级" },
   outage: { en: "Major outage", zh: "服务中断" },
+  unknown: { en: "Status unknown", zh: "状态未知" },
 };
-const COLORS: Record<Overall, string> = { operational: "#16a34a", degraded: "#d97706", outage: "#dc2626" };
+const COLORS: Record<Overall, string> = { operational: "#16a34a", degraded: "#d97706", outage: "#dc2626", unknown: "#64748b" };
 const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 /** Rough text width for the badge: CJK glyphs are about twice as wide as latin ones. */
 const textWidth = (v: string) => [...v].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e80 ? 12 : 6.4), 0);
-const overallOf = (statuses: string[]): Overall => (statuses.includes("down") ? "outage" : statuses.includes("degraded") ? "degraded" : "operational");
+const overallOf = (statuses: string[]): Overall => (statuses.includes("down") ? "outage" : statuses.includes("degraded") ? "degraded" : statuses.includes("unknown") ? "unknown" : "operational");
 const langOf = (c: { req: { query(k: string): string | undefined; header(k: string): string | undefined } }): "en" | "zh" => {
   const q = c.req.query("lang") ?? c.req.header("accept-language") ?? "";
   return /^zh/i.test(q) ? "zh" : "en";
