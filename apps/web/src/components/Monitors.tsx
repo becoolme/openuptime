@@ -1,3 +1,4 @@
+import { SkeletonRows } from "./Skeleton";
 import Select from "./Select";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -194,9 +195,14 @@ export default function Monitors() {
         </div>
       )}
 
-      {items?.length === 0 && everything ? (
+      {items === null ? (
+        <div className="card tbl mon-tbl">
+          <div className="tr th"><span>{t("Monitor")}</span><span>{t("Status")}</span><span>{t("Response")}</span><span>{t("Uptime 24h")}</span><span>{t("Latency")}</span><span>{t("Checked")}</span></div>
+          <SkeletonRows cols={6} />
+        </div>
+      ) : items.length === 0 && everything ? (
         <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No monitors yet")}</h3><p className="muted">{t("Choose a project to add the first one.")}</p></div>
-      ) : items?.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="onb">
           <div className="onb-h">
             <div>
@@ -232,7 +238,7 @@ export default function Monitors() {
           <div className="tool">
             <div className="ftabs">
               {tabs.map(([k, label, n]) => (
-                <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(label)} <em>{n}</em></button>
+                <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(label)} {items !== null && <em>{n}</em>}</button>
               ))}
             </div>
             <label className="search">

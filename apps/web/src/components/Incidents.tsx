@@ -1,3 +1,4 @@
+import { SkeletonRows } from "./Skeleton";
 import Select from "./Select";
 import { navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
@@ -53,24 +54,29 @@ export default function Incidents() {
       {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
 
       <div className="kp">
-        <div className="card"><small>{t("Open now")}</small><b>{open.length}</b><div className={`d ${open.length ? "bad" : ""}`}>{open[0]?.monitorName ?? (open.length ? t("Investigating") : t("All clear"))}</div></div>
-        <div className="card"><small>MTTA</small><b>{fmtMin(mtta)}</b><div className="d faint">{t("time to acknowledge")}</div></div>
-        <div className="card"><small>MTTR</small><b>{fmtMin(mttr)}</b><div className="d faint">{t("time to resolve")}</div></div>
-        <div className="card"><small>{t("Incidents · 90 days")}</small><b>{cur.length}</b>
-          <div className={`d ${delta == null ? "faint" : delta > 0 ? "bad" : ""}`}>{delta == null ? t("No previous period") : `${delta > 0 ? "▲" : delta < 0 ? "▼" : "="} ${Math.abs(delta)} ${t("vs. prev. period")}`}</div>
+        <div className="card"><small>{t("Open now")}</small><b>{items === null ? <i className="sk" /> : <>{open.length}</>}</b><div className={`d ${open.length ? "bad" : ""}`}>{items === null ? "\u00a0" : open[0]?.monitorName ?? (open.length ? t("Investigating") : t("All clear"))}</div></div>
+        <div className="card"><small>MTTA</small><b>{items === null ? <i className="sk" /> : <>{fmtMin(mtta)}</>}</b><div className="d faint">{t("time to acknowledge")}</div></div>
+        <div className="card"><small>MTTR</small><b>{items === null ? <i className="sk" /> : <>{fmtMin(mttr)}</>}</b><div className="d faint">{t("time to resolve")}</div></div>
+        <div className="card"><small>{t("Incidents · 90 days")}</small><b>{items === null ? <i className="sk" /> : <>{cur.length}</>}</b>
+          <div className={`d ${delta == null ? "faint" : delta > 0 ? "bad" : ""}`}>{items === null ? "\u00a0" : delta == null ? t("No previous period") : `${delta > 0 ? "▲" : delta < 0 ? "▼" : "="} ${Math.abs(delta)} ${t("vs. prev. period")}`}</div>
         </div>
       </div>
 
       <div className="tool">
         <div className="ftabs">
           {([["all", "All", all.length], ["open", "Open", open.length], ["resolved", "Resolved", resolved.length]] as const).map(([k, l, n]) => (
-            <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(l)} <em>{n}</em></button>
+            <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(l)} {items !== null && <em>{n}</em>}</button>
           ))}
         </div>
         <input className="in" style={{ maxWidth: 220 }} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search or INC-12")} aria-label={t("Search incidents")} />
       </div>
 
-      {items && shown.length === 0 ? (
+      {items === null ? (
+        <div className="card tbl inc-tbl">
+          <div className="tr th"><span>{t("Incident")}</span><span>{t("Status")}</span><span>{t("Started")}</span><span>{t("Duration")}</span><span>{t("Affected")}</span></div>
+          <SkeletonRows cols={5} />
+        </div>
+      ) : shown.length === 0 ? (
         <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No incidents")}</h3><p className="muted">{t("Quiet is good.")}</p></div>
       ) : (
         <div className="card tbl inc-tbl">

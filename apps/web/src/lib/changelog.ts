@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "loading-placeholders",
+    date: "2026-10-29",
+    edition: "community",
+    title: { en: "Loading placeholders on lists", zh: "列表加载占位" },
+    summary: { en: "The Monitors and Incidents pages now show placeholders while data loads instead of briefly looking empty.", zh: "监控和事件页面在加载数据时显示占位，不再先显示成空列表。" },
+    points: [
+      { en: "On a slow connection you no longer see “0” counts or an empty list before the real data arrives.", zh: "网络较慢时，不会再先看到“0”的计数或空列表，再等真实数据出现。" },
+    ],
+  },
+  {
     id: "websocket-monitors",
     date: "2026-10-28",
     edition: "community",
