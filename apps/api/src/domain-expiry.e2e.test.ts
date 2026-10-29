@@ -6,6 +6,30 @@ const url = process.env.TEST_DATABASE_URL;
 const origin = "http://localhost:8787";
 const env = { DATABASE_URL: url, BETTER_AUTH_SECRET: "domain-monitor-test-secret-not-for-production", BETTER_AUTH_URL: origin, WEB_ORIGIN: origin };
 describe.skipIf(!url)("domain monitors and shared cache", () => {
+  it("projects registration uncertainty consistently without claiming a service outage", async () => {
+    const db = openDatabase(url!, { max: 2 }); await db.migrate();
+    const orgId = "domain-status-" + crypto.randomUUID();
+    const app = createApp(openDatabase);
+    try {
+      await db.query("insert into organization (id,name,slug,created_at) values ($1,'Domain',$1,now())", [orgId]);
+      const project = await db.repo.createProject(orgId, "Project");
+      const [monitor] = await db.query<{ id: string }>("insert into monitor (organization_id,project_id,name,type,target,status,domain_expiry) values ($1,$2,'Registration','domain','example.com','down',$3) returning id", [orgId, project.id, JSON.stringify({ state: "unknown", expiresAt: null, cacheUntil: new Date(Date.now() + 60_000).toISOString() })]);
+      const page = await db.repo.createStatusPage(orgId, project.id, { slug: "d-" + crypto.randomUUID(), title: "Domain status" });
+      await db.repo.setPageComponents(page.id, orgId, [{ monitorId: monitor.id }], [project.id]);
+      const board = await db.repo.statusBoard(page);
+      expect(board.components[0]).toMatchObject({ status: "unknown", uptime90d: null, days: [] });
+      for (const suffix of ["", "/summary"]) {
+        const response = await app.fetch(new Request(`${origin}/api/public/status/${page.slug}${suffix}`), env as never);
+        expect(await response.json()).toMatchObject({ overall: "unknown" });
+      }
+      const badge = await app.fetch(new Request(`${origin}/api/public/status/${page.slug}/badge.svg`), env as never);
+      expect(await badge.text()).toContain("Status unknown");
+      const llms = await app.fetch(new Request(`${origin}/api/public/status/${page.slug}/llms.txt`), env as never);
+      expect(await llms.text()).toContain("Status unknown");
+      await db.query("update monitor set domain_expiry=$1 where id=$2", [JSON.stringify({ state: "expired", expiresAt: new Date(Date.now() - 864e5).toISOString(), cacheUntil: new Date(Date.now() + 60_000).toISOString() }), monitor.id]);
+      expect((await db.repo.statusBoard(page)).components[0].status).toBe("degraded");
+    } finally { await db.query("delete from organization where id=$1", [orgId]); await db.close(1); }
+  });
   it("serializes concurrent fills and reloads expired data", async () => {
     const db = openDatabase(url!, { max: 4 }); await db.migrate();
     const key = crypto.randomUUID(); let calls = 0;
@@ -16,6 +40,9 @@ describe.skipIf(!url)("domain monitors and shared cache", () => {
       await db.query("update rdap_cache set expires_at=now()-interval '1 second' where key=$1", [key]);
       await db.repo.cachedRdap(key, load); expect(calls).toBe(2);
       await db.repo.cachedRdap(key, load, 120_000); expect(calls).toBe(3);
+      const failedKey = crypto.randomUUID();
+      await expect(db.repo.cachedRdap(failedKey, async () => { throw new Error("probe offline"); })).rejects.toThrow("probe offline");
+      expect(await db.query("select key from rdap_cache where key=$1", [failedKey])).toHaveLength(0);
       await db.query("update rdap_cache set value=$1 where key=$2", [JSON.stringify({ error: "429" }), key]);
       await db.repo.cachedRdap(key, load, 120_000); expect(calls).toBe(3);
     } finally { await db.close(1); }
@@ -37,6 +64,7 @@ describe.skipIf(!url)("domain monitors and shared cache", () => {
       const path = `/monitors/${mon.body.id}`;
       expect((await call("PATCH", path, { domainExpiryWarnDays: 0 })).status).toBe(400);
       await db.query("update monitor set domain_expiry=$1 where id=$2", [JSON.stringify({ state: "valid" }), mon.body.id]);
+      expect(await call("PATCH", path, { name: "Renamed", target: "example.com", domainExpiryWarnDays: 45 })).toMatchObject({ status: 200, body: { domainExpiry: { state: "valid" } } });
       expect(await call("PATCH", path, { target: "example.net", intervalSec: 60 })).toMatchObject({ status: 200, body: { domainExpiry: null, intervalSec: 3600 } });
       for (const change of [{ target: "example.org" }, { domainExpiryWarnDays: 60 }, { paused: true }]) {
         const created = await call("POST", "/monitors", { name: "Race", type: "domain", target: "example.com", failureThreshold: 1 });

@@ -16,6 +16,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "./client";
 import * as schema from "./schema";
+import { publicMonitorStatus } from "./public-monitor-status";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -468,7 +469,7 @@ export function createRepo(db: Db): Repo {
     async updateMonitor(orgId, id, scope, patch) {
       const [row] = await db
         .update(schema.monitor)
-        .set({ ...patch, ...(patch.target !== undefined || patch.domainExpiryWarnDays !== undefined ? { domainExpiry: null } : {}) })
+        .set({ ...patch, ...(patch.target !== undefined || patch.domainExpiryWarnDays !== undefined ? { domainExpiry: sql`case when ${schema.monitor.target} is distinct from ${patch.target ?? schema.monitor.target} or ${schema.monitor.domainExpiryWarnDays} is distinct from ${patch.domainExpiryWarnDays ?? schema.monitor.domainExpiryWarnDays} then null else ${schema.monitor.domainExpiry} end` } : {}) })
         .where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)))
         .returning();
       return row ?? null;
@@ -1287,9 +1288,10 @@ export function createRepo(db: Db): Repo {
             id: m.id,
             name: m.name,
             group: c.groupName,
-            status: m.status,
-            uptime90d: total ? Math.round((ok / total) * 10000) / 100 : null,
-            days: mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
+            status: publicMonitorStatus(m),
+            // Registration checks are not service uptime samples.
+            uptime90d: m.type === "domain" ? null : total ? Math.round((ok / total) * 10000) / 100 : null,
+            days: m.type === "domain" ? [] : mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
           };
         }),
         incidents: await withUpdates(open),

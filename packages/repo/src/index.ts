@@ -350,7 +350,7 @@ export interface StatusBoard {
     id: string;
     name: string;
     group: string;
-    status: MonitorStatus;
+    status: MonitorStatus | "unknown";
     uptime90d: number | null;
     days: { day: string; uptime: number }[];
   }[];

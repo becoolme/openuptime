@@ -208,6 +208,11 @@ describe("checkOne noise rules", () => {
     await checkOne(repo, hb({ dependsOnMonitorId: "parent" }));
     expect(incidents.map((i) => i.title)).toEqual(["API is down"]);
   });
+  it("never suppresses a service incident because a registration monitor is internally down", async () => {
+    const { repo, incidents } = fakeRepo({ monitors: [{ ...parent("down"), type: "domain" }] });
+    await checkOne(repo, hb({ dependsOnMonitorId: "parent" }));
+    expect(incidents.map((i) => i.title)).toEqual(["API is down"]);
+  });
 
   it("opens the incident late when the dependency recovered but the child is still down", async () => {
     const { repo, incidents } = fakeRepo({ monitors: [parent("up")] });

@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { domainCheck, expiration, registryUrl, DOMAIN_TTL_MS, UNKNOWN_TTL_MS } from "./domain-expiry";
 import { domainName } from "./domain-name";
 import { guardedFetch } from "./netguard";
+import { proberOnline } from "./selfcheck";
 vi.mock("./netguard", () => ({ guardedFetch: vi.fn() }));
+vi.mock("./selfcheck", async original => ({ ...await original<typeof import("./selfcheck")>(), proberOnline: vi.fn(async () => true) }));
 const bootstrap = { services: [[["com"], ["https://registry.example/rdap/"]]] };
 const record = (days = 60) => ({ objectClassName: "domain", ldhName: "example.com", events: [{ eventAction: "expiration", eventDate: new Date(Date.now() + days * 864e5).toISOString() }] });
 function cache() {
@@ -18,6 +20,24 @@ function response(value: unknown, status = 200) { vi.mocked(guardedFetch).mockRe
 const input = { target: "example.com", timeoutMs: 1000 };
 afterEach(() => { vi.resetAllMocks(); vi.useRealTimers(); });
 describe("domain RDAP", () => {
+  it.each(["bootstrap", "registry"])("does not poison the %s cache when the local network fails", async stage => {
+    const { repo, values } = cache();
+    if (stage === "registry") response(bootstrap);
+    vi.mocked(guardedFetch).mockRejectedValueOnce(Object.assign(new Error("no route"), { code: "ENETUNREACH" }));
+    expect(await domainCheck(repo, input)).toMatchObject({ ok: false, inconclusive: true });
+    expect(values.has("domain:v1:example.com")).toBe(false);
+    expect(values.has("bootstrap:v1")).toBe(stage === "registry");
+    if (stage === "bootstrap") response(bootstrap);
+    response(record());
+    expect(await domainCheck(repo, input)).toMatchObject({ ok: true, domainExpiry: { state: "valid" } });
+  });
+  it("treats resolver failure while offline as inconclusive and leaves bootstrap uncached", async () => {
+    const { repo, values } = cache();
+    vi.mocked(proberOnline).mockResolvedValueOnce(false);
+    vi.mocked(guardedFetch).mockRejectedValueOnce(Object.assign(new Error("temporary DNS failure"), { code: "EAI_AGAIN" }));
+    expect(await domainCheck(repo, input)).toMatchObject({ inconclusive: true });
+    expect(values.size).toBe(0);
+  });
   it("normalizes IDNA but never guesses a registered domain", () => {
     expect(domainName("BÜCHER.de.")).toBe("xn--bcher-kva.de");
     expect(domainName("www.example.com")).toBe("www.example.com");

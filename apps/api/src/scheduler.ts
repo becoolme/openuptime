@@ -245,7 +245,8 @@ const SUPPRESSED_DEPENDENCY = "suppressed: the monitor it depends on is down";
 async function dependencyDown(repo: Repo, m: Monitor) {
   if (!m.dependsOnMonitorId) return false;
   const [parent] = await repo.monitorsByIds([m.dependsOnMonitorId]);
-  return parent?.status === "down";
+  // Registration dates (including expired or unknown dates) do not prove the service is unavailable.
+  return parent?.type !== "domain" && parent?.status === "down";
 }
 
 /** The short "why did this open" line stored on an incident. */

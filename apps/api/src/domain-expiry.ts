@@ -2,6 +2,7 @@ import type { DomainExpiry, Repo } from "@openuptime/repo";
 import type { CheckOutcome } from "./checker";
 import { domainName } from "./domain-name";
 import { guardedFetch } from "./netguard";
+import { proberOnline, proberSideError } from "./selfcheck";
 
 const BOOTSTRAP = "https://data.iana.org/rdap/dns.json";
 export const DOMAIN_TTL_MS = 26 * 3600_000;
@@ -9,12 +10,19 @@ export const UNKNOWN_TTL_MS = 15 * 60_000;
 const BOOTSTRAP_TTL_MS = 24 * 3600_000;
 const MAX_BYTES = 1024 * 1024;
 type Lookup = { expiresAt: string | null; checkedAt: string; source: string | null; error: string | null };
+class RdapProberFailure extends Error {}
+async function networkFailure(error: unknown): Promise<never> {
+  if (!(error instanceof Error && error.name === "BlockedTarget") && (proberSideError(error) || !(await proberOnline()))) {
+    throw new RdapProberFailure("RDAP lookup unavailable from this location");
+  }
+  throw error;
+}
 
 /** RDAP responses are data, not redirects or instructions; keep both body and duration bounded. */
 async function json(url: string, signal: AbortSignal): Promise<unknown> {
   const u = new URL(url);
   if (u.protocol !== "https:" || u.username || u.password || u.port && u.port !== "443") throw new Error("RDAP requires a public HTTPS endpoint");
-  const { res } = await guardedFetch(url, { headers: { accept: "application/rdap+json, application/json" }, signal }, { follow: false, publicOnly: true });
+  const { res } = await guardedFetch(url, { headers: { accept: "application/rdap+json, application/json" }, signal }, { follow: false, publicOnly: true }).catch(networkFailure);
   if (!res.ok) { await res.body?.cancel(); throw new Error(res.status === 429 ? "RDAP registry rate limited the lookup (429)" : `RDAP returned HTTP ${res.status}; redirects are not followed`); }
   if (!res.body) throw new Error("RDAP returned an empty response");
   const reader = res.body.getReader();
@@ -22,7 +30,7 @@ async function json(url: string, signal: AbortSignal): Promise<unknown> {
   let size = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await reader.read().catch(networkFailure);
       if (done) break;
       size += value.byteLength;
       if (size > MAX_BYTES) throw new Error("RDAP response exceeds 1 MiB");
@@ -77,20 +85,23 @@ export async function domainCheck(repo: Repo | undefined, input: { target: strin
     // Sequential cache transactions avoid nested connection acquisition and work with one DB connection.
     const bootstrap = await repo.cachedRdap("bootstrap:v1", async () => {
       try { return { value: { data: await json(BOOTSTRAP, AbortSignal.timeout(input.timeoutMs)) }, expiresAt: new Date(Date.now() + BOOTSTRAP_TTL_MS) }; }
-      catch (e) { return { value: { error: (e as Error).message }, expiresAt: new Date(Date.now() + UNKNOWN_TTL_MS) }; }
+      catch (e) { if (e instanceof RdapProberFailure) throw e; return { value: { error: (e as Error).message }, expiresAt: new Date(Date.now() + UNKNOWN_TTL_MS) }; }
     });
     const data = bootstrap.value as { data?: unknown; error?: string };
     if (data.error) throw new Error(data.error);
     const result = await repo.cachedRdap("domain:v1:" + domain, async () => {
       const value: Lookup = { expiresAt: null, checkedAt: new Date().toISOString(), source: null, error: null };
       try { value.source = registryUrl(data.data, domain); value.expiresAt = expiration(await json(value.source, AbortSignal.timeout(input.timeoutMs)), domain); }
-      catch (e) { value.error = (e as Error).message; }
+      catch (e) { if (e instanceof RdapProberFailure) throw e; value.error = (e as Error).message; }
       return { value, expiresAt: new Date(Date.now() + (value.error ? UNKNOWN_TTL_MS : DOMAIN_TTL_MS)) };
     }, 24 * 3600_000); // Refresh before the next supported daily check; negative cache keeps its full backoff.
     lookup = result.value as Lookup;
     until = result.expiresAt;
     if (until.getTime() <= Date.now()) throw new Error("Cached registration data is stale");
-  } catch (e) { lookup = { ...lookup, expiresAt: null, error: (e as Error).message }; }
+  } catch (e) {
+    if (e instanceof RdapProberFailure) return { ok: false, inconclusive: true, error: e.message };
+    lookup = { ...lookup, expiresAt: null, error: (e as Error).message };
+  }
   const days = lookup.expiresAt ? (Date.parse(lookup.expiresAt) - Date.now()) / 864e5 : null;
   const state: DomainExpiry["state"] = lookup.error || days === null ? "unknown" : days <= 0 ? "expired" : days <= (input.domainExpiryWarnDays ?? 30) ? "expiring" : "valid";
   const error = state === "unknown" ? `Domain expiry unknown: ${lookup.error ?? "No expiration date"}` : state === "expired" ? `Domain registration expiration date has passed (${lookup.expiresAt})` : state === "expiring" ? `Domain registration expires in ${Math.ceil(days!)} days (${lookup.expiresAt})` : undefined;

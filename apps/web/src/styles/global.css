@@ -447,6 +447,7 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .pub-s.w{color:var(--warn)}.pub-s.d{color:var(--down)}
 .sd{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;display:block}
 .sd.w{background:var(--warn)}.sd.d{background:var(--down)}
+.sd.unknown{background:var(--muted)}.pub-s.unknown,.pill.unknown{color:var(--muted)}
 .pub-axis{display:flex;justify-content:space-between;padding:12px 24px 14px;font:11.5px var(--mono);color:var(--faint)}
 .pub-inc{padding:22px 24px;margin-bottom:20px}.pub-inc.live{border-color:color-mix(in srgb,var(--down) 40%,var(--line))}
 .pub-inc-h{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.pub-inc-h h3{font-size:18px;font-weight:500}

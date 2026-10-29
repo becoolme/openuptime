@@ -32,7 +32,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "Watch registry expiration dates and receive advance renewal alerts.", zh: "跟踪注册局到期日，提前接收续期提醒。" },
     points: [
       { en: "Choose a registered domain and a warning window from 1 to 365 days; unavailable dates are marked unknown, never healthy.", zh: "指定注册域名和 1 至 365 天的预警窗口；无法获取日期时标记为未知，不会视为正常。" },
-      { en: "RDAP lookups use IANA discovery, a shared 26-hour result cache with early refresh and fifteen-minute unknown-result cache; concurrent requests share a lookup.", zh: "通过 IANA 查询 RDAP 服务，正常结果共享缓存 26 小时并提前刷新，未知结果缓存十五分钟，并发请求复用查询。" },
+      { en: "RDAP dates stay fresh for 26 hours but refresh after about two hours; unknown registry results cache for fifteen minutes, while probe network faults are discarded.", zh: "RDAP 日期有效期为 26 小时，约两小时后提前刷新；注册局未知结果缓存十五分钟，探测端网络故障不作结果记录。" },
+      { en: "Public pages show unknown registration data separately from service outages; registration warnings never suppress dependent service alerts.", zh: "公开页面区分未知注册信息与服务中断，注册日期预警不会抑制依赖服务的告警。" },
       { en: "Alerts distinguish unknown dates, upcoming expiration and passed registration dates, with the existing incident deduplication.", zh: "告警区分日期未知、临近到期和已过注册到期日，并沿用事件去重机制。" },
     ],
   },
