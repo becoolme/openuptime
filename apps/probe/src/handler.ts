@@ -3,8 +3,11 @@ import { runCheck, type CheckInput } from "../../api/src/checker";
 import { targetProblem } from "../../api/src/netguard";
 import { SIGNATURE_HEADER, TIMESTAMP_HEADER, verifyProbe } from "../../api/src/probe-protocol";
 
-/** Bounds the signed envelope, including escaped request text and custom headers. */
-export const MAX_BODY_BYTES = 256 * 1024;
+/**
+ * Bounds the signed envelope, which is read before the signature can be checked: a 16 KiB request body (escaped) plus
+ * custom headers fit with room to spare, and an unsigned caller cannot make a probe buffer more.
+ */
+export const MAX_BODY_BYTES = 64 * 1024;
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
@@ -54,6 +57,7 @@ export async function handleProbe(req: Request, o: { secret: string | undefined;
   if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
+  if (Number(req.headers.get("content-length")) > MAX_BODY_BYTES) return json(413, { error: "Request too large" });
   const text = await req.text();
   if (text.length > MAX_BODY_BYTES) return json(413, { error: "Request too large" });
   const verified = await verifyProbe(o.secret, { timestamp: req.headers.get(TIMESTAMP_HEADER), signature: req.headers.get(SIGNATURE_HEADER), body: text });

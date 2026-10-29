@@ -304,7 +304,8 @@ export function connectFailure(e: unknown): boolean {
   };
   return walk(e, 0);
 }
-const SENSITIVE = ["authorization", "cookie", "proxy-authorization"];
+/** Headers that may follow a redirect to another origin; everything else the monitor supplied is dropped there. */
+const PORTABLE = ["user-agent", "accept", "accept-language", "accept-encoding", "content-type"];
 
 /**
  * fetch() that checks the host before every hop and follows redirects itself (so a public URL cannot bounce a check to
@@ -341,15 +342,21 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     await res.body?.cancel();
     if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects");
     const next = new URL(location, current);
-    if (next.origin !== u.origin) {
-      if (protectBody && body != null && body !== "") throw new Error("Cross-origin redirect refused for a request with a body");
-      headers = new Headers(headers);
-      for (const h of SENSITIVE) headers.delete(h);
-    }
     // like browsers: 303, and POST after 301/302, become a bodiless GET; 307 / 308 repeat the request
-    if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === "POST")) {
+    const converts = res.status === 303 || ((res.status === 301 || res.status === 302) && method === "POST");
+    if (next.origin !== u.origin) {
+      // the body is only a problem when it would really be sent again, and a same-host http -> https upgrade is safe
+      const upgrade = u.protocol === "http:" && next.protocol === "https:" && next.hostname === u.hostname;
+      if (protectBody && !converts && !upgrade && body != null && body !== "") throw new Error("Cross-origin redirect refused for a request with a body");
+      // only the headers every request carries go along; anything the monitor supplied (keys, tokens, cookies) stays behind
+      const kept = new Headers();
+      for (const h of PORTABLE) { const v = headers.get(h); if (v != null) kept.set(h, v); }
+      headers = kept;
+    }
+    if (converts) {
       method = method === "HEAD" ? "HEAD" : "GET";
       body = undefined;
+      headers = new Headers(headers);
       headers.delete("content-type");
       headers.delete("content-length");
     }

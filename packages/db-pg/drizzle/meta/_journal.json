@@ -239,6 +239,13 @@
       "when": 1793294166579,
       "tag": "0033_brief_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793294433764,
+      "tag": "0034_wild_giant_man",
+      "breakpoints": true
     }
   ]
 }

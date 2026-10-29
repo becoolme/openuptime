@@ -48,6 +48,7 @@ export function parseProbeRegions(raw: string | undefined): { regions: ProbeRegi
 
 /** Env values are constant per deployment, so a module-level config is safe in a Worker isolate; parsed once. */
 export function configureProbes(env: { PROBE_REGIONS?: string; PROBE_SECRET?: string }) {
+  capable.clear();
   const key = `${env.PROBE_REGIONS ?? ""}\u0000${env.PROBE_SECRET ?? ""}`;
   if (key === configured) return;
   configured = key;
@@ -83,6 +84,11 @@ const outcomeOf = (v: unknown): CheckOutcome | null => {
  * Run a check from `region`. A probe that cannot be reached, refuses us or answers nonsense is `unreachable`: that says
  * nothing about the target, so callers must not count it as a failed check.
  */
+const CAPABILITY_TTL_MS = 30_000;
+const capable = new Map<string, number>();
+/** Forgets which probes were seen supporting request bodies (tests, and a configuration reload). */
+export function resetProbeCapabilities() { capable.clear(); }
+
 export async function runInRegion(region: string, input: CheckInput): Promise<RegionRun> {
   if (region === AUTO) {
     const outcome = await runCheck(input);
@@ -96,16 +102,18 @@ export async function runInRegion(region: string, input: CheckInput): Promise<Re
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
   });
   try {
-    // Old probes ignore unknown fields: verify support BEFORE sending a payload.
-    // Do not cache positive capabilities: a rollback must stop payload delivery immediately.
-    if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) {
+    // Old probes ignore unknown fields: verify support BEFORE sending a payload. A positive answer is remembered
+    // briefly so every check does not pay for a second request; a rolled-back probe is noticed within CAPABILITY_TTL_MS.
+    if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method)) && (capable.get(probe.url) ?? 0) <= Date.now()) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
       const capabilities: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;
       if (!health.ok) await health.body?.cancel();
       const advertised = (capabilities as { capabilities?: unknown } | null)?.capabilities;
       if (!Array.isArray(advertised) || !advertised.includes(HTTP_REQUEST_CAPABILITY)) {
+        capable.delete(probe.url);
         return { region, unreachable: "Probe upgrade required for HTTP request bodies and methods" };
       }
+      capable.set(probe.url, Date.now() + CAPABILITY_TTL_MS);
     }
     const ts = Math.floor(Date.now() / 1000);
     const res = await fetch(probe.url, {

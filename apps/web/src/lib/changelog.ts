@@ -27,14 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
-    id: "http-request-bodies", date: "2026-10-28", edition: "community",
+    id: "http-request-bodies", date: "2026-10-29", edition: "community",
     title: { en: "HTTP request bodies", zh: "HTTP 请求体" },
     summary: { en: "Monitor API endpoints with custom request bodies and additional HTTP methods.", zh: "通过自定义请求体和更多 HTTP 方法检测 API 接口。" },
     points: [
       { en: "Send up to 16 KiB of UTF-8 text with POST, PUT, PATCH, DELETE or OPTIONS; the form counts bytes and the runtime calculates Content-Length.", zh: "使用 POST、PUT、PATCH、DELETE 或 OPTIONS 发送最多 16 KiB 的 UTF-8 文本；表单按字节计数，运行时计算 Content-Length。" },
-      { en: "Request bodies are masked for members and viewers, and redirects cannot forward them to another origin.", zh: "成员和访客只能查看请求体掩码，重定向不会将请求体转发到其他源。" },
+      { en: "Request bodies are masked for members and viewers. A redirect to another origin never carries your custom headers, and one that would resend the body there is refused.", zh: "成员和访客只能查看请求体掩码。重定向到其他源时不会携带自定义请求头，会重新发送请求体的跨源重定向会被拒绝。" },
       { en: "Upgrade remote probes before using request bodies; incompatible probes are reported as unavailable.", zh: "使用请求体前请升级远程探针；不兼容的探针会被标记为不可用。" },
+      { en: "The account data export now includes request bodies for workspaces you own or administer.", zh: "账号数据导出现在会包含你拥有或管理的工作区中的请求体。" },
     ],
+    link: { href: "/docs/api", label: { en: "Read the monitor API docs", zh: "阅读监控 API 文档" } },
   },
   {
     id: "teams-alerts", date: "2026-10-29", edition: "community",

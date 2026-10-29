@@ -51,12 +51,37 @@ describe("HTTP request bodies", () => {
     expect(requestBodyProblem({ type: "http", method: "POST", requestBody: "你".repeat(5462) })).toMatch(/16384/);
     expect(requestBodyProblem({ type: "http", method: "POST", requestBody: "x".repeat(16384) })).toBeNull();
   });
-  it("never forwards a body across origins", async () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 307, headers: { location: "https://8.8.8.8/" } }));
-    vi.stubGlobal("fetch", fetch);
+  it("never forwards a body across origins on 307 / 308", async () => {
+    for (const status of [307, 308]) {
+      const fetch = vi.fn(async () => new Response(null, { status, headers: { location: "https://8.8.8.8/" } }));
+      vi.stubGlobal("fetch", fetch);
+      try {
+        await expect(guardedFetch("https://1.1.1.1/", { method: "POST", body: "secret" }, { protectBody: true })).rejects.toThrow(/Cross-origin/);
+        expect(fetch).toHaveBeenCalledTimes(1);
+      } finally { vi.unstubAllGlobals(); }
+    }
+  });
+  it.each([301, 302, 303])("follows a %s to another origin after dropping the body", async (status) => {
+    const calls: { url: string; method: string; body: unknown; key: string | null }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ url, method: init.method as string, body: init.body, key: new Headers(init.headers).get("x-api-key") });
+      return calls.length === 1 ? new Response(null, { status, headers: { location: "https://8.8.8.8/next" } }) : new Response("ok");
+    });
     try {
-      await expect(guardedFetch("https://1.1.1.1/", { method: "POST", body: "secret" }, { protectBody: true })).rejects.toThrow(/Cross-origin/);
-      expect(fetch).toHaveBeenCalledTimes(1);
+      const { res } = await guardedFetch("https://1.1.1.1/", { method: "POST", body: "secret", headers: { "x-api-key": "k", "content-type": "text/plain" } }, { protectBody: true });
+      expect(res.status).toBe(200);
+      expect(calls[1]).toEqual({ url: "https://8.8.8.8/next", method: "GET", body: undefined, key: null });
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("allows a same-host http to https upgrade to repeat the body, without custom headers", async () => {
+    const calls: { url: string; body: unknown; key: string | null }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ url, body: init.body, key: new Headers(init.headers).get("x-api-key") });
+      return calls.length === 1 ? new Response(null, { status: 308, headers: { location: "https://1.1.1.1/x" } }) : new Response("ok");
+    });
+    try {
+      await guardedFetch("http://1.1.1.1/", { method: "POST", body: "secret", headers: { "x-api-key": "k" } }, { protectBody: true });
+      expect(calls).toEqual([{ url: "http://1.1.1.1/", body: "secret", key: "k" }, { url: "https://1.1.1.1/x", body: "secret", key: null }]);
     } finally { vi.unstubAllGlobals(); }
   });
   it("does not POST to old probes, and signs the complete body for upgraded probes", async () => {
@@ -75,12 +100,18 @@ describe("HTTP request bodies", () => {
         return Response.json({ ok: true });
       });
       expect(await runInRegion("test", input)).toMatchObject({ outcome: { ok: true } });
-      // A successful preflight must not authorize a later request after a probe rollback.
+      // A successful preflight is remembered briefly, so the next check posts without asking again...
+      const afterFirst = fetch.mock.calls.length;
+      expect(await runInRegion("test", input)).toMatchObject({ outcome: { ok: true } });
+      expect(fetch).toHaveBeenCalledTimes(afterFirst + 1);
+      // ...and a rolled-back probe is noticed once that memory expires.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.now() + 31_000);
       fetch.mockImplementation(async () => Response.json({ ok: true }));
       const beforeRollback = fetch.mock.calls.length;
       expect(await runInRegion("test", input)).toMatchObject({ unreachable: expect.stringContaining("upgrade required") });
       expect(fetch).toHaveBeenCalledTimes(beforeRollback + 1);
 
-    } finally { vi.unstubAllGlobals(); configureProbes({}); }
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); configureProbes({}); }
   });
 });
