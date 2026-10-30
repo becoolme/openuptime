@@ -45,7 +45,7 @@ describe("probe as a Node server", () => {
   });
 
   it("answers the health check with its region", async () => {
-    expect(await (await fetch(base)).json()).toMatchObject({ ok: true, region: "test-region", capabilities: ["http-request-body-v1"] });
+    expect(await (await fetch(base)).json()).toMatchObject({ ok: true, region: "test-region", capabilities: ["http-request-body-v1", "mcp-monitor-v2"] });
   });
 
   it("runs a signed check and returns the outcome", async () => {

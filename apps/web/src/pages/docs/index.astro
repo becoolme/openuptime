@@ -3,6 +3,7 @@ import Doc from "../../layouts/Doc.astro";
 
 type Entry = { href: string; en: string; zh: string; descEn: string; descZh: string };
 const guides: Entry[] = [
+  { href: "/docs/mcp-monitors", en: "MCP Uptime Monitor", zh: "MCP 可用性监控", descEn: "Check agent connectivity, tool discovery, optional tool calls and schema compatibility.", descZh: "检查 Agent 连接、工具发现，并可选验证工具调用和 schema 兼容性。" },
   { href: "/docs/self-host", en: "Self-host", zh: "自托管", descEn: "Run your own copy on Cloudflare Workers or in Docker, with a Postgres database you control.", descZh: "在 Cloudflare Workers 或 Docker 上运行你自己的实例，数据库由你自己掌控。" },
   { href: "/docs/backup", en: "Backup and restore", zh: "备份与恢复", descEn: "Back up the Postgres database of a Docker deployment with pg_dump, and restore it step by step.", descZh: "用 pg_dump 备份 Docker 部署的 Postgres 数据库，并逐步恢复。" },
   { href: "/docs/regions", en: "Multi-region checks", zh: "多区域检测", descEn: "Check a monitor from several places in the world, and run your own probes in Docker, on Node or on Vercel.", descZh: "让监控项从世界各地发起检测，并用 Docker、Node 或 Vercel 运行你自己的探针。" },

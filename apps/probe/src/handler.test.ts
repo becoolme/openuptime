@@ -22,7 +22,7 @@ async function signed(body: unknown, o: { secret?: string; ts?: number } = {}) {
 describe("probe handler", () => {
   it("answers a health GET without credentials", async () => {
     const res = await handleProbe(new Request("http://probe/"), { secret, region: "fra1" });
-    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1"] });
+    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1", "mcp-monitor-v2"] });
   });
 
   it("is not an open proxy: unsigned, wrongly signed and stale requests are refused", async () => {
@@ -36,7 +36,7 @@ describe("probe handler", () => {
     expect((await handleProbe(await signed(check), { secret: undefined })).status).toBe(503);
   });
 
-  it("only runs http, tcp and websocket checks", async () => {
+  it("only runs the configured outbound monitor protocols", async () => {
     expect((await handleProbe(await signed({ ...check, type: "postgres", target: "postgres://u:p@db.example.com/x" }), { secret })).status).toBe(400);
     expect(parseCheck({ ...check, type: "websocket", target: "wss://example.com/socket", wsMessage: "ping" })).toMatchObject({ input: { type: "websocket", wsMessage: "ping" } });
     expect(parseCheck({ ...check, type: "websocket", target: "wss://example.com/socket" })).toMatchObject({ input: { wsMessage: null } });
@@ -46,6 +46,13 @@ describe("probe handler", () => {
     expect(parseCheck({ ...check, headers: { a: 1 } })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedLocation: 5 })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedStatus: 301, expectedLocation: "/new" })).toMatchObject({ input: { expectedLocation: "/new" } });
+  });
+
+  it("accepts the remaining MCP deadline and centrally resolved bearer token, but never a refresh credential", () => {
+    const input = { ...check, type: "mcp", timeoutMs: 100, headers: { Authorization: "Bearer " + "x".repeat(8192) }, mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: null } };
+    expect(parseCheck(input)).toHaveProperty("input");
+    expect(parseCheck({ ...input, timeoutMs: 0 })).toHaveProperty("error");
+    expect(parseCheck({ ...input, mcpConfig: { ...input.mcpConfig, oauth: { mode: "refresh_token", issuer: "https://auth.example", clientId: "id", refreshToken: "private-refresh" } } })).toHaveProperty("error");
   });
 
   it("validates HTTP body semantics before running a check", () => {
@@ -69,7 +76,13 @@ describe("probe handler", () => {
     beforeAll(async () => {
       // a loopback target is private; this suite opts in the way a self-hoster would
       configureNetGuard({ ALLOW_PRIVATE_TARGETS: "true" });
-      server = createServer((req, res) => {
+      server = createServer(async (req, res) => {
+        if (req.url === "/mcp") {
+          const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString());
+          const result = body.method === "server/discover" ? { resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: { tools: {} } } : { resultType: "complete", tools: [{ name: "lookup", inputSchema: { type: "object" } }] };
+          res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result })); return;
+        }
         res.statusCode = req.url === "/down" ? 503 : 200;
         res.end("hello from the target");
       });
@@ -96,6 +109,12 @@ describe("probe handler", () => {
       expect(typeof up.latencyMs).toBe("number");
       const down = await (await handleProbe(await signed({ ...check, target: `${url}/down` }), { secret })).json() as { ok: boolean; statusCode: number };
       expect(down).toMatchObject({ ok: false, statusCode: 503 });
+    });
+
+    it("executes a signed MCP discovery against a private server and retains the complete schema", async () => {
+      const response = await handleProbe(await signed({ ...check, type: "mcp", target: `${url}/mcp`, mcpConfig: { requiredTools: ["lookup"], schemaCheck: true, toolCall: null } }), { secret });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, mcp: { stage: "complete", toolsComplete: true, tools: [{ name: "lookup", inputSchema: { type: "object" } }] } });
     });
 
     it("returns the outcome of a tcp check", async () => {

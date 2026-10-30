@@ -204,5 +204,20 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0040_gray_ultimates",
     "when": 1793296005371,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'domain';--> statement-breakpoint\nCREATE TABLE \"rdap_cache\" (\n\t\"key\" text PRIMARY KEY NOT NULL,\n\t\"value\" jsonb NOT NULL,\n\t\"expires_at\" timestamp with time zone NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"domain_expiry_warn_days\" integer DEFAULT 30 NOT NULL;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"domain_expiry\" jsonb;--> statement-breakpoint\nCREATE INDEX \"rdap_cache_expiry_idx\" ON \"rdap_cache\" USING btree (\"expires_at\");"
+  },
+  {
+    "tag": "0041_thankful_elektra",
+    "when": 1793375153748,
+    "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'mcp';--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"mcp_config\" jsonb;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"mcp_baseline\" jsonb;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"mcp_observation\" jsonb;--> statement-breakpoint\nALTER TABLE \"monitor\" ADD COLUMN \"mcp_generation\" integer DEFAULT 0 NOT NULL;"
+  },
+  {
+    "tag": "0042_equal_mister_sinister",
+    "when": 1793377565650,
+    "sql": "CREATE TABLE \"mcp_alert_outbox\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"sequence\" bigserial NOT NULL,\n\t\"event_key\" text NOT NULL,\n\t\"organization_id\" text NOT NULL,\n\t\"monitor_id\" uuid NOT NULL,\n\t\"delivery_id\" uuid NOT NULL,\n\t\"recipient\" text NOT NULL,\n\t\"channel_id\" uuid,\n\t\"event\" jsonb NOT NULL,\n\t\"status\" text DEFAULT 'pending' NOT NULL,\n\t\"attempts\" integer DEFAULT 0 NOT NULL,\n\t\"quota_attempted\" boolean DEFAULT false NOT NULL,\n\t\"lease_token\" uuid,\n\t\"lease_until\" timestamp with time zone,\n\t\"next_attempt_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"error\" text,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"check_result\" ADD COLUMN \"mcp\" jsonb;--> statement-breakpoint\nALTER TABLE \"mcp_alert_outbox\" ADD CONSTRAINT \"mcp_alert_outbox_organization_id_organization_id_fk\" FOREIGN KEY (\"organization_id\") REFERENCES \"public\".\"organization\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE \"mcp_alert_outbox\" ADD CONSTRAINT \"mcp_alert_outbox_monitor_id_monitor_id_fk\" FOREIGN KEY (\"monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE \"mcp_alert_outbox\" ADD CONSTRAINT \"mcp_alert_outbox_delivery_id_alert_delivery_id_fk\" FOREIGN KEY (\"delivery_id\") REFERENCES \"public\".\"alert_delivery\"(\"id\") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nCREATE UNIQUE INDEX \"mcp_alert_outbox_event_recipient_idx\" ON \"mcp_alert_outbox\" USING btree (\"event_key\",\"recipient\");--> statement-breakpoint\nCREATE INDEX \"mcp_alert_outbox_due_idx\" ON \"mcp_alert_outbox\" USING btree (\"status\",\"next_attempt_at\");--> statement-breakpoint\nCREATE INDEX \"mcp_alert_outbox_order_idx\" ON \"mcp_alert_outbox\" USING btree (\"monitor_id\",\"recipient\",\"sequence\");"
+  },
+  {
+    "tag": "0043_concerned_tyger_tiger",
+    "when": 1793378217317,
+    "sql": "ALTER TABLE \"mcp_alert_outbox\" ADD COLUMN \"quota_decision\" text;"
   }
 ];

@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import type { Repo } from "@openuptime/repo";
+import type { Repo, McpConfig } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -9,15 +9,29 @@ import { creditCost } from "../entitlements";
 import { targetProblem } from "../netguard";
 import { MASK, maskHeaders, restoreHeaders, sameJson } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
-import { isRegionConfigured, runInRegion } from "../probes";
+import { isRegionConfigured, runInRegion, usesOnlyPrivateProbes } from "../probes";
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 
+import { mcpConfigSchema } from "../mcp-config";
+import { mcpCheck } from "../mcp-monitor";
+import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
+
+function mcpProblem(v: {type: string; target: string; mcpConfig?: McpConfig | null}): string | null {
+  if (v.type !== "mcp") return v.mcpConfig ? "MCP configuration is only valid for MCP monitors" : null;
+  try {
+    const url = new URL(v.target);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) return "MCP requires an http(s) URL without embedded credentials or a fragment; use authentication headers";
+  } catch { return "MCP requires an absolute http(s) URL"; }
+  return null;
+}
+
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
   target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  mcpConfig: mcpConfigSchema.nullable().describe("MCP: requiredTools, optional schemaCheck baseline, and toolCall. Tool calls require explicit enabled=true and may incur charges or modify data. Assertions use JSON Pointer paths into the result. Manager-only configuration."),
   domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
   method: z.enum(HTTP_METHODS).describe("HTTP request method; ignored for other monitor types."),
   requestBody: z.string().max(MAX_REQUEST_BODY_BYTES).nullable().describe("HTTP request body, up to 16384 UTF-8 bytes; unavailable with GET or HEAD. Set Content-Type using headers. Null clears it. Masked values preserve stored secrets on update; owners and admins can read bodies."),
@@ -27,7 +41,7 @@ const fields = {
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   recoveryThreshold: z.number().int().min(1).max(10).describe("Consecutive successful runs (or heartbeat pings) required to recover from down. Default 1; a multi-region vote counts once. Does not delay latency-only recovery."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
-  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP and WebSocket only. A supplied list replaces the existing one."),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket and MCP. A supplied list replaces the existing one."),
   keyword: z.string().max(500).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test; null disables keyword matching."),
   keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body (or the WebSocket message) must contain keyword or must not contain it."),
   // an absolute http(s) URL or a path; blank means "any destination"
@@ -56,6 +70,7 @@ const body = z.object({
   target: fields.target.default(""),
   method: fields.method.default("GET"),
   requestBody: fields.requestBody.default(null),
+  mcpConfig: fields.mcpConfig.default(null),
   domainExpiryWarnDays: fields.domainExpiryWarnDays.default(30),
   expectedStatus: fields.expectedStatus.default(200),
   intervalSec: fields.intervalSec.default(60),
@@ -123,7 +138,7 @@ export const monitorPatchSchema = patchBody;
 
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
-const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : requestBodyProblem(v);
+const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : mcpProblem(v) ?? requestBodyProblem(v);
 
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
@@ -207,14 +222,15 @@ async function dependencyProblem(c: Context<AppEnv>, projectId: string | null, s
 }
 
 /** HTTP 400 for a target that points at a private address (unless the deployment allows those), or null. */
-async function refuseTarget(c: Context<AppEnv>, type: string, target: string) {
+async function refuseTarget(c: Context<AppEnv>, type: string, target: string, regions: string[] = ["auto"]) {
+  if (usesOnlyPrivateProbes(type, regions)) return null;
   const error = await targetProblem(type, target);
   return error ? c.json({ error, code: "target_not_allowed" }, 400) : null;
 }
 
 /** Request headers and bodies (often tokens) are shown to owners and admins only. */
-const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
-  (await isManager(c)) ? rows : rows.map((m) => ({ ...m, ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
+const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
+  (await isManager(c)) ? rows : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
 
 /** Source fields that look like credentials: a record carrying one is refused rather than imported without its authentication. */
 const CREDENTIAL_KEY = /auth|user|pass|secret|token|cred|bearer|oauth/i;
@@ -248,7 +264,9 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     if (!parsed.success) { row.error = parsed.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; "); continue; }
     const v = parsed.data;
     row.name = v.name;
+    if (v.type === "mcp" && v.mcpConfig?.toolCall?.enabled) { row.error = "Import MCP monitors with tool calls disabled; enable them explicitly after import"; continue; }
     const invalid = creationProblem(v);
+    if (v.type === "mcp" && !(await isManager(c))) return c.json({ error: "Only workspace owners and admins can configure MCP monitors" }, 403);
     if (invalid) { row.error = invalid; continue; }
     const source = sourceSchema.safeParse(r.source ?? defaultSource.data);
     if (!source.success) { row.error = "Invalid source namespace"; continue; }
@@ -261,8 +279,8 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     if (r.dependsOnMonitorId) row.warnings.push("Source monitor dependencies are not imported");
     if (v.type !== "heartbeat" && !v.target.trim()) { row.error = "target: required"; continue; }
     // a file often repeats a host; resolve each distinct target once (a read-only grant may run previews)
-    const lookupKey = `${v.type}\0${v.target}`;
-    if (!lookups.has(lookupKey)) lookups.set(lookupKey, targetProblem(v.type, v.target));
+    const lookupKey = `${v.type}\0${v.target}\0${v.regions.join(",")}`;
+    if (!lookups.has(lookupKey)) lookups.set(lookupKey, usesOnlyPrivateProbes(v.type, v.regions) ? Promise.resolve(null) : targetProblem(v.type, v.target));
     const problem = await lookups.get(lookupKey)!;
     if (problem) { row.error = `target: ${problem}`; continue; }
     let sourceId: string;
@@ -318,8 +336,9 @@ export const monitors = new Hono<AppEnv>()
     const v = c.req.valid("json");
     const invalid = creationProblem(v);
     if (invalid) return c.json({ error: invalid }, 400);
+    if (v.type === "mcp" && !(await isManager(c))) return c.json({ error: "Only workspace owners and admins can configure MCP monitors" }, 403);
     if (v.type === "domain") v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
-    const blocked = await refuseTarget(c, v.type, v.target);
+    const blocked = await refuseTarget(c, v.type, v.target, v.regions);
     if (blocked) return blocked;
     const badRegion = await regionProblem(c, v.type, v.regions);
     if (badRegion) return badRegion;
@@ -329,6 +348,34 @@ export const monitors = new Hono<AppEnv>()
     if (refused) return refused;
     const channelIds = await withAutoChannels(repo, c.get("orgId"), c.get("projectId"), v.channelIds);
     return c.json((await shown(c, [await repo.createMonitor(c.get("orgId"), c.get("projectId"), newMonitor({ ...v, channelIds }))]))[0], 201);
+  })
+  .post("/mcp/preview", requireManager, bodyLimit({ maxSize: 128 * 1024 }), zValidator("json", z.object({
+    monitorId: z.string().uuid().optional(), target: fields.target, headers: fields.headers.default({}),
+    timeoutMs: fields.timeoutMs.default(10000), mcpConfig: fields.mcpConfig.default(null), region: z.string().regex(REGION_ID).optional(),
+  })), async (c) => {
+    const v = c.req.valid("json"), repo = c.get("repo");
+    const invalid = mcpProblem({ type: "mcp", ...v });
+    if (invalid) return c.json({ error: invalid }, 400);
+    const blocked = await refuseTarget(c, "mcp", v.target, [v.region ?? AUTO]);
+    if (blocked) return blocked;
+    if (v.region && !isRegionConfigured(v.region)) return c.json({ error: "Unknown probe region" }, 400);
+    const stored = v.monitorId ? await repo.getMonitor(c.get("orgId"), v.monitorId, c.get("projectScope")) : null;
+    if (v.monitorId && (!stored || stored.type !== "mcp")) return c.json({ error: "Not found" }, 404);
+    if (stored && mcpRefreshPreviewChanged(v, stored)) return c.json({ error: "Save endpoint and OAuth changes before previewing an existing monitor, or reload its rotated credentials" }, 409);
+    if ((await c.get("entitlements").spendCredits(c.get("orgId"), 1)) < 1) return c.json({ error: "No credits left this period", code: "credits_exhausted" }, 402);
+    const input = { type: "mcp" as const, target: v.target, headers: v.headers, timeoutMs: v.timeoutMs, method: "GET", expectedStatus: 200,
+      mcpConfig: { requiredTools: [], ...v.mcpConfig, schemaCheck: false, toolCall: null } };
+    // Refresh token rotation is persisted only against the authorized existing monitor.
+    const prepared = await prepareMcpOAuth(input, repo, stored ?? undefined);
+    c.header("cache-control", "no-store");
+    if ("outcome" in prepared) return c.json({ ...prepared.outcome, mcp: prepared.outcome.mcp ?? { stage: "oauth", timings: {}, tools: [], changes: [], toolsComplete: false }, ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
+    let outcome;
+    if (v.region && v.region !== AUTO) {
+      const run = await runInRegion(v.region, prepared.input, repo);
+      if ("unreachable" in run) return c.json({ ok: false, inconclusive: true, error: run.unreachable, mcp: { stage: "server/discover", timings: { oauth: prepared.elapsedMs }, tools: [], changes: [], toolsComplete: false }, ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
+      outcome = run.outcome;
+    } else outcome = await mcpCheck(prepared.input);
+    return c.json({ ...addOAuthTiming(outcome, prepared.elapsedMs), ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
   })
   // JSON backup of this project's monitors; feed it back to POST /import (here or in another workspace)
   .get("/export", async (c) => {
@@ -351,12 +398,28 @@ export const monitors = new Hono<AppEnv>()
     const repo = c.get("repo");
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
-    return c.json({ ...(await shown(c, [m]))[0], ...(await repo.monitorDetail(m.id)) });
+    const detail = await repo.monitorDetail(m.id);
+    const result = { ...(await shown(c, [m]))[0], ...detail };
+    if (m.type === "mcp" && !(await isManager(c))) result.results = detail.results.map(r => Object.fromEntries(Object.entries(r).filter(([key]) => key !== "mcp")) as typeof r);
+    return c.json(result);
   })
   .patch("/:id", uuidParams, zValidator("json", patchBody), async (c) => {
     const repo = c.get("repo");
     const v = c.req.valid("json");
     if (Object.keys(v).length === 0) return c.json({ error: "No changes" }, 400);
+    const stored = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+    if (!stored) return c.json({ error: "Not found" }, 404);
+    if (stored.type === "mcp" && stored.mcpConfig?.toolCall?.enabled &&
+      ((v.paused === false && stored.paused) || (v.intervalSec !== undefined && v.intervalSec !== stored.intervalSec) || (v.timeoutMs !== undefined && v.timeoutMs !== stored.timeoutMs) || (v.regions !== undefined && !sameJson(v.regions, stored.regions))) && !(await isManager(c))) {
+      return c.json({ error: "Only workspace owners and admins can resume or change the schedule of enabled MCP tool calls" }, 403);
+    }
+
+    if (v.mcpConfig !== undefined || (stored.type === "mcp" && (v.target !== undefined || v.headers !== undefined))) {
+      if (!(await isManager(c))) return c.json({ error: "Only workspace owners and admins can configure MCP monitors" }, 403);
+      const invalid = mcpProblem({ ...stored, ...v });
+      if (invalid) return c.json({ error: invalid }, 400);
+    }
+
     if (v.dnsRecordType !== undefined || v.dnsExpectedValue !== undefined || v.dnsMatchMode !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
@@ -385,7 +448,7 @@ export const monitors = new Hono<AppEnv>()
     if (v.target !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
-      const blocked = await refuseTarget(c, current.type, v.target);
+      const blocked = await refuseTarget(c, current.type, v.target, v.regions ?? current.regions);
       if (blocked) return blocked;
     }
     if (v.regions !== undefined) {
@@ -393,6 +456,10 @@ export const monitors = new Hono<AppEnv>()
       if (!current) return c.json({ error: "Not found" }, 404);
       const badRegion = await regionProblem(c, current.type, v.regions);
       if (badRegion) return badRegion;
+      if (current.type === "mcp") {
+        const blocked = await refuseTarget(c, current.type, v.target ?? current.target, v.regions);
+        if (blocked) return blocked;
+      }
     }
     if (v.dependsOnMonitorId !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
@@ -423,6 +490,23 @@ export const monitors = new Hono<AppEnv>()
     }
     return c.json((await shown(c, [row]))[0]);
   })
+  .get("/:id/mcp-history", uuidParams, requireManager, async (c) => {
+    const days = c.req.query("days") ?? "7";
+    if (days !== "7" && days !== "30") return c.json({ error: "days must be 7 or 30" }, 400);
+    const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 120)));
+    if (!Number.isInteger(limit)) return c.json({ error: "limit must be an integer" }, 400);
+    const history = await c.get("repo").mcpHistory(c.get("orgId"), c.req.param("id"), c.get("projectScope"), { days: days === "7" ? 7 : 30, limit });
+    if (!history) return c.json({ error: "MCP monitor not found" }, 404);
+    c.header("cache-control", "no-store");
+    return c.json(history);
+  })
+  .post("/:id/mcp-baseline/accept", uuidParams, requireManager, zValidator("json", z.object({ observationId: z.string().uuid(), schemaHash: z.string().regex(/^[a-f0-9]{64}$/) })), async (c) => {
+    const result = await c.get("repo").acceptMcpBaseline(c.get("orgId"), c.req.param("id"), c.get("projectScope"), c.req.valid("json"));
+    if (result.status === "not_found") return c.json({ error: "MCP monitor not found" }, 404);
+    if (result.status !== "accepted") return c.json({ error: "Discovery changed or is incomplete; review the latest schema before accepting", code: result.status }, 409);
+    return c.json({ ok: true });
+  })
+  .post("/:id/mcp-baseline/reset", uuidParams, requireManager, async (c) => c.json({ error: "Review the discovered schema and POST its observationId and schemaHash to /mcp-baseline/accept" }, 409))
   .delete("/:id", uuidParams, requireManager, async (c) => {
     await c.get("repo").deleteMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     return c.body(null, 204);
@@ -436,6 +520,7 @@ export const monitors = new Hono<AppEnv>()
     const region = asked.data.region;
     const m = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
     if (!m) return c.json({ error: "Not found" }, 404);
+    if (m.type === "mcp" && !(await isManager(c))) return c.json({ error: "Only workspace owners and admins can run MCP checks" }, 403);
     if (m.type === "heartbeat") return c.json({ error: "Heartbeat monitors have no check to run", code: "regions_not_supported" }, 400);
     if (region !== undefined) {
       if (!(PROBE_TYPES as readonly string[]).includes(m.type) && region !== AUTO) {

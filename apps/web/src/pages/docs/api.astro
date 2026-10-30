@@ -5,7 +5,7 @@ type Ep = { m: "GET" | "POST" | "PATCH" | "DELETE"; p: string; en: string; zh: s
 type Group = { id: string; en: string; zh: string; noteEn?: string; noteZh?: string; eps: Ep[] };
 
 const monitorFields = `name           string, 1-120 chars (required)
-type           "http" | "tcp" | "websocket" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "domain"   (default "http"; cannot be changed later)
+type           "http" | "tcp" | "websocket" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "domain" | "mcp"   (default "http"; cannot be changed later)
 target         string, max 2048   (URL for http, ws:// or wss:// URL for websocket, host:port for tcp/postgres/mysql/redis, hostname for dns)
 method         "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
 requestBody    string | null (max 16384 UTF-8 bytes; no body for GET/HEAD)
@@ -14,11 +14,12 @@ intervalSec    integer 60-86400                              (default 60)
 timeoutMs      integer 1000-30000                            (default 10000)
 failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
 recoveryThreshold integer 1-10 successful runs or heartbeat pings before recovering from down (default 1)
-regions        string[], ids from GET /regions                 (default ["auto"]; http, tcp and websocket monitors only)
+regions        string[], ids from GET /regions                 (default ["auto"]; http, tcp, websocket and mcp monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
 expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus: the redirect is not followed; Location must equal this URL or path (default null = any)
-headers        { [name: string]: string }  http, or the websocket handshake (default {})
+headers        { [name: string]: string }  http, mcp, or the websocket handshake (default {})
+mcpConfig      { transport?: "auto" | "streamable-http" | "sse", oauth?: object | null, listPrompts?: boolean, listResources?: boolean, driftPolicy?: "down" | "degraded" | "record", requiredTools: string[], schemaCheck: boolean, toolCall: null | { enabled: boolean, name: string, arguments: object, assertions: { path: string, operator: "equals" | "contains" | "exists", value?: JSON }[] } } (mcp only; schemaCheck false and toolCall null by default)
 wsMessage      string | null, max 2000  websocket: text sent once connected; a message must come back within timeoutMs (default null = handshake only; not a secret)
 dnsRecordType  "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS" (default "A")
 dnsExpectedValue string | null, max 2000 (default null = any answer of selected type)
@@ -53,7 +54,7 @@ const groups: Group[] = [
   },
   {
     id: "regions", en: "Regions", zh: "检测区域",
-    noteEn: "A monitor checks from its own location (auto) unless regions says otherwise; list regions only for http, tcp and websocket monitors. With several regions a run is down when most of the regions that answered failed, so one region's bad route does not page you. Each region counts as one check of your allowance. Errors: 400 unknown_region, 400 regions_not_supported (other monitor types), 402 regions_not_allowed (more regions than the plan allows).",
+    noteEn: "A monitor checks from its own location (auto) unless regions says otherwise; list regions only for http, tcp, websocket and mcp monitors. With several regions a run is down when most of the regions that answered failed, so one region's bad route does not page you. Each region counts as one check of your allowance. Errors: 400 unknown_region, 400 regions_not_supported (other monitor types), 402 regions_not_allowed (more regions than the plan allows).",
     noteZh: "监控项默认从服务自身所在位置（auto）检测，仅当设置 regions 时才走多区域，且只适用于 http、tcp 与 websocket 类型。多区域时，只有多数应答的区域都失败才判定为故障，单个区域的线路问题不会触发告警。每个区域各计一次检查额度。错误：400 unknown_region、400 regions_not_supported（其他类型）、402 regions_not_allowed（超出套餐允许的区域数）。",
     eps: [
       { m: "GET", p: "/regions", en: "The regions this deployment can check from, the monitor types that support them and how many one monitor may list (null: no limit, which is always the case when self-hosting).", zh: "当前部署可用的检测区域、支持区域检测的监控类型，以及单个监控项最多可选的区域数（null 表示不限，自部署始终不限）。",
@@ -168,6 +169,13 @@ const groups: Group[] = [
     <p>每条记录可指定 <code>source</code> 和 <code>sourceId</code>（或 <code>id</code>）。标识在工作区、项目和来源范围内唯一。重复或并发导入会跳过已有标识，不会更新或删除监控项。无 ID 时按类型、名称和目标生成稳定哈希；修改这些字段会创建新项。重试复用来源标识，不同来源账号使用不同标识。本系统导出会保留来源信息。删除已导入项后可重新导入。预览不会预留容量；无效记录会跳过，超出套餐容量则整批拒绝并返回 402。</p>
     <p>Reports include unsupported fields, removed channel/dependency references and interval/region adjustments. Masked headers and unsupported authentication/body fields (any field named like a credential, for example basic_auth_user or oauth_token) are rejected instead of creating an unauthenticated check. Supported credential headers are retained but never echoed in preview. MCP exposes <code>preview_monitor_import</code> and <code>import_monitors</code>; read-only OAuth grants can preview, while execution needs write scope.</p>
     <p>报告包含不支持的字段、被移除的渠道或依赖引用，以及间隔和区域调整。掩码请求头和不支持的认证或请求体字段会被拒绝（名称像凭据的字段，例如 basic_auth_user、oauth_token，也同样拒绝），避免创建丢失认证的检测。支持的凭据请求头会保留，但不会在预览中回显。MCP 提供 <code>preview_monitor_import</code> 和 <code>import_monitors</code>；只读 OAuth 授权可预览，执行需要写入权限。</p>
+    <h3>MCP server monitors / MCP 服务监控</h3>
+    <p>Create a <code>mcp</code> monitor with the MCP endpoint in <code>target</code> and authentication in <code>headers</code> or <code>mcpConfig.oauth</code>. Transport can be auto, streamable-http or sse. Required tool names match exactly; optional listPrompts/listResources discover only catalogs. Optional schemaCheck compares approved input/output schemas with a down, degraded or record driftPolicy. Tool calls require explicit enabled: true and may incur charges or write data. Assertions use JSON Pointer into tools/call results. See <a href="/docs/mcp-monitors">the MCP monitor guide</a> for OAuth fields and policy details.</p>
+    <p>创建 <code>mcp</code> 监控，<code>target</code> 填 MCP 端点，通过 <code>headers</code> 或 <code>mcpConfig.oauth</code> 鉴权。传输方式支持 auto、streamable-http、sse。必需工具按名称完全匹配；可选 listPrompts/listResources 只发现目录。schemaCheck 比较已批准的输入/输出 schema，driftPolicy 可选 down、degraded、record。工具调用必须显式 enabled: true，可能产生费用或写入数据。断言通过 JSON Pointer 读取 tools/call 结果。OAuth 字段和策略详见 <a href="/docs/mcp-monitors">MCP 监控指南</a>。</p>
+    <p>POST <code>/monitors/mcp/preview</code> accepts target, headers, timeoutMs, mcpConfig, optional region (default auto) and monitorId; it never calls tools or establishes a baseline. OAuth preview may refresh credentials and returns oauthRefreshToken when rotated. On PATCH, omit mcpConfig.oauth to preserve current credentials, or send null to remove them.</p>
+    <p>POST <code>/monitors/mcp/preview</code> 接受 target、headers、timeoutMs、mcpConfig、可选 region（默认 auto）和 monitorId，不调用工具或建立基线。OAuth 预览可能刷新凭据，轮换时返回 oauthRefreshToken。PATCH 时省略 mcpConfig.oauth 可保留当前凭据，传 null 才会移除。</p>
+    <p>GET monitor detail includes mcpBaseline and mcpObservation with id, schemaHash, stage, timings, catalogs and drift severity. POST <code>/monitors/:id/mcp-baseline/accept</code> with observationId and schemaHash accepts only that current reviewed discovery. GET <code>/monitors/:id/mcp-history?days=7</code> (7 or 30) returns result diagnostics, overall/per-stage p50/p95 and change events. Schemas, OAuth settings, observations and MCP history require owner/admin access; other readers receive mcpConfigRedacted: true and can still read normal health/check history.</p>
+    <p>详情包含 mcpBaseline 和 mcpObservation（id、schemaHash、阶段、耗时、目录及变化级别）。向 <code>/monitors/:id/mcp-baseline/accept</code> 提交 observationId 与 schemaHash，只接受当前已审阅的准确发现版本。<code>/monitors/:id/mcp-history?days=7</code>（7 或 30 天）返回检测诊断、整体/各阶段 p50/p95 及变化事件。Schema、OAuth 配置、观测详情和 MCP 历史仅限所有者/管理员读取；其他读者收到 mcpConfigRedacted: true，仍可读取常规健康状态和检测历史。</p>
     <h3>Domain registration expiry / 域名注册到期</h3>
     <p>Create a <code>domain</code> monitor with the explicit registered domain (for example <code>example.co.uk</code>), <code>domainExpiryWarnDays</code> from 1 to 365 (default 30), and preferably <code>intervalSec: 86400</code>. Intervals are bounded to 3600–86400 seconds. No parent domain is inferred. IANA RDAP discovery selects the registry; only exact domain responses with a usable top-level <code>expiration</code> event count as known. This is the registry date, not necessarily the registrar billing deadline or proof that a website is available.</p>
     <p>创建 <code>domain</code> 监控项并填写准确的注册域名（如 <code>example.co.uk</code>）。<code>domainExpiryWarnDays</code> 范围为 1 至 365 天，默认 30 天，建议设置 <code>intervalSec: 86400</code>；间隔限制在 3600 至 86400 秒。不自动推测父域名。检测通过 IANA 发现注册局 RDAP 服务，仅接受域名完全匹配且包含可用注册到期事件的响应。该日期不一定等于注册商账单截止日，也不代表网站是否可用。</p>

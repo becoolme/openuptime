@@ -52,8 +52,8 @@ export const OU = {
     "HTTP / HTTPS（预期状态码、关键字必须出现或不得出现、自定义请求头）、TCP、DNS、心跳、PostgreSQL、MySQL / MariaDB 与 Redis 连通性",
   ),
   regions: l(
-    "HTTP, TCP and WebSocket monitors can be checked from several regions; a run fails when most answering regions fail. Self-hosters run their own probes",
-    "HTTP、TCP 与 WebSocket 监控可从多个区域检测，多数应答区域失败才判定失败。自托管时由你自己运行探针",
+    "HTTP, TCP, WebSocket and MCP monitors can be checked from several regions; a run fails when most answering regions fail. Self-hosters run their own probes",
+    "HTTP、TCP、WebSocket 与 MCP 监控可从多个区域检测，多数应答区域失败才判定失败。自托管时由你自己运行探针",
   ),
   status: l(
     "Public status pages with grouped components, incident history, email subscriptions, an RSS feed and an embeddable badge",
@@ -470,8 +470,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("Customers in more than one part of the world", "客户分布在多个地区"),
         body: l(
-          "For HTTP, TCP and WebSocket monitors, pick several regions. The run fails when most of the regions that answered fail, so one bad route does not open an incident, and a probe that is down is left out of the vote. Each region counts as one check. Where the probes are depends on the deployment; see the multi-region docs.",
-          "为 HTTP、TCP 和 WebSocket 监控选择多个区域。多数应答区域失败时本次检测才判定失败，因此某一条线路出问题不会创建事件，而自身故障的探针不参与投票。每个区域算一次检测。探针的位置取决于部署方式，详见多区域文档。",
+          "For HTTP, TCP, WebSocket and MCP monitors, pick several regions. The run fails when most of the regions that answered fail, so one bad route does not open an incident, and a probe that is down is left out of the vote. Each region counts as one check. Where the probes are depends on the deployment; see the multi-region docs.",
+          "为 HTTP、TCP、WebSocket 和 MCP 监控选择多个区域。多数应答区域失败时本次检测才判定失败，因此某一条线路出问题不会创建事件，而自身故障的探针不参与投票。每个区域算一次检测。探针的位置取决于部署方式，详见多区域文档。",
         ),
         uses: [l("multi-region", "多区域").en],
       },
@@ -711,8 +711,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("Pages for outages, not for one bad route", "为故障告警，而不是为一条糟糕的线路告警"),
         body: l(
-          "Check HTTP, TCP and WebSocket monitors from several regions. The run fails when most answering regions fail, or when the number you set fail. A probe that cannot be reached is left out of the vote instead of counted as a failure, and if no probe answers the check falls back to the default location. The incident names the regions that failed.",
-          "让 HTTP、TCP 和 WebSocket 监控从多个区域检测。多数应答区域失败，或达到你设定的失败数量，本次检测才判定失败。无法连接的探针不参与投票，也不算作失败；如果没有任何探针应答，检测会回退到默认位置。事件中会写明哪些区域失败。",
+          "Check HTTP, TCP, WebSocket and MCP monitors from several regions. The run fails when most answering regions fail, or when the number you set fail. A probe that cannot be reached is left out of the vote instead of counted as a failure, and if no probe answers the check falls back to the default location. The incident names the regions that failed.",
+          "让 HTTP、TCP、WebSocket 和 MCP 监控从多个区域检测。多数应答区域失败，或达到你设定的失败数量，本次检测才判定失败。无法连接的探针不参与投票，也不算作失败；如果没有任何探针应答，检测会回退到默认位置。事件中会写明哪些区域失败。",
         ),
         uses: [l("multi-region", "多区域").en, "probes"],
       },
@@ -761,7 +761,7 @@ export const SEGMENTS: Segment[] = [
       l("No on-call rotation schedules or phone-call paging; escalation is by channel and minutes unacknowledged.", "没有值班排班表和电话告警；升级按渠道和未确认的分钟数进行。"),
       l("Database monitors check reachability only.", "数据库监控只检查连通性。"),
       l("No TLS certificate expiry or ICMP ping monitors.", "没有 TLS 证书到期和 ICMP ping 监控。"),
-      l("Multi-region covers HTTP, TCP and WebSocket monitors only.", "多区域检测仅适用于 HTTP、TCP 和 WebSocket 监控。"),
+      l("Multi-region covers HTTP, TCP, WebSocket and MCP monitors only.", "多区域检测仅适用于 HTTP、TCP、WebSocket 和 MCP 监控。"),
     ],
     faq: [
       {

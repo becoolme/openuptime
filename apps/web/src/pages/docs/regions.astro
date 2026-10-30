@@ -8,7 +8,8 @@ import Doc from "../../layouts/Doc.astro";
     <h2 id="overview">Overview</h2>
     <p>By default a monitor is checked from where OpenUptime itself runs. That location is called <code>auto</code>. A region is an extra place a check can be sent from, served by a small <strong>probe</strong> that runs in that place. Regions are opt-in: a monitor uses them only when you pick regions for it, and everything else keeps running exactly as before.</p>
     <ul>
-      <li>HTTP, TCP and WebSocket monitors only. DNS, heartbeat and database monitors always run from <code>auto</code>.</li>
+      <li>For MCP, update probes to a version with MCP support. Explicitly enabled tool calls run in each selected region and may incur charges or write data.</li>
+      <li>HTTP, TCP, WebSocket and MCP monitors. DNS, heartbeat and database monitors always run from <code>auto</code>.</li>
       <li>One monitor can list several regions. A monitor with a single non-<code>auto</code> region is checked from that region alone.</li>
       <li>Each region counts as one check of your allowance, so three regions cost three times as much per run.</li>
     </ul>
@@ -29,7 +30,7 @@ import Doc from "../../layouts/Doc.astro";
       <li>When the run fails, the incident reads <em>Failed from 2 of 3 regions (eu-central: connection timed out)</em>, so you can see where it broke.</li>
     </ul>
     <h3 id="probe-down">When a probe itself is down</h3>
-    <p>A probe that cannot be reached, refuses the request or answers nonsense says nothing about your service, so it is <strong>left out</strong> of the vote instead of counted as a failure. If no probe answers at all, the check falls back to <code>auto</code> so that a probe outage can never leave a monitor blind. You will see the probe problem in the API's logs, not as a downtime of your monitor.</p>
+    <p>A probe that cannot be reached, refuses the request or answers nonsense says nothing about your service, so it is <strong>left out</strong> of the vote instead of counted as a failure. If no probe answers at all, HTTP/TCP/WebSocket checks fall back to <code>auto</code>. MCP checks remain inconclusive instead of retrying locally, because another call may duplicate an external operation. You will see the probe problem in the API's logs, not as a downtime of your monitor.</p>
     <h2 id="detail">What you see on the monitor</h2>
     <ul>
       <li><strong>Regions</strong> card: uptime and average latency for each region over the last 24 hours, in the order you configured them.</li>
@@ -51,7 +52,7 @@ import Doc from "../../layouts/Doc.astro";
           ──signed POST──▶ probe (us-east)    ──▶ your target
           ◀──── { ok, statusCode, latencyMs, error } ────</code></pre>
     <p>The scheduler sends the check (type, target, method, expected status, keyword, timeout and headers) to each probe over HTTPS. The probe runs it and answers with the outcome. Probes are stateless: they store nothing and hold no database credentials.</p>
-    <p>Requests are signed with <code>HMAC-SHA256</code> over <code>timestamp.body</code> using a shared secret (<code>PROBE_SECRET</code>), and a timestamp more than 60 seconds off is rejected, so a captured request cannot be replayed later. Without a valid signature a probe would be an open proxy, so it answers 401. A probe also refuses private and internal addresses whatever the signature says, so it cannot be used to reach into someone's network.</p>
+    <p>Requests are signed with <code>HMAC-SHA256</code> over <code>timestamp.body</code> using a shared secret (<code>PROBE_SECRET</code>), and a timestamp more than 60 seconds off is rejected, so a captured request cannot be replayed later. Without a valid signature a probe would be an open proxy, so it answers 401. A probe refuses private and internal targets by default. Only its operator can enable private-target access; MCP additionally requires an administrator-approved private region on the coordinator.</p>
     <h2 id="run">Running your own probes</h2>
     <p>On the hosted service the available regions are already set up. When you self-host, you run the probes yourself. A probe is the small app in <code>apps/probe</code>, and it runs anywhere you can run Node:</p>
     <table class="vars">
@@ -80,8 +81,8 @@ PROBE_REGIONS={
     <h2 id="limits">Good to know</h2>
     <ul>
       <li><strong>International regions only.</strong> The bundled Vercel build covers regions outside mainland China. To check from inside mainland China, run a probe on a host there yourself.</li>
-      <li>Probes only make outbound requests. They never see your monitors' stored secrets, and database checks stay on <code>auto</code> so credentials are never sent to a probe.</li>
-      <li>Private and internal targets (<code>10.x</code>, <code>localhost</code> and so on) are refused by every probe. To watch something inside your network, run a probe inside it and set <code>ALLOW_PRIVATE_TARGETS=true</code> on that probe only.</li>
+      <li>Probes receive the inputs needed for the check, including configured request headers and MCP tool arguments. OAuth acquisition happens centrally and forwards an access token, not the refresh token or client secret. Database checks remain on <code>auto</code>.</li>
+      <li>Private and internal targets are refused by default. For private MCP, run a Node probe inside the network with <code>ALLOW_PRIVATE_TARGETS=true</code>, mark its API <code>PROBE_REGIONS</code> entry <code>private: true</code>, and select only approved private regions. The coordinator need not globally allow private targets. See <a href="/docs/mcp-monitors#private-probes">private MCP probes</a> for the separate OAuth metadata reachability requirement.</li>
       <li>Set the same <code>CHECK_USER_AGENT</code> on the API and the probes so your target sees one consistent client.</li>
     </ul>
   </div>
@@ -91,7 +92,8 @@ PROBE_REGIONS={
     <h2 id="overview-zh">概览</h2>
     <p>默认情况下，监控项从 OpenUptime 自身所在的位置发起检测，这个位置叫 <code>auto</code>。区域则是检测请求可以额外发出的地点，由运行在该地点的一个小型<strong>探针</strong>提供。区域是显式开启的：只有你为监控项选了区域，它才会用到，其余监控项和以前完全一样。</p>
     <ul>
-      <li>仅适用于 HTTP、TCP 和 WebSocket 监控项。DNS、心跳和数据库监控项始终从 <code>auto</code> 发起。</li>
+      <li>MCP 需要支持该类型的探针版本。显式启用的工具调用会在每个所选区域执行，可能产生费用或写入数据。</li>
+      <li>适用于 HTTP、TCP、WebSocket 和 MCP 监控项。DNS、心跳和数据库监控项始终从 <code>auto</code> 发起。</li>
       <li>一个监控项可以选多个区域。只选一个非 <code>auto</code> 区域时，仅从该区域检测。</li>
       <li>每个区域各计一次检查额度，因此三个区域每轮消耗三倍额度。</li>
     </ul>
@@ -112,7 +114,7 @@ PROBE_REGIONS={
       <li>失败时，事件原因类似<em>Failed from 2 of 3 regions (eu-central: connection timed out)</em>，能看出是哪里出了问题。</li>
     </ul>
     <h3 id="probe-down-zh">探针本身不可用时</h3>
-    <p>探针连不上、拒绝请求或返回无法理解的内容，说明不了你的服务有问题，所以它会被<strong>排除在投票之外</strong>，不会算作失败。如果没有任何探针应答，检测会回退到 <code>auto</code> 执行，因此探针故障永远不会让监控“失明”。探针的问题会出现在 API 的日志里，而不是记为你监控项的宕机。</p>
+    <p>探针连不上、拒绝请求或返回无法理解的内容，说明不了你的服务有问题，所以它会被<strong>排除在投票之外</strong>，不会算作失败。如果没有任何探针应答，HTTP/TCP/WebSocket 检测会回退到 <code>auto</code>；MCP 检测保留为无法判定，不会改为本地重试，以免重复外部操作。探针的问题会出现在 API 的日志里，而不是记为你监控项的宕机。</p>
     <h2 id="detail-zh">在监控项上看到什么</h2>
     <ul>
       <li><strong>区域</strong>卡片：按你配置的顺序，显示每个区域最近 24 小时的可用率和平均延迟。</li>
@@ -134,7 +136,7 @@ PROBE_REGIONS={
        ──签名 POST──▶ 探针 (us-east)    ──▶ 你的目标
        ◀──── { ok, statusCode, latencyMs, error } ────</code></pre>
     <p>调度器通过 HTTPS 把检测内容（类型、目标、方法、期望状态码、关键字、超时和请求头）发给每个探针，探针执行后返回结果。探针是无状态的：不保存任何数据，也不持有数据库凭据。</p>
-    <p>请求使用共享密钥（<code>PROBE_SECRET</code>）对 <code>timestamp.body</code> 做 <code>HMAC-SHA256</code> 签名，时间戳与探针时钟相差超过 60 秒会被拒绝，因此截获的请求之后无法重放。没有有效签名，探针就成了开放代理，所以会返回 401。探针还会无视签名，始终拒绝私有和内网地址，因此不能被用来探测别人的内网。</p>
+    <p>请求使用共享密钥（<code>PROBE_SECRET</code>）对 <code>timestamp.body</code> 做 <code>HMAC-SHA256</code> 签名，时间戳与探针时钟相差超过 60 秒会被拒绝，因此截获的请求之后无法重放。没有有效签名，探针就成了开放代理，所以会返回 401。探针默认拒绝私有和内网地址，只有其运维人员可以开启私有目标访问；MCP 还要求协调器上的区域由部署管理员标记为私有。</p>
     <h2 id="run-zh">运行你自己的探针</h2>
     <p>托管服务的可用区域已经配置好。自托管时，探针需要你自己运行。探针就是 <code>apps/probe</code> 里的小应用，能跑 Node 的地方都能运行：</p>
     <table class="vars">
@@ -163,8 +165,8 @@ PROBE_REGIONS={
     <h2 id="limits-zh">需要了解</h2>
     <ul>
       <li><strong>仅限国际区域。</strong>自带的 Vercel 构建只覆盖中国大陆以外的区域。要从中国大陆境内检测，需要你自己在那里的主机上运行探针。</li>
-      <li>探针只发出站请求，看不到监控项保存的密钥；数据库检测始终留在 <code>auto</code>，凭据不会发给探针。</li>
-      <li>所有探针都会拒绝私有和内网目标（<code>10.x</code>、<code>localhost</code> 等）。要监控内网里的东西，请在内网中运行探针，并只在该探针上设置 <code>ALLOW_PRIVATE_TARGETS=true</code>。</li>
+      <li>探针会收到执行检测所需的输入，包括配置的请求头及 MCP 工具参数。OAuth 在中央获取令牌，向探针转发访问令牌，不转发刷新令牌或客户端密钥。数据库检测仍在 <code>auto</code> 执行。</li>
+      <li>探针默认拒绝私有和内网目标。私有 MCP 需要在内网 Node 探针上设置 <code>ALLOW_PRIVATE_TARGETS=true</code>，由部署管理员将 API 的 <code>PROBE_REGIONS</code> 对应条目标记为 <code>private: true</code>，并仅选择已批准的私有区域；协调器无需全局开启私有目标访问。OAuth 的中央元数据可达性另有要求，见 <a href="/docs/mcp-monitors#private-probes">私有 MCP 探针</a>。</li>
       <li>在 API 和探针上设置相同的 <code>CHECK_USER_AGENT</code>，让目标看到一致的客户端。</li>
     </ul>
   </div>

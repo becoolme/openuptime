@@ -1,3 +1,6 @@
+import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
+import { mcpToolsEqual } from "./mcp-monitor-schema";
+import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
@@ -14,7 +17,7 @@ import { AUTO, REGION_ID, REGION_NAMES, effectiveRegions } from "./regions";
  *
  * Nothing configured means only `auto` (the scheduler's own location), exactly as before.
  */
-export type ProbeRegion = { id: string; name: string; url: string };
+export type ProbeRegion = { id: string; name: string; url: string; private?: boolean };
 
 let regions = new Map<string, ProbeRegion>();
 let secret = "";
@@ -41,7 +44,7 @@ export function parseProbeRegions(raw: string | undefined): { regions: ProbeRegi
     const local = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";
     if (u.protocol !== "https:" && !(local && u.protocol === "http:")) { problems.push(`${id}: url must use https`); continue; }
     const name = typeof (entry as { name?: unknown })?.name === "string" && (entry as { name: string }).name.trim() ? (entry as { name: string }).name.trim().slice(0, 60) : (REGION_NAMES[id] ?? id);
-    out.push({ id, name, url: u.toString() });
+    out.push({ id, name, url: u.toString(), ...((entry as { private?: unknown })?.private === true ? { private: true } : {}) });
   }
   return { regions: out, problems };
 }
@@ -64,16 +67,20 @@ export function availableRegions(): { id: string; name: string }[] {
   return [{ id: AUTO, name: "Auto" }, ...[...regions.values()].map(({ id, name }) => ({ id, name }))];
 }
 
+export const usesOnlyPrivateProbes = (type: string, ids: string[]) => type === "mcp" && ids.length > 0 && ids.every(id => regions.get(id)?.private === true);
+
 export const isRegionConfigured = (id: string) => id === AUTO || regions.has(id);
 
 /** What running a check in one region came to: an outcome, or that the region could not be asked at all. */
 export type RegionRun = { region: string; outcome: CheckOutcome } | { region: string; unreachable: string };
 
 const outcomeOf = (v: unknown): CheckOutcome | null => {
-  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown } | null;
+  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown } | null;
   if (!o || typeof o.ok !== "boolean") return null;
   return {
     ok: o.ok,
+    ...(typeof o.degraded === "boolean" ? { degraded: o.degraded } : {}),
+    ...(o.mcp && mcpObservationSchema.safeParse(o.mcp).success ? { mcp: mcpObservationSchema.parse(o.mcp) } : {}),
     ...(typeof o.statusCode === "number" ? { statusCode: o.statusCode } : {}),
     ...(typeof o.latencyMs === "number" ? { latencyMs: o.latencyMs } : {}),
     ...(typeof o.error === "string" ? { error: o.error.slice(0, 500) } : {}),
@@ -90,6 +97,14 @@ const capable = new Map<string, number>();
 export function resetProbeCapabilities() { capable.clear(); }
 
 export async function runInRegion(region: string, input: CheckInput, repo?: Repo): Promise<RegionRun> {
+  if (input.type === "mcp" && input.mcpConfig?.oauth) {
+    const snapshot = "id" in input && "organizationId" in input ? input as Monitor : undefined;
+    const prepared = await prepareMcpOAuth(input, repo, snapshot);
+    if ("outcome" in prepared) return prepared.outcome.inconclusive ? { region, unreachable: "OAuth refresh unavailable" } : { region, outcome: prepared.outcome };
+    const result = await runInRegion(region, prepared.input, repo);
+    return "outcome" in result ? { ...result, outcome: addOAuthTiming(result.outcome, prepared.elapsedMs) } : result;
+  }
+
   if (region === AUTO) {
     const outcome = await runCheck(input, repo);
     return outcome.inconclusive ? { region, unreachable: "This location is offline" } : { region, outcome };
@@ -100,8 +115,15 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     type: input.type, target: input.target, method: input.method, expectedStatus: input.expectedStatus, timeoutMs: input.timeoutMs,
     keyword: input.keyword ?? null, keywordMode: input.keywordMode ?? "contains", expectedLocation: input.expectedLocation ?? null, headers: input.headers ?? {},
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
+    ...(input.type === "mcp" ? { mcpConfig: input.mcpConfig ?? null, mcpBaseline: input.mcpBaseline ?? null } : {}),
   });
   try {
+    if (input.type === "mcp") {
+      const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+      const advertised: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;
+      if (!health.ok) void health.body?.cancel();
+      if (!Array.isArray((advertised as {capabilities?: unknown} | null)?.capabilities) || !(advertised as {capabilities: unknown[]}).capabilities.includes("mcp-monitor-v2")) return { region, unreachable: "Probe upgrade required for MCP monitoring" };
+    }
     // Old probes ignore unknown fields: verify support BEFORE sending a payload. A positive answer is remembered
     // briefly so every check does not pay for a second request; a rolled-back probe is noticed within CAPABILITY_TTL_MS.
     if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method)) && (capable.get(probe.url) ?? 0) <= Date.now()) {
@@ -128,11 +150,11 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
       await res.body?.cancel();
       return { region, unreachable: `Probe answered ${res.status}` };
     }
-    const answer = await res.json().catch(() => null);
+    const answer = await (async () => { try { return JSON.parse(await readCapped(res, input.type === "mcp" ? 5 * 1024 * 1024 : 64 * 1024)); } catch { return null; } })();
     // the probe could not even reach the internet: that says nothing about the target, same as a probe we cannot reach
     if ((answer as { inconclusive?: unknown } | null)?.inconclusive === true) return { region, unreachable: "Probe is offline" };
     const outcome = outcomeOf(answer);
-    return outcome ? { region, outcome } : { region, unreachable: "Probe answered with something that is not a result" };
+    return outcome && (input.type !== "mcp" || outcome.mcp) ? { region, outcome } : { region, unreachable: "Probe answered with something that is not a result" };
   } catch (e) {
     const err = e as Error;
     return { region, unreachable: err.name === "TimeoutError" ? "Probe did not answer in time" : `Probe unreachable: ${err.message}` };
@@ -186,6 +208,12 @@ export function combine(runs: RegionRun[], minFailing = 0): Measured | null {
  * probe answers, the check falls back to this location so a probe outage cannot blind monitoring.
  */
 export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
+  if (m.type === "mcp" && m.mcpConfig?.oauth) {
+    const prepared = await prepareMcpOAuth(m, repo, m);
+    if ("outcome" in prepared) return { out: prepared.outcome, results: prepared.outcome.inconclusive ? [] : [{ region: AUTO, ...prepared.outcome }] };
+    const result = await measure({ ...m, ...prepared.input }, repo);
+    return { ...result, out: addOAuthTiming(result.out, prepared.elapsedMs) };
+  }
   const regions = effectiveRegions(m);
   if (regions.length === 1 && regions[0] === AUTO) {
     const out = await runCheck(m, repo);
@@ -196,8 +224,33 @@ export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   const lost = runs.flatMap((r) => ("unreachable" in r ? [`${r.region}: ${r.unreachable}`] : []));
   if (lost.length) console.warn(`probes unavailable for ${m.id}: ${lost.join("; ")}`);
   const combined = combine(runs, m.minRegionsFailing);
-  if (combined) return combined;
+  if (combined) {
+    if (m.type === "mcp") return combineMcp(runs, combined, m);
+    return combined;
+  }
+  // An unreachable MCP probe must never cause an extra potentially mutating call elsewhere.
+  if (m.type === "mcp") return inconclusive({ ok: false, inconclusive: true, error: "No MCP probe could execute this check" });
   const out = await runCheck(m, repo);
   if (out.inconclusive) return inconclusive(out);
   return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
+}
+
+
+function combineMcp(runs: RegionRun[], combined: Measured, m: Monitor): Measured {
+  const answered = runs.flatMap(r => "outcome" in r && r.outcome.mcp ? [{ region: r.region, out: r.outcome, mcp: r.outcome.mcp }] : []);
+  const chosen = (combined.out.ok ? answered.find(r => r.out.ok && r.out.degraded) ?? answered.find(r => r.out.ok) : answered.find(r => !r.out.ok)) ?? answered[0];
+  if (!chosen) return inconclusive({ ok: false, inconclusive: true, error: "MCP probe returned no diagnostics" });
+  const timings: Record<string, number> = {};
+  for (const r of answered) for (const [stage, ms] of Object.entries(r.mcp.timings)) timings[stage] = Math.max(timings[stage] ?? 0, ms);
+  const sameContract = answered.every(r => r.mcp.toolsComplete === true && mcpToolsEqual(r.mcp.tools, chosen.mcp.tools));
+  const prefix = (region: string, message: string) => answered.length > 1 ? `[${region}] ${message}`.slice(0, 500) : message;
+  const rank = { breaking: 0, warning: 1, info: 2 };
+  const drift = answered.flatMap(r => (r.mcp.drift ?? []).map(change => ({ ...change, message: prefix(r.region, change.message) })))
+    .sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 100);
+  const changes = answered.flatMap(r => r.mcp.changes.map(change => prefix(r.region, change))).slice(0, 100);
+  const observation = { ...chosen.mcp, toolsComplete: sameContract, changes, drift, timings, regions: answered.map(r => ({ region: r.region, ok: r.out.ok, stage: r.mcp.stage, timings: r.mcp.timings, error: r.out.error, degraded: r.out.degraded })) };
+  if (!m.mcpBaseline && m.mcpConfig?.schemaCheck && (answered.some(r => !r.out.ok) || !sameContract)) {
+    return { ...combined, out: { ...combined.out, ok: false, error: "MCP schema: regions disagree; baseline was not established", mcp: { ...observation, toolsComplete: false, stage: "schema", changes: ["Regions returned different tool schemas or incomplete discovery"] } } };
+  }
+  return { ...combined, out: { ...combined.out, ...(combined.out.ok && answered.some(r => r.out.ok && r.out.degraded) ? { degraded: true } : {}), mcp: observation } };
 }

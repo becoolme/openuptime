@@ -1,8 +1,21 @@
 import { resolveRoute } from "./routes";
 import { go } from "./locale-path";
 
+export type McpAssertion = { path: string; operator: "equals" | "contains" | "exists"; value?: unknown };
+export type McpOAuth = { mode: "client_credentials" | "refresh_token"; issuer: string; clientId: string; clientSecret?: string; refreshToken?: string; scopes?: string[]; resource?: string; tokenAuthMethod?: "client_secret_basic" | "client_secret_post" };
+export type McpConfig = { requiredTools: string[]; schemaCheck: boolean; transport?: "auto" | "streamable-http" | "sse"; listPrompts?: boolean; listResources?: boolean; driftPolicy?: "down" | "degraded" | "record"; oauth?: McpOAuth | null; toolCall: { enabled: boolean; name: string; arguments: Record<string, unknown>; assertions: McpAssertion[] } | null };
+export type McpToolSchema = { name: string; inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>; description?: string; annotations?: Record<string, unknown> };
+export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string; tool: string; path?: string; message: string };
+export type McpObservation = { toolsComplete?: boolean; id?: string; schemaHash?: string; checkedAt?: string; protocolVersion?: string; transport?: string; stage: string; timings: Record<string, number>; tools: McpToolSchema[]; changes: string[]; drift?: McpDrift[]; prompts?: { name: string }[]; resources?: { uri: string; name: string }[] };
+export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "checkedAt" | "stage" | "timings" | "changes" | "drift" | "protocolVersion" | "transport">;
+export type McpHistory = { results: (CheckResult & { mcp: McpCheckDiagnostics })[]; metrics: { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> }; changes: { id: string; checkedAt: string; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] }[] };
+export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation; oauthRefreshToken?: string };
 export type Monitor = {
-  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain"; target: string; method: string; requestBody?: string | null;
+  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp"; target: string; method: string; requestBody?: string | null;
+  mcpConfig?: McpConfig | null;
+  mcpConfigRedacted?: boolean;
+  mcpBaseline?: McpToolSchema[] | null;
+  mcpObservation?: McpObservation | null;
   domainExpiryWarnDays?: number;
   domainExpiry?: { state: "valid" | "expiring" | "expired" | "unknown"; expiresAt: string | null; checkedAt: string; cacheUntil: string; source: string | null; error: string | null } | null;
   expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number; recoveryThreshold?: number; consecutiveSuccesses?: number;
@@ -200,6 +213,9 @@ export const api = {
   createMonitor: (b: Partial<Monitor> & { name: string }) => req<Monitor>("/monitors", { method: "POST", body: JSON.stringify(b) }),
   updateMonitor: (id: string, b: Partial<Monitor>) => req<Monitor>(`/monitors/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteMonitor: (id: string) => req<void>(`/monitors/${id}`, { method: "DELETE" }),
+  previewMcp: (body: { region?: string; monitorId?: string; target: string; headers: Record<string, string>; timeoutMs: number; mcpConfig: McpConfig }) => req<McpPreview>("/monitors/mcp/preview", { method: "POST", body: JSON.stringify(body) }),
+  mcpHistory: (id: string, days: 7 | 30) => req<McpHistory>(`/monitors/${id}/mcp-history?days=${days}&limit=120`),
+  acceptMcpBaseline: (id: string, observationId: string, schemaHash: string) => req<{ ok: true }>(`/monitors/${id}/mcp-baseline/accept`, { method: "POST", body: JSON.stringify({ observationId, schemaHash }) }),
   /** Without `region` the monitor's own check runs and is recorded; with it one request is sent from there and only returned. */
   checkNow: (id: string, region?: string) => req<SpotCheck>(`/monitors/${id}/check`, { method: "POST", ...(region ? { body: JSON.stringify({ region }) } : {}) }),
   me: () => req<{ userId: string; organization: { id: string; name: string }; projectId: string; user: { name: string; email: string; locale: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null } | null }>("/me"),

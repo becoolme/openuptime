@@ -2,15 +2,16 @@ import { SkeletonRows } from "./Skeleton";
 import MonitorImport from "./MonitorImport";
 import { monitorState } from "../lib/domain-expiry";
 import Select from "./Select";
+import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey, sameOAuthForm } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { ago, api, everyShort, type Channel, type Incident, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
-const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN" };
+const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP" };
 
 export function Spark({ data, status }: { data: (number | null)[]; status: string }) {
   const pts = data.filter((v): v is number => v != null);
@@ -288,7 +289,7 @@ const statusOptions = (current: number) =>
   [...new Set([...Object.keys(STATUS_NAMES).map(Number), current])].sort((a, b) => a - b).map((n) => ({ value: n, label: STATUS_NAMES[n] ? `${n} ${STATUS_NAMES[n]}` : String(n) }));
 
 /** Types whose checks can run from a probe region (the API's PROBE_TYPES). */
-const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket"];
+const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp"];
 
 /** Create a monitor, or edit one when `monitor` is given (its type is fixed). */
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
@@ -297,7 +298,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     requestBody: monitor?.requestBody ?? "", domainExpiryWarnDays: monitor?.domainExpiryWarnDays ?? 30, method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
-    recoveryThreshold: monitor?.recoveryThreshold ?? 1,
+    recoveryThreshold: monitor?.recoveryThreshold ?? 1, timeoutMs: monitor?.timeoutMs ?? 10000,
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
     slowThresholdMs: monitor?.slowThresholdMs ?? 1500, slowAlertAfter: monitor?.slowAlertAfter ?? 0,
     regions: monitor?.regions?.length ? monitor.regions : ["auto"],
@@ -306,6 +307,12 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   // the project's other monitors, to pick the one this depends on
   const [others, setOthers] = useState<Monitor[]>([]);
   useEffect(() => { api.monitors().then((l) => setOthers(l.filter((x) => x.id !== monitor?.id))).catch(() => {}); }, []);
+  const [savedMcpConfig, setSavedMcpConfig] = useState(monitor?.mcpConfig);
+  const [initialMcp, setInitialMcp] = useState(() => initialMcpForm(monitor?.mcpConfig));
+  const [mcp, setMcp] = useState(initialMcp);
+  const [mcpPreview, setMcpPreview] = useState<{ key: string; result: McpPreview } | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState("");
   const [tagText, setTagText] = useState((monitor?.tags ?? []).join(", "));
   const [hdrs, setHdrs] = useState<{ k: string; v: string }[]>(Object.entries(monitor?.headers ?? {}).map(([k, v]) => ({ k, v })));
   const setHdr = (i: number, p: Partial<{ k: string; v: string }>) => setHdrs((h) => h.map((r, j) => (j === i ? { ...r, ...p } : r)));
@@ -341,6 +348,31 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
+  const previewRegion = f.regions[0] ?? "auto";
+  const previewRegionName = places.find((place) => place.id === previewRegion)?.name ?? (previewRegion === "auto" ? t("Auto") : previewRegion);
+  const connectionKey = mcpConnectionKey(f.target, f.timeoutMs, hdrs, mcp, previewRegion);
+  const currentPreview = mcpPreview?.key === connectionKey ? mcpPreview.result : null;
+  const savedConnectionKey = monitor ? mcpConnectionKey(monitor.target, monitor.timeoutMs, Object.entries(monitor.headers ?? {}).map(([k, v]) => ({ k, v })), initialMcp, monitor.regions?.[0] ?? "auto") : null;
+  const discoveredTools = currentPreview?.mcp.tools ?? (connectionKey === savedConnectionKey ? monitor?.mcpObservation?.tools ?? [] : []);
+  async function discoverMcp() {
+    setDiscovering(true); setDiscoveryError(""); setMcpPreview(null);
+    const key = connectionKey;
+    try {
+      // Preview never submits an enabled call, even when the saved monitor runs tools.
+      const config = mcpDiscoveryConfig(mcp, monitor ? { config: savedMcpConfig, initial: initialMcp } : undefined);
+      const result = await api.previewMcp({ region: previewRegion, ...(monitor ? { monitorId: monitor.id } : {}), target: f.target, timeoutMs: f.timeoutMs, headers: Object.fromEntries(hdrs.filter((h) => h.k.trim()).map((h) => [h.k.trim(), h.v])), mcpConfig: config });
+      if (result.oauthRefreshToken && monitor && sameOAuthForm(mcp, initialMcp)) {
+        // Keep the exact saved OAuth shape and its latest server-confirmed token for repeat previews.
+        setSavedMcpConfig((saved) => saved?.oauth ? { ...saved, oauth: { ...saved.oauth, refreshToken: result.oauthRefreshToken! } } : saved);
+        // The server already persisted this rotation. It is not a user edit to credentials.
+        setInitialMcp((initial) => sameOAuthForm(initial, mcp) ? { ...initial, oauthRefreshToken: result.oauthRefreshToken! } : initial);
+      }
+      const nextMcp = result.oauthRefreshToken ? { ...mcp, oauthRefreshToken: result.oauthRefreshToken } : mcp;
+      if (result.oauthRefreshToken) setMcp((current) => mcpConnectionKey(f.target, f.timeoutMs, hdrs, current, previewRegion) === key ? { ...current, oauthRefreshToken: result.oauthRefreshToken! } : current);
+      setMcpPreview({ key: result.oauthRefreshToken ? mcpConnectionKey(f.target, f.timeoutMs, hdrs, nextMcp, previewRegion) : key, result });
+    } catch (error) { setDiscoveryError((error as Error).message); }
+    finally { setDiscovering(false); }
+  }
   const bodyBytes = new TextEncoder().encode(f.requestBody).byteLength;
   const bodyTooLarge = f.type === "http" && !["GET", "HEAD"].includes(f.method) && bodyBytes > 16384;
 
@@ -351,14 +383,16 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     setErr("");
     setUpgrade(undefined);
     try {
-      const headers = f.type === "http" || f.type === "websocket" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
+      const headers = f.type === "http" || f.type === "websocket" || f.type === "mcp" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
-      const { regions, dnsRecordType, dnsExpectedValue, dnsMatchMode, ...rest } = f;
+      const { regions, dnsRecordType, dnsExpectedValue, dnsMatchMode, timeoutMs, ...rest } = f;
+      const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
       if (monitor) {
         const { type: _t, ...patch } = payload;
+        if (monitor.mcpConfigRedacted) { delete (patch as Partial<typeof patch>).target; delete (patch as Partial<typeof patch>).headers; }
         await api.updateMonitor(monitor.id, patch);
       } else await api.createMonitor(payload);
       onSaved();
@@ -381,8 +415,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
-            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
-              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", id === "http" ? "https://" : id === "websocket" ? "wss://" : ""); }}>
+            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["mcp", "MCP", "Initialize an MCP server and discover its tools."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
+              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", (id === "http" || id === "mcp") ? "https://" : id === "websocket" ? "wss://" : ""); }}>
                 <b>{t(label)}</b><small>{t(desc)}</small>
               </button>
             ))}
@@ -393,10 +427,15 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <span className="muted">{t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")}</span>
         </label>}
         {f.type !== "heartbeat" && (
-          <label className="fld">{t(f.type === "http" || f.type === "websocket" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
-            <input className="in mono" required value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket" } as Record<string, string>)[f.type] ?? ""} />
+          <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
+            <input className="in mono" required disabled={monitor?.mcpConfigRedacted} value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket", mcp: "https://example.com/mcp" } as Record<string, string>)[f.type] ?? ""} />
           </label>
         )}
+        {f.type === "mcp" && (monitor?.mcpConfigRedacted ? <p className="muted">{t("Only owners and admins can view or edit MCP connection and tool settings.")}</p> : <McpConnectionFields value={mcp} onChange={setMcp} />)}
+        {f.type === "mcp" && <label className="fld">{t("Timeout (ms)")}
+          <input className="in mono" type="number" min={1000} max={30000} step={1} required value={f.timeoutMs} onChange={(e) => set("timeoutMs", Number(e.target.value))} />
+          <small className="muted">{t("One timeout covers initialization, all tool-list pages and the optional tool call.")}</small>
+        </label>}
         <div className="fld">{t("Check every")}
           <div className="seg">
             {![60, 300, 900].includes(f.intervalSec) && <i className="on">{f.intervalSec}s</i>}
@@ -468,7 +507,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             </label>
           </div>
         )}
-        {(f.type === "http" || f.type === "websocket") && (
+        {(f.type === "http" || f.type === "websocket" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (
           <div className="fld">
             {t(f.type === "websocket" ? "Handshake headers" : "Request headers")}
             {hdrs.map((r, i) => (
@@ -481,6 +520,18 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setHdrs((h) => [...h, { k: "", v: "" }])}>{t("Add header")}</button></div>
           </div>
         )}
+        {f.type === "mcp" && !monitor?.mcpConfigRedacted && <div className="fld">
+          <p>{t("Discovery preview region")}: <strong>{previewRegionName}</strong> <code>({previewRegion})</code></p>
+          <small className="muted">{t("Preview uses the first selected check region. Change Check from below before previewing a private endpoint.")}</small>
+          <button type="button" className="btn" disabled={discovering || !f.target.trim()} onClick={discoverMcp}>{discovering ? t("Discovering…") : t("Discover tools without calling them")}</button>
+          <small className="muted">{t("Preview does not create a monitor, call tools or send alerts. OAuth credentials may be refreshed; save changed OAuth settings before previewing an existing monitor.")}</small>
+          {discoveryError && <p className="err" role="alert">{discoveryError}</p>}
+          {currentPreview && <p className={currentPreview.ok ? "muted" : "err"}>{currentPreview.ok ? t("Discovery completed") : currentPreview.error} · {currentPreview.mcp.tools.length} {t("tools")} · {currentPreview.latencyMs ?? "—"} ms</p>}
+        </div>}
+        {f.type === "mcp" && !monitor?.mcpConfigRedacted && <>
+          <McpToolCatalog tools={discoveredTools} onSelect={(name) => setMcp((state) => ({ ...state, toolName: name }))} />
+          <McpFields value={mcp} onChange={setMcp} tools={discoveredTools} monthlyCalls={Math.round(30 * 86400 / Math.max(1, f.intervalSec) * Math.max(1, new Set(f.regions).size))} />
+        </>}
         {f.type !== "heartbeat" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <label className="fld">{t("Slow above (ms)")}
