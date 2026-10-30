@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Monitor, Scope, TimeCoverage } from "@openuptime/repo";
-import type { Db } from "./client";
+import type { DbExecutor as Db } from "./client";
 import * as schema from "./schema";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -18,7 +18,7 @@ export async function coverageTime(tx: Tx, monitorId: string, completedAt = new 
   return new Date(Math.max(Math.min(completedAt.getTime(), dbAt.getTime()), last?.at.getTime() ?? 0));
 }
 
-export async function recordObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<boolean> {
+export async function recordObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null; degraded?: boolean }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<boolean> {
   return !!(await appendObservation(db, snapshot, result, options));
 }
 
@@ -28,7 +28,7 @@ export function recordHeartbeatObservation(db: Db, snapshot: Monitor): Promise<M
 }
 
 /** Store the configuration that actually produced the observation. Never re-interpret old data with today's config. */
-async function appendObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<Monitor | null> {
+async function appendObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null; degraded?: boolean }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<Monitor | null> {
   // Capture completion before waiting on the lock: database congestion must not extend freshness.
   const completedAt = new Date();
   return db.transaction(async (tx) => {
@@ -59,7 +59,7 @@ async function appendObservation(db: Db, snapshot: Monitor, result: { ok: boolea
     const maintenanceUntil = windows.length ? new Date(Math.max(...windows.map((w) => w.endsAt.getTime()))) : null;
     await tx.insert(schema.monitorObservation).values({
       monitorId: current.id, observedAt: at,
-      state: !result.ok ? "down" : result.latencyMs != null && result.latencyMs > current.slowThresholdMs ? "degraded" : "up",
+      state: !result.ok ? "down" : result.degraded || (result.latencyMs != null && result.latencyMs > current.slowThresholdMs) ? "degraded" : "up",
       validUntil: new Date(at.getTime() + durationMs), maintenanceUntil,
       revision: current.coverageRevision, generation, intervalSec: current.intervalSec, graceSec: current.graceSec, timeoutMs: current.timeoutMs,
     });

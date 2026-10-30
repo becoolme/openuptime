@@ -10,6 +10,12 @@ const zh: Record<string, string> = {
   // generic
   "Sent by OpenUptime, open-source uptime monitoring.": "此邮件由 OpenUptime 发送，开源的可用性监控。",
   // alerts
+  "{name}: tool schema changed": "{name}：工具结构发生变化",
+  "{name}: tool schema alert cleared": "{name}：工具结构告警已解除",
+  "Tool schemas changed while the MCP server remains reachable.": "MCP 服务器仍可连接，但工具结构发生了变化。",
+  "Tool schema monitoring no longer reports a degraded state.": "工具结构监控不再报告降级状态。",
+  "Schema changed": "工具结构变化",
+  "Schema alert cleared": "工具结构告警已解除",
   "Your channel is connected": "渠道已连通",
   "This is a test alert from OpenUptime. When a monitor goes down or recovers, you'll get a message like this one at this address.": "这是一封来自 OpenUptime 的测试告警。当监控宕机或恢复时，你会在这个地址收到类似的邮件。",
   "This is a test alert from OpenUptime": "这是一条来自 OpenUptime 的测试告警",

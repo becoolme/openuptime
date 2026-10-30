@@ -13,12 +13,17 @@ import {
   type Repo,
   type ImportResult,
   type Scope,
+  type McpAlertTask,
+  type McpCheckHistory,
+  type McpHistory,
+  type McpObservation,
 } from "@openuptime/repo";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import type { Db } from "./client";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import type { DbExecutor } from "./client";
 import * as schema from "./schema";
 import { coverageTime, recordHeartbeatObservation, recordObservation, timeCoverage } from "./coverage";
 import { publicMonitorStatus } from "./public-monitor-status";
+import { mcpSchemaHash, completeMcpDiscovery, comparableMcpConfig, mcpTaskId } from "./mcp-data";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,7 +35,7 @@ const resolvedByPerson = (incidentId: Parameters<typeof inArray>[0]): SQL =>
   sql`coalesce((select u.by_person from incident_update u where u.incident_id = ${incidentId} and u.status = 'resolved' order by u.created_at desc limit 1), false)`;
 
 /** Postgres implementation of the storage contract, on drizzle + postgres.js. */
-export function createRepo(db: Db): Repo {
+export function createRepo(db: DbExecutor): Repo {
   const rows = async <T>(q: PromiseLike<unknown>) => (await q) as unknown as T[];
 
   async function ensureDefaultProject(orgId: string) {
@@ -520,21 +525,32 @@ export function createRepo(db: Db): Repo {
         // Only actual changes to measurement or freshness invalidate observation coverage.
         const changedPause = patch.paused !== undefined && patch.paused !== current.paused;
         const effective = { ...patch };
+        if (patch.mcpConfig && patch.mcpConfig.oauth === undefined) {
+          // Retain the locked current token: the form may predate an OAuth refresh rotation.
+          effective.mcpConfig = { ...patch.mcpConfig, oauth: current.mcpConfig?.oauth ?? null };
+        }
         if (patch.paused !== undefined && !changedPause) {
           // The route derives these controls from paused; repeating the current value is not a resume.
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage"];
+        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage", "mcpConfig"];
         const comparable = (key: string, value: unknown) => JSON.stringify(
-          key === "regions" && Array.isArray(value) ? [...value].sort() : value,
+          key === "regions" && Array.isArray(value) ? [...value].sort()
+            : key === "mcpConfig" ? comparableMcpConfig(value as import("@openuptime/repo").McpConfig | null | undefined) : value,
           (_name, part) => part && typeof part === "object" && !Array.isArray(part)
             ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part,
         );
         const changed = Object.entries(effective).some(([key, value]) => measured.includes(key)
           && comparable(key, value) !== comparable(key, current[key as keyof typeof current]));
         const resetExpiry = (effective.target !== undefined && effective.target !== current.target) || (effective.domainExpiryWarnDays !== undefined && effective.domainExpiryWarnDays !== current.domainExpiryWarnDays);
-        const [row] = await tx.update(schema.monitor).set({ ...effective, ...(resetExpiry ? { domainExpiry: null } : {}), ...(changedPause ? { consecutiveSuccesses: 0 } : {}), ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
+        // The baseline is approval of this server's contract, not of a probe's arguments or assertions.
+        // Editing a check (including switching schema checks off/on) must not silently approve a changed schema.
+        const resetMcpBaseline = current.type === "mcp" && Object.entries(effective).some(([key, value]) => ["target", "headers"].includes(key)
+          && comparable(key, value) !== comparable(key, current[key as keyof typeof current]));
+        const resetMcpObservation = resetMcpBaseline || (current.type === "mcp" && effective.mcpConfig !== undefined
+          && comparable("mcpConfig", effective.mcpConfig) !== comparable("mcpConfig", current.mcpConfig));
+        const [row] = await tx.update(schema.monitor).set({ ...effective, ...(resetMcpBaseline ? { mcpBaseline: null } : {}), ...(resetMcpObservation ? { mcpObservation: null } : {}), ...(resetExpiry ? { domainExpiry: null } : {}), ...(changedPause ? { consecutiveSuccesses: 0 } : {}), ...(changed ? { coverageRevision: current.coverageRevision + 1 } : {}) })
           .where(eq(schema.monitor.id, id)).returning();
         if (changed) {
           const at = await coverageTime(tx, id);
@@ -660,7 +676,7 @@ export function createRepo(db: Db): Repo {
     recordHeartbeatObservation: (m) => recordHeartbeatObservation(db, m),
     timeCoverage: (orgId, monitorId, scope, days, now) => timeCoverage(db, orgId, monitorId, scope, days, now),
     async recordCheck(r) {
-      await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error });
+      await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error, mcp: r.mcp });
       await foldIntoRollup(r.monitorId, r.ok, r.latencyMs ?? null);
     },
     async recordRegionResults(monitorId, results, summary) {
@@ -676,6 +692,208 @@ export function createRepo(db: Db): Repo {
         eq(schema.monitor.id, snapshot.id), eq(schema.monitor.type, "domain"), eq(schema.monitor.paused, false),
         eq(schema.monitor.target, snapshot.target), eq(schema.monitor.domainExpiryWarnDays, snapshot.domainExpiryWarnDays ?? 30),
       )).returning({ id: schema.monitor.id });
+      return rows.length === 1;
+    },
+    async withMcpOAuth(snapshot, apply) {
+      try {
+        return await db.transaction(async tx => {
+          const locked = await tx.execute<{ locked: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext(${"mcp-oauth:" + snapshot.id})) as locked`);
+          if (!locked[0]?.locked) return null;
+          const [current] = await tx.select().from(schema.monitor).where(and(eq(schema.monitor.id, snapshot.id),
+            eq(schema.monitor.organizationId, snapshot.organizationId))).for("update", { noWait: true });
+          if (!current || current.type !== "mcp" || current.coverageRevision !== (snapshot.coverageRevision ?? 0)) return null;
+          return apply(createRepo(tx), current);
+        });
+      } catch (error) {
+        const cause = error && typeof error === "object" && "cause" in error ? error.cause : error;
+        if (cause && typeof cause === "object" && "code" in cause && cause.code === "55P03") return null;
+        throw error;
+      }
+    },
+    async withMcpResult(snapshot, apply) {
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor).where(and(eq(schema.monitor.id, snapshot.id),
+          eq(schema.monitor.organizationId, snapshot.organizationId))).for("update");
+        if (!current || current.type !== "mcp" || current.paused || current.coverageRevision !== (snapshot.coverageRevision ?? 0)
+          || current.runGeneration !== (snapshot.runGeneration ?? 0)) return null;
+        const comparable = (value: unknown) => JSON.stringify(value, (_key, part) => part && typeof part === "object" && !Array.isArray(part)
+          ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part);
+        if (comparable(current.mcpBaseline) !== comparable(snapshot.mcpBaseline ?? null)) return null;
+        // Every result/state/incident write in apply uses this same transaction and row lock.
+        // The caller performs external notifications only after this promise commits.
+        return apply(createRepo(tx), current);
+      });
+    },
+    async acceptMcpObservation(snapshot, observation, options = {}) {
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor).where(eq(schema.monitor.id, snapshot.id)).for("update");
+        if (!current || current.type !== "mcp" || current.paused || current.coverageRevision !== (snapshot.coverageRevision ?? 0)) return false;
+        const generation = options.generation;
+        if (generation !== undefined) {
+          if (!Number.isSafeInteger(generation) || generation <= 0 || generation > current.runGeneration || generation <= current.mcpGeneration) return false;
+        } else if (current.runGeneration !== (snapshot.runGeneration ?? 0) || current.mcpGeneration !== (snapshot.mcpGeneration ?? 0)) {
+          // A manual check may not replace a scheduled result claimed/completed after it began.
+          return false;
+        }
+        // A concurrent discovery must not evaluate against an absent or replaced baseline.
+        const comparable = (value: unknown) => JSON.stringify(value, (_key, part) => part && typeof part === "object" && !Array.isArray(part)
+          ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a.localeCompare(b))) : part);
+        if (comparable(current.mcpBaseline) !== comparable(snapshot.mcpBaseline ?? null)) return false;
+        if (generation === undefined && comparable(current.mcpObservation) !== comparable(snapshot.mcpObservation ?? null)) return false;
+        const canBaseline = options.ok === true && completeMcpDiscovery(observation) && current.mcpConfig?.schemaCheck && current.mcpBaseline === null
+          && ["schema", "tools/call", "assertions", "complete"].includes(observation.stage);
+        const saved: McpObservation = { ...observation, id: crypto.randomUUID(), schemaHash: await mcpSchemaHash(observation.tools), checkedAt: new Date().toISOString() };
+        await tx.update(schema.monitor).set({
+          mcpObservation: saved,
+          ...(canBaseline ? { mcpBaseline: observation.tools } : {}),
+          ...(generation !== undefined ? { mcpGeneration: generation } : {}),
+        }).where(eq(schema.monitor.id, current.id));
+        return true;
+      });
+    },
+    async acceptMcpBaseline(orgId, id, scope, expected) {
+      return db.transaction(async (tx) => {
+        const [current] = await tx.select().from(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId),
+          eq(schema.monitor.type, "mcp"), inScope(scope, schema.monitor.projectId))).for("update");
+        if (!current) return { status: "not_found" as const };
+        const seen = current.mcpObservation;
+        if (!expected || !seen?.id || seen.id !== expected.observationId || seen.schemaHash !== expected.schemaHash) return { status: "stale" as const };
+        if (!completeMcpDiscovery(seen)) return { status: "incomplete" as const };
+        const [row] = await tx.update(schema.monitor).set({ mcpBaseline: seen.tools,
+          coverageRevision: current.coverageRevision + 1, nextCheckAt: sql`now()` }).where(eq(schema.monitor.id, id)).returning();
+        const at = await coverageTime(tx, id);
+        await tx.insert(schema.monitorObservation).values({ monitorId: id, observedAt: at,
+          state: row.paused ? "paused" : "unknown", revision: row.coverageRevision });
+        return { status: "accepted" as const, monitor: row };
+      });
+    },
+    async resetMcpBaseline(orgId, id, scope, expected) {
+      const result = await createRepo(db).acceptMcpBaseline(orgId, id, scope, expected);
+      return result.status === "accepted" ? result.monitor : null;
+    },
+    async rotateMcpRefreshToken(snapshot, oldToken, newToken) {
+      if (!newToken || newToken.length > 16384) return false;
+      const rows = await db.update(schema.monitor).set({
+        mcpConfig: sql`jsonb_set(${schema.monitor.mcpConfig}, '{oauth,refreshToken}', to_jsonb(${newToken}::text), false)`,
+      }).where(and(eq(schema.monitor.id, snapshot.id), eq(schema.monitor.type, "mcp"),
+        eq(schema.monitor.coverageRevision, snapshot.coverageRevision ?? 0),
+        sql`${schema.monitor.mcpConfig}->'oauth'->>'refreshToken' = ${oldToken}`)).returning({ id: schema.monitor.id });
+      return rows.length === 1;
+    },
+    async mcpHistory(orgId, id, scope, options = {}) {
+      const [owned] = await db.select({ id: schema.monitor.id }).from(schema.monitor).where(and(eq(schema.monitor.id, id),
+        eq(schema.monitor.organizationId, orgId), eq(schema.monitor.type, "mcp"), inScope(scope, schema.monitor.projectId)));
+      if (!owned) return null;
+      const days = options.days === 30 ? 30 : 7;
+      const limit = Math.min(200, Math.max(1, options.limit ?? 50));
+      const since = sql`now() - make_interval(days => ${days})`;
+      const results = await db.select().from(schema.checkResult).where(and(eq(schema.checkResult.monitorId, id),
+        isNotNull(schema.checkResult.mcp), gte(schema.checkResult.checkedAt, since),
+        options.before ? lt(schema.checkResult.checkedAt, options.before) : undefined))
+        .orderBy(desc(schema.checkResult.checkedAt), desc(schema.checkResult.id)).limit(limit);
+      const totals = await db.execute<{ samples: number; p50: number | null; p95: number | null }>(sql`
+        select count(latency_ms)::int as samples, percentile_cont(0.5) within group (order by latency_ms) as p50,
+          percentile_cont(0.95) within group (order by latency_ms) as p95
+        from check_result where monitor_id = ${id} and mcp is not null and checked_at >= ${since}`);
+      const stages = await db.execute<{ stage: string; samples: number; p50: number | null; p95: number | null }>(sql`
+        select timing.key as stage, count(*)::int as samples,
+          percentile_cont(0.5) within group (order by (timing.value #>> '{}')::double precision) as p50,
+          percentile_cont(0.95) within group (order by (timing.value #>> '{}')::double precision) as p95
+        from check_result cross join lateral jsonb_each(mcp->'timings') as timing
+        where monitor_id = ${id} and mcp is not null and checked_at >= ${since} and jsonb_typeof(timing.value) = 'number'
+        group by timing.key`);
+      const changed = await db.execute<{ id: string; checkedAt: Date; mcp: import("@openuptime/repo").McpCheckDiagnostics }>(sql`
+        with snapshots as (
+          select id, checked_at, mcp,
+            lag(jsonb_build_array(mcp->'changes', mcp->'drift')) over (order by checked_at, id) as previous
+          from check_result where monitor_id = ${id} and mcp is not null and checked_at >= ${since}
+        )
+        select id, checked_at as "checkedAt", mcp from snapshots
+        where (jsonb_array_length(coalesce(mcp->'changes', '[]'::jsonb)) > 0 or jsonb_array_length(coalesce(mcp->'drift', '[]'::jsonb)) > 0)
+          and jsonb_build_array(mcp->'changes', mcp->'drift') is distinct from previous
+        order by checked_at desc, id desc limit 100`);
+      const metrics = { ...totals[0], stages: Object.fromEntries(stages.map(({ stage, ...values }) => [stage, values])) };
+      return { results: results as McpCheckHistory[], metrics, changes: changed.map(row => ({ id: row.id, checkedAt: row.checkedAt,
+        severity: row.mcp?.changes.length || row.mcp?.drift?.some(d => d.severity === "breaking") ? "breaking" : row.mcp?.drift?.some(d => d.severity === "warning") ? "warning" : "info",
+        changes: row.mcp?.changes ?? [], drift: row.mcp?.drift ?? [] })) } satisfies McpHistory;
+    },
+    async enqueueMcpAlerts(tasks) {
+      if (!tasks.length) return;
+      // Deterministic IDs make retries idempotent without serializing thousands of subscriber inserts.
+      const pending = await Promise.all(tasks.map(async task => ({ ...task, id: await mcpTaskId(task.eventKey, task.recipient) })));
+      pending.sort((a, b) => a.id.localeCompare(b.id));
+      const ids = [...new Set(tasks.flatMap(task => task.channelId ? [task.channelId] : []))];
+      const channels = ids.length ? await db.select({ id: schema.alertChannel.id, orgId: schema.alertChannel.organizationId, name: schema.alertChannel.name, type: schema.alertChannel.type })
+        .from(schema.alertChannel).where(inArray(schema.alertChannel.id, ids)) : [];
+      const byId = new Map(channels.map(channel => [channel.id, channel]));
+      await db.transaction(async tx => {
+        for (let offset = 0; offset < pending.length; offset += 200) {
+          const batch = pending.slice(offset, offset + 200);
+          await tx.insert(schema.alertDelivery).values(batch.map(task => {
+            const found = task.channelId ? byId.get(task.channelId) : undefined;
+            const channel = found?.orgId === task.organizationId ? found : undefined;
+            return { id: task.id, organizationId: task.organizationId, projectId: task.event.monitor.projectId, channelId: task.channelId,
+              channelName: channel?.name ?? (task.channelId ? "Removed channel" : "Status page subscriber"), channelType: channel?.type ?? "email",
+              kind: task.event.kind, incidentId: task.event.incident.id, monitorName: task.event.monitor.name, ok: false, status: "pending" as const, attempts: 0 };
+          })).onConflictDoNothing({ target: schema.alertDelivery.id });
+          await tx.insert(schema.mcpAlertOutbox).values(batch.map(task => ({ ...task, deliveryId: task.id })))
+            .onConflictDoNothing({ target: [schema.mcpAlertOutbox.eventKey, schema.mcpAlertOutbox.recipient] });
+        }
+      });
+    },
+    async claimMcpAlerts(limit, monitorId) {
+      return db.transaction(async tx => {
+        const token = crypto.randomUUID();
+        const t = schema.mcpAlertOutbox;
+        // A delayed retry of an obsolete "down" must not block the newer recovery for an hour.
+        // Active leases retain ordering; expired leases can be revoked safely via their token fence.
+        const obsolete = await tx.update(t).set({ status: "skipped", error: "skipped: incident changed before delivery", leaseToken: null, leaseUntil: null })
+          .where(and(monitorId ? eq(t.monitorId, monitorId) : undefined,
+            sql`(${t.status} = 'pending' or (${t.status} = 'leased' and ${t.leaseUntil} <= now()))`,
+            sql`exists (select 1 from incident i where i.id::text = ${t.event}->'incident'->>'id'
+              and ((${t.event}->>'kind' = 'incident.opened' and i.resolved_at is not null)
+                or (${t.event}->>'kind' = 'incident.resolved' and i.resolved_at is null)))`))
+          .returning({ deliveryId: t.deliveryId });
+        if (obsolete.length) await tx.update(schema.alertDelivery).set({ status: "skipped", ok: false,
+          error: "skipped: incident changed before delivery", statusMessage: "skipped: incident changed before delivery" })
+          .where(inArray(schema.alertDelivery.id, obsolete.map(row => row.deliveryId)));
+        return await tx.update(t).set({ status: "leased", leaseToken: token, leaseUntil: sql`now() + interval '3 minutes'` })
+          .where(inArray(t.id, sql`(select q.id from mcp_alert_outbox q
+            where ((q.status = 'pending' and q.next_attempt_at <= now()) or (q.status = 'leased' and q.lease_until <= now()))
+              ${monitorId ? sql`and q.monitor_id = ${monitorId}` : sql``}
+              and not exists (select 1 from mcp_alert_outbox prior where prior.monitor_id = q.monitor_id and prior.recipient = q.recipient
+                and prior.sequence < q.sequence and prior.status in ('pending','leased'))
+            order by q.sequence limit ${Math.min(100, Math.max(1, limit))} for update of q skip locked)`)).returning() as McpAlertTask[];
+      });
+    },
+    async finishMcpAlert(id, leaseToken, result) {
+      return db.transaction(async tx => {
+        const t = schema.mcpAlertOutbox;
+        const [row] = await tx.update(t).set({ status: result.status === "retry" ? "pending" : result.status,
+          attempts: sql`${t.attempts} + 1`, error: result.error ?? null, leaseToken: null, leaseUntil: null,
+          nextAttemptAt: sql`now() + make_interval(secs => ${Math.min(3600, Math.max(1, result.retryInSec ?? 60))})` })
+          .where(and(eq(t.id, id), eq(t.status, "leased"), eq(t.leaseToken, leaseToken), gt(t.leaseUntil, sql`now()`))).returning();
+        if (!row) return false;
+        await tx.update(schema.alertDelivery).set({ status: result.status === "retry" ? "pending" : result.status,
+          ok: result.status === "sent", error: result.error ?? null, statusMessage: result.status === "retry" ? "failed: queued for retry" : result.error ?? null,
+          attempts: row.attempts }).where(eq(schema.alertDelivery.id, row.deliveryId));
+        return true;
+      });
+    },
+    async renewMcpAlertLease(id, leaseToken) {
+      const rows = await db.update(schema.mcpAlertOutbox).set({ leaseUntil: sql`now() + interval '3 minutes'` }).where(and(eq(schema.mcpAlertOutbox.id, id),
+        eq(schema.mcpAlertOutbox.status, "leased"), eq(schema.mcpAlertOutbox.leaseToken, leaseToken), gt(schema.mcpAlertOutbox.leaseUntil, sql`now()`))).returning({ id: schema.mcpAlertOutbox.id });
+      return rows.length === 1;
+    },
+    async settleMcpAlertQuota(id, leaseToken, decision) {
+      const rows = await db.update(schema.mcpAlertOutbox).set({ quotaDecision: decision }).where(and(eq(schema.mcpAlertOutbox.id, id),
+        eq(schema.mcpAlertOutbox.status, "leased"), eq(schema.mcpAlertOutbox.leaseToken, leaseToken),
+        gt(schema.mcpAlertOutbox.leaseUntil, sql`now()`), isNull(schema.mcpAlertOutbox.quotaDecision))).returning({ id: schema.mcpAlertOutbox.id });
+      return rows.length === 1;
+    },
+    async markMcpAlertQuota(id, leaseToken) {
+      const rows = await db.update(schema.mcpAlertOutbox).set({ quotaAttempted: true }).where(and(eq(schema.mcpAlertOutbox.id, id),
+        eq(schema.mcpAlertOutbox.status, "leased"), eq(schema.mcpAlertOutbox.leaseToken, leaseToken), gt(schema.mcpAlertOutbox.leaseUntil, sql`now()`))).returning({ id: schema.mcpAlertOutbox.id });
       return rows.length === 1;
     },
     async setMonitorState(id, state) {
@@ -718,7 +936,8 @@ export function createRepo(db: Db): Repo {
       // counters only matter within their window (the longest is an hour)
       await db.execute(sql`delete from rate_limit where window_start < now() - interval '1 day'`);
       await db.execute(sql`delete from alert_delivery d
-        where d.created_at < now() - make_interval(days => coalesce((select s.alert_log_retention_days from workspace_setting s where s.organization_id = d.organization_id), ${DEFAULT_ALERT_LOG_DAYS}))`);
+        where d.created_at < now() - make_interval(days => coalesce((select s.alert_log_retention_days from workspace_setting s where s.organization_id = d.organization_id), ${DEFAULT_ALERT_LOG_DAYS}))
+          and not exists (select 1 from mcp_alert_outbox q where q.delivery_id = d.id and q.status in ('pending', 'leased'))`);
       // a phone that has not opened the app (which re-registers on launch) for half a year is gone or has a stale token
       await db.delete(schema.pushDevice).where(lte(schema.pushDevice.lastSeenAt, new Date(Date.now() - PUSH_DEVICE_STALE_DAYS * 864e5)));
     },

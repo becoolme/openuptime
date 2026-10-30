@@ -2,13 +2,17 @@ import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsP
 import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
 import { dnsCheck } from "./dns";
 import { requestBodyProblem } from "./http-request";
-import type { DomainExpiry, Repo } from "@openuptime/repo";
+import type { DomainExpiry, Repo, McpConfig, McpToolSchema, McpObservation } from "@openuptime/repo";
 import { domainCheck } from "./domain-expiry";
+import { mcpCheck } from "./mcp-monitor";
+import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { websocketCheck } from "./websocket";
 
 export type CheckInput = {
-  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain";
+  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp";
   target: string;
+  mcpConfig?: McpConfig | null;
+  mcpBaseline?: McpToolSchema[] | null;
   domainExpiryWarnDays?: number;
   method: string;
   requestBody?: string | null;
@@ -26,6 +30,8 @@ export type CheckInput = {
   dnsMatchMode?: "exact" | "contains";
 };
 export type CheckOutcome = {
+  mcp?: McpObservation;
+  degraded?: boolean;
   domainExpiry?: DomainExpiry;
   ok: boolean;
   statusCode?: number;
@@ -42,6 +48,12 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
   const started = Date.now();
   try {
     switch (m.type) {
+      case "mcp": {
+        const snapshot = "id" in m && "organizationId" in m ? m as import("@openuptime/repo").Monitor : undefined;
+        const prepared = await prepareMcpOAuth(m, repo, snapshot);
+        if ("outcome" in prepared) return prepared.outcome;
+        return addOAuthTiming(await mcpCheck(prepared.input), prepared.elapsedMs);
+      }
       case "domain": return await domainCheck(repo, m);
       case "http": return await httpCheck(m, started);
       case "dns": return await dnsCheck(m, started);
@@ -61,7 +73,7 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
 /** The host a check dials, or null when it has none of its own (dns checks ask a public resolver, not the target). */
 function dialedHost(m: CheckInput): string | null {
   try {
-    if (m.type === "http" || m.type === "websocket") return new URL(m.target).hostname;
+    if (m.type === "http" || m.type === "websocket" || m.type === "mcp") return new URL(m.target).hostname;
     if (m.type === "dns" || m.type === "heartbeat") return null;
     return hostPort(m.target, 1)?.hostname ?? null;
   } catch {

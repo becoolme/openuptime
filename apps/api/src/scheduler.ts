@@ -1,8 +1,9 @@
-import type { Monitor, Repo } from "@openuptime/repo";
+import type { Monitor, Repo, McpCheckDiagnostics } from "@openuptime/repo";
 import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries, wasDelivered } from "./alerts";
 import type { CheckOutcome } from "./checker";
+import { enqueueMcpAlert, drainMcpAlerts } from "./mcp-outbox";
 import { sendMonthlyReports } from "./reports";
-import { measure } from "./probes";
+import { measure, type Measured } from "./probes";
 import { creditCost, unmetered, type Entitlements } from "./entitlements";
 
 const CONCURRENCY = 20;
@@ -85,6 +86,7 @@ const step = async (what: string, run: () => Promise<unknown>) => {
 };
 
 async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0, entitlements: Entitlements = unmetered) {
+  await step("MCP alert outbox", () => drainMcpAlerts(repo, entitlements, queue ? 20 : 5));
   // alerts a dead worker left half-sent go back in line before the retries are picked up
   await step("delivery sweep", () => sweepDeliveries(repo));
   // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
@@ -170,6 +172,25 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
     console.warn(`check for ${m.id} discarded: ${out.error ?? "this location is offline"}`);
     return;
   }
+  if (m.type === "mcp") {
+    // Apply a result under the monitor row lock. Protocol I/O stays outside the transaction,
+    // and notifications run only after the incident, diagnostics and status have committed.
+    await repo.withMcpResult(m, async (tx, current) => {
+      if (!out.mcp || !(await tx.acceptMcpObservation(m, out.mcp, { generation: scheduled ? m.runGeneration : undefined, ok: out.ok }))) return;
+      const accepted = await tx.getMonitor(m.organizationId, m.id, null);
+      if (!accepted?.mcpObservation?.id) throw new Error("MCP observation was not persisted");
+      const notify: typeof dispatchAlert = (_repo, orgId, event, channels) => enqueueMcpAlert(tx, orgId, event, channels ?? [], accepted.mcpObservation!.id!);
+      await applyMeasured(tx, { ...current, mcpObservation: accepted.mcpObservation }, { out, results, note: regionNote }, entitlements, scheduled, notify);
+    });
+    // Failure here cannot lose the notification: its recipient tasks committed with the incident.
+    await step("MCP alert delivery", () => drainMcpAlerts(repo, entitlements, 50, m.id));
+    return;
+  }
+  await applyMeasured(repo, m, { out, results, note: regionNote }, entitlements, scheduled);
+}
+
+async function applyMeasured(repo: Repo, m: Monitor, measured: Measured, entitlements: Entitlements, scheduled: boolean, notify: typeof dispatchAlert = dispatchAlert) {
+  const { out, results, note: regionNote } = measured;
   // a region that failed without the monitor going down leaves a trace, so a skipped change can be explained
   if (regionNote && out.ok) console.info(`monitor ${m.id}: no change, ${regionNote}`);
   if (!(await repo.recordObservation(m, out, { generation: scheduled ? m.runGeneration : undefined }))) return;
@@ -179,7 +200,14 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   }
   const inMaintenance = await repo.underMaintenance(m);
   // one region is one row; several are rows per region that count as a single run in the rollup
-  if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
+  if (m.type === "mcp" && m.mcpObservation) {
+    const observed = m.mcpObservation;
+    const history: McpCheckDiagnostics = { id: observed.id, schemaHash: observed.schemaHash, checkedAt: observed.checkedAt,
+      stage: observed.stage, timings: observed.timings, changes: observed.changes, drift: observed.drift,
+      protocolVersion: observed.protocolVersion, transport: observed.transport, regions: observed.regions };
+    await repo.recordCheck({ monitorId: m.id, region: results.length > 1 ? "multi" : results[0]?.region ?? "auto", ok: out.ok,
+      statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error, mcp: history });
+  } else if (results.length === 1) await repo.recordCheck({ monitorId: m.id, region: results[0].region, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error });
   else await repo.recordRegionResults(m.id, results, { ok: out.ok, latencyMs: out.latencyMs });
   // Concurrent manual/scheduled checks must advance the latest streak atomically. A failure that
   // completed while this check was in flight cannot be overwritten by its old success count.
@@ -198,12 +226,12 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
   const slow = m.type !== "domain" && out.ok && !!out.latencyMs && out.latencyMs > m.slowThresholdMs;
   // a failed check neither extends nor ends a slow streak
   const slowCount = !out.ok ? m.consecutiveSlow : slow ? m.consecutiveSlow + 1 : 0;
-  const status = out.ok ? (m.status === "down" && !recovery.ready ? "down" : slow ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.type === "domain" ? "degraded" : m.status;
+  const status = out.ok ? (m.status === "down" && !recovery.ready ? "down" : (slow || out.degraded) ? "degraded" : "up") : failures >= m.failureThreshold ? "down" : m.type === "domain" ? "degraded" : m.status;
   const goingDown = status === "down" && m.status !== "down";
   const recovering = out.ok && m.status === "down" && recovery.ready;
   // a slow streak inside a maintenance window or under a down dependency opens nothing, however long it gets
-  const wantsSlowIncident = status !== "down" && slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
-  const parentDown = (goingDown || wantsSlowIncident || (!out.ok && status === "down")) && (await dependencyDown(repo, m));
+  const wantsSlowIncident = status !== "down" && !out.degraded && slow && m.slowAlertAfter > 0 && slowCount === m.slowAlertAfter;
+  const parentDown = (goingDown || wantsSlowIncident || out.degraded || (!out.ok && status === "down")) && (await dependencyDown(repo, m));
   if (wantsSlowIncident && inMaintenance) console.info(`monitor ${m.id}: ${SUPPRESSED_MAINTENANCE} (latency incident)`);
   if ((goingDown || wantsSlowIncident) && parentDown) console.info(`monitor ${m.id}: ${SUPPRESSED_DEPENDENCY}`);
   const slowTrips = wantsSlowIncident && !inMaintenance && !parentDown;
@@ -225,14 +253,35 @@ export async function checkOne(repo: Repo, m: Monitor, entitlements: Entitlement
     ...next,
   });
 
-  if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements);
-  if (recovering && !(await completeRecovery(repo, m, slow ? "degraded" : "up", finalSlow, entitlements))) return;
-  if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements);
-  if (slowClears) await resolveIncident(repo, m, true, entitlements);
+  if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements, notify);
+  if (recovering && !(await completeRecovery(repo, m, (slow || out.degraded) ? "degraded" : "up", finalSlow, entitlements, notify))) return;
+  if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements, notify);
+  if (slowClears) await resolveIncident(repo, m, true, entitlements, notify);
   if (pending && !recovering) await repo.setMonitorState(m.id, { status, consecutiveSlow: finalSlow });
+  if (m.type === "mcp" && out.ok && status !== "down") {
+    const minor = await repo.openIncidents(m.id, true);
+    const drift = minor.filter(incident => incident.evaluationNote === "mcp-schema-drift");
+    if (out.degraded && !inMaintenance && !parentDown) {
+      for (const old of minor.filter(incident => incident.evaluationNote !== "mcp-schema-drift")) {
+        if (await repo.resolveIncident(old.id, "Replaced by a tool schema drift incident.")) await notify(repo, m.organizationId,
+          { kind: "incident.resolved", incident: { ...old, resolvedAt: new Date() }, monitor: m, slow: true }, m.channelIds, entitlements);
+      }
+      if (!drift.length) {
+        const reason = out.mcp?.changes[0] ?? "Tool schema changed";
+        const incident = await repo.openAutoIncident({ organizationId: m.organizationId, monitorId: m.id,
+          title: `${m.name}: tool schema changed`, severity: "minor", auto: true, evaluationNote: "mcp-schema-drift" },
+          { status: "investigating", body: reason });
+        if (incident) await notify(repo, m.organizationId, { kind: "incident.opened", incident, monitor: m, reason, schemaDrift: true }, m.channelIds, entitlements);
+      }
+    } else if (!out.degraded) {
+      for (const incident of drift) if (await repo.resolveIncident(incident.id, "Tool schema alert cleared.")) {
+        await notify(repo, m.organizationId, { kind: "incident.resolved", incident: { ...incident, resolvedAt: new Date() }, monitor: m, schemaDrift: true }, m.channelIds, entitlements);
+      }
+    }
+  }
 }
 
-async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entitlements: Entitlements) {
+async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entitlements: Entitlements, notify: typeof dispatchAlert = dispatchAlert) {
   if (await repo.hasOpenIncident(m.id, true)) return;
   const reason = `${m.slowAlertAfter} consecutive checks slower than ${m.slowThresholdMs} ms (latest ${latencyMs} ms).`;
   const inc = await repo.openAutoIncident(
@@ -242,7 +291,7 @@ async function openSlowIncident(repo: Repo, m: Monitor, latencyMs: number, entit
   if (!inc) return; // a concurrent check opened it
   // the follow-up clocks are set before the alert goes out, so a slow channel cannot delay them
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
+  await notify(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason, slow: true }, m.channelIds, entitlements);
 }
 
 const SUPPRESSED_MAINTENANCE = "suppressed: maintenance";
@@ -265,7 +314,7 @@ function evaluation(m: Monitor, regionNote: string | undefined, lateOpen: boolea
 /** An outage that resolved this recently is reopened by a new failure instead of becoming a second incident. */
 export const REOPEN_WINDOW_MS = 10 * 60_000;
 
-async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNote: string, entitlements: Entitlements) {
+async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNote: string, entitlements: Entitlements, notify: typeof dispatchAlert = dispatchAlert) {
   // an outage is not blocked by a latency incident: that one is superseded (resolved without a recovery alert)
   for (const slow of await repo.openIncidents(m.id, true)) await repo.resolveIncident(slow.id, "Superseded: the monitor is down.");
   if (await repo.hasOpenIncident(m.id, false)) return;
@@ -286,7 +335,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
       if (!history.muted) await markMuted(repo, m, reopened.id, "Another alert for this incident went out in the last 15 minutes");
       return;
     }
-    await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: reopened, monitor: m, reason, reopened: true }, m.channelIds, entitlements);
+    await notify(repo, m.organizationId, { kind: "incident.opened", incident: reopened, monitor: m, reason, reopened: true }, m.channelIds, entitlements);
     return;
   }
   // a monitor that flaps (down, up, down…) gets one down alert per window, not one per flip
@@ -304,7 +353,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
     return;
   }
   await step("reminder schedule", () => repo.scheduleFollowUps(inc, m.projectId ?? null));
-  await dispatchAlert(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
+  await notify(repo, m.organizationId, { kind: "incident.opened", incident: inc, monitor: m, reason }, m.channelIds, entitlements);
 }
 
 const FLAP_WINDOW_MS = 15 * 60_000;
@@ -340,22 +389,22 @@ async function alertHistory(repo: Repo, inc: { id: string; organizationId: strin
 const consecutive = (m: Monitor) => m.failureThreshold;
 
 /** Commit the recovery decision with its incidents before sending any recovery notifications. */
-export async function completeRecovery(repo: Repo, m: Monitor, status: "up" | "degraded", consecutiveSlow: number, entitlements: Entitlements = unmetered) {
+export async function completeRecovery(repo: Repo, m: Monitor, status: "up" | "degraded", consecutiveSlow: number, entitlements: Entitlements = unmetered, notify: typeof dispatchAlert = dispatchAlert) {
   const resolved = await repo.completeRecovery(m, status, consecutiveSlow);
   for (const inc of resolved ?? []) {
     if ((await alertHistory(repo, inc)).muted) continue;
-    await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: inc, monitor: m }, m.channelIds, entitlements);
+    await notify(repo, m.organizationId, { kind: "incident.resolved", incident: inc, monitor: m }, m.channelIds, entitlements);
   }
   return resolved !== null;
 }
 
 /** Resolve a monitor's open incidents: its outage ones, or with `slow` only the automatic latency ones. */
-export async function resolveIncident(repo: Repo, m: Monitor, slow = false, entitlements: Entitlements = unmetered) {
+export async function resolveIncident(repo: Repo, m: Monitor, slow = false, entitlements: Entitlements = unmetered, notify: typeof dispatchAlert = dispatchAlert) {
   for (const inc of await repo.openIncidents(m.id, slow)) {
     // false: a concurrent check resolved it first and sent the recovery alert
     if (!(await repo.resolveIncident(inc.id, slow ? "Response time is back under the threshold." : "Checks are passing again."))) continue;
     if ((await alertHistory(repo, inc)).muted) continue;
-    await dispatchAlert(repo, m.organizationId, { kind: "incident.resolved", incident: { ...inc, resolvedAt: new Date() }, monitor: m, ...(slow ? { slow: true as const } : {}) }, m.channelIds, entitlements);
+    await notify(repo, m.organizationId, { kind: "incident.resolved", incident: { ...inc, resolvedAt: new Date() }, monitor: m, ...(slow ? { slow: true as const } : {}) }, m.channelIds, entitlements);
   }
 }
 

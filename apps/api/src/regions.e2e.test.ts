@@ -69,7 +69,22 @@ describe.skipIf(!url)("regions", () => {
     const r = await call("GET", "/regions");
     expect(r.status).toBe(200);
     expect(r.body.regions.map((x: { id: string }) => x.id)).toEqual(["auto", "us-east", "eu-central", "ap-southeast"]);
-    expect(r.body).toMatchObject({ types: ["http", "tcp", "websocket"], maxPerMonitor: 2 });
+    expect(r.body).toMatchObject({ types: ["http", "tcp", "websocket", "mcp"], maxPerMonitor: 2 });
+  });
+
+  it("keeps private MCP endpoints confined to configured private probes on create, preview and region-only edits", async () => {
+    const privateEnv = { ...env, PROBE_REGIONS: JSON.stringify({ ...PROBES, intranet: { url: "https://probe.test/private", private: true } }) };
+    const call = await signedIn((path, init = {}) => app.fetch(new Request(`${ORIGIN}${path}`, init), privateEnv as never));
+    const payload = { name: "Private MCP", type: "mcp", target: "http://10.0.0.1/mcp", regions: ["intranet"] };
+    const created = await call("POST", "/monitors", payload); expect(created.status).toBe(201);
+    expect((await call("PATCH", `/monitors/${created.body.id}`, { regions: ["auto"] })).status).toBe(400);
+    expect((await call("PATCH", `/monitors/${created.body.id}`, { regions: ["intranet", "us-east"] })).status).toBe(400);
+    expect((await call("POST", "/monitors", { ...payload, regions: ["us-east"] })).status).toBe(400);
+    expect((await call("POST", "/monitors/mcp/preview", { target: payload.target, region: "auto" })).status).toBe(400);
+    const preview = await call("POST", "/monitors/mcp/preview", { target: payload.target, region: "intranet" });
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({ ok: false, inconclusive: true, mcp: { tools: [], toolsComplete: false } });
+
   });
 
   it("puts no limit on the regions of one monitor in the community edition", async () => {

@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_alert_outbox" ADD COLUMN "quota_decision" text;

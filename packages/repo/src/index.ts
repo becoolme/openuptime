@@ -11,7 +11,7 @@ export const ROLLUP_RETENTION_DAYS = 400;
 export const PUSH_DEVICE_STALE_DAYS = 180;
 export const DEFAULT_ALERT_LOG_DAYS = 30;
 
-export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain";
+export type MonitorType = "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp";
 export type MonitorStatus = "pending" | "up" | "degraded" | "down" | "paused";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type IncidentSeverity = "minor" | "major";
@@ -43,12 +43,67 @@ export const REMINDER_INTERVALS = [5, 10, 15, 30, 60] as const;
 
 export type DomainExpiry = { state: "valid" | "expiring" | "expired" | "unknown"; expiresAt: string | null; checkedAt: string; cacheUntil: string; source: string | null; error: string | null };
 export type RdapCacheEntry = { value: unknown; expiresAt: Date };
+/** MCP arguments and assertion values may contain credentials; expose configuration only to managers. */
+export type McpConfig = {
+  transport?: "auto" | "streamable-http" | "sse";
+  listPrompts?: boolean;
+  listResources?: boolean;
+  driftPolicy?: "down" | "degraded" | "record";
+  oauth?: { mode: "client_credentials" | "refresh_token"; issuer: string; clientId: string; clientSecret?: string; refreshToken?: string; scopes?: string[]; resource?: string; tokenAuthMethod?: "client_secret_basic" | "client_secret_post" } | null;
+  requiredTools: string[];
+  schemaCheck: boolean;
+  toolCall: {
+    enabled: boolean;
+    name: string;
+    arguments: Record<string, unknown>;
+    assertions: { path: string; operator: "equals" | "contains" | "exists"; value?: unknown }[];
+  } | null;
+};
+export type McpToolSchema = { name: string; inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>; description?: string; annotations?: Record<string, unknown> };
+export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string; tool: string; path?: string; message: string };
+/** Bounded diagnostics, never raw tool results or server error messages. */
+export type McpObservation = {
+  id?: string;
+  schemaHash?: string;
+  checkedAt?: string;
+  regions?: { region: string; ok: boolean; stage: McpObservation["stage"]; timings: Record<string, number>; error?: string; degraded?: boolean }[];
+  toolsComplete?: boolean;
+  protocolVersion?: string;
+  transport?: "streamable-http" | "sse";
+  prompts?: { name: string }[];
+  resources?: { uri: string; name: string }[];
+  drift?: McpDrift[];
+  stage: "server/discover" | "prompts/list" | "resources/list" | "oauth" | "initialize" | "initialized" | "tools/list" | "required-tools" | "schema" | "tools/call" | "assertions" | "complete";
+  timings: Record<string, number>;
+  tools: McpToolSchema[];
+  changes: string[];
+};
+/** Historical diagnostics intentionally omit discovered schemas, credentials, tool arguments and results. */
+export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "checkedAt" | "stage" | "timings" | "changes" | "drift" | "protocolVersion" | "transport" | "regions">;
+export type McpCheckHistory = CheckResult & { mcp: McpCheckDiagnostics };
+export type McpChangeEvent = { id: string; checkedAt: Date; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] };
+export type McpMetrics = { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> };
+export type McpHistory = { results: McpCheckHistory[]; metrics: McpMetrics; changes: McpChangeEvent[] };
+export type McpAlertEvent = {
+  kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated";
+  incident: { id: string; title: string; startedAt?: string; resolvedAt?: string | null };
+  monitor: { id: string; projectId: string | null; name: string; target: string; type: "mcp" };
+  reason?: string; slow?: true; schemaDrift?: true; reopened?: true; count?: number;
+};
+export type NewMcpAlertTask = { eventKey: string; organizationId: string; monitorId: string; recipient: string; channelId: string | null; event: McpAlertEvent };
+export type McpAlertTask = NewMcpAlertTask & { id: string; deliveryId: string; sequence: number; leaseToken: string; attempts: number; quotaAttempted: boolean; quotaDecision: "granted" | "denied" | null; createdAt: Date };
 export interface Monitor {
   /** Immutable import provenance; scoped to this organization and project. */
   importSource?: string | null;
   importSourceId?: string | null;
   domainExpiryWarnDays?: number;
   domainExpiry?: DomainExpiry | null;
+  mcpConfig?: McpConfig | null;
+  /** Approved server schemas. Probe-setting edits preserve these; endpoint/auth edits or an explicit reset clear them. */
+  mcpBaseline?: McpToolSchema[] | null;
+  mcpObservation?: McpObservation | null;
+  /** Last accepted scheduled MCP observation, independent of coverage acceptance. */
+  mcpGeneration?: number;
   id: string;
   organizationId: string;
   projectId: string | null;
@@ -102,7 +157,7 @@ export interface Monitor {
 /** Fields a user can set when creating a monitor. */
 export type MonitorInput = Pick<
   Monitor,
-  | "name" | "type" | "target" | "method" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
+  | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
   | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
@@ -133,9 +188,10 @@ export interface CheckResult {
   latencyMs: number | null;
   error: string | null;
   checkedAt: Date;
+  mcp?: McpCheckDiagnostics | null;
 }
 /** `region` is where the check ran from (default `auto`: the scheduler's own location). */
-export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; region?: string };
+export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; region?: string; mcp?: McpCheckDiagnostics | null };
 /** One region's result of a run that was checked from several. */
 export type RegionResult = { region: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null };
 
@@ -515,7 +571,7 @@ export interface Repo {
   /** Atomically accept a ping using current configuration and renew its deadline; null if paused or deleted. */
   recordHeartbeatObservation(m: Monitor): Promise<Monitor | null>;
   /** Persist a bounded observation independently of mutable alert/incident state. False rejects a stale or duplicate run. */
-  recordObservation(m: Monitor, result: { ok: boolean; latencyMs?: number | null }, options?: { generation?: number; heartbeatPing?: boolean }): Promise<boolean>;
+  recordObservation(m: Monitor, result: { ok: boolean; latencyMs?: number | null; degraded?: boolean }, options?: { generation?: number; heartbeatPing?: boolean }): Promise<boolean>;
   /** All durations are milliseconds; unknown is never implicitly counted as healthy. */
   timeCoverage(orgId: string, monitorId: string, scope: Scope, days: 7 | 30, now?: Date): Promise<TimeCoverage | null>;
   /** Store a raw result and fold it into its hourly rollup. */
@@ -526,6 +582,23 @@ export interface Repo {
    */
   recordRegionResults(monitorId: string, results: RegionResult[], summary: { ok: boolean; latencyMs?: number | null }): Promise<void>;
   acceptDomainExpiry(snapshot: Monitor, expiry: DomainExpiry): Promise<boolean>;
+  /** Serialize MCP result application on its monitor row; external notifications must wait for commit. */
+  withMcpOAuth<T>(snapshot: Monitor, apply: (repo: Repo, current: Monitor) => Promise<T>): Promise<T | null>;
+  withMcpResult<T>(snapshot: Monitor, apply: (repo: Repo, current: Monitor) => Promise<T>): Promise<T | null>;
+  /** Accept bounded MCP diagnostics and, once, the discovery baseline, only for the current configuration. */
+  acceptMcpObservation(snapshot: Monitor, observation: McpObservation, options?: { generation?: number; ok?: boolean }): Promise<boolean>;
+  /** Accept exactly the reviewed discovery by observation ID and schema hash; invalidates in-flight checks. */
+  acceptMcpBaseline(orgId: string, id: string, scope: Scope, expected: { observationId: string; schemaHash: string }): Promise<{ status: "accepted"; monitor: Monitor } | { status: "not_found" | "stale" | "incomplete" }>;
+  /** Compatibility name: still requires the exact reviewed snapshot; never approves a future discovery. */
+  resetMcpBaseline(orgId: string, id: string, scope: Scope, expected: { observationId: string; schemaHash: string }): Promise<Monitor | null>;
+  rotateMcpRefreshToken(snapshot: Monitor, oldToken: string, newToken: string): Promise<boolean>;
+  mcpHistory(orgId: string, id: string, scope: Scope, options?: { days?: 7 | 30; limit?: number; before?: Date }): Promise<McpHistory | null>;
+  enqueueMcpAlerts(tasks: NewMcpAlertTask[]): Promise<void>;
+  claimMcpAlerts(limit: number, monitorId?: string): Promise<McpAlertTask[]>;
+  finishMcpAlert(id: string, leaseToken: string, result: { status: "sent" | "skipped" | "retry"; error?: string; retryInSec?: number }): Promise<boolean>;
+  renewMcpAlertLease(id: string, leaseToken: string): Promise<boolean>;
+  settleMcpAlertQuota(id: string, leaseToken: string, decision: "granted" | "denied"): Promise<boolean>;
+  markMcpAlertQuota(id: string, leaseToken: string): Promise<boolean>;
   setMonitorState(id: string, state: MonitorState): Promise<void>;
   /** Is a maintenance window of the monitor's project (or a workspace-wide one) covering it right now? */
   underMaintenance(m: Pick<Monitor, "id" | "organizationId" | "projectId">): Promise<boolean>;

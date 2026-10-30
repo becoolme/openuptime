@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "mcp-server-monitors", date: "2026-10-30", edition: "community",
+    title: { en: "Monitor MCP servers", zh: "MCP 服务监控" },
+    summary: { en: "Check that agents can connect, discover required tools and optionally use them.", zh: "检查 Agent 能否连接并发现必需工具，还可选择验证工具调用。" },
+    points: [
+      { en: "Preview MCP discovery before saving, authenticate with headers or OAuth, and monitor Streamable HTTP or legacy HTTP+SSE across configured probe regions.", zh: "保存前预览 MCP 发现，支持请求头或 OAuth 鉴权，并可通过已配置区域探针检测 Streamable HTTP 或旧版 HTTP+SSE。" },
+      { en: "Explicitly enable a tool call with test arguments and result assertions; calls are disabled by default because they can incur charges or write data.", zh: "可显式开启带测试参数和结果断言的工具调用；由于可能产生费用或写入数据，默认关闭。" },
+      { en: "Compare input/output schemas, choose drift severity handling and explicitly approve the exact reviewed version.", zh: "比较输入/输出 schema，选择变化处理策略，并显式批准准确的已审阅版本。" },
+      { en: "Inspect optional prompt/resource catalogs and historical stage latency, p50/p95 metrics and schema-change timelines.", zh: "可选查看提示词和资源目录，以及历史分阶段耗时、p50/p95 指标和 schema 变化时间线。" },
+    ],
+    link: { href: "/docs/mcp-monitors", label: { en: "Read the MCP monitor guide", zh: "阅读 MCP 监控指南" } },
+  },
+  {
     id: "domain-registration-expiry", date: "2026-10-29", edition: "community",
     title: { en: "Domain registration expiry", zh: "域名注册到期检测" },
     summary: { en: "Get a warning before a domain registration runs out.", zh: "域名注册到期前提前收到提醒。" },

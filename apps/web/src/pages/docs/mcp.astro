@@ -8,7 +8,7 @@ const tools: Tool[] = [
   { name: "create_project", en: "Create a project. Only where the connection has all projects of that workspace.", zh: "创建项目。仅限已授权该工作区全部项目的连接。" },
   { name: "list_monitors", en: "Monitors with status, uptime and latency.", zh: "监控项及其状态、可用率和延迟。" },
   { name: "get_monitor", en: "One monitor with recent checks and uptime.", zh: "单个监控项及最近的检测和可用率。" },
-  { name: "create_monitor", en: "Create an http, tcp, websocket, dns, heartbeat, postgres, mysql or redis monitor.", zh: "创建 http、tcp、websocket、dns、heartbeat、postgres、mysql 或 redis 监控。" },
+  { name: "create_monitor", en: "Create an http, tcp, websocket, dns, heartbeat, postgres, mysql, redis, domain or mcp monitor.", zh: "创建 http、tcp、websocket、dns、heartbeat、postgres、mysql、redis、domain 或 mcp 监控。" },
   { name: "preview_monitor_import", en: "Preview monitor import validation, duplicate identities, warnings and plan capacity without writes.", zh: "预览监控导入的校验、重复身份、警告和套餐容量，不写入数据。" },
   { name: "import_monitors", en: "Import reviewed records using stable source/sourceId values and the preview destination; duplicates are skipped. Source IDs ignore surrounding whitespace.", zh: "使用稳定的 source/sourceId 和预览目标导入已审阅记录，跳过重复项；来源 ID 忽略首尾空白。" },
   { name: "update_monitor", en: "Change fields of a monitor.", zh: "修改监控项字段。" },
@@ -35,6 +35,7 @@ const tools: Tool[] = [
 <Doc titleZh="MCP：让 Claude 管理你的监控" descriptionZh="把 Claude、Cursor 等 MCP 客户端连接到 OpenUptime，用来管理监控、故障和状态页。" description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-17" toc>
   <div lang="en">
     <h1>MCP server</h1>
+    <p>To monitor another MCP server, see <a href="/docs/mcp-monitors">MCP Uptime Monitor</a>.</p>
     <p class="lede">Let an AI agent such as Claude, Cursor or any MCP client manage your monitors, incidents and status pages.</p>
     <pre><code>claude mcp add --transport http openuptime https://openuptime.app/api/mcp</code></pre>
     <p>That is the whole setup for Claude Code; other clients are below. Only want to read a public status page? <a href="#public">No sign-in is needed</a>.</p>

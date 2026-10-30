@@ -13,3 +13,6 @@ export function createDb(connectionString: string, opts: { max?: number } = {}) 
   return Object.assign(drizzle(client, { schema }), { $client: client });
 }
 export type Db = ReturnType<typeof createDb>;
+
+/** Query surface shared by a root Drizzle database and its transaction-bound executor. */
+export type DbExecutor = Omit<Db, "$client">;

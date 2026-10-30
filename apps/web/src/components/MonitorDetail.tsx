@@ -1,4 +1,6 @@
 import TimeCoverage from "./TimeCoverage";
+import { McpSummary } from "./McpSummary";
+import McpHistory from "./McpHistory";
 import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { monitorState } from "../lib/domain-expiry";
 import { t } from "../lib/i18n";
@@ -51,7 +53,7 @@ export default function MonitorDetail({ id }: { id: string }) {
     ...configured.map((r) => m.regionStats.find((s) => s.region === r) ?? { region: r, checks24h: 0, uptime24h: null, avgLatency24h: null, last: null }),
     ...m.regionStats.filter((s) => !configured.includes(s.region)),
   ].filter((s, i, all) => all.findIndex((x) => x.region === s.region) === i);
-  const probable = m.type === "http" || m.type === "tcp" || m.type === "websocket";
+  const probable = m.type === "http" || m.type === "tcp" || m.type === "websocket" || m.type === "mcp";
   const places = Object.keys(names);
   const showRegion = m.results.some((r) => r.region && r.region !== "auto");
   // the newest 30 rows, whole runs only where they fit; `lead` marks the first row of a run, which carries the time
@@ -68,6 +70,9 @@ export default function MonitorDetail({ id }: { id: string }) {
         {m.domainExpiry?.error && <p className="err">{m.domainExpiry.error}</p>}
         <p className="muted">{t("This checks the registry registration date, not website availability or your registrar billing deadline. Unknown means no usable date could be obtained.")}</p>
       </div>}
+      {m.type === "mcp" && <McpSummary monitor={m} busy={!!pending} onAccept={(observationId, schemaHash) => {
+        act("mcp-baseline", async () => { await api.acceptMcpBaseline(id, observationId, schemaHash); await load(); });
+      }} />}
       <div className="ph">
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1 className="ph-title">{m.name} <span className={`pill ${monitorState(m).tone}`}>{t(monitorState(m).label)}</span></h1>
@@ -83,12 +88,13 @@ export default function MonitorDetail({ id }: { id: string }) {
         <div className="ph-actions">
           <button className="btn" onClick={() => setEditing(true)}>{t("Edit")}</button>
           <button className="btn" disabled={!!pending} onClick={() => act("pause", async () => { await api.updateMonitor(id, { paused: !m.paused }); await load(); })}>{pending === "pause" ? t("Saving…") : m.paused ? t("Resume") : t("Pause")}</button>
-          {m.type !== "heartbeat" && <button className="btn primary" disabled={!!pending} onClick={() => act("check", async () => { await api.checkNow(id); await load(); })}>{pending === "check" ? t("Checking…") : t("Check now")}</button>}
+          {m.type !== "heartbeat" && !m.mcpConfigRedacted && <button className="btn primary" disabled={!!pending} onClick={() => act("check", async () => { await api.checkNow(id); await load(); })}>{pending === "check" ? t("Checking…") : t("Check now")}</button>}
         </div>
       </div>
 
       {err && <p className="err">{err}</p>}
       <TimeCoverage id={id} />
+      {m.type === "mcp" && !m.mcpConfigRedacted && <McpHistory id={id} />}
       {editing && <MonitorForm monitor={m} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
 
       <div className="kp">

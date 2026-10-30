@@ -16,10 +16,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DomainExpiry } from "@openuptime/repo";
+import type { DomainExpiry, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
-export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain"]);
+export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp"]);
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);
@@ -64,6 +64,10 @@ export const monitor = pgTable(
     requestBody: text("request_body"),
     domainExpiryWarnDays: integer("domain_expiry_warn_days").notNull().default(30),
     domainExpiry: jsonb("domain_expiry").$type<DomainExpiry>(),
+    mcpConfig: jsonb("mcp_config").$type<McpConfig>(),
+    mcpBaseline: jsonb("mcp_baseline").$type<McpToolSchema[]>(),
+    mcpObservation: jsonb("mcp_observation").$type<McpObservation>(),
+    mcpGeneration: integer("mcp_generation").notNull().default(0),
     expectedStatus: integer("expected_status").notNull().default(200),
     intervalSec: integer("interval_sec").notNull().default(60),
     timeoutMs: integer("timeout_ms").notNull().default(10000),
@@ -147,6 +151,7 @@ export const checkResult = pgTable(
     statusCode: integer("status_code"),
     latencyMs: integer("latency_ms"),
     error: text("error"),
+    mcp: jsonb("mcp").$type<McpCheckDiagnostics>(),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("check_result_monitor_time_idx").on(t.monitorId, t.checkedAt)],
@@ -295,6 +300,28 @@ export const alertDelivery = pgTable(
   },
   (t) => [index("alert_delivery_org_time_idx").on(t.organizationId, t.createdAt), index("alert_delivery_retry_idx").on(t.nextAttemptAt), index("alert_delivery_status_idx").on(t.status, t.claimedAt), index("alert_delivery_incident_idx").on(t.incidentId)],
 );
+
+/** Persistent recipient-specific MCP notifications, committed with the incident transition. */
+export const mcpAlertOutbox = pgTable("mcp_alert_outbox", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sequence: bigserial("sequence", { mode: "number" }).notNull(),
+  eventKey: text("event_key").notNull(),
+  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  monitorId: uuid("monitor_id").notNull().references(() => monitor.id, { onDelete: "cascade" }),
+  deliveryId: uuid("delivery_id").notNull().references(() => alertDelivery.id, { onDelete: "cascade" }),
+  recipient: text("recipient").notNull(),
+  channelId: uuid("channel_id"),
+  event: jsonb("event").$type<McpAlertEvent>().notNull(),
+  status: text("status").$type<"pending" | "leased" | "sent" | "skipped">().notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  quotaAttempted: boolean("quota_attempted").notNull().default(false),
+  quotaDecision: text("quota_decision").$type<"granted" | "denied">(),
+  leaseToken: uuid("lease_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex("mcp_alert_outbox_event_recipient_idx").on(t.eventKey, t.recipient), index("mcp_alert_outbox_due_idx").on(t.status, t.nextAttemptAt), index("mcp_alert_outbox_order_idx").on(t.monitorId, t.recipient, t.sequence)]);
 
 /** Per-workspace preferences; a missing row means defaults. */
 export const workspaceSetting = pgTable("workspace_setting", {

@@ -121,6 +121,7 @@ export type PushEvent = {
   reason?: string;
   test?: true;
   slow?: true;
+  schemaDrift?: true;
   monitor: { id?: string; name: string; target: string };
   project?: { id: string; name: string };
   multiProject?: true;
@@ -147,16 +148,16 @@ export function buildPayload(ev: PushEvent, orgId: string, lang: Lang, critical 
     body = tr(lang, "This is a test alert from OpenUptime");
   } else if (opened) {
     const tag = ev.project && ev.multiProject ? `[${clip(ev.project.name, 40)}] ` : "";
-    title = tag + tr(lang, still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
+    title = tag + tr(lang, ev.schemaDrift ? "{name}: tool schema changed" : still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : ev.slow ? "{name} is responding slowly" : "{name} is down", { name });
     body = clip(ev.reason || ev.monitor.target || ev.incident.title, 300);
   } else {
-    title = (ev.project && ev.multiProject ? `[${clip(ev.project.name, 40)}] ` : "") + tr(lang, "{name} has recovered", { name });
+    title = (ev.project && ev.multiProject ? `[${clip(ev.project.name, 40)}] ` : "") + tr(lang, ev.schemaDrift ? "{name}: tool schema alert cleared" : "{name} has recovered", { name });
     const s = ev.incident.startedAt;
     const r = ev.incident.resolvedAt;
-    body = s && r ? tr(lang, "Down for {duration}", { duration: downtime(r.getTime() - s.getTime(), lang) }) : tr(lang, "Checks are passing again and the incident is resolved.");
+    body = ev.schemaDrift ? tr(lang, "Tool schema monitoring no longer reports a degraded state.") : s && r ? tr(lang, "Down for {duration}", { duration: downtime(r.getTime() - s.getTime(), lang) }) : tr(lang, "Checks are passing again and the incident is resolved.");
   }
   // critical breaks through Do Not Disturb, so only a real "down" (not slow, test or recovery) on an opted-in device gets it
-  const isCritical = critical && opened && !ev.slow && !ev.test;
+  const isCritical = critical && opened && !ev.slow && !ev.schemaDrift && !ev.test;
   return {
     aps: {
       alert: { title, body },

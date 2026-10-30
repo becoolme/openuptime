@@ -1,4 +1,4 @@
-import { MAX_REMINDERS, type AlertChannel, type AlertDelivery, type DeliveryRetry, type NewDelivery, type Repo, type SubscriberTarget } from "@openuptime/repo";
+import { MAX_REMINDERS, type AlertChannel, type AlertDelivery, type DeliveryRetry, type NewDelivery, type Repo, type SubscriberTarget, type McpAlertTask } from "@openuptime/repo";
 import { sendPush } from "./apns";
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
@@ -18,6 +18,7 @@ type Event = {
   test?: true;
   /** latency incident rather than an outage */
   slow?: true;
+  schemaDrift?: true;
   /** the monitor failed again soon after recovering, so an earlier incident was reopened */
   reopened?: true;
   monitor: { id?: string; projectId?: string | null; name: string; target: string; type?: string; domainExpiry?: { state: string; error: string | null } | null };
@@ -131,7 +132,10 @@ async function postLark(url: string, text: string, secret?: string) {
 }
 
 const domainHeading = (ev: Event, opened = ev.kind !== "incident.resolved") => !opened ? "{name}: domain expiry verified" : (!ev.monitor.domainExpiry || ev.monitor.domainExpiry.state === "unknown") ? "{name}: domain expiry unknown" : ev.monitor.domainExpiry?.state === "expired" ? "{name}: registration date passed" : "{name}: domain renewal needed";
-const alertText = (ev: Event) => ev.monitor.type === "domain"
+const schemaHeading = (opened: boolean) => opened ? "{name}: tool schema changed" : "{name}: tool schema alert cleared";
+const alertText = (ev: Event) => ev.schemaDrift
+  ? `${ev.kind === "incident.resolved" ? "✅" : "🟡"} ${tag(ev)}${schemaHeading(ev.kind !== "incident.resolved").replace("{name}", ev.monitor.name)} — ${ev.reason ?? ev.incident.title}`
+  : ev.monitor.type === "domain"
   ? `${tag(ev)}${domainHeading(ev).replace("{name}", ev.monitor.name)} — ${ev.kind === "incident.resolved" ? ev.monitor.target : ev.reason ?? ev.monitor.domainExpiry?.error ?? ev.incident.title}`
   :
   ev.kind === "incident.opened"
@@ -182,7 +186,7 @@ const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: Del
   count,
   incident: { id: incident.id, title: incident.title, startedAt: incident.startedAt, resolvedAt: incident.resolvedAt },
   monitor: { id: monitor.id, projectId: monitor.projectId, name: monitor.name, target: monitor.target, type: monitor.type, domainExpiry: monitor.domainExpiry },
-  ...(incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
+  ...(incident.evaluationNote === "mcp-schema-drift" ? { schemaDrift: true as const } : incident.auto && incident.severity === "minor" ? { slow: true as const } : {}),
   ...(reopened ? { reopened: true as const } : {}),
 });
 
@@ -487,7 +491,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       break;
     case "webhook":
       need(cfg.url, "webhook URL");
-      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
+      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
       break;
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
@@ -499,7 +503,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           routing_key: cfg.routingKey,
           event_action: opened ? "trigger" : "resolve",
           dedup_key: ev.incident.id,
-          payload: { summary: text, source: ev.monitor.target || ev.monitor.name, severity: "critical" },
+          payload: { summary: text, source: ev.monitor.target || ev.monitor.name, severity: ev.schemaDrift ? "warning" : "critical" },
         });
       break;
     case "push": {
@@ -549,12 +553,12 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         if (started) rows.push([L("Started"), utc(started)]);
         if (opened && ev.reason) rows.push([L("Error"), ev.reason]);
         if (!opened && started && ev.incident.resolvedAt) {
-          rows.push([L(ev.monitor.type === "domain" ? "Time needing attention" : "Downtime"), duration(ev.incident.resolvedAt.getTime() - started.getTime(), lang)]);
+          rows.push([L(ev.monitor.type === "domain" || ev.schemaDrift ? "Time needing attention" : "Downtime"), duration(ev.incident.resolvedAt.getTime() - started.getTime(), lang)]);
           rows.push([L("Resolved"), utc(ev.incident.resolvedAt)]);
         }
         const still = ev.kind === "incident.reminder" || ev.kind === "incident.escalated";
-        const heading = ev.monitor.type === "domain" ? domainHeading(ev, opened) : still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered";
-        const intro = ev.kind === "incident.reminder"
+        const heading = ev.schemaDrift ? schemaHeading(opened) : ev.monitor.type === "domain" ? domainHeading(ev, opened) : still ? (ev.slow ? "{name} is still responding slowly" : "{name} is still down") : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered";
+        const intro = ev.schemaDrift ? L(opened ? "Tool schemas changed while the MCP server remains reachable." : "Tool schema monitoring no longer reports a degraded state.") : ev.kind === "incident.reminder"
           ? L("Nobody has acknowledged this incident yet. This is reminder {n} of {max}.", { n: String(ev.count ?? 1), max: String(MAX_REMINDERS) })
           : ev.kind === "incident.escalated"
             ? L("Nobody acknowledged this incident in time, so it was escalated to this channel.")
@@ -562,7 +566,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         const mail = actionEmail({
           title: L(heading, { name: ev.monitor.name }),
           body: intro,
-          badge: ev.monitor.type === "domain" ? { label: L(opened ? "Domain attention" : "Verified"), tone: opened ? "warn" : "up" } : opened ? (ev.slow ? { label: L("Slow"), tone: "warn" } : { label: L("Down"), tone: "down" }) : { label: L("Recovered"), tone: "up" },
+          badge: ev.schemaDrift ? { label: L(opened ? "Schema changed" : "Schema alert cleared"), tone: opened ? "warn" : "up" } : ev.monitor.type === "domain" ? { label: L(opened ? "Domain attention" : "Verified"), tone: opened ? "warn" : "up" } : opened ? (ev.slow ? { label: L("Slow"), tone: "warn" } : { label: L("Down"), tone: "down" }) : { label: L("Recovered"), tone: "up" },
           rows,
           cta: L("View incident"),
           url: `${appUrl()}/app/incidents/${ev.incident.id}`,
@@ -570,7 +574,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           footerUrl: { text: L("Manage alerting"), url: `${appUrl()}/app/alerting` },
           lang,
         });
-        await sendEmail({ to: cfg.to, subject: `${tag(ev)}${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
+        await sendEmail({ to: cfg.to, subject: `${tag(ev)}${opened ? (ev.slow || ev.schemaDrift ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
       }
       break;
   }
@@ -689,4 +693,59 @@ export async function sendMaintenanceReminders(repo: Repo, entitlements: Entitle
     const retry = await repo.withinLimit(`maint-reminder:${r.window.id}:${r.page.id}`, REMINDER_ATTEMPTS, 24 * 3600).catch(() => false);
     if (retry) await repo.releaseMaintenanceReminder(r.window.id, r.page.id).catch((e) => console.error("maintenance reminder release failed", e));
   }
+}
+
+/** Stable subscriber identity in the MCP outbox; never persist email addresses or unsubscribe tokens there. */
+export async function mcpSubscriberRecipient(token: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return "subscriber:" + [...new Uint8Array(hash)].map(value => value.toString(16).padStart(2, "0")).join("");
+}
+
+/** One already-leased durable task. Throws on transient errors so the task remains retriable. */
+export async function deliverMcpAlertTask(repo: Repo, task: McpAlertTask, entitlements: Entitlements, pushed: PushedDevices = new Map()) {
+  const current = await repo.incidentDetail(task.organizationId, task.event.incident.id);
+  if (!current) throw new Skipped("skipped: incident removed");
+  if ((task.event.kind === "incident.opened" && current.incident.resolvedAt) || (task.event.kind === "incident.resolved" && !current.incident.resolvedAt)) throw new Skipped("skipped: incident changed before delivery");
+  const ev = await withProject(repo, task.organizationId, { ...task.event, incident: {
+    ...task.event.incident,
+    startedAt: task.event.incident.startedAt ? new Date(task.event.incident.startedAt) : undefined,
+    resolvedAt: task.event.incident.resolvedAt ? new Date(task.event.incident.resolvedAt) : null,
+  } });
+  const meter = async () => {
+    if (task.quotaDecision === "denied") throw new Skipped(SKIPPED);
+    if (task.quotaDecision === "granted") return;
+    if (!(await repo.markMcpAlertQuota(task.id, task.leaseToken))) throw new Error("MCP alert lease lost");
+    const decision = (await withinEmails(entitlements, task.organizationId, [task])).skipped ? "denied" : "granted";
+    // An attempt checkpoint is not permission. Interrupted/unknown decisions are checked again.
+    // A ledger without idempotency keys may debit twice if it charged immediately before this write was lost.
+    if (!(await repo.settleMcpAlertQuota(task.id, task.leaseToken, decision))) throw new Error("MCP quota decision not persisted");
+    if (decision === "denied") throw new Skipped(SKIPPED);
+  };
+  if (task.channelId) {
+    const channels = await repo.channelsToAlert(task.organizationId, { channelIds: [task.channelId], projectId: ev.monitor.projectId, withDisabled: true });
+    const channel = channels.find(channel => channel.id === task.channelId);
+    if (!channel?.enabled) throw new Skipped("skipped: channel removed or disabled");
+    if (entitlements.allowAlertChannel) await authorizeChannel(channel, ev, entitlements, task.createdAt);
+    if (channel.type === "email") await meter();
+    const lang = await languageFor(repo, channel);
+    if (!(await repo.renewMcpAlertLease(task.id, task.leaseToken))) throw new Error("MCP alert lease lost");
+    await deliver(channel, ev, alertText(ev), lang, repo, pushed);
+    return;
+  }
+  const subscribers = await repo.subscribersFor(task.organizationId, task.monitorId);
+  let selected: SubscriberTarget | undefined;
+  for (const subscriber of subscribers) if (await mcpSubscriberRecipient(subscriber.token) === task.recipient) { selected = subscriber; break; }
+  if (!selected) throw new Skipped("skipped: subscription removed or no longer eligible");
+  if (entitlements.canNotifySubscriber && await entitlements.canNotifySubscriber(task.organizationId, selected) !== true) throw new Skipped("skipped: subscriber policy denied");
+  await meter();
+  const opened = ev.kind !== "incident.resolved";
+  const head = (lang: Lang) => tr(lang, ev.schemaDrift ? schemaHeading(opened) : opened ? "{name} is down" : "{name} has recovered", { name: ev.monitor.name });
+  const hideBranding = await mayHideBranding(entitlements, task.organizationId);
+  if (!(await repo.renewMcpAlertLease(task.id, task.leaseToken))) throw new Error("MCP alert lease lost");
+  const sent = await mailSubscribers([selected], hideBranding, {
+    subject: (page, lang) => `[${page}] ${head(lang)}`, title: head,
+    body: () => ev.reason ?? ev.monitor.name,
+    badge: lang => ({ label: tr(lang, ev.schemaDrift ? opened ? "Schema changed" : "Schema alert cleared" : opened ? "Down" : "Recovered"), tone: opened ? ev.schemaDrift ? "warn" : "down" : "up" }),
+  });
+  if (sent.failed) throw new Error("MCP subscriber delivery failed");
 }
