@@ -6,10 +6,41 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 
 [Hosted version](https://openuptime.app) · [Docs](https://openuptime.app/docs/self-host) · [Reference](docs/reference.md) · [MIT license](LICENSE)
 
-- HTTP, TCP, DNS, heartbeat, PostgreSQL, MySQL, Redis, WebSocket, domain expiry and [MCP server](https://openuptime.app/docs/mcp-monitors) checks, with keyword matching and slow-response alerts
-- Incidents with acknowledgement, assignment and postmortems; maintenance windows and public status pages with email / RSS subscriptions
-- Alerts to Slack, Discord, Microsoft Teams, ntfy, Lark / Feishu, Telegram, PagerDuty, webhooks and email, with repeat reminders and escalation
-- Workspaces, projects, roles, API keys, an MCP server for agents, JSON import / export
+## Features
+
+**Monitoring**
+
+- [x] HTTP / HTTPS with keyword matching and slow-response alerts
+- [x] TCP, DNS and [WebSocket](https://openuptime.app/docs/websocket)
+- [x] Heartbeat (push) monitors for cron jobs and background workers
+- [x] PostgreSQL, MySQL and Redis
+- [x] Domain expiry
+- [x] [MCP server](https://openuptime.app/docs/mcp-monitors) checks
+- [x] [Multi-region checks](https://openuptime.app/docs/regions), with your own probes
+- [x] Monitor dependencies, so a downstream outage doesn't page you twice
+
+**Incidents and status pages**
+
+- [x] Incidents with acknowledgement, assignment and postmortems
+- [x] Maintenance windows, one-off or recurring
+- [x] Public status pages
+- [x] Email and RSS subscriptions for status page visitors
+- [x] [Status badges and embeds](https://openuptime.app/docs/embed) for your site or README
+
+**Alerts**
+
+- [x] Slack, Discord, Microsoft Teams, Telegram, Lark / Feishu and ntfy
+- [x] PagerDuty, webhooks and email
+- [x] Push notifications to the [iOS app](https://openuptime.app/ios)
+- [x] Repeat reminders and escalation
+
+**Teams and automation**
+
+- [x] Workspaces, projects and roles
+- [x] GitHub sign-in and two-factor authentication
+- [x] [REST API](https://openuptime.app/docs/api) with API keys
+- [x] [MCP server](https://openuptime.app/docs/mcp) so your AI agent can manage monitors, incidents and status pages
+- [x] JSON import / export
 
 | Part | Stack |
 |---|---|
