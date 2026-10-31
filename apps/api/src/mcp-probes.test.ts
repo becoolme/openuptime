@@ -2,7 +2,7 @@ import type { Monitor, McpObservation } from "@openuptime/repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureProbes, measure, runInRegion, usesOnlyPrivateProbes } from "./probes";
 import { runCheck } from "./checker";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, verifyProbe } from "./probe-protocol";
+import { ENVELOPE_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, verifyProbe, verifyProbeEnvelope } from "./probe-protocol";
 vi.mock("./checker", () => ({ runCheck: vi.fn() }));
 const observation: McpObservation = { stage: "complete", toolsComplete: true, timings: { "tools/list": 5 }, tools: [{ name: "lookup", inputSchema: { type: "object", properties: { q: { type: "string" } } } }], changes: [] };
 const m: Monitor = { id: "m", organizationId: "fixture", projectId: null, name: "Regional MCP",
@@ -30,6 +30,9 @@ describe("MCP regional checks", () => {
       posts++;
       const headers = new Headers(init.headers), body = String(init.body);
       expect(await verifyProbe("fixture-secret", { timestamp: headers.get(TIMESTAMP_HEADER), signature: headers.get(SIGNATURE_HEADER), body })).toBe(true);
+      // the declared length is signed separately so the probe can accept a large body before reading it
+      expect(await verifyProbeEnvelope("fixture-secret", { timestamp: headers.get(TIMESTAMP_HEADER), envelope: headers.get(ENVELOPE_HEADER), byteLength: Buffer.byteLength(body) })).toBe(true);
+      expect(await verifyProbeEnvelope("fixture-secret", { timestamp: headers.get(TIMESTAMP_HEADER), envelope: headers.get(ENVELOPE_HEADER), byteLength: Buffer.byteLength(body) + 1 })).toBe(false);
       expect(JSON.parse(body)).toMatchObject({ type: "mcp", mcpConfig: m.mcpConfig, mcpBaseline: null });
       const tools = posts === 1 ? observation.tools : [{ inputSchema: { properties: { q: { type: "string" } }, type: "object" }, name: "lookup" }];
       return Response.json({ ok: true, latencyMs: 20, mcp: { ...observation, tools } });

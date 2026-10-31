@@ -5,7 +5,7 @@ import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe } from "./probe-protocol";
+import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
 import { AUTO, REGION_ID, REGION_NAMES, effectiveRegions } from "./regions";
 
 /**
@@ -122,7 +122,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
       const advertised: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;
       if (!health.ok) void health.body?.cancel();
-      if (!Array.isArray((advertised as {capabilities?: unknown} | null)?.capabilities) || !(advertised as {capabilities: unknown[]}).capabilities.includes("mcp-monitor-v2")) return { region, unreachable: "Probe upgrade required for MCP monitoring" };
+      if (!Array.isArray((advertised as {capabilities?: unknown} | null)?.capabilities) || !(advertised as {capabilities: unknown[]}).capabilities.includes(MCP_MONITOR_CAPABILITY)) return { region, unreachable: "Probe upgrade required for MCP monitoring" };
     }
     // Old probes ignore unknown fields: verify support BEFORE sending a payload. A positive answer is remembered
     // briefly so every check does not pay for a second request; a rolled-back probe is noticed within CAPABILITY_TTL_MS.
@@ -141,7 +141,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     const res = await fetch(probe.url, {
       method: "POST",
       redirect: "manual",
-      headers: { "content-type": "application/json", [TIMESTAMP_HEADER]: String(ts), [SIGNATURE_HEADER]: await signProbe(secret, ts, body) },
+      headers: { "content-type": "application/json", [TIMESTAMP_HEADER]: String(ts), [SIGNATURE_HEADER]: await signProbe(secret, ts, body), [ENVELOPE_HEADER]: await signProbeEnvelope(secret, ts, new TextEncoder().encode(body).byteLength) },
       body,
       // the probe enforces timeoutMs itself; this only covers a probe that hangs
       signal: AbortSignal.timeout(input.timeoutMs + 8000),

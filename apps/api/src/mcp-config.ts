@@ -2,7 +2,11 @@ import { z } from "zod";
 const httpsUrl = (value: string) => { try { const u = new URL(value); return u.protocol === "https:" && !u.username && !u.password && !u.hash && !u.search; } catch { return false; } };
 /** Tool calls are opt-in. Payloads and assertions may hold secrets, just like headers. */
 const boundedJson = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength <= 16_384;
-export const mcpConfigSchema = z.object({
+/**
+ * A stored refresh token rotates on every check, so a client copy is always potentially stale. Updates and saved-monitor
+ * previews may omit it to mean "keep the stored token"; creation and probes require the complete credentials.
+ */
+const buildMcpConfigSchema = (refreshTokenRequired: boolean) => z.object({
   requiredTools: z.array(z.string().trim().min(1).max(128)).max(100).default([]),
   schemaCheck: z.boolean().default(false),
   transport: z.enum(["auto", "streamable-http", "sse"]).optional(),
@@ -18,7 +22,7 @@ export const mcpConfigSchema = z.object({
     scopes: z.array(z.string().min(1).max(200).regex(/^[\x21\x23-\x5b\x5d-\x7e]+$/)).max(30).optional(),
     resource: z.string().url().max(2048).refine(httpsUrl, "OAuth resource must be an HTTPS URL").optional(),
     tokenAuthMethod: z.enum(["client_secret_basic", "client_secret_post"]).optional(),
-  }).refine(v => v.mode !== "refresh_token" || Boolean(v.refreshToken), "Refresh-token mode requires a refresh token")
+  }).refine(v => !refreshTokenRequired || v.mode !== "refresh_token" || Boolean(v.refreshToken), "Refresh-token mode requires a refresh token")
     .refine(v => v.mode !== "client_credentials" || Boolean(v.clientSecret), "Client-credentials mode requires a client secret").nullable().optional(),
   toolCall: z.object({
     enabled: z.boolean().default(false),
@@ -32,6 +36,9 @@ export const mcpConfigSchema = z.object({
   }).nullable().default(null),
 }).refine(v => !v.toolCall?.enabled || Boolean(v.toolCall.name), "An enabled tool call requires a tool name")
   .refine(boundedJson, "MCP configuration exceeds 16384 UTF-8 bytes");
+export const mcpConfigSchema = buildMcpConfigSchema(true);
+/** PATCH and saved-monitor preview: an omitted oauth.refreshToken keeps the stored one. */
+export const mcpConfigPatchSchema = buildMcpConfigSchema(false);
 
 
 const oneMiB = 1024 * 1024;

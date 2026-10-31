@@ -256,6 +256,45 @@ describe.skipIf(!url)("MCP observation persistence", () => {
     expect(await first).toBe("first");
   });
 
+  it("keeps the stored rotated refresh token when an edit omits it", async () => {
+    const oauth = { mode: "refresh_token" as const, issuer: "https://issuer.example", clientId: "fixture", refreshToken: "r1" };
+    const m = await monitor({ mcpConfig: { ...config, oauth } });
+    // A scheduled check rotates r1 to r2 while an edit form is open.
+    expect(await repo.rotateMcpRefreshToken(m, "r1", "r2")).toBe(true);
+    const { refreshToken: _r1, ...formOAuth } = oauth;
+    const edited = await repo.updateMonitor(orgId, m.id, null, { mcpConfig: { ...config, oauth: { ...formOAuth, scopes: ["read"] } } });
+    expect(edited?.mcpConfig?.oauth).toMatchObject({ refreshToken: "r2", scopes: ["read"] });
+    const replaced = await repo.updateMonitor(orgId, m.id, null, { mcpConfig: { ...config, oauth: { ...formOAuth, refreshToken: "typed" } } });
+    expect(replaced?.mcpConfig?.oauth?.refreshToken).toBe("typed");
+  });
+
+  it("holds no transaction or row lock during the OAuth token request", async () => {
+    const oauth = { mode: "refresh_token" as const, issuer: "https://issuer.example", clientId: "fixture", refreshToken: "old" };
+    const m = await monitor({ mcpConfig: { ...config, oauth } });
+    const result = await repo.withMcpOAuth(m, async (storage, current) => {
+      // Under the former FOR UPDATE lock this edit of the same row would wait for the token request.
+      const edit = repo.updateMonitor(orgId, m.id, null, { name: "Edited during refresh" });
+      const settled = await Promise.race([edit.then(() => "edited"), new Promise(resolve => setTimeout(() => resolve("blocked"), 2000))]);
+      // Many concurrent statements on a small pool still progress while the refresh is pending.
+      await Promise.all(Array.from({ length: 8 }, () => repo.getMonitor(orgId, m.id, null)));
+      return { settled, rotated: await storage.rotateMcpRefreshToken(current, "old", "new") };
+    });
+    expect(result).toEqual({ settled: "edited", rotated: true });
+    expect((await load(m.id)).mcpConfig?.oauth?.refreshToken).toBe("new");
+    expect(await db.select().from(schema.mcpOAuthLease).where(eq(schema.mcpOAuthLease.monitorId, m.id))).toHaveLength(0);
+  });
+
+  it("releases the OAuth lease after a failure and takes over an expired one", async () => {
+    const m = await monitor();
+    await expect(repo.withMcpOAuth(m, async () => { throw new Error("token endpoint failed"); })).rejects.toThrow("token endpoint failed");
+    expect(await repo.withMcpOAuth(m, async () => "after failure")).toBe("after failure");
+    // A holder that died leaves its row behind; it blocks until it expires, then the next check proceeds.
+    await db.insert(schema.mcpOAuthLease).values({ monitorId: m.id, leaseToken: crypto.randomUUID(), leaseUntil: new Date(Date.now() + 60_000) });
+    expect(await repo.withMcpOAuth(m, async () => "blocked")).toBeNull();
+    await db.update(schema.mcpOAuthLease).set({ leaseUntil: new Date(Date.now() - 1000) }).where(eq(schema.mcpOAuthLease.monitorId, m.id));
+    expect(await repo.withMcpOAuth(m, async () => "taken over")).toBe("taken over");
+  });
+
   it("stores bounded history, stage percentiles, and a scoped drift timeline", async () => {
     const m = await monitor();
     for (const latencyMs of [10, 20, 30]) await repo.recordCheck({ monitorId: m.id, ok: true, latencyMs, mcp: {

@@ -11,6 +11,9 @@ export function McpTimingChart({ rows, stage }: { rows: History["results"]; stag
   const max = Math.max(1, ...values);
   const regions = [...new Set(points.map((row) => row.region ?? "auto"))];
   const colors = ["var(--accent)", "var(--warn)", "#9575cd", "#42a5f5", "#ef5350"];
+  // each region also gets its own line pattern, so the chart and legend do not rely on color alone
+  const dashes = ["", "6 4", "2 3", "10 3 2 3", "1 5"];
+  const dash = (i: number) => dashes[i % dashes.length] || undefined;
   const x = (i: number) => 20 + i * 660 / Math.max(1, points.length - 1);
   return <>
     <svg viewBox="0 0 700 170" role="img" aria-label={t("MCP stage latency history")} style={{ width: "100%", height: 180 }}>
@@ -27,12 +30,14 @@ export function McpTimingChart({ rows, stage }: { rows: History["results"]; stag
           return `${command}${x(i).toFixed(1)} ${(145 - n / max * 120).toFixed(1)}`;
         }).join(" ");
         return <g key={region} stroke={colors[regionIndex % colors.length]} fill={colors[regionIndex % colors.length]}>
-          <path d={path} fill="none" strokeWidth={2} />
+          <path d={path} fill="none" strokeWidth={2} strokeDasharray={dash(regionIndex)} />
           {points.map((row, i) => (row.region ?? "auto") === region && typeof value(row) === "number" ? <circle key={row.id} cx={x(i)} cy={145 - value(row)! / max * 120} r={2}><title>{new Date(row.checkedAt).toLocaleString()} · {region} · {ms(value(row)!)} · {row.ok ? t("OK") : t("Failed")}</title></circle> : null)}
         </g>;
       })}
     </svg>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{regions.map((region, i) => <span key={region} style={{ color: colors[i % colors.length] }}>● {region}</span>)}</div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{regions.map((region, i) => <span key={region} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <svg width="28" height="8" aria-hidden="true"><path d="M1 4H27" stroke={colors[i % colors.length]} strokeWidth={2} strokeDasharray={dash(i)} /></svg>{region}
+    </span>)}</div>
     <p className="muted">{t("Up to 120 latest recorded checks, ordered by time. Missing stage samples leave gaps.")}</p>
   </>;
 }

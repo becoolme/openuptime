@@ -219,5 +219,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0043_concerned_tyger_tiger",
     "when": 1793378217317,
     "sql": "ALTER TABLE \"mcp_alert_outbox\" ADD COLUMN \"quota_decision\" text;"
+  },
+  {
+    "tag": "0044_free_random",
+    "when": 1793449904545,
+    "sql": "CREATE TABLE \"mcp_oauth_lease\" (\n\t\"monitor_id\" uuid PRIMARY KEY NOT NULL,\n\t\"lease_token\" uuid NOT NULL,\n\t\"lease_until\" timestamp with time zone NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"mcp_oauth_lease\" ADD CONSTRAINT \"mcp_oauth_lease_monitor_id_monitor_id_fk\" FOREIGN KEY (\"monitor_id\") REFERENCES \"public\".\"monitor\"(\"id\") ON DELETE cascade ON UPDATE no action;"
   }
 ];

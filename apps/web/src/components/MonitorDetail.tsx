@@ -167,7 +167,7 @@ export default function MonitorDetail({ id }: { id: string }) {
                   </span>
                 </div>
               ))}
-              {places.length > 1 && (
+              {places.length > 1 && !(m.type === "mcp" && m.mcpConfigRedacted) && (
                 <div className="spot">
                   <span className="faint">{t("Test once from")}</span>
                   <div className="spot-pick">
@@ -189,6 +189,7 @@ export default function MonitorDetail({ id }: { id: string }) {
                     </p>
                   )}
                   <small className="faint">{t("One-off test: it is not recorded and does not change the monitor's status.")}</small>
+                  {m.type === "mcp" && m.mcpConfig?.toolCall?.enabled && <small className="err">{t("This test also calls the configured tool and may incur charges or write data.")}</small>}
                 </div>
               )}
             </div>

@@ -582,8 +582,12 @@ export interface Repo {
    */
   recordRegionResults(monitorId: string, results: RegionResult[], summary: { ok: boolean; latencyMs?: number | null }): Promise<void>;
   acceptDomainExpiry(snapshot: Monitor, expiry: DomainExpiry): Promise<boolean>;
-  /** Serialize MCP result application on its monitor row; external notifications must wait for commit. */
+  /**
+   * Run one OAuth refresh for this monitor at a time under a short-lived lease, outside any transaction (the token
+   * request may be slow). Returns null when another refresh holds the lease or the configuration changed.
+   */
   withMcpOAuth<T>(snapshot: Monitor, apply: (repo: Repo, current: Monitor) => Promise<T>): Promise<T | null>;
+  /** Serialize MCP result application on its monitor row; external notifications must wait for commit. */
   withMcpResult<T>(snapshot: Monitor, apply: (repo: Repo, current: Monitor) => Promise<T>): Promise<T | null>;
   /** Accept bounded MCP diagnostics and, once, the discovery baseline, only for the current configuration. */
   acceptMcpObservation(snapshot: Monitor, observation: McpObservation, options?: { generation?: number; ok?: boolean }): Promise<boolean>;

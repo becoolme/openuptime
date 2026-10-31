@@ -124,6 +124,16 @@ export const monitor = pgTable(
   (t) => [index("monitor_org_idx").on(t.organizationId), index("monitor_due_idx").on(t.nextCheckAt), uniqueIndex("monitor_import_source_unique").on(t.organizationId, t.projectId, t.importSource, t.importSourceId)],
 );
 
+/**
+ * One OAuth refresh at a time per MCP monitor, without holding a database connection during the token request.
+ * A row is a lease: whoever inserted it (or replaced an expired one) may refresh until `leaseUntil`.
+ */
+export const mcpOAuthLease = pgTable("mcp_oauth_lease", {
+  monitorId: uuid("monitor_id").primaryKey().references(() => monitor.id, { onDelete: "cascade" }),
+  leaseToken: uuid("lease_token").notNull(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }).notNull(),
+});
+
 /** Append-only observations and configuration fences. No historical backfill from mutable status or incidents. */
 export const monitorObservation = pgTable("monitor_observation", {
   id: bigserial("id", { mode: "number" }).primaryKey(),

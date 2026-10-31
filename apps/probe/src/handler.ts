@@ -2,11 +2,13 @@ import { mcpConfigSchema, mcpToolsSchema } from "../../api/src/mcp-config";
 import { HTTP_METHODS, HTTP_REQUEST_CAPABILITY, requestBodyProblem } from "../../api/src/http-request";
 import { runCheck, type CheckInput } from "../../api/src/checker";
 import { targetProblem } from "../../api/src/netguard";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, verifyProbe } from "../../api/src/probe-protocol";
+import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, probeHeadersPlausible, verifyProbe, verifyProbeEnvelope } from "../../api/src/probe-protocol";
 
+/** Any request whose length is not vouched for by a valid envelope signature: every non-MCP check fits. */
+export const SMALL_BODY_BYTES = 64 * 1024;
 /**
- * Bounds the signed envelope before signature verification. MCP schema baselines may occupy up to 4 MiB;
- * the remaining room covers the configuration and headers.
+ * Upper bound for a body whose declared length the scheduler signed (MCP schema baselines may occupy up to 4 MiB;
+ * the remaining room covers the configuration and headers). Only MCP checks may use more than SMALL_BODY_BYTES.
  */
 export const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
@@ -63,10 +65,20 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
  * function is deployed to.
  */
 export async function handleProbe(req: Request, o: { secret: string | undefined; region?: string }): Promise<Response> {
-  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, "mcp-monitor-v2"] });
+  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
-  if (Number(req.headers.get("content-length")) > MAX_BODY_BYTES) return json(413, { error: "Request too large" });
+  const declared = req.headers.get("content-length");
+  const length = declared !== null && /^\d{1,10}$/.test(declared) ? Number(declared) : null;
+  if (length !== null && length > MAX_BODY_BYTES) return json(413, { error: "Request too large" });
+  // Nothing is buffered for a request that cannot be the scheduler's: stale or missing timestamp, no signature.
+  const timestamp = req.headers.get(TIMESTAMP_HEADER), signature = req.headers.get(SIGNATURE_HEADER);
+  if (!probeHeadersPlausible({ timestamp, signature })) return json(401, { error: "Bad or expired signature" });
+  // A large body is read only when the scheduler signed its exact length; anyone else gets the small limit.
+  const vouched = length !== null && length > SMALL_BODY_BYTES
+    && await verifyProbeEnvelope(o.secret, { timestamp, envelope: req.headers.get(ENVELOPE_HEADER), byteLength: length });
+  if (length !== null && length > SMALL_BODY_BYTES && !vouched) return json(413, { error: "Request too large" });
+  const limit = vouched ? length! : SMALL_BODY_BYTES;
   const reader = req.body?.getReader();
   if (!reader) return json(400, { error: "Body is required" });
   let text = "", bytes = 0;
@@ -76,17 +88,18 @@ export async function handleProbe(req: Request, o: { secret: string | undefined;
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > MAX_BODY_BYTES) return json(413, { error: "Request too large" });
+      if (bytes > limit) return json(413, { error: "Request too large" });
       text += decoder.decode(value, { stream: true });
     }
     text += decoder.decode();
   } finally { void reader.cancel().catch(() => {}); }
-  const verified = await verifyProbe(o.secret, { timestamp: req.headers.get(TIMESTAMP_HEADER), signature: req.headers.get(SIGNATURE_HEADER), body: text });
+  const verified = await verifyProbe(o.secret, { timestamp, signature, body: text });
   if (!verified) return json(401, { error: "Bad or expired signature" });
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return json(400, { error: "Body is not valid JSON" }); }
   const parsed = parseCheck(raw);
   if ("error" in parsed) return json(400, { error: parsed.error });
+  if (bytes > SMALL_BODY_BYTES && parsed.input.type !== "mcp") return json(413, { error: "Request too large" });
   // a signed request is still not allowed to aim the probe at a private address
   const blocked = await targetProblem(parsed.input.type, parsed.input.target);
   if (blocked) return json(400, { error: blocked, code: "target_not_allowed" });

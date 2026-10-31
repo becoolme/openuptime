@@ -1,19 +1,27 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { MAX_BODY_BYTES } from "./handler";
 
-/** Turn a Node request into a Fetch `Request`, refusing bodies that are already larger than a check ever is. */
-export async function toRequest(req: IncomingMessage): Promise<Request | "too-large"> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return "too-large";
-    chunks.push(chunk as Buffer);
-  }
+/**
+ * Turn a Node request into a Fetch `Request` without reading its body. The body is passed on as a stream so the handler
+ * can refuse an unsigned or oversized request from its headers alone, and reads at most the limit it allows.
+ */
+export function toRequest(req: IncomingMessage): Request {
   const headers = new Headers();
   for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
   const method = req.method ?? "GET";
-  return new Request(`http://probe${req.url ?? "/"}`, { method, headers, ...(method === "GET" || method === "HEAD" ? {} : { body: Buffer.concat(chunks) }) });
+  if (method === "GET" || method === "HEAD") return new Request(`http://probe${req.url ?? "/"}`, { method, headers });
+  // pulled lazily: a request refused from its headers is never read here, and Node discards its body as for any
+  // unread request (bounded by the server's requestTimeout) so the client still receives the refusal
+  let chunks: AsyncIterator<Buffer> | undefined;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(c) {
+      chunks ??= req[Symbol.asyncIterator]();
+      const next = await chunks.next();
+      if (next.done) c.close();
+      else c.enqueue(new Uint8Array(next.value));
+    },
+    async cancel() { await chunks?.return?.(); },
+  }, { highWaterMark: 0 });
+  return new Request(`http://probe${req.url ?? "/"}`, { method, headers, body, duplex: "half" } as RequestInit);
 }
 
 export async function send(res: ServerResponse, out: Response) {

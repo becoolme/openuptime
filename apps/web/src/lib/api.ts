@@ -9,7 +9,7 @@ export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string
 export type McpObservation = { toolsComplete?: boolean; id?: string; schemaHash?: string; checkedAt?: string; protocolVersion?: string; transport?: string; stage: string; timings: Record<string, number>; tools: McpToolSchema[]; changes: string[]; drift?: McpDrift[]; prompts?: { name: string }[]; resources?: { uri: string; name: string }[] };
 export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "checkedAt" | "stage" | "timings" | "changes" | "drift" | "protocolVersion" | "transport">;
 export type McpHistory = { results: (CheckResult & { mcp: McpCheckDiagnostics })[]; metrics: { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> }; changes: { id: string; checkedAt: string; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] }[] };
-export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation; oauthRefreshToken?: string };
+export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation };
 export type Monitor = {
   id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp"; target: string; method: string; requestBody?: string | null;
   mcpConfig?: McpConfig | null;

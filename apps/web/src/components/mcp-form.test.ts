@@ -54,24 +54,25 @@ describe("MCP monitor form", () => {
     expect(mcpConnectionKey("https://example.com", 10000, [], { ...form, toolName: "read", callEnabled: false })).toBe(key);
     expect(mcpConnectionKey("https://example.com", 10000, [], { ...form, oauthIssuer: "https://different.example.com" })).not.toBe(key);
   });
-  it("previews saved OAuth using its exact optional fields and latest rotated token", () => {
+  it("previews saved OAuth using its exact optional fields and lets the server supply the current token", () => {
     const original: McpConfig = { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { mode: "refresh_token", issuer: "https://auth.example.com", clientId: "monitor", refreshToken: "old-token" } };
     const initial = initialMcpForm(original);
-    const latest = { ...original, oauth: { ...original.oauth!, refreshToken: "rotated-token" } };
-    const preview = mcpDiscoveryConfig({ ...initial, argumentsText: "invalid draft", callEnabled: true }, { config: latest, initial });
-    expect(preview.oauth).toEqual(latest.oauth);
-    expect(preview.oauth).not.toHaveProperty("scopes");
-    expect(preview.oauth).not.toHaveProperty("tokenAuthMethod");
+    expect(initial.oauthRefreshToken).toBe("");
+    const preview = mcpDiscoveryConfig({ ...initial, argumentsText: "invalid draft", callEnabled: true }, { config: original, initial });
+    expect(preview.oauth).toEqual({ mode: "refresh_token", issuer: "https://auth.example.com", clientId: "monitor" });
     expect(preview.toolCall).toBeNull();
-    const rotatedInitial = { ...initial, oauthRefreshToken: "rotated-token" };
-    const repeated = mcpDiscoveryConfig(rotatedInitial, { config: latest, initial: rotatedInitial });
-    expect(repeated.oauth).toEqual(latest.oauth);
-    expect(mcpConfigForSave(rotatedInitial, rotatedInitial)).toBeUndefined();
+    expect(mcpConfigForSave({ ...initial }, initial)).toBeUndefined();
     expect(() => mcpFormConfig({ ...initialMcpForm(), oauthMode: "client_credentials", oauthIssuer: "https://auth.example.com", oauthClientId: "monitor" })).toThrow("client secret");
+    // A new monitor has no stored token to keep.
+    expect(() => mcpFormConfig({ ...initialMcpForm(), oauthMode: "refresh_token", oauthIssuer: "https://auth.example.com", oauthClientId: "monitor" })).toThrow("refresh token");
   });
-  it("omits untouched OAuth from partial edits so rotated tokens cannot be overwritten", () => {
-    const initial = initialMcpForm({ requiredTools: [], schemaCheck: false, toolCall: null, oauth: { mode: "refresh_token", issuer: "https://auth.example.com", clientId: "monitor", refreshToken: "old-token" } });
+  it("never sends back a refresh token the user did not type, so a rotated one cannot be overwritten", () => {
+    // The form was opened while the stored token was r1; a scheduled check has since rotated it to r2.
+    const initial = initialMcpForm({ requiredTools: [], schemaCheck: false, toolCall: null, oauth: { mode: "refresh_token", issuer: "https://auth.example.com", clientId: "monitor", refreshToken: "r1" } });
     expect(mcpConfigForSave({ ...initial, requiredTools: "read" }, initial)).not.toHaveProperty("oauth");
+    const scopesOnly = mcpConfigForSave({ ...initial, oauthScopes: "read write" }, initial)!;
+    expect(scopesOnly.oauth).toMatchObject({ mode: "refresh_token", scopes: ["read", "write"] });
+    expect(scopesOnly.oauth).not.toHaveProperty("refreshToken");
     expect(mcpConfigForSave({ ...initial, oauthRefreshToken: "replacement-token" }, initial)?.oauth?.refreshToken).toBe("replacement-token");
     expect(mcpConfigForSave({ ...initial, oauthMode: "none" }, initial)?.oauth).toBeNull();
   });

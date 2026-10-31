@@ -166,7 +166,7 @@ PROBE_REGIONS={
     <ul>
       <li><strong>仅限国际区域。</strong>自带的 Vercel 构建只覆盖中国大陆以外的区域。要从中国大陆境内检测，需要你自己在那里的主机上运行探针。</li>
       <li>探针会收到执行检测所需的输入，包括配置的请求头及 MCP 工具参数。OAuth 在中央获取令牌，向探针转发访问令牌，不转发刷新令牌或客户端密钥。数据库检测仍在 <code>auto</code> 执行。</li>
-      <li>探针默认拒绝私有和内网目标。私有 MCP 需要在内网 Node 探针上设置 <code>ALLOW_PRIVATE_TARGETS=true</code>，由部署管理员将 API 的 <code>PROBE_REGIONS</code> 对应条目标记为 <code>private: true</code>，并仅选择已批准的私有区域；协调器无需全局开启私有目标访问。OAuth 的中央元数据可达性另有要求，见 <a href="/docs/mcp-monitors#private-probes">私有 MCP 探针</a>。</li>
+      <li>探针默认拒绝私有和内网目标。私有 MCP 需要在内网 Node 探针上设置 <code>ALLOW_PRIVATE_TARGETS=true</code>，由部署管理员将 API 的 <code>PROBE_REGIONS</code> 对应条目标记为 <code>private: true</code>，并仅选择已批准的私有区域；协调器无需全局开启私有目标访问。OAuth 的中央元数据可达性另有要求，见 <a href="/docs/mcp-monitors#private-probes-zh">私有 MCP 探针</a>。</li>
       <li>在 API 和探针上设置相同的 <code>CHECK_USER_AGENT</code>，让目标看到一致的客户端。</li>
     </ul>
   </div>

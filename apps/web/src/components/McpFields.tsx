@@ -11,7 +11,7 @@ export type McpForm = {
 export function initialMcpForm(config?: McpConfig | null): McpForm {
   return {
     transport: config?.transport ?? "auto", listPrompts: config?.listPrompts ?? false, listResources: config?.listResources ?? false, driftPolicy: config?.driftPolicy ?? "down",
-    oauthMode: config?.oauth?.mode ?? "none", oauthIssuer: config?.oauth?.issuer ?? "", oauthClientId: config?.oauth?.clientId ?? "", oauthClientSecret: config?.oauth?.clientSecret ?? "", oauthRefreshToken: config?.oauth?.refreshToken ?? "", oauthScopes: config?.oauth?.scopes?.join(" ") ?? "", oauthResource: config?.oauth?.resource ?? "", oauthTokenAuthMethod: config?.oauth?.tokenAuthMethod ?? "client_secret_basic",
+    oauthMode: config?.oauth?.mode ?? "none", oauthIssuer: config?.oauth?.issuer ?? "", oauthClientId: config?.oauth?.clientId ?? "", oauthClientSecret: config?.oauth?.clientSecret ?? "", oauthRefreshToken: "", oauthScopes: config?.oauth?.scopes?.join(" ") ?? "", oauthResource: config?.oauth?.resource ?? "", oauthTokenAuthMethod: config?.oauth?.tokenAuthMethod ?? "client_secret_basic",
     requiredTools: config?.requiredTools.join("\n") ?? "", schemaCheck: config?.schemaCheck ?? false,
     callEnabled: config?.toolCall?.enabled === true, toolName: config?.toolCall?.name ?? "",
     argumentsText: JSON.stringify(config?.toolCall?.arguments ?? {}, null, 2),
@@ -23,22 +23,29 @@ export function sameOAuthForm(left: McpForm, right: McpForm): boolean {
   const oauthFields = (value: McpForm) => Object.entries(value).filter(([key]) => key.startsWith("oauth"));
   return JSON.stringify(oauthFields(left)) === JSON.stringify(oauthFields(right));
 }
+/**
+ * The server never returns a saved refresh token: checks rotate it, so any copy would be stale. The form starts with
+ * the field empty and sends a token only when the user types one; an omitted token keeps the stored, current one.
+ */
+const keepsSavedRefreshToken = (initial?: McpForm) => initial?.oauthMode === "refresh_token";
 export function mcpDiscoveryConfig(form: McpForm, saved?: { config?: McpConfig | null; initial: McpForm }): McpConfig {
-  const config = mcpFormConfig({ ...form, callEnabled: false, argumentsText: "{}", assertions: [], toolName: "", requiredTools: "", schemaCheck: false });
-  // Do not invent optional OAuth fields or send a stale token for an untouched saved connection.
-  if (saved && sameOAuthForm(form, saved.initial)) config.oauth = saved.config?.oauth ?? null;
+  const config = mcpFormConfig({ ...form, callEnabled: false, argumentsText: "{}", assertions: [], toolName: "", requiredTools: "", schemaCheck: false }, { keepRefreshToken: keepsSavedRefreshToken(saved?.initial) });
+  // Do not invent optional OAuth fields for an untouched saved connection.
+  if (saved && sameOAuthForm(form, saved.initial)) {
+    const oauth = saved.config?.oauth;
+    config.oauth = oauth ? Object.fromEntries(Object.entries(oauth).filter(([key]) => key !== "refreshToken")) as McpOAuth : null;
+  }
   return config;
 }
 /** Leave an unchanged saved configuration out of PATCH, including disabled calls and legacy defaults. */
 export function mcpConfigForSave(form: McpForm, initial?: McpForm): McpConfig | undefined {
   if (initial && JSON.stringify(form) === JSON.stringify(initial)) return undefined;
-  const config = mcpFormConfig(form);
-  // Scheduled checks can rotate a saved refresh token while this form is open. Omit untouched auth
-  // instead of replacing the latest stored credentials with the form's original snapshot.
+  const config = mcpFormConfig(form, { keepRefreshToken: keepsSavedRefreshToken(initial) });
+  // Omit untouched auth entirely; the server keeps the stored credentials.
   if (initial && sameOAuthForm(form, initial)) delete config.oauth;
   return config;
 }
-export function mcpFormConfig(form: McpForm): McpConfig {
+export function mcpFormConfig(form: McpForm, options: { keepRefreshToken?: boolean } = {}): McpConfig {
   const requiredTools = [...new Set(form.requiredTools.split(/[\n,，]/).map((n) => n.trim()).filter(Boolean))];
   if (requiredTools.length > 100 || requiredTools.some((name) => name.length > 128)) throw new Error(t("Use at most 100 required tools, each up to 128 characters."));
   const bounded = (config: McpConfig) => {
@@ -52,7 +59,7 @@ export function mcpFormConfig(form: McpForm): McpConfig {
     scopes: form.oauthScopes.split(/\s+/).filter(Boolean), ...(form.oauthResource.trim() ? { resource: form.oauthResource.trim() } : {}), tokenAuthMethod: form.oauthTokenAuthMethod,
   };
   if (oauth?.mode === "client_credentials" && !oauth.clientSecret) throw new Error(t("OAuth client credentials require a client secret."));
-  if (oauth && (!oauth.issuer || !oauth.clientId || (oauth.mode === "refresh_token" && !oauth.refreshToken))) throw new Error(t("Complete the OAuth issuer, client ID and refresh token when required."));
+  if (oauth && (!oauth.issuer || !oauth.clientId || (oauth.mode === "refresh_token" && !oauth.refreshToken && !options.keepRefreshToken))) throw new Error(t("Complete the OAuth issuer, client ID and refresh token when required."));
   const base = { requiredTools, schemaCheck: form.schemaCheck, transport: form.transport, listPrompts: form.listPrompts, listResources: form.listResources, driftPolicy: form.driftPolicy, oauth };
   if (form.callEnabled && !form.toolName.trim()) throw new Error(t("Choose a tool name before enabling calls."));
   let toolCall: McpConfig["toolCall"] = null;
@@ -129,7 +136,7 @@ export function McpFields({ value, onChange, tools, monthlyCalls = 0 }: { value:
   </>;
 }
 
-export function McpConnectionFields({ value, onChange }: { value: McpForm; onChange: (v: McpForm) => void }) {
+export function McpConnectionFields({ value, onChange, savedRefreshToken = false }: { value: McpForm; onChange: (v: McpForm) => void; savedRefreshToken?: boolean }) {
   const set = <K extends keyof McpForm>(key: K, next: McpForm[K]) => onChange({ ...value, [key]: next });
   return <>
     <label className="fld">{t("MCP transport")}
@@ -143,7 +150,7 @@ export function McpConnectionFields({ value, onChange }: { value: McpForm; onCha
       <label className="fld">{t("OAuth issuer URL")}<input className="in mono" type="url" required value={value.oauthIssuer} onChange={(e) => set("oauthIssuer", e.target.value)} placeholder="https://auth.example.com" /></label>
       <label className="fld">{t("OAuth client ID")}<input className="in mono" required value={value.oauthClientId} onChange={(e) => set("oauthClientId", e.target.value)} autoComplete="off" /></label>
       <label className="fld">{t(value.oauthMode === "client_credentials" ? "OAuth client secret" : "OAuth client secret (optional)")}<input className="in mono" type="password" required={value.oauthMode === "client_credentials"} value={value.oauthClientSecret} onChange={(e) => set("oauthClientSecret", e.target.value)} autoComplete="off" /></label>
-      {value.oauthMode === "refresh_token" && <label className="fld">{t("OAuth refresh token")}<input className="in mono" type="password" required value={value.oauthRefreshToken} onChange={(e) => set("oauthRefreshToken", e.target.value)} autoComplete="off" /></label>}
+      {value.oauthMode === "refresh_token" && <label className="fld">{t("OAuth refresh token")}<input className="in mono" type="password" required={!savedRefreshToken} value={value.oauthRefreshToken} onChange={(e) => set("oauthRefreshToken", e.target.value)} placeholder={savedRefreshToken ? t("Saved; leave empty to keep the current token") : undefined} autoComplete="off" /></label>}
       <label className="fld">{t("OAuth scopes (space separated)")}<input className="in mono" value={value.oauthScopes} onChange={(e) => set("oauthScopes", e.target.value)} /></label>
       <label className="fld">{t("OAuth resource (optional)")}<input className="in mono" type="url" value={value.oauthResource} onChange={(e) => set("oauthResource", e.target.value)} /></label>
       <label className="fld">{t("OAuth token authentication")}<Select className="in" value={value.oauthTokenAuthMethod} onChange={(v) => set("oauthTokenAuthMethod", v)} options={[{ value: "client_secret_basic", label: "client_secret_basic" }, { value: "client_secret_post", label: "client_secret_post" }]} /></label>

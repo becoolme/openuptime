@@ -14,7 +14,7 @@ import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 
-import { mcpConfigSchema } from "../mcp-config";
+import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
@@ -130,7 +130,9 @@ function normaliseImport(raw: unknown): unknown {
 }
 
 /** Update: only named fields change (defaults here would silently reset the rest); type is immutable. */
-const patchBody = z.object(fields).partial().omit({ type: true }).extend({ paused: z.boolean().optional().describe("True pauses checks and alerts; false resumes checking with pending status. Prefer pause_monitor or resume_monitor for this change alone.") });
+const patchBody = z.object(fields).partial().omit({ type: true }).extend({
+  mcpConfig: mcpConfigPatchSchema.nullable().optional().describe(`${fields.mcpConfig.description} Omit oauth to keep the stored credentials; with oauth.mode refresh_token, omit oauth.refreshToken to keep the stored (rotating) token.`),
+  paused: z.boolean().optional().describe("True pauses checks and alerts; false resumes checking with pending status. Prefer pause_monitor or resume_monitor for this change alone.") });
 
 /** Exposed for the MCP tool definitions so they cannot drift from the REST validation. */
 export const monitorCreateSchema = body;
@@ -228,9 +230,18 @@ async function refuseTarget(c: Context<AppEnv>, type: string, target: string, re
   return error ? c.json({ error, code: "target_not_allowed" }, 400) : null;
 }
 
+/**
+ * A refresh token rotates on every check, so any copy handed out is stale soon after and must never be written back.
+ * It is write-only; with `clientSecret` also removed the result is safe to place in an export file.
+ */
+function withoutOAuthSecrets(config: McpConfig | null | undefined, o: { clientSecret?: boolean } = {}): McpConfig | null | undefined {
+  if (!config?.oauth) return config;
+  const { refreshToken: _refresh, clientSecret, ...oauth } = config.oauth;
+  return { ...config, oauth: { ...oauth, ...(o.clientSecret || clientSecret === undefined ? {} : { clientSecret }) } };
+}
 /** Request headers and bodies (often tokens) are shown to owners and admins only. */
 const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
-  (await isManager(c)) ? rows : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
+  (await isManager(c)) ? rows.map((m) => m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig) } : m) : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
 
 /** Source fields that look like credentials: a record carrying one is refused rather than imported without its authentication. */
 const CREDENTIAL_KEY = /auth|user|pass|secret|token|cred|bearer|oauth/i;
@@ -260,6 +271,9 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     const r = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
     const row: Row = { index, name: typeof r.name === "string" ? r.name : null, status: "skipped", warnings: [] };
     report.push(row);
+    // Like masked headers: never import OAuth credentials, and never turn an OAuth monitor into an unauthenticated one.
+    const importedOAuth = r.mcpConfig && typeof r.mcpConfig === "object" ? (r.mcpConfig as Record<string, unknown>).oauth : null;
+    if (importedOAuth !== undefined && importedOAuth !== null) { row.error = "MCP OAuth credentials are not imported; remove mcpConfig.oauth, import, then enter the OAuth settings on the monitor"; continue; }
     const parsed = body.safeParse(normaliseImport(item));
     if (!parsed.success) { row.error = parsed.error.issues.map((i) => `${i.path.join(".") || "item"}: ${i.message}`).join("; "); continue; }
     const v = parsed.data;
@@ -351,7 +365,7 @@ export const monitors = new Hono<AppEnv>()
   })
   .post("/mcp/preview", requireManager, bodyLimit({ maxSize: 128 * 1024 }), zValidator("json", z.object({
     monitorId: z.string().uuid().optional(), target: fields.target, headers: fields.headers.default({}),
-    timeoutMs: fields.timeoutMs.default(10000), mcpConfig: fields.mcpConfig.default(null), region: z.string().regex(REGION_ID).optional(),
+    timeoutMs: fields.timeoutMs.default(10000), mcpConfig: mcpConfigPatchSchema.nullable().default(null), region: z.string().regex(REGION_ID).optional(),
   })), async (c) => {
     const v = c.req.valid("json"), repo = c.get("repo");
     const invalid = mcpProblem({ type: "mcp", ...v });
@@ -361,26 +375,34 @@ export const monitors = new Hono<AppEnv>()
     if (v.region && !isRegionConfigured(v.region)) return c.json({ error: "Unknown probe region" }, 400);
     const stored = v.monitorId ? await repo.getMonitor(c.get("orgId"), v.monitorId, c.get("projectScope")) : null;
     if (v.monitorId && (!stored || stored.type !== "mcp")) return c.json({ error: "Not found" }, 404);
-    if (stored && mcpRefreshPreviewChanged(v, stored)) return c.json({ error: "Save endpoint and OAuth changes before previewing an existing monitor, or reload its rotated credentials" }, 409);
+    if (v.mcpConfig?.oauth?.mode === "refresh_token") {
+      // The issuer may rotate the token on use; without a saved monitor the new token could not be stored and the pasted one would be burned.
+      if (!stored) return c.json({ error: "Save the monitor before testing a refresh token: the authorization server may rotate it, and only a saved monitor can keep the new token", code: "mcp_refresh_requires_saved_monitor" }, 400);
+      const saved = stored.mcpConfig?.oauth;
+      if (!v.mcpConfig.oauth.refreshToken && saved?.mode === "refresh_token" && saved.refreshToken) v.mcpConfig.oauth.refreshToken = saved.refreshToken;
+      if (!v.mcpConfig.oauth.refreshToken) return c.json({ error: "Refresh-token mode requires a refresh token" }, 400);
+    }
+    if (stored && mcpRefreshPreviewChanged(v, stored)) return c.json({ error: "Save endpoint and OAuth changes before previewing an existing monitor" }, 409);
     if ((await c.get("entitlements").spendCredits(c.get("orgId"), 1)) < 1) return c.json({ error: "No credits left this period", code: "credits_exhausted" }, 402);
     const input = { type: "mcp" as const, target: v.target, headers: v.headers, timeoutMs: v.timeoutMs, method: "GET", expectedStatus: 200,
       mcpConfig: { requiredTools: [], ...v.mcpConfig, schemaCheck: false, toolCall: null } };
-    // Refresh token rotation is persisted only against the authorized existing monitor.
+    // Refresh token rotation is persisted only against the authorized existing monitor and never returned.
     const prepared = await prepareMcpOAuth(input, repo, stored ?? undefined);
     c.header("cache-control", "no-store");
-    if ("outcome" in prepared) return c.json({ ...prepared.outcome, mcp: prepared.outcome.mcp ?? { stage: "oauth", timings: {}, tools: [], changes: [], toolsComplete: false }, ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
+    if ("outcome" in prepared) return c.json({ ...prepared.outcome, mcp: prepared.outcome.mcp ?? { stage: "oauth", timings: {}, tools: [], changes: [], toolsComplete: false } });
     let outcome;
     if (v.region && v.region !== AUTO) {
       const run = await runInRegion(v.region, prepared.input, repo);
-      if ("unreachable" in run) return c.json({ ok: false, inconclusive: true, error: run.unreachable, mcp: { stage: "server/discover", timings: { oauth: prepared.elapsedMs }, tools: [], changes: [], toolsComplete: false }, ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
+      if ("unreachable" in run) return c.json({ ok: false, inconclusive: true, error: run.unreachable, mcp: { stage: "server/discover", timings: { oauth: prepared.elapsedMs }, tools: [], changes: [], toolsComplete: false } });
       outcome = run.outcome;
     } else outcome = await mcpCheck(prepared.input);
-    return c.json({ ...addOAuthTiming(outcome, prepared.elapsedMs), ...(prepared.refreshToken ? { oauthRefreshToken: prepared.refreshToken } : {}) });
+    return c.json(addOAuthTiming(outcome, prepared.elapsedMs));
   })
   // JSON backup of this project's monitors; feed it back to POST /import (here or in another workspace)
   .get("/export", async (c) => {
     const rows = await c.get("repo").exportMonitors(c.get("orgId"), c.get("projectId"));
-    const monitors = (await shown(c, rows)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]]).concat([["source", m.importSource ?? "openuptime"], ["sourceId", m.importSourceId ?? m.id]])));
+    // OAuth secrets stay with this monitor: a copied refresh token would be shared, and burned, by two monitors.
+    const monitors = (await shown(c, rows)).map((m) => (m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig, { clientSecret: true }) } : m)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]]).concat([["source", m.importSource ?? "openuptime"], ["sourceId", m.importSourceId ?? m.id]])));
     c.header("content-disposition", 'attachment; filename="openuptime-monitors.json"');
     return c.json({ version: 1, exportedAt: new Date().toISOString(), monitors });
   })
@@ -418,6 +440,9 @@ export const monitors = new Hono<AppEnv>()
       if (!(await isManager(c))) return c.json({ error: "Only workspace owners and admins can configure MCP monitors" }, 403);
       const invalid = mcpProblem({ ...stored, ...v });
       if (invalid) return c.json({ error: invalid }, 400);
+      // An omitted refresh token keeps the stored one (filled in under the row lock); there must be one to keep.
+      const saved = stored.mcpConfig?.oauth;
+      if (v.mcpConfig?.oauth?.mode === "refresh_token" && !v.mcpConfig.oauth.refreshToken && !(saved?.mode === "refresh_token" && saved.refreshToken)) return c.json({ error: "Refresh-token mode requires a refresh token" }, 400);
     }
 
     if (v.dnsRecordType !== undefined || v.dnsExpectedValue !== undefined || v.dnsMatchMode !== undefined) {

@@ -27,7 +27,7 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
-    id: "mcp-server-monitors", date: "2026-10-30", edition: "community",
+    id: "mcp-server-monitors", date: "2026-10-31", edition: "community",
     title: { en: "Monitor MCP servers", zh: "MCP 服务监控" },
     summary: { en: "Check that agents can connect, discover required tools and optionally use them.", zh: "检查 Agent 能否连接并发现必需工具，还可选择验证工具调用。" },
     points: [
@@ -35,6 +35,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Explicitly enable a tool call with test arguments and result assertions; calls are disabled by default because they can incur charges or write data.", zh: "可显式开启带测试参数和结果断言的工具调用；由于可能产生费用或写入数据，默认关闭。" },
       { en: "Compare input/output schemas, choose drift severity handling and explicitly approve the exact reviewed version.", zh: "比较输入/输出 schema，选择变化处理策略，并显式批准准确的已审阅版本。" },
       { en: "Inspect optional prompt/resource catalogs and historical stage latency, p50/p95 metrics and schema-change timelines.", zh: "可选查看提示词和资源目录，以及历史分阶段耗时、p50/p95 指标和 schema 变化时间线。" },
+      { en: "OAuth refresh tokens are write-only: they are never shown, exported or overwritten by an older copy, and client secrets are left out of exports.", zh: "OAuth 刷新令牌只写不读：不会显示、不会导出，也不会被旧副本覆盖；导出同样不含客户端密钥。" },
     ],
     link: { href: "/docs/mcp-monitors", label: { en: "Read the MCP monitor guide", zh: "阅读 MCP 监控指南" } },
   },

@@ -528,6 +528,12 @@ export function createRepo(db: DbExecutor): Repo {
         if (patch.mcpConfig && patch.mcpConfig.oauth === undefined) {
           // Retain the locked current token: the form may predate an OAuth refresh rotation.
           effective.mcpConfig = { ...patch.mcpConfig, oauth: current.mcpConfig?.oauth ?? null };
+        } else if (patch.mcpConfig?.oauth?.mode === "refresh_token" && !patch.mcpConfig.oauth.refreshToken) {
+          // Clients never echo the rotating token back (a copy is stale after the next check): an omitted one means
+          // "keep the stored token", read here under the row lock so a concurrent rotation is never overwritten.
+          const stored = current.mcpConfig?.oauth;
+          const { refreshToken: _omitted, ...oauth } = patch.mcpConfig.oauth;
+          effective.mcpConfig = { ...patch.mcpConfig, oauth: stored?.mode === "refresh_token" && stored.refreshToken ? { ...oauth, refreshToken: stored.refreshToken } : oauth };
         }
         if (patch.paused !== undefined && !changedPause) {
           // The route derives these controls from paused; repeating the current value is not a resume.
@@ -695,19 +701,41 @@ export function createRepo(db: DbExecutor): Repo {
       return rows.length === 1;
     },
     async withMcpOAuth(snapshot, apply) {
+      // Serialize refreshes with a lease row instead of a transaction, advisory lock or row lock: the token request
+      // may take the whole check timeout (up to 30 s), and holding a pooled connection for it would let a few slow
+      // issuers exhaust the pool. Each statement here is a single short autocommit query.
+      //
+      // Guarantees: while a lease is live, no other check refreshes this monitor (it gets null and reports the check
+      // as inconclusive), so two checks never present the same refresh token. The holder reads the monitor only after
+      // taking the lease, so it sees the token its predecessor rotated before releasing. Rotation is still a
+      // compare-and-swap on the old token and coverage revision, so a rotation is never lost or applied to an edited
+      // configuration.
+      // Trade-off: if a holder dies, the monitor cannot refresh until the lease expires. The lease outlives the bounded
+      // token request (timeoutMs) by a minute; only a holder stalled past that could overlap with the next one, and
+      // even then the compare-and-swap lets just one rotation win.
+      const leaseToken = crypto.randomUUID();
+      const leaseSec = Math.ceil(Math.min(Math.max(snapshot.timeoutMs ?? 30_000, 1_000), 30_000) / 1000) + 60;
+      const t = schema.mcpOAuthLease;
+      const until = sql`now() + make_interval(secs => ${leaseSec})`;
+      let taken: { monitorId: string }[];
       try {
-        return await db.transaction(async tx => {
-          const locked = await tx.execute<{ locked: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext(${"mcp-oauth:" + snapshot.id})) as locked`);
-          if (!locked[0]?.locked) return null;
-          const [current] = await tx.select().from(schema.monitor).where(and(eq(schema.monitor.id, snapshot.id),
-            eq(schema.monitor.organizationId, snapshot.organizationId))).for("update", { noWait: true });
-          if (!current || current.type !== "mcp" || current.coverageRevision !== (snapshot.coverageRevision ?? 0)) return null;
-          return apply(createRepo(tx), current);
-        });
+        taken = await db.insert(t).values({ monitorId: snapshot.id, leaseToken, leaseUntil: until })
+          .onConflictDoUpdate({ target: t.monitorId, set: { leaseToken, leaseUntil: until }, setWhere: sql`${t.leaseUntil} <= now()` })
+          .returning({ monitorId: t.monitorId });
       } catch (error) {
+        // The monitor was deleted meanwhile (foreign key violation): nothing to refresh.
         const cause = error && typeof error === "object" && "cause" in error ? error.cause : error;
-        if (cause && typeof cause === "object" && "code" in cause && cause.code === "55P03") return null;
+        if (cause && typeof cause === "object" && "code" in cause && cause.code === "23503") return null;
         throw error;
+      }
+      if (!taken.length) return null;
+      try {
+        const [current] = await db.select().from(schema.monitor).where(and(eq(schema.monitor.id, snapshot.id),
+          eq(schema.monitor.organizationId, snapshot.organizationId)));
+        if (!current || current.type !== "mcp" || current.coverageRevision !== (snapshot.coverageRevision ?? 0)) return null;
+        return await apply(createRepo(db), current);
+      } finally {
+        await db.delete(t).where(and(eq(t.monitorId, snapshot.id), eq(t.leaseToken, leaseToken)));
       }
     },
     async withMcpResult(snapshot, apply) {

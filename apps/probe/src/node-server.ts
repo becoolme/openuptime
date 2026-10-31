@@ -6,13 +6,7 @@ import { send, toRequest } from "./node-adapter";
 export function createProbeServer(o: { secret: string | undefined; region?: string }): Server {
   const server = createServer(async (req, res) => {
     try {
-      const request = await toRequest(req);
-      if (request === "too-large") {
-        res.statusCode = 413;
-        res.end('{"error":"Request too large"}');
-        return;
-      }
-      await send(res, await handleProbe(request, o));
+      await send(res, await handleProbe(toRequest(req), o));
     } catch (e) {
       console.error(e);
       if (!res.headersSent) res.statusCode = 500;

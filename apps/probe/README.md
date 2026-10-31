@@ -17,6 +17,9 @@ scheduler ──signed POST──▶ https://probe.example.app/api/probe/eu-cent
 Every request carries `x-ou-timestamp` and `x-ou-signature` (HMAC-SHA256 of `<timestamp>.<body>` under `PROBE_SECRET`).
 A probe refuses anything unsigned or older than 60 seconds, and refuses private and internal targets whatever the
 signature says (unless its own operator sets `ALLOW_PRIVATE_TARGETS`), so it is not an open proxy.
+The timestamp, the signature's format and the declared length are checked before any of the body is read. A body over
+64 KiB is read only when `x-ou-envelope` (HMAC-SHA256 of `envelope.<timestamp>.<byte length>`) vouches for that exact
+length, only up to 5 MiB, and only for an MCP check, whose schema baseline can be large.
 
 ## Run it as a container or on any Node host
 
@@ -106,4 +109,4 @@ pnpm typecheck
 
 ### HTTP request bodies
 
-Upgrade probes before enabling HTTP bodies or PUT/PATCH/DELETE/OPTIONS checks. The health GET advertises `http-request-body-v1`; the scheduler verifies this before sending new request semantics. Old probes are unavailable for these checks rather than silently dropping a body. If every selected probe is unavailable, existing local fallback applies. Bodies support up to 16 KiB UTF-8, and a probe refuses a signed request larger than 64 KiB before checking the signature. On a redirect to another origin the custom headers are dropped, and a 307 or 308 that would resend the body there is refused; a 301, 302 or 303 turns the request into a GET without the body, and a same-host http to https upgrade keeps it.
+Upgrade probes before enabling HTTP bodies or PUT/PATCH/DELETE/OPTIONS checks. The health GET advertises `http-request-body-v1`; the scheduler verifies this before sending new request semantics. Old probes are unavailable for these checks rather than silently dropping a body. If every selected probe is unavailable, existing local fallback applies. Bodies support up to 16 KiB UTF-8, and a probe refuses a request larger than 64 KiB before reading it unless the scheduler signed its length for an MCP check. On a redirect to another origin the custom headers are dropped, and a 307 or 308 that would resend the body there is refused; a 301, 302 or 303 turns the request into a GET without the body, and a same-host http to https upgrade keeps it.

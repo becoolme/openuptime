@@ -9,7 +9,7 @@ PROBE_REGIONS='{"office":{"url":"https://office-probe.example.com/","name":"Offi
 ALLOW_PRIVATE_TARGETS=true
 # Set the same PROBE_SECRET on the coordinator and probe.`;
 ---
-<Doc title="MCP Uptime Monitor" titleZh="MCP Uptime Monitor：MCP 可用性监控" description="Monitor MCP discovery, optional tool calls, OAuth, regional latency and schema compatibility." descriptionZh="检测 MCP 发现、可选工具调用、OAuth、多区域延迟及 schema 兼容性。" updated="2026-10-30" toc>
+<Doc title="MCP Uptime Monitor" titleZh="MCP Uptime Monitor：MCP 可用性监控" description="Monitor MCP discovery, optional tool calls, OAuth, regional latency and schema compatibility." descriptionZh="检测 MCP 发现、可选工具调用、OAuth、多区域延迟及 schema 兼容性。" updated="2026-10-31" toc>
   <div lang="en">
     <h1>MCP Uptime Monitor</h1>
     <p class="lede">Check that an agent can connect and discover the tools it needs. Tool calls and schema monitoring are optional.</p>
@@ -28,7 +28,7 @@ ALLOW_PRIVATE_TARGETS=true
     <p>Use request headers for static credentials, for example <code>Authorization: Bearer …</code>. OAuth supports client credentials and refresh-token grants. Explicitly trust an HTTPS issuer and supply its client ID, required credentials, optional scopes/resource and token authentication method. The issuer metadata supplies its token endpoint. Client-credentials mode requires a client secret.</p>
     <pre><code>{oauthExample}</code></pre>
     <p>This is the optional <code>mcpConfig.oauth</code> object. For a previously authorized connection use <code>mode: "refresh_token"</code> with a refreshToken. Interactive browser sign-in is not provided. On PATCH, omit oauth to preserve the latest credentials; send null to remove them.</p>
-    <p>OAuth tokens renew automatically. Preview may consume and rotate refresh tokens even though it does not call tools. For an existing monitor, save changed endpoint/OAuth settings first; matching stored credentials are updated on rotation. For a new monitor, preview returns the replacement token to the form. Do not discard it if the issuer invalidated the previous token.</p>
+    <p>OAuth tokens renew automatically. A refresh token is write-only: the API never returns it, because the issuer rotates it and any copy goes stale. On PATCH, omit <code>refreshToken</code> to keep the stored (latest) token, or send a new one to replace it. Preview may consume and rotate a refresh token even though it does not call tools, so refresh-token preview needs a saved monitor: pass its <code>monitorId</code> and save changed endpoint/OAuth settings first; the stored token is updated on rotation. Without a <code>monitorId</code> it returns 400 <code>mcp_refresh_requires_saved_monitor</code>. Client-credentials preview works before saving.</p>
     <h2 id="discovery">Tool, prompt and resource discovery</h2>
     <p>Tool lists follow pagination and required names match exactly. Optional prompts and resources list names and identifiers without rendering prompts or reading resource contents. Read-only and destructive annotations are server claims, not safety guarantees; they never authorize tool calls.</p>
     <p>Each list is limited to 20 pages and 1,000 entries. Responses are capped at 1 MiB each and 4 MiB across the check. The timeout covers protocol exchange, discovery and the optional call. Streamable HTTP SSE resumption uses at most three GET reconnects, never replaying a tool-call POST.</p>
@@ -36,7 +36,7 @@ ALLOW_PRIVATE_TARGETS=true
     <p><strong>Enable repeated tool calls</strong> is off by default. Enabling authorizes one call per scheduled check per selected region, plus manual checks. Calls may incur charges or write data. Use a dedicated test account, safe arguments and predictable tools. The form estimates 30-day call volume from interval and regions; it is not a price quote.</p>
     <p>Choose a discovered tool or enter its exact name. Arguments must be a JSON object. JSON-RPC errors, <code>isError: true</code> and failed assertions fail checks. Pausing stops scheduled checks. Disabling calls preserves valid arguments for later use.</p>
     <p>Assertions use JSON Pointer, such as <code>/structuredContent/ok</code> or <code>/content/0/text</code>; empty selects the whole result. Exists checks presence, Equals compares JSON values, and Contains checks a string substring or array element. Values are JSON: <code>true</code> is boolean and <code>"ok"</code> is text.</p>
-    <p>Imports reject enabled calls. Import with calls disabled, review, then enable explicitly. Configuration is at most 16 KiB of UTF-8 JSON, with 100 required names (128 characters each) and 20 assertions.</p>
+    <p>Imports reject enabled calls. Import with calls disabled, review, then enable explicitly. Exports omit the refresh token and client secret, and imports refuse a row that carries <code>mcpConfig.oauth</code>: import without it, then enter the OAuth settings on the monitor. Configuration is at most 16 KiB of UTF-8 JSON, with 100 required names (128 characters each) and 20 assertions.</p>
     <h2 id="schemas">Review schema changes</h2>
     <p>Enable schema monitoring to save the first successful check as the approved baseline. Later discoveries compare input/output contracts, required parameters, types and supported constraints. Changes are breaking, warning or informational. This cannot prove every possible JSON Schema behavior compatible.</p>
     <ul>
@@ -54,6 +54,7 @@ ALLOW_PRIVATE_TARGETS=true
     <p>For multi-region checks, each stage duration is the maximum among responding regions; total latency follows the regional aggregation. Schema changes retain their region in history. Establishing or accepting a baseline requires complete, matching tool contracts from the responding regions.</p>
     <h2 id="private-probes">Private-network MCP endpoints</h2>
     <p>Run a Node probe inside the network. A deployment administrator must mark its API region <code>private: true</code> and enable <code>ALLOW_PRIVATE_TARGETS=true</code> on that probe. Workspace users cannot declare private regions.</p>
+    <p><strong>Use private regions only on a single-tenant deployment.</strong> A private region is available to every workspace on the deployment, and an MCP monitor that checks only from private regions skips the coordinator's private-target check. Anyone who can create a monitor can then reach addresses inside that network through the probe.</p>
     <pre><code>{privateProbeExample}</code></pre>
     <p>Select only approved private regions under <strong>Check from</strong>, excluding auto. The coordinator can accept that private MCP target without globally allowing its own private-target access. Preview sends the first selected region: check its displayed label. Header-authenticated discovery and calls run on the remote probe. Unreachable MCP probes never trigger automatic local retries.</p>
     <p><strong>OAuth still performs central discovery.</strong> The coordinator must be able and permitted to fetch MCP protected-resource metadata and trusted issuer metadata/token endpoints. A private probe does not grant this access. Provide centrally reachable metadata and suitable coordinator network policy, or use header authentication for endpoints accessible only inside the probe network. Private probes alone do not guarantee private OAuth compatibility.</p>
@@ -68,7 +69,7 @@ ALLOW_PRIVATE_TARGETS=true
   <div lang="zh-CN">
     <h1>MCP Uptime Monitor：MCP 可用性监控</h1>
     <p class="lede">检查 Agent 能否连接并发现所需工具。工具调用与 schema 监控可选开启。</p>
-    <h2>创建监控</h2>
+    <h2 id="quick-start-zh">创建监控</h2>
     <ol>
       <li>选择<strong>新建监控 → MCP</strong>，填写端点、传输方式和鉴权配置。</li>
       <li>选择检测区域，然后点击<strong>发现工具（不调用）</strong>。预览使用第一个已选区域，按钮上方显示其名称。</li>
@@ -77,22 +78,22 @@ ALLOW_PRIVATE_TARGETS=true
       <li>设置间隔、超时、阈值与渠道并保存；在详情页查看耗时、schema 审阅与历史。</li>
     </ol>
     <p>HTTP 200 不能证明 Agent 可以发现或使用工具。预览验证发现能力，不创建监控、不调用工具、不建立基线，也不发送告警。</p>
-    <h2>传输与鉴权</h2>
+    <h2 id="connection-zh">传输与鉴权</h2>
     <p><strong>自动检测</strong>支持 Streamable HTTP 和旧版 HTTP+SSE，也可显式指定。支持 2026-07-28、2025-11-25、2025-06-18、2025-03-26、2024-11-05 协议。新版本使用 <code>server/discover</code>，旧版本执行初始化和 initialized 通知。不支持本地 stdio。</p>
     <p>仅在端点不支持或协商错误时回退，鉴权失败不会触发回退。旧版 SSE 消息端点必须同源。JSON-RPC 错误、协议错误、分页不完整或缺少必需工具使检测失败。</p>
     <p>静态凭据可使用请求头，例如 <code>Authorization: Bearer …</code>。OAuth 支持客户端凭据和刷新令牌授权：明确指定受信任的 HTTPS 签发方、客户端 ID、必要凭据，以及可选权限范围、资源和令牌鉴权方式。令牌端点由签发方元数据提供。客户端凭据模式必须提供客户端密钥。</p>
     <pre><code>{oauthExample}</code></pre>
     <p>以上是可选 <code>mcpConfig.oauth</code> 对象。已有授权使用 <code>mode: "refresh_token"</code> 和 refreshToken。不提供浏览器交互登录。PATCH 省略 oauth 保留最新凭据，传 null 才移除。</p>
-    <p>OAuth 令牌自动续期。预览虽然不调用工具，也可能消费并轮换刷新令牌。已有监控请先保存端点/OAuth 改动，匹配的存储凭据会在轮换后更新。新监控的表单会保留预览返回的新令牌；若旧令牌已失效，请勿丢弃表单。</p>
-    <h2>发现工具、提示词和资源</h2>
+    <p>OAuth 令牌自动续期。刷新令牌只写不读：签发方会轮换它，任何副本很快失效，因此 API 从不返回它。PATCH 时省略 <code>refreshToken</code> 即保留已存储的最新令牌，传入新值则替换。预览虽然不调用工具，也可能消费并轮换刷新令牌，所以刷新令牌模式的预览需要已保存的监控：传入 <code>monitorId</code>，并先保存端点/OAuth 改动，轮换后的令牌会写回存储。未传 <code>monitorId</code> 时返回 400 <code>mcp_refresh_requires_saved_monitor</code>。客户端凭据模式可在保存前预览。</p>
+    <h2 id="discovery-zh">发现工具、提示词和资源</h2>
     <p>工具列表支持分页，必需名称完全匹配。可选提示词/资源发现仅列出名称与标识，不渲染提示词或读取资源内容。只读和破坏性注解是服务端声明，不是安全保证，也不会自动授权调用。</p>
     <p>每类列表最多 20 页、1,000 条；单响应最多 1 MiB，整次检测最多 4 MiB。协议、发现和可选调用共用超时预算。Streamable HTTP 的 SSE 续传最多通过 GET 重连三次，不重发工具调用 POST。</p>
-    <h2>可选周期调用</h2>
+    <h2 id="calls-zh">可选周期调用</h2>
     <p><strong>启用周期工具调用</strong>默认关闭。开启后，每个所选区域的每次定时检测及手动检测都会调用一次，可能产生费用或写入数据。请使用专用测试账号、安全参数和可预测工具。表单按间隔和区域估算 30 天调用次数，不代表报价。</p>
     <p>选择已发现工具或填写准确名称，参数为 JSON 对象。JSON-RPC 错误、<code>isError: true</code> 或断言失败使检测失败。暂停停止定时检测；关闭调用保留合法参数。</p>
     <p>断言使用 JSON Pointer，例如 <code>/structuredContent/ok</code>、<code>/content/0/text</code>；留空选择整个结果。存在检查路径，等于比较 JSON 值，包含检查子串或数组元素。期望值为 JSON：<code>true</code> 是布尔值，<code>"ok"</code> 是文本。</p>
-    <p>导入拒绝已开启的调用。先关闭调用再导入，审阅后显式开启。配置最多 16 KiB UTF-8 JSON，100 个必需工具名称（每个 128 字符）和 20 条断言。</p>
-    <h2>审阅 Schema 变化</h2>
+    <p>导入拒绝已开启的调用。先关闭调用再导入，审阅后显式开启。导出不含刷新令牌和客户端密钥；导入会拒绝带 <code>mcpConfig.oauth</code> 的条目：请去掉后导入，再在监控上填写 OAuth 设置。配置最多 16 KiB UTF-8 JSON，100 个必需工具名称（每个 128 字符）和 20 条断言。</p>
+    <h2 id="schemas-zh">审阅 Schema 变化</h2>
     <p>开启 schema 监控，首次完整检测成功的结果成为基线。后续比较输入/输出接口、必填参数、类型及受支持约束，分为破坏性、警告和信息级别；不能证明全部 JSON Schema 行为兼容。</p>
     <ul>
       <li><strong>标记为宕机并告警</strong>：破坏性变化使检测失败，在调用工具前停止。</li>
@@ -101,22 +102,23 @@ ALLOW_PRIVATE_TARGETS=true
     </ul>
     <p>任何策略下，工具和断言失败仍使检测失败；警告与信息记录历史。</p>
     <p>并排比较已批准和新发现的 schema，勾选<strong>我已审阅此 schema 版本</strong>，再点击<strong>接受已审阅的 schema 版本</strong>。批准绑定准确的 observationId 和 schemaHash。新观测需要重新审阅，不会接受未知的未来版本，批准也不调用工具。探测设置变更保留基线；连接/鉴权变化会建立新的上下文。</p>
-    <h2>历史、区域和告警</h2>
+    <h2 id="history-zh">历史、区域和告警</h2>
     <p>7/30 天历史含整体与各阶段 p50/p95、区分区域的曲线、耗时样本和 schema 事件。图表最多 120 条最近结果，指标覆盖所选窗口保留的全部样本；未执行阶段留空。只保存诊断，不保存原始输出和凭据。</p>
     <p>MCP 可使用已配置的区域，请更新探针以支持 MCP。每个区域计一次检测，也可能执行已开启工具，增加调用次数。沿用失败/恢复阈值、渠道、依赖和维护规则。状态页公开健康状态，不公开凭据或工具参数。</p>
     <p>所有者/管理员可配置、预览、手动检测、查看 MCP schema/历史和批准基线；其他角色可读常规健康状态与检测历史。</p>
     <p>通知采用至少一次投递：服务商接收成功后、确认落库前进程中断，可能重复发送。额度授权会持久化并复用，但外部额度扣减与本地授权落库之间极窄的中断窗口可能重复扣额；授权未知或被拒绝均不会放行投递。</p>
     <p>多区域检测的每阶段耗时取回答区域中的最大值，总耗时沿用区域聚合规则。Schema 变化在历史中带有区域来源；建立或接受基线要求所有回答区域的工具契约完整且一致。</p>
-    <h2>内网 MCP 与私有探针</h2>
+    <h2 id="private-probes-zh">内网 MCP 与私有探针</h2>
     <p>在目标网络运行 Node 探针。部署管理员须将 API 区域标记 <code>private: true</code>，并在探针开启 <code>ALLOW_PRIVATE_TARGETS=true</code>。普通用户不能自行声明私有区域。</p>
+    <p><strong>私有区域只适合单租户部署。</strong>部署上的每个工作区都能使用私有区域；只从私有区域检测的 MCP 监控会跳过协调器对私有目标的检查。任何能创建监控的人都可以借探针访问该网络内的地址。</p>
     <pre><code>{privateProbeExample}</code></pre>
     <p>检查位置仅选择已批准私有区域，排除 auto；协调器即可接受此私有 MCP 目标，无需全局开启自身私有访问。预览发送第一个已选区域，运行前请核对名称。请求头鉴权的发现/调用在远端探针执行，探针无法连接时不自动改为本地重试。</p>
     <p><strong>OAuth 仍需中央发现。</strong>协调器必须能够且被策略允许访问 MCP 受保护资源元数据，以及受信任签发方的元数据/令牌端点。私有探针不赋予协调器这种访问权限。请提供中央可达元数据并配置网络策略；完全仅在探针网络可达的端点可使用请求头鉴权。不能假定私有探针保证内网 OAuth 完整兼容。</p>
-    <h2>API 示例</h2>
+    <h2 id="api-examples-zh">API 示例</h2>
     <p>使用 OpenUptime 凭据 POST <code>/api/monitors</code>；JSON 内请求头属于被监控服务。</p><pre><code>{discoveryExample}</code></pre>
     <p>审阅安全工具后 PATCH <code>/api/monitors/:id</code>，按服务调整参数和结果路径：</p><pre><code>{callExample}</code></pre>
     <p>POST <code>/api/monitors/mcp/preview</code> 接受 target、headers、timeoutMs、mcpConfig、region 和可选 monitorId。GET <code>/api/monitors/:id/mcp-history?days=7</code> 返回 7 或 30 天历史。POST <code>/api/monitors/:id/mcp-baseline/accept</code> 提交已审阅 observationId 和 schemaHash。</p>
-    <h2>排查失败</h2>
+    <h2 id="troubleshooting-zh">排查失败</h2>
     <p>阶段定位 OAuth、服务发现/初始化、目录列表、必需名称、schema、工具调用或断言。详细原因查服务端日志，不保留原始服务错误和输出。失败/恢复阈值控制事件开启与恢复。</p>
     <p>如需 Agent 管理 OpenUptime，见<a href="/docs/mcp">单独的 MCP 服务指南</a>。</p>
   </div>

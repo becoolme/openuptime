@@ -48,8 +48,8 @@ export const OU = {
   ),
   selfHost: l("Yes, the same code as the hosted service, no feature limits", "支持，与托管服务是同一份代码，没有功能限制"),
   types: l(
-    "HTTP and HTTPS (expected status, keyword must or must not appear, custom headers), TCP, DNS, heartbeat, PostgreSQL, MySQL / MariaDB and Redis reachability",
-    "HTTP / HTTPS（预期状态码、关键字必须出现或不得出现、自定义请求头）、TCP、DNS、心跳、PostgreSQL、MySQL / MariaDB 与 Redis 连通性",
+    "HTTP and HTTPS (expected status, keyword must or must not appear, custom headers), TCP, DNS, WebSocket, heartbeat, PostgreSQL, MySQL / MariaDB and Redis reachability, MCP servers (tool discovery, optional tool calls and schema changes) and domain registration expiry",
+    "HTTP / HTTPS（预期状态码、关键字必须出现或不得出现、自定义请求头）、TCP、DNS、WebSocket、心跳、PostgreSQL、MySQL / MariaDB 与 Redis 连通性、MCP 服务（工具发现、可选工具调用与 schema 变化）以及域名注册到期",
   ),
   regions: l(
     "HTTP, TCP, WebSocket and MCP monitors can be checked from several regions; a run fails when most answering regions fail. Self-hosters run their own probes",
@@ -305,16 +305,16 @@ export const TOOLS: Tool[] = [
       { topic: l("License", "许可证"), ou: OU.license, them: l("Closed source", "闭源") },
       { topic: l("Where it runs", "运行方式"), ou: OU.hosting, them: l("Hosted by the vendor only", "仅由厂商托管") },
       { topic: l("Uptime checks", "可用性检测"), ou: OU.types, them: l("Website and server uptime checks; see their site for the full list", "网站与服务器可用性检测；完整列表见其官网") },
-      { topic: l("SSL and domain monitoring", "SSL 与域名监控"), ou: l("Not available. OpenUptime does not watch certificate or domain expiry", "不提供。OpenUptime 不监控证书或域名到期"), them: l("Offered", "提供") },
+      { topic: l("SSL and domain monitoring", "SSL 与域名监控"), ou: l("Domain registration expiry only. OpenUptime does not watch certificate expiry", "仅监控域名注册到期，不监控证书到期"), them: l("Offered", "提供") },
       { topic: l("Status pages", "状态页"), ou: OU.status, them: l("Offered; check their docs for details", "提供；详情请查看其文档") },
       { topic: l("Pricing", "价格"), ou: l("Free to self-host. The hosted service has plans; check the current ones", "自托管免费。托管服务有各档套餐，请查看最新方案"), them: l("Free tier and paid plans; check their current pricing", "有免费档与付费套餐；请查看其最新价格") },
     ],
     theyHave: [
-      l("SSL certificate and domain expiry monitoring. OpenUptime has neither.", "SSL 证书和域名到期监控。OpenUptime 两者都没有。"),
+      l("SSL certificate expiry monitoring. OpenUptime watches domain registration expiry but not certificates.", "SSL 证书到期监控。OpenUptime 监控域名注册到期，但不监控证书。"),
       l("Page speed testing. OpenUptime records response time only.", "页面速度测试。OpenUptime 只记录响应时间。"),
     ],
     bestThem: [
-      l("You want certificate and domain expiry warnings from the same tool that checks uptime.", "你希望在检测可用性的同一个工具里收到证书和域名到期提醒。"),
+      l("You want certificate expiry warnings from the same tool that checks uptime.", "你希望在检测可用性的同一个工具里收到证书到期提醒。"),
       l("You want a hosted service with a free tier to start with.", "你想先从有免费档的托管服务开始。"),
     ],
     bestUs: [
@@ -326,7 +326,7 @@ export const TOOLS: Tool[] = [
       l("List your uptime tests as JSON with a name, a url or hostname, the interval in seconds and the type.", "把可用性测试整理成 JSON，每项包含名称、url 或 hostname、以秒为单位的间隔和类型。"),
       fieldsStep,
       importStep,
-      l("Keep a separate reminder for certificate and domain renewals, since OpenUptime will not warn you about them.", "请另外设置证书和域名续期的提醒，OpenUptime 不会就此预警。"),
+      l("Keep a separate reminder for certificate renewals, since OpenUptime will not warn you about them; add a domain monitor for registration expiry.", "请另外设置证书续期的提醒，OpenUptime 不会就此预警；域名注册到期可添加域名监控。"),
       parallelStep,
     ],
     faq: [

@@ -2,7 +2,7 @@ import { SkeletonRows } from "./Skeleton";
 import MonitorImport from "./MonitorImport";
 import { monitorState } from "../lib/domain-expiry";
 import Select from "./Select";
-import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey, sameOAuthForm } from "./McpFields";
+import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { ago, api, everyShort, type Channel, type Incident, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
@@ -307,8 +307,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   // the project's other monitors, to pick the one this depends on
   const [others, setOthers] = useState<Monitor[]>([]);
   useEffect(() => { api.monitors().then((l) => setOthers(l.filter((x) => x.id !== monitor?.id))).catch(() => {}); }, []);
-  const [savedMcpConfig, setSavedMcpConfig] = useState(monitor?.mcpConfig);
-  const [initialMcp, setInitialMcp] = useState(() => initialMcpForm(monitor?.mcpConfig));
+  const savedMcpConfig = monitor?.mcpConfig;
+  const [initialMcp] = useState(() => initialMcpForm(monitor?.mcpConfig));
   const [mcp, setMcp] = useState(initialMcp);
   const [mcpPreview, setMcpPreview] = useState<{ key: string; result: McpPreview } | null>(null);
   const [discovering, setDiscovering] = useState(false);
@@ -360,16 +360,9 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     try {
       // Preview never submits an enabled call, even when the saved monitor runs tools.
       const config = mcpDiscoveryConfig(mcp, monitor ? { config: savedMcpConfig, initial: initialMcp } : undefined);
+      // A rotated refresh token is stored by the server and never returned, so the form never holds a stale copy.
       const result = await api.previewMcp({ region: previewRegion, ...(monitor ? { monitorId: monitor.id } : {}), target: f.target, timeoutMs: f.timeoutMs, headers: Object.fromEntries(hdrs.filter((h) => h.k.trim()).map((h) => [h.k.trim(), h.v])), mcpConfig: config });
-      if (result.oauthRefreshToken && monitor && sameOAuthForm(mcp, initialMcp)) {
-        // Keep the exact saved OAuth shape and its latest server-confirmed token for repeat previews.
-        setSavedMcpConfig((saved) => saved?.oauth ? { ...saved, oauth: { ...saved.oauth, refreshToken: result.oauthRefreshToken! } } : saved);
-        // The server already persisted this rotation. It is not a user edit to credentials.
-        setInitialMcp((initial) => sameOAuthForm(initial, mcp) ? { ...initial, oauthRefreshToken: result.oauthRefreshToken! } : initial);
-      }
-      const nextMcp = result.oauthRefreshToken ? { ...mcp, oauthRefreshToken: result.oauthRefreshToken } : mcp;
-      if (result.oauthRefreshToken) setMcp((current) => mcpConnectionKey(f.target, f.timeoutMs, hdrs, current, previewRegion) === key ? { ...current, oauthRefreshToken: result.oauthRefreshToken! } : current);
-      setMcpPreview({ key: result.oauthRefreshToken ? mcpConnectionKey(f.target, f.timeoutMs, hdrs, nextMcp, previewRegion) : key, result });
+      setMcpPreview({ key, result });
     } catch (error) { setDiscoveryError((error as Error).message); }
     finally { setDiscovering(false); }
   }
@@ -431,7 +424,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <input className="in mono" required disabled={monitor?.mcpConfigRedacted} value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket", mcp: "https://example.com/mcp" } as Record<string, string>)[f.type] ?? ""} />
           </label>
         )}
-        {f.type === "mcp" && (monitor?.mcpConfigRedacted ? <p className="muted">{t("Only owners and admins can view or edit MCP connection and tool settings.")}</p> : <McpConnectionFields value={mcp} onChange={setMcp} />)}
+        {f.type === "mcp" && (monitor?.mcpConfigRedacted ? <p className="muted">{t("Only owners and admins can view or edit MCP connection and tool settings.")}</p> : <McpConnectionFields value={mcp} onChange={setMcp} savedRefreshToken={initialMcp.oauthMode === "refresh_token"} />)}
         {f.type === "mcp" && <label className="fld">{t("Timeout (ms)")}
           <input className="in mono" type="number" min={1000} max={30000} step={1} required value={f.timeoutMs} onChange={(e) => set("timeoutMs", Number(e.target.value))} />
           <small className="muted">{t("One timeout covers initialization, all tool-list pages and the optional tool call.")}</small>

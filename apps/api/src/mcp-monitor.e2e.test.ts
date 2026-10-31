@@ -80,6 +80,53 @@ describe.skipIf(!url)("MCP monitor API and existing status/incident flow", () =>
     } finally { await db.close(1); }
   });
 
+  it("never hands out, copies or overwrites a rotating OAuth refresh token", async () => {
+    const db = openDatabase(url!, { max: 2 }); await db.migrate();
+    const app = createApp(openDatabase);
+    const call = async (cookie: string, method: string, path: string, body?: unknown) => {
+      const r = await app.fetch(new Request(`${origin}/api${path}`, { method, headers: { cookie, origin, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }), env as never);
+      return { status: r.status, body: await r.json().catch(() => null) as any, cookie: r.headers.getSetCookie().map(c => c.split(";")[0]).join("; ") };
+    };
+    try {
+      const signed = await call("", "POST", "/auth/sign-up/email", { email: `mcp-oauth-${crypto.randomUUID()}@example.com`, name: "MCP", password: "correct horse battery" });
+      const owner = signed.cookie;
+      const orgId = (await call(owner, "GET", "/me")).body.organization.id;
+      const oauth = { mode: "refresh_token", issuer: "https://issuer.example", clientId: "fixture-client", clientSecret: "fixture-secret", refreshToken: "fixture-r1", scopes: ["read"] };
+      const created = await call(owner, "POST", "/monitors", { name: "OAuth MCP", type: "mcp", target: "https://1.1.1.1/mcp", mcpConfig: { ...config, oauth } });
+      expect(created.status).toBe(201);
+      const path = `/monitors/${created.body.id}`;
+      expect(created.body.mcpConfig.oauth).not.toHaveProperty("refreshToken");
+      expect((await call(owner, "GET", path)).body.mcpConfig.oauth).toMatchObject({ clientId: "fixture-client", clientSecret: "fixture-secret" });
+      expect((await call(owner, "GET", path)).body.mcpConfig.oauth).not.toHaveProperty("refreshToken");
+
+      // Export leaves every OAuth secret behind; importing an OAuth monitor is refused per row.
+      const exported = (await call(owner, "GET", "/monitors/export")).body.monitors.find((m: any) => m.name === "OAuth MCP");
+      expect(exported.mcpConfig.oauth).toEqual({ mode: "refresh_token", issuer: oauth.issuer, clientId: oauth.clientId, scopes: ["read"] });
+      const imported = await call(owner, "POST", "/monitors/import", [{ ...exported, sourceId: "oauth-copy" }, { ...exported, sourceId: "oauth-copy-2", mcpConfig: { ...config, oauth } }]);
+      expect(imported.body).toMatchObject({ created: 0, skipped: [{ error: expect.stringContaining("OAuth credentials are not imported") }, { error: expect.stringContaining("OAuth credentials are not imported") }] });
+
+      // A scheduled check rotates r1 to r2; an edit form that never held the token changes only the scopes.
+      const stored = (await db.repo.getMonitor(orgId, created.body.id, null))!;
+      expect(await db.repo.rotateMcpRefreshToken(stored, "fixture-r1", "fixture-r2")).toBe(true);
+      const { refreshToken: _r1, ...formOAuth } = oauth;
+      expect((await call(owner, "PATCH", path, { mcpConfig: { ...config, oauth: { ...formOAuth, scopes: ["read", "write"] } } })).status).toBe(200);
+      expect((await db.repo.getMonitor(orgId, created.body.id, null))!.mcpConfig?.oauth).toMatchObject({ refreshToken: "fixture-r2", scopes: ["read", "write"] });
+      // Switching to refresh-token mode needs a token: there is none stored to keep.
+      const cc = await call(owner, "POST", "/monitors", { name: "CC MCP", type: "mcp", target: "https://1.1.1.1/mcp", mcpConfig: { ...config, oauth: { ...formOAuth, mode: "client_credentials" } } });
+      expect((await call(owner, "PATCH", `/monitors/${cc.body.id}`, { mcpConfig: { ...config, oauth: formOAuth } })).status).toBe(400);
+
+      // Preview cannot persist a rotation without a saved monitor, so it refuses before contacting anyone.
+      vi.mocked(mcpCheck).mockClear();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const unsaved = await call(owner, "POST", "/monitors/mcp/preview", { target: "https://1.1.1.1/mcp", mcpConfig: { ...config, oauth } });
+      expect(unsaved.status).toBe(400);
+      expect(unsaved.body).toMatchObject({ code: "mcp_refresh_requires_saved_monitor" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+      expect(mcpCheck).not.toHaveBeenCalled();
+    } finally { await db.close(1); }
+  });
+
   it("records diagnostics, retains schema baseline, opens and resolves an incident and publishes status without config", async () => {
     const db = openDatabase(url!, { max: 2 }); await db.migrate();
     const orgId = "mcp-status-" + crypto.randomUUID();

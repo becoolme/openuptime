@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe } from "../../api/src/probe-protocol";
+import { ENVELOPE_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "../../api/src/probe-protocol";
 import { configureNetGuard } from "../../api/src/netguard";
-import { handleProbe, parseCheck } from "./handler";
+import { MAX_BODY_BYTES, SMALL_BODY_BYTES, handleProbe, parseCheck } from "./handler";
 
 const secret = "s3cret";
 const check = { type: "http", target: "https://example.com", method: "GET", expectedStatus: 200, timeoutMs: 2000, keyword: null, keywordMode: "contains", headers: {} };
@@ -68,6 +68,74 @@ describe("probe handler", () => {
     const res = await handleProbe(await signed({ ...check, target: "http://169.254.169.254/latest/meta-data" }), { secret });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe("target_not_allowed");
+  });
+
+  describe("body limits", () => {
+    /** A request whose body is a stream that records how much of it the handler pulled. */
+    function streamed(text: string, headers: Record<string, string>) {
+      const bytes = new TextEncoder().encode(text);
+      const read = { bytes: 0 };
+      let offset = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(c) {
+          if (offset >= bytes.length) return c.close();
+          const chunk = bytes.subarray(offset, offset + 16 * 1024);
+          offset += chunk.length; read.bytes += chunk.length;
+          c.enqueue(chunk);
+        },
+      }, { highWaterMark: 0 });
+      return { req: new Request("http://probe/", { method: "POST", headers, body, duplex: "half" } as RequestInit), read };
+    }
+    async function headersFor(text: string, o: { envelope?: boolean; length?: number } = {}) {
+      const ts = Math.floor(Date.now() / 1000);
+      const length = o.length ?? new TextEncoder().encode(text).byteLength;
+      return {
+        "content-length": String(length), [TIMESTAMP_HEADER]: String(ts), [SIGNATURE_HEADER]: await signProbe(secret, ts, text),
+        ...(o.envelope ? { [ENVELOPE_HEADER]: await signProbeEnvelope(secret, ts, length) } : {}),
+      };
+    }
+    // ~80 KB of headers: over the small limit, valid for any check type
+    const padded = (type: string) => JSON.stringify({ ...check, type, target: "http://169.254.169.254/mcp", headers: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`x-pad-${i}`, "p".repeat(2000)])) });
+
+    it("refuses an unsigned or over-cap request without reading its body", async () => {
+      const text = padded("mcp");
+      const unsigned = streamed(text, { "content-length": String(text.length) });
+      expect((await handleProbe(unsigned.req, { secret })).status).toBe(401);
+      expect(unsigned.read.bytes).toBe(0);
+      const huge = streamed(text, { ...(await headersFor(text, { envelope: true })), "content-length": String(MAX_BODY_BYTES + 1) });
+      expect((await handleProbe(huge.req, { secret })).status).toBe(413);
+      expect(huge.read.bytes).toBe(0);
+    });
+
+    it("keeps the small limit unless the scheduler signed the declared length", async () => {
+      const text = padded("mcp");
+      expect(text.length).toBeGreaterThan(SMALL_BODY_BYTES);
+      const noEnvelope = streamed(text, await headersFor(text));
+      expect((await handleProbe(noEnvelope.req, { secret })).status).toBe(413);
+      expect(noEnvelope.read.bytes).toBe(0);
+      const forged = streamed(text, { ...(await headersFor(text)), [ENVELOPE_HEADER]: "0".repeat(64) });
+      expect((await handleProbe(forged.req, { secret })).status).toBe(413);
+      expect(forged.read.bytes).toBe(0);
+      // no declared length (chunked): read stops at the small limit
+      const { "content-length": _, ...chunkedHeaders } = await headersFor(text);
+      const chunked = streamed(text, chunkedHeaders);
+      expect((await handleProbe(chunked.req, { secret })).status).toBe(413);
+      expect(chunked.read.bytes).toBeLessThanOrEqual(SMALL_BODY_BYTES + 16 * 1024);
+    });
+
+    it("accepts a large signed MCP body and refuses a large body for any other check type", async () => {
+      configureNetGuard({});
+      const mcp = padded("mcp");
+      const accepted = await handleProbe(streamed(mcp, await headersFor(mcp, { envelope: true })).req, { secret });
+      // past every size and signature check; refused only for its private target
+      expect(accepted.status).toBe(400);
+      expect(((await accepted.json()) as { code: string }).code).toBe("target_not_allowed");
+      const http = padded("http");
+      expect((await handleProbe(streamed(http, await headersFor(http, { envelope: true })).req, { secret })).status).toBe(413);
+      // a body longer than the length the envelope vouched for is cut off
+      const short = streamed(mcp, await headersFor(mcp, { envelope: true, length: SMALL_BODY_BYTES + 1 }));
+      expect((await handleProbe(short.req, { secret })).status).toBe(413);
+    });
   });
 
   describe("running a check", () => {
