@@ -15,6 +15,7 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 - [x] Heartbeat (push) monitors for cron jobs and background workers
 - [x] PostgreSQL, MySQL and Redis
 - [x] Domain expiry
+- [x] EVM and Solana RPC node health
 - [x] [MCP server](https://openuptime.app/docs/mcp-monitors) checks
 - [x] [Multi-region checks](https://openuptime.app/docs/regions), with your own probes
 - [x] Monitor dependencies, so a downstream outage doesn't page you twice
