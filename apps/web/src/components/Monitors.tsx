@@ -11,7 +11,7 @@ import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
-const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP" };
+const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP", evm: "EVM", solana: "SOLANA" };
 
 export function Spark({ data, status }: { data: (number | null)[]; status: string }) {
   const pts = data.filter((v): v is number => v != null);
@@ -376,7 +376,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     setErr("");
     setUpgrade(undefined);
     try {
-      const headers = f.type === "http" || f.type === "websocket" || f.type === "mcp" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
+      const headers = f.type === "http" || f.type === "websocket" || f.type === "mcp" || f.type === "evm" || f.type === "solana" ? Object.fromEntries(hdrs.filter((r) => r.k.trim()).map((r) => [r.k.trim(), r.v])) : {};
       const tags = [...new Set(tagText.split(/[,，\n]/).map((x) => x.trim().replace(/^#/, "")).filter(Boolean))];
       const { regions, dnsRecordType, dnsExpectedValue, dnsMatchMode, timeoutMs, ...rest } = f;
       const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
@@ -408,8 +408,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
-            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["mcp", "MCP", "Initialize an MCP server and discover its tools."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
-              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", (id === "http" || id === "mcp") ? "https://" : id === "websocket" ? "wss://" : ""); }}>
+            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["evm", "EVM", "Check EVM node sync status."], ["solana", "Solana", "Check Solana node health."], ["mcp", "MCP", "Initialize an MCP server and discover its tools."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
+              <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", (id === "http" || id === "mcp" || id === "evm" || id === "solana") ? "https://" : id === "websocket" ? "wss://" : ""); }}>
                 <b>{t(label)}</b><small>{t(desc)}</small>
               </button>
             ))}
@@ -420,7 +420,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <span className="muted">{t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")}</span>
         </label>}
         {f.type !== "heartbeat" && (
-          <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
+          <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" || f.type === "evm" || f.type === "solana" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
             <input className="in mono" required disabled={monitor?.mcpConfigRedacted} value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket", mcp: "https://example.com/mcp" } as Record<string, string>)[f.type] ?? ""} />
           </label>
         )}
@@ -500,7 +500,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             </label>
           </div>
         )}
-        {(f.type === "http" || f.type === "websocket" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (
+        {(f.type === "http" || f.type === "websocket" || f.type === "evm" || f.type === "solana" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (
           <div className="fld">
             {t(f.type === "websocket" ? "Handshake headers" : "Request headers")}
             {hdrs.map((r, i) => (

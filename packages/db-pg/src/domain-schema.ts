@@ -19,7 +19,7 @@ import {
 import type { DomainExpiry, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
-export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp"]);
+export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]);
 export const monitorStatus = pgEnum("monitor_status", ["pending", "up", "degraded", "down", "paused"]);
 export const incidentStatus = pgEnum("incident_status", ["investigating", "identified", "monitoring", "resolved"]);
 export const incidentUpdateVisibility = pgEnum("incident_update_visibility", ["public", "internal"]);

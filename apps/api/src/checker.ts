@@ -6,10 +6,11 @@ import type { DomainExpiry, Repo, McpConfig, McpToolSchema, McpObservation } fro
 import { domainCheck } from "./domain-expiry";
 import { mcpCheck } from "./mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
+import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
 
 export type CheckInput = {
-  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp";
+  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana";
   target: string;
   mcpConfig?: McpConfig | null;
   mcpBaseline?: McpToolSchema[] | null;
@@ -54,6 +55,8 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
         if ("outcome" in prepared) return prepared.outcome;
         return addOAuthTiming(await mcpCheck(prepared.input), prepared.elapsedMs);
       }
+      case "evm":
+      case "solana": return await blockchainCheck(m, started);
       case "domain": return await domainCheck(repo, m);
       case "http": return await httpCheck(m, started);
       case "dns": return await dnsCheck(m, started);
@@ -73,7 +76,7 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
 /** The host a check dials, or null when it has none of its own (dns checks ask a public resolver, not the target). */
 function dialedHost(m: CheckInput): string | null {
   try {
-    if (m.type === "http" || m.type === "websocket" || m.type === "mcp") return new URL(m.target).hostname;
+    if (m.type === "http" || m.type === "websocket" || m.type === "mcp" || m.type === "evm" || m.type === "solana") return new URL(m.target).hostname;
     if (m.type === "dns" || m.type === "heartbeat") return null;
     return hostPort(m.target, 1)?.hostname ?? null;
   } catch {

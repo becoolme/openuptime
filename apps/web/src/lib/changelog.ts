@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "blockchain-node-monitors", date: "2026-10-31", edition: "community",
+    title: { en: "Blockchain node monitors", zh: "区块链节点监控" },
+    summary: { en: "Monitor the health of EVM and Solana RPC nodes.", zh: "监控 EVM 和 Solana RPC 节点的健康状态。" },
+    points: [
+      { en: "EVM checks report nodes that are still syncing; Solana checks use the node health response.", zh: "EVM 检测会报告仍在同步的节点；Solana 检测使用节点的健康状态响应。" },
+      { en: "Add request headers to authenticate with your RPC provider.", zh: "可添加请求头以通过 RPC 服务商的身份验证。" },
+    ],
+  },
+  {
     id: "home-page-redesign", date: "2026-10-31", edition: "community",
     title: { en: "Redesigned home page", zh: "首页改版" },
     summary: { en: "The home page shows how OpenUptime works with pictures of the product instead of long blocks of text.", zh: "首页用产品示意图代替大段文字，直观展示 OpenUptime 的用法。" },

@@ -11,7 +11,7 @@ export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "ch
 export type McpHistory = { results: (CheckResult & { mcp: McpCheckDiagnostics })[]; metrics: { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> }; changes: { id: string; checkedAt: string; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] }[] };
 export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation };
 export type Monitor = {
-  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp"; target: string; method: string; requestBody?: string | null;
+  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana"; target: string; method: string; requestBody?: string | null;
   mcpConfig?: McpConfig | null;
   mcpConfigRedacted?: boolean;
   mcpBaseline?: McpToolSchema[] | null;

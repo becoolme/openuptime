@@ -1,5 +1,7 @@
 /** Simplified Chinese strings, keyed by the English source text. */
 export const zh: Record<string, string> = {
+  "Check EVM node sync status.": "检查 EVM 节点同步状态。",
+  "Check Solana node health.": "检查 Solana 节点健康状态。",
   "OAuth client secret": "OAuth 客户端密钥",
   "OAuth client credentials require a client secret.": "OAuth 客户端凭据模式需要客户端密钥。",
   "Discovery preview region": "发现预览区域",
