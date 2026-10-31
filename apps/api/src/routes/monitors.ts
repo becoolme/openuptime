@@ -18,6 +18,15 @@ import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
+function rpcProblem(v: { type: string; target: string }): string | null {
+  if (v.type !== "evm" && v.type !== "solana") return null;
+  try {
+    const url = new URL(v.target);
+    if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.hash) return null;
+  } catch { /* invalid URL */ }
+  return "Blockchain RPC requires an http(s) URL without embedded credentials or a fragment";
+}
+
 function mcpProblem(v: {type: string; target: string; mcpConfig?: McpConfig | null}): string | null {
   if (v.type !== "mcp") return v.mcpConfig ? "MCP configuration is only valid for MCP monitors" : null;
   try {
@@ -29,7 +38,7 @@ function mcpProblem(v: {type: string; target: string; mcpConfig?: McpConfig | nu
 
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
   target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
   mcpConfig: mcpConfigSchema.nullable().describe("MCP: requiredTools, optional schemaCheck baseline, and toolCall. Tool calls require explicit enabled=true and may incur charges or modify data. Assertions use JSON Pointer paths into the result. Manager-only configuration."),
   domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
@@ -140,7 +149,7 @@ export const monitorPatchSchema = patchBody;
 
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
-const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : mcpProblem(v) ?? requestBodyProblem(v);
+const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v);
 
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
@@ -436,6 +445,10 @@ export const monitors = new Hono<AppEnv>()
       return c.json({ error: "Only workspace owners and admins can resume or change the schedule of enabled MCP tool calls" }, 403);
     }
 
+    if (v.target !== undefined) {
+      const invalid = rpcProblem({ ...stored, ...v });
+      if (invalid) return c.json({ error: invalid }, 400);
+    }
     if (v.mcpConfig !== undefined || (stored.type === "mcp" && (v.target !== undefined || v.headers !== undefined))) {
       if (!(await isManager(c))) return c.json({ error: "Only workspace owners and admins can configure MCP monitors" }, 403);
       const invalid = mcpProblem({ ...stored, ...v });

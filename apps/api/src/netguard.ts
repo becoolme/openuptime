@@ -259,14 +259,14 @@ export async function targetProblem(type: string, target: string): Promise<strin
   if (type === "domain") { try { domainName(target); return null; } catch (e) { return (e as Error).message; } }
   if (allowPrivate || type === "heartbeat" || type === "dns") return null;
   let host: string | undefined;
-  if (type === "http" || type === "websocket" || type === "mcp") {
+  if (type === "http" || type === "websocket" || type === "mcp" || type === "evm" || type === "solana") {
     let u: URL;
     try {
       u = new URL(target);
     } catch {
       return null; // reported by the check itself, as before
     }
-    if ((type === "http" || type === "mcp") && u.protocol !== "http:" && u.protocol !== "https:") return "Only http:// and https:// URLs can be monitored.";
+    if ((type === "http" || type === "mcp" || type === "evm" || type === "solana") && u.protocol !== "http:" && u.protocol !== "https:") return "Only http:// and https:// URLs can be monitored.";
     if (type === "websocket" && u.protocol !== "ws:" && u.protocol !== "wss:") return "Only ws:// and wss:// URLs can be monitored.";
     host = u.hostname;
   } else {
