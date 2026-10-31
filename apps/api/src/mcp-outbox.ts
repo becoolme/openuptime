@@ -1,5 +1,5 @@
 import type { McpAlertEvent, NewMcpAlertTask, Repo } from "@openuptime/repo";
-import { deliverMcpAlertTask, dispatchAlert, mcpSubscriberRecipient, Skipped, type PushedDevices } from "./alerts";
+import { deliverMcpAlertTask, dispatchAlert, MAX_ATTEMPTS, mcpSubscriberRecipient, Skipped, type PushedDevices } from "./alerts";
 import { unmetered, type Entitlements } from "./entitlements";
 
 /** Runs inside the monitor-result transaction. All destinations exist durably before that transaction commits. */
@@ -25,7 +25,7 @@ export async function drainMcpAlerts(repo: Repo, entitlements: Entitlements = un
   const pushedBy = new Map<string, PushedDevices>();
   while (count < limit) {
     // Do not lease a long queue then leave its tail idle while earlier provider requests run.
-    const tasks = await repo.claimMcpAlerts(Math.min(5, limit - count), monitorId);
+    const tasks = await repo.claimMcpAlerts(Math.min(5, limit - count), monitorId, { maxAttempts: MAX_ATTEMPTS });
     if (!tasks.length) break;
     count += tasks.length;
     const completed = await Promise.allSettled(tasks.map(async task => {
@@ -35,8 +35,10 @@ export async function drainMcpAlerts(repo: Repo, entitlements: Entitlements = un
         await repo.finishMcpAlert(task.id, task.leaseToken, { status: "sent" });
       } catch (error) {
         const skipped = error instanceof Skipped;
+        // The same budget as other alerts: after the last attempt the task fails for good and stops blocking later alerts.
+        const lastAttempt = task.attempts + 1 >= MAX_ATTEMPTS;
         // Provider errors may include credentials or payloads: persist only a fixed error category.
-        await repo.finishMcpAlert(task.id, task.leaseToken, { status: skipped ? "skipped" : "retry",
+        await repo.finishMcpAlert(task.id, task.leaseToken, { status: skipped ? "skipped" : lastAttempt ? "failed" : "retry",
           error: skipped ? error.message : "MCP alert delivery unavailable", retryInSec: Math.min(3600, 60 * 2 ** Math.min(task.attempts, 6)) });
       }
     }));

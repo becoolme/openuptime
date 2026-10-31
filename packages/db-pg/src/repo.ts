@@ -34,6 +34,12 @@ const inScope = (scope: Scope, col: Parameters<typeof inArray>[0]): SQL | undefi
 const resolvedByPerson = (incidentId: Parameters<typeof inArray>[0]): SQL =>
   sql`coalesce((select u.by_person from incident_update u where u.incident_id = ${incidentId} and u.status = 'resolved' order by u.created_at desc limit 1), false)`;
 
+/**
+ * An alert_delivery row whose sending belongs to the MCP outbox. The generic sweep and retry worker must leave it alone,
+ * or they resend through the old path. Outbox tasks share their delivery row's id (enqueueMcpAlerts), so this is a key lookup.
+ */
+const notMcpOutbox = sql`not exists (select 1 from mcp_alert_outbox q where q.id = ${schema.alertDelivery.id})`;
+
 /** Postgres implementation of the storage contract, on drizzle + postgres.js. */
 export function createRepo(db: DbExecutor): Repo {
   const rows = async <T>(q: PromiseLike<unknown>) => (await q) as unknown as T[];
@@ -869,23 +875,36 @@ export function createRepo(db: DbExecutor): Repo {
         }
       });
     },
-    async claimMcpAlerts(limit, monitorId) {
+    async claimMcpAlerts(limit, monitorId, options) {
+      const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
       return db.transaction(async tx => {
         const token = crypto.randomUUID();
         const t = schema.mcpAlertOutbox;
+        const scope = monitorId ? eq(t.monitorId, monitorId) : undefined;
+        const expired = sql`(${t.status} = 'leased' and ${t.leaseUntil} <= now())`;
+        // Compare as uuid so the incident primary key is used; a malformed id matches nothing instead of failing the claim.
+        const incidentId = sql`case when ${t.event}->'incident'->>'id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (${t.event}->'incident'->>'id')::uuid end`;
         // A delayed retry of an obsolete "down" must not block the newer recovery for an hour.
         // Active leases retain ordering; expired leases can be revoked safely via their token fence.
         const obsolete = await tx.update(t).set({ status: "skipped", error: "skipped: incident changed before delivery", leaseToken: null, leaseUntil: null })
-          .where(and(monitorId ? eq(t.monitorId, monitorId) : undefined,
-            sql`(${t.status} = 'pending' or (${t.status} = 'leased' and ${t.leaseUntil} <= now()))`,
-            sql`exists (select 1 from incident i where i.id::text = ${t.event}->'incident'->>'id'
+          .where(and(scope, sql`(${t.status} = 'pending' or ${expired})`,
+            sql`exists (select 1 from incident i where i.id = ${incidentId}
               and ((${t.event}->>'kind' = 'incident.opened' and i.resolved_at is not null)
                 or (${t.event}->>'kind' = 'incident.resolved' and i.resolved_at is null)))`))
           .returning({ deliveryId: t.deliveryId });
         if (obsolete.length) await tx.update(schema.alertDelivery).set({ status: "skipped", ok: false,
           error: "skipped: incident changed before delivery", statusMessage: "skipped: incident changed before delivery" })
           .where(inArray(schema.alertDelivery.id, obsolete.map(row => row.deliveryId)));
-        return await tx.update(t).set({ status: "leased", leaseToken: token, leaseUntil: sql`now() + interval '3 minutes'` })
+        // An expired lease is an attempt whose worker died. Once that spends the budget the task fails for good,
+        // so it neither retries forever nor blocks later alerts to the same recipient.
+        const exhausted = await tx.update(t).set({ status: "failed", attempts: sql`${t.attempts} + 1`, error: "MCP alert delivery unavailable", leaseToken: null, leaseUntil: null })
+          .where(and(scope, expired, sql`${t.attempts} + 1 >= ${maxAttempts}`))
+          .returning({ deliveryId: t.deliveryId, attempts: t.attempts });
+        for (const row of exhausted) await tx.update(schema.alertDelivery).set({ status: "failed", ok: false, error: "MCP alert delivery unavailable",
+          statusMessage: `failed: gave up after ${row.attempts} attempts`, attempts: row.attempts }).where(eq(schema.alertDelivery.id, row.deliveryId));
+        return await tx.update(t).set({ status: "leased", leaseToken: token, leaseUntil: sql`now() + interval '3 minutes'`,
+          attempts: sql`case when ${t.status} = 'leased' then ${t.attempts} + 1 else ${t.attempts} end` })
           .where(inArray(t.id, sql`(select q.id from mcp_alert_outbox q
             where ((q.status = 'pending' and q.next_attempt_at <= now()) or (q.status = 'leased' and q.lease_until <= now()))
               ${monitorId ? sql`and q.monitor_id = ${monitorId}` : sql``}
@@ -897,13 +916,16 @@ export function createRepo(db: DbExecutor): Repo {
     async finishMcpAlert(id, leaseToken, result) {
       return db.transaction(async tx => {
         const t = schema.mcpAlertOutbox;
-        const [row] = await tx.update(t).set({ status: result.status === "retry" ? "pending" : result.status,
+        const status = result.status === "retry" ? "pending" : result.status;
+        const [row] = await tx.update(t).set({ status,
           attempts: sql`${t.attempts} + 1`, error: result.error ?? null, leaseToken: null, leaseUntil: null,
           nextAttemptAt: sql`now() + make_interval(secs => ${Math.min(3600, Math.max(1, result.retryInSec ?? 60))})` })
           .where(and(eq(t.id, id), eq(t.status, "leased"), eq(t.leaseToken, leaseToken), gt(t.leaseUntil, sql`now()`))).returning();
         if (!row) return false;
-        await tx.update(schema.alertDelivery).set({ status: result.status === "retry" ? "pending" : result.status,
-          ok: result.status === "sent", error: result.error ?? null, statusMessage: result.status === "retry" ? "failed: queued for retry" : result.error ?? null,
+        // The outbox owns this log row: it stays "pending" without next_attempt_at, which the generic retry worker skips.
+        await tx.update(schema.alertDelivery).set({ status,
+          ok: result.status === "sent", error: result.error ?? null,
+          statusMessage: result.status === "retry" ? "failed: queued for retry" : result.status === "failed" ? `failed: gave up after ${row.attempts} attempts` : result.error ?? null,
           attempts: row.attempts }).where(eq(schema.alertDelivery.id, row.deliveryId));
         return true;
       });
@@ -1334,7 +1356,7 @@ export function createRepo(db: DbExecutor): Repo {
     async claimRetries(limit) {
       const t = schema.alertDelivery;
       // rows from before delivery states existed count as pending when they failed and wait for a retry
-      const due = sql`(${t.status} = 'pending' or (${t.status} is null and ${t.ok} = false)) and ${t.nextAttemptAt} <= now()`;
+      const due = sql`(${t.status} = 'pending' or (${t.status} is null and ${t.ok} = false)) and ${t.nextAttemptAt} <= now() and ${notMcpOutbox}`;
       const claimed = await db
         .update(t)
         .set({ status: "sending", claimedAt: sql`now()`, nextAttemptAt: null })
@@ -1371,7 +1393,7 @@ export function createRepo(db: DbExecutor): Repo {
       const orphans = await db
         .update(t)
         .set({ nextAttemptAt: sql`now()` })
-        .where(and(eq(t.status, "pending"), isNull(t.nextAttemptAt), lt(t.createdAt, sql`now() - make_interval(secs => ${o.stuckSec})`)))
+        .where(and(eq(t.status, "pending"), isNull(t.nextAttemptAt), lt(t.createdAt, sql`now() - make_interval(secs => ${o.stuckSec})`), notMcpOutbox))
         .returning({ id: t.id });
       return gaveUp.length + back.length + orphans.length;
     },

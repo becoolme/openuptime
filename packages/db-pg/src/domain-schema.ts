@@ -322,7 +322,7 @@ export const mcpAlertOutbox = pgTable("mcp_alert_outbox", {
   recipient: text("recipient").notNull(),
   channelId: uuid("channel_id"),
   event: jsonb("event").$type<McpAlertEvent>().notNull(),
-  status: text("status").$type<"pending" | "leased" | "sent" | "skipped">().notNull().default("pending"),
+  status: text("status").$type<"pending" | "leased" | "sent" | "skipped" | "failed">().notNull().default("pending"),
   attempts: integer("attempts").notNull().default(0),
   quotaAttempted: boolean("quota_attempted").notNull().default(false),
   quotaDecision: text("quota_decision").$type<"granted" | "denied">(),

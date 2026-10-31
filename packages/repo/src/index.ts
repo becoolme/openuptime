@@ -598,8 +598,10 @@ export interface Repo {
   rotateMcpRefreshToken(snapshot: Monitor, oldToken: string, newToken: string): Promise<boolean>;
   mcpHistory(orgId: string, id: string, scope: Scope, options?: { days?: 7 | 30; limit?: number; before?: Date }): Promise<McpHistory | null>;
   enqueueMcpAlerts(tasks: NewMcpAlertTask[]): Promise<void>;
-  claimMcpAlerts(limit: number, monitorId?: string): Promise<McpAlertTask[]>;
-  finishMcpAlert(id: string, leaseToken: string, result: { status: "sent" | "skipped" | "retry"; error?: string; retryInSec?: number }): Promise<boolean>;
+  /** An expired lease counts as an attempt; once that uses up `maxAttempts` (default 3) the task fails for good instead of being leased again. */
+  claimMcpAlerts(limit: number, monitorId?: string, options?: { maxAttempts?: number }): Promise<McpAlertTask[]>;
+  /** "failed" is terminal: the task stops blocking later alerts to the same recipient and its log row ages out normally. */
+  finishMcpAlert(id: string, leaseToken: string, result: { status: "sent" | "skipped" | "retry" | "failed"; error?: string; retryInSec?: number }): Promise<boolean>;
   renewMcpAlertLease(id: string, leaseToken: string): Promise<boolean>;
   settleMcpAlertQuota(id: string, leaseToken: string, decision: "granted" | "denied"): Promise<boolean>;
   markMcpAlertQuota(id: string, leaseToken: string): Promise<boolean>;
