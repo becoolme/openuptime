@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "home-page-redesign", date: "2026-10-31", edition: "community",
+    title: { en: "Redesigned home page", zh: "首页改版" },
+    summary: { en: "The home page shows how OpenUptime works with pictures of the product instead of long blocks of text.", zh: "首页用产品示意图代替大段文字，直观展示 OpenUptime 的用法。" },
+    points: [
+      { en: "A sample conversation shows an AI agent creating and pausing a monitor over MCP.", zh: "新增一段示例对话，展示 AI Agent 通过 MCP 创建和暂停监控。" },
+      { en: "The full feature list is grouped into tabs, and self-hosting with Docker is mentioned next to Cloudflare.", zh: "完整功能清单按分类放进标签页，自托管部分在 Cloudflare 之外也写明了 Docker。" },
+      { en: "Every language and the dark theme carry the new design.", zh: "所有语言版本和深色主题都已使用新设计。" },
+    ],
+    cloud: { en: "The hosted home page also spells out the free plan at the top: 26,000 checks a month, 3 monitors and no credit card.", zh: "托管版首页顶部还直接写明免费套餐：每月 26,000 次检测、3 个监控，无需信用卡。" },
+  },
+  {
     id: "mcp-server-monitors", date: "2026-10-31", edition: "community",
     title: { en: "Monitor MCP servers", zh: "MCP 服务监控" },
     summary: { en: "Check that agents can connect, discover required tools and optionally use them.", zh: "检查 Agent 能否连接并发现必需工具，还可选择验证工具调用。" },

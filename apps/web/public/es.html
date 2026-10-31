@@ -9,7 +9,7 @@
 <meta name="description" content="Monitorización de uptime de código abierto, sin tarifas por monitor. Comprobaciones HTTP, TCP, DNS y heartbeat, alertas por Slack, Lark, Telegram y correo, y páginas de estado públicas.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+JP:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
 // Resolve theme + language before first paint. The URL decides (/ = English, /zh-Hans, /ja, /es); a visit is
 // remembered in the ou_lang cookie, and an unprefixed visit goes to the remembered language (English when nothing is remembered).
@@ -29,50 +29,56 @@
 </script>
 <style>
 :root{
-  --bg:#fafaf7; --surface:#ffffff; --surface-2:#f4f4ee; --line:#e7e7df; --line-2:#d8d8cd;
-  --ink:#0e1411; --muted:#5a635d; --faint:#8b938d;
-  --accent:#0f9d58; --accent-weak:rgba(15,157,88,.10); --accent-line:rgba(15,157,88,.28);
-  --warn:#c98a0a; --warn-weak:rgba(201,138,10,.12); --down:#d93a3a;
-  --dot:rgba(14,20,17,.13);
-  --shadow:0 1px 0 rgba(255,255,255,.9) inset,0 36px 70px -34px rgba(24,36,29,.28),0 10px 28px -14px rgba(24,36,29,.14);
-  --shadow-sm:0 1px 2px rgba(24,36,29,.06),0 10px 24px -14px rgba(24,36,29,.16);
-  --serif:"Instrument Serif","Noto Serif SC","Noto Serif JP",Georgia,serif;
+  --bg:#f7f8f6; --surface:#ffffff; --surface-2:#fbfbfa; --tile:#f5f7f4; --line:#e4e7e3; --line-soft:#eef0ed; --line-2:#d5d9d4;
+  --ink:#0b1310; --ink-2:#3d4641; --muted:#56605a; --faint:#6b746e;
+  --accent:#0f9d58; --accent-ink:#0a7a43; --accent-weak:#e7f5ed; --accent-line:#cfe9da; --accent-tint:#f2faf5;
+  --warn:#e0a325; --warn-ink:#8a5a00; --down:#d93a3a; --down-weak:#fdecec; --down-ink:#b42b2b;
+  --dark:#0b1310; --dark-2:#121a16; --dark-line:#26312b;
+  --hero-top:#e9f6ee; --hero-mid:#f3f8f4; --grid:rgba(11,19,16,.055); --glow:rgba(15,157,88,.16);
+  --label-bg:#d6f1e1; --label-ink:#0a6b3b; --frame:rgba(255,255,255,.55); --frame-line:rgba(11,19,16,.07);
+  --shadow-sm:0 1px 2px rgba(11,19,16,.04);
   --sans:"Geist",-apple-system,"PingFang SC","Hiragino Sans GB","Hiragino Kaku Gothic ProN","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif;
   --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 :root[data-theme="dark"]{
-  --bg:#0a0c0b; --surface:#111412; --surface-2:#171b19; --line:#222825; --line-2:#2f3733;
-  --ink:#eef1ee; --muted:#8c968f; --faint:#5b655e;
-  --accent:#3ddc84; --accent-weak:rgba(61,220,132,.12); --accent-line:rgba(61,220,132,.3);
-  --warn:#f5b942; --warn-weak:rgba(245,185,66,.14); --down:#ff5c5c;
-  --dot:rgba(238,241,238,.10);
-  --shadow:0 1px 0 rgba(255,255,255,.04) inset,0 40px 80px -40px rgba(0,0,0,.8),0 10px 28px -14px rgba(0,0,0,.5);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.4),0 10px 24px -14px rgba(0,0,0,.6);
+  --bg:#0a0c0b; --surface:#111412; --surface-2:#141816; --tile:#171b19; --line:#232a26; --line-soft:#1c221f; --line-2:#2f3733;
+  --ink:#eef1ee; --ink-2:#c9d1cc; --muted:#9aa39d; --faint:#7a847e;
+  --accent:#3ddc84; --accent-ink:#5fe39a; --accent-weak:rgba(61,220,132,.12); --accent-line:rgba(61,220,132,.28); --accent-tint:rgba(61,220,132,.06);
+  --warn:#f5b942; --warn-ink:#f5b942; --down:#ff5c5c; --down-weak:rgba(255,92,92,.14); --down-ink:#ff8a8a;
+  --dark:#060807; --dark-2:#0e1311; --dark-line:#1f2823;
+  --hero-top:#0d1a13; --hero-mid:#0b120e; --grid:rgba(238,241,238,.05); --glow:rgba(61,220,132,.14);
+  --label-bg:rgba(61,220,132,.16); --label-ink:#7beaa9; --frame:rgba(255,255,255,.03); --frame-line:rgba(238,241,238,.08);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
 }
-html[lang="ja"]{--serif:"Instrument Serif","Noto Serif JP","Noto Serif SC",Georgia,serif}
 html[lang="ja"] body,html[lang="zh-CN"] body{word-break:auto-phrase;line-break:strict}
+html[lang="ko"] body{word-break:keep-all}
 *{box-sizing:border-box;margin:0}
 html{scroll-behavior:smooth;scroll-padding-top:80px}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .25s,color .25s}
 a{color:inherit;text-decoration:none}
 button,select{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.mono{font-family:var(--mono)}
 .wrap{max-width:1160px;margin:0 auto;padding:0 28px}
-section{padding:120px 0;position:relative}
-.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:inline-flex;gap:10px;align-items:center;margin-bottom:22px}
-.eyebrow::before{content:"";width:18px;height:1px;background:currentColor}
-h1,h2,h3{font-weight:500}
-h2{font-family:var(--serif);font-size:clamp(34px,4.6vw,56px);line-height:1.08;letter-spacing:-.015em;max-width:18ch;font-weight:400}
-h2 i{color:var(--accent)}
-html[lang="zh-CN"] h2,html[lang="zh-CN"] h3{font-family:var(--sans);font-weight:600;letter-spacing:.005em;line-height:1.3}
-html[lang="ja"] h2{font-weight:500;letter-spacing:0;line-height:1.22}
-.lead{color:var(--muted);font-size:18px;max-width:58ch;margin-top:20px;line-height:1.65}
-.sec-head{margin-bottom:56px}
+section{padding:112px 0;position:relative;border-top:1px solid var(--line)}
+section.alt{background:var(--surface)}
+h1,h2,h3{font-weight:600}
+h2{font-size:clamp(32px,3.8vw,48px);line-height:1.08;letter-spacing:-.04em;margin-top:16px;text-wrap:balance}
+html[lang="zh-CN"] h2,html[lang="ja"] h2,html[lang="ko"] h2{letter-spacing:-.01em;line-height:1.24}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:8px}
+.eyebrow.g{color:var(--accent-ink)}
+.eyebrow.g::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.lead{color:var(--muted);font-size:17px;line-height:1.55;margin-top:16px;max-width:58ch}
+.head{max-width:640px}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:32px;flex-wrap:wrap}
+.head-row .lead{margin:0;font-size:16px;max-width:38ch}
+.center{text-align:center}.center .eyebrow{justify-content:center}
 
 /* ---------- nav ---------- */
-nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:saturate(1.4) blur(16px);-webkit-backdrop-filter:saturate(1.4) blur(16px);border-bottom:1px solid var(--line)}
-.nav-in{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:32px;height:68px}
-.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-.01em}
-.logo-mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#0f9d58,#0a5c34);display:grid;place-items:center;flex:none}
+nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:saturate(1.4) blur(16px);-webkit-backdrop-filter:saturate(1.4) blur(16px);border-bottom:1px solid var(--line)}
+.nav-in{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:32px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;letter-spacing:-.01em}
+.logo-mark{width:26px;height:26px;border-radius:7px;background:#0f9d58;display:grid;place-items:center;flex:none}
 .logo-mark svg{width:16px;height:16px}
 .nav-links{display:flex;gap:28px;justify-self:center;font-size:14.5px;color:var(--muted)}
 .nav-links a{transition:color .15s}.nav-links a:hover{color:var(--ink)}
@@ -83,268 +89,300 @@ nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 78%,
 .lang-btn svg{width:15px;height:15px;color:var(--muted)}
 .lang-btn .chev{width:12px;height:12px;transition:transform .15s}
 .lang-btn[aria-expanded=true] .chev{transform:rotate(180deg)}
-.lang-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:150px;padding:5px;margin:0;list-style:none;border-radius:12px;border:1px solid var(--line);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:60;display:none}
+.lang-menu{position:absolute;right:0;top:auto;bottom:calc(100% + 6px);min-width:150px;padding:5px;margin:0;list-style:none;border-radius:12px;border:1px solid var(--line);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:60;display:none}
 .lang-menu.open{display:block}
-.lang-menu a{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:0;border-radius:8px;background:none;font-size:14px;text-align:left;cursor:pointer;color:var(--ink)}
-.lang-menu a:hover{background:var(--bg-soft,rgba(127,127,127,.12))}
+.lang-menu a{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;font-size:14px;color:var(--ink)}
+.lang-menu a:hover{background:rgba(127,127,127,.12)}
 .lang-menu a[aria-checked=true]{font-weight:600}
-.lang-menu a[aria-checked=true]::after{content:"✓";color:var(--accent,#0f9d58)}
+.lang-menu a[aria-checked=true]::after{content:"✓";color:var(--accent)}
 .icon-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer;transition:.15s}
 .icon-btn:hover{border-color:var(--line-2)}
 .icon-btn svg{width:17px;height:17px}
 .icon-btn .moon{display:none}
 :root[data-theme="dark"] .icon-btn .sun{display:none}
 :root[data-theme="dark"] .icon-btn .moon{display:block}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 24px;border-radius:12px;font-weight:500;font-size:15.5px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;box-shadow:var(--shadow-sm)}
-.btn:hover{transform:translateY(-1px);border-color:var(--faint)}
-.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:48px;padding:0 22px;border-radius:12px;font-weight:500;font-size:15px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--bg);box-shadow:0 10px 24px -12px rgba(11,19,16,.55)}
 .btn.sm{height:38px;padding:0 16px;font-size:14px;border-radius:10px;box-shadow:none}
-[hidden]{display:none!important}.btn svg{width:16px;height:16px}
+.btn .live{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-weak)}
 
 /* ---------- hero ---------- */
-.hero{padding:96px 0 64px;position:relative;text-align:center}
-.hero-bg{position:absolute;inset:0;overflow:hidden;pointer-events:none}
-.hero-bg::before{content:"";position:absolute;inset:0;background-image:radial-gradient(var(--dot) 1px,transparent 1.4px);background-size:26px 26px;-webkit-mask-image:radial-gradient(70% 60% at 50% 30%,#000,transparent 75%);mask-image:radial-gradient(70% 60% at 50% 30%,#000,transparent 75%)}
-.hero-bg::after{content:"";position:absolute;left:50%;top:-260px;width:980px;height:560px;transform:translateX(-50%);background:radial-gradient(closest-side,var(--accent-weak),transparent 72%)}
-.hero .wrap{position:relative}
-.badge{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted);border:1px solid var(--line);background:var(--surface);padding:6px;border-radius:99px;margin-bottom:34px;box-shadow:var(--shadow-sm)}
-.badge b{background:var(--accent-weak);color:var(--accent);font-weight:500;padding:3px 11px;border-radius:99px;font-size:12.5px}
-h1{font-family:var(--serif);font-weight:400;font-size:clamp(44px,7.4vw,100px);line-height:1;letter-spacing:-.03em;max-width:none;margin:0 auto;text-wrap:balance}
-h1 i{color:var(--accent);display:block}
-html[lang="zh-CN"] h1{font-family:var(--sans);font-weight:700;letter-spacing:-.01em;line-height:1.2;font-size:clamp(36px,5.8vw,72px);max-width:none}
-html[lang="ja"] h1{font-weight:500;letter-spacing:-.01em;line-height:1.14;font-size:clamp(40px,6.6vw,84px);max-width:none}
-html[lang="zh-CN"] body{line-height:1.75;letter-spacing:.01em}
-html[lang="zh-CN"] .tl .n{font-family:var(--mono)}
-html[lang="zh-CN"] h1 i,html[lang="ja"] h1 i,html[lang="zh-CN"] h2 i,html[lang="ja"] h2 i{font-style:normal}
-.hero .lead{margin:30px auto 0;font-size:19px;max-width:54ch}
-.cta-row{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:40px}
-.install{display:flex;align-items:center;gap:14px;margin:28px auto 0;max-width:760px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 10px 10px 20px;font:13px var(--mono);box-shadow:var(--shadow-sm);text-align:left}
-.install code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
-.install code::-webkit-scrollbar{display:none}
-.install .p{color:var(--faint);user-select:none}
-.copy{flex:none;display:inline-flex;gap:7px;align-items:center;height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);font:500 13px var(--sans);color:var(--muted);cursor:pointer}
-.copy:hover{color:var(--ink)}
-.hero-note{margin-top:16px;font-size:14px;color:var(--faint)}
+.hero{position:relative;overflow:hidden;padding:88px 0 0;background:linear-gradient(180deg,var(--hero-top) 0%,var(--hero-mid) 38%,var(--bg) 70%)}
+.hero-grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:64px 64px;background-position:center top;-webkit-mask-image:radial-gradient(ellipse 60% 48% at 50% 18%,#000 0%,transparent 100%);mask-image:radial-gradient(ellipse 60% 48% at 50% 18%,#000 0%,transparent 100%)}
+.hero-glow{position:absolute;left:50%;top:-180px;width:780px;height:420px;transform:translateX(-50%);border-radius:50%;pointer-events:none;background:radial-gradient(closest-side,var(--glow),transparent 100%)}
+.beat{position:absolute;left:50%;top:760px;transform:translateX(-50%);pointer-events:none}
+.beat stop,.beat circle{stop-color:var(--accent);fill:var(--accent)}
+.hero>.wrap{position:relative;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;font-weight:500;box-shadow:var(--shadow-sm)}
+.badge b{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--accent-weak);color:var(--accent-ink);font-weight:500}
+.badge b::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(15,157,88,.18)}
+.badge span{padding:4px 10px 4px 4px;color:var(--ink-2)}
+h1{margin:32px auto 0;max-width:1000px;font-size:clamp(38px,5.4vw,72px);line-height:1.06;letter-spacing:-.042em;text-wrap:balance}
+h1>span{display:block}
+h1 .ai{display:inline-block;padding:0 .18em .04em;margin:0 .22em;border-radius:.16em;background:var(--label-bg);box-shadow:inset 0 0 0 1px rgba(15,157,88,.18);color:var(--label-ink);line-height:1.02}
+html[lang="ja"] h1 .ai,html[lang="ko"] h1 .ai{margin-right:.04em}
+html[lang="zh-CN"] h1,html[lang="ja"] h1,html[lang="ko"] h1{letter-spacing:-.015em;line-height:1.2}
+.hero .lead{margin:24px auto 0;max-width:54ch;font-size:19px}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:36px}
+.hero-note{margin-top:18px;font:12.5px var(--mono);color:var(--faint)}
 
-/* product stage */
-.stage{position:relative;margin:84px auto 0;max-width:1000px;text-align:left}
-.dash{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
-.dash-top{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface-2)}
-.dots{display:flex;gap:7px}.dots i{width:11px;height:11px;border-radius:50%;background:var(--line-2)}
-.urlbar{flex:1;max-width:340px;margin:0 auto;text-align:center;font:12.5px var(--mono);color:var(--faint);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 12px}
-.dash-body{padding:36px 40px 28px}
-.dash-head{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:18px}
-.brand i{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#0b3d24));display:block}
-.pill-ok{display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--accent);background:var(--accent-weak);border:1px solid var(--accent-line);padding:8px 16px;border-radius:99px}
-.pill-ok::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 var(--accent);animation:ping 2.2s infinite}
-@keyframes ping{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:28px}
-.kpi{background:var(--surface);padding:18px 22px}
-.kpi b{display:block;font:500 26px/1.2 var(--mono);letter-spacing:-.02em}
-.kpi span{font-size:13px;color:var(--muted)}
-.mons{margin-top:12px}
-.mon{display:grid;grid-template-columns:190px 1fr 84px;gap:24px;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
-.mon:last-child{border-bottom:0}
-.mon-n{font-weight:500;font-size:15px;display:flex;gap:11px;align-items:center}
-.mon-n i{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
-.mon-n i.w{background:var(--warn)}
-.mon-n small{display:block;font:12px var(--mono);color:var(--faint);margin-top:1px}
-.bars{display:flex;gap:2.5px;height:34px;align-items:flex-end;animation:reveal 1.1s .25s cubic-bezier(.2,.7,.2,1) both}
-@keyframes reveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
-.bars i{flex:1;min-width:1px;border-radius:99px;background:var(--accent);opacity:.8}
-.bars i.w{background:var(--warn);opacity:1}
-.bars i.d{background:var(--down);opacity:1}
-.mon-v{text-align:right;font:12.5px var(--mono);color:var(--faint)}
-.mon-v b{display:block;color:var(--ink);font-weight:500;font-size:15px}
-.axis{display:flex;justify-content:space-between;font:11.5px var(--mono);color:var(--faint);padding:0 0 0 214px;margin:-4px 108px 0 0}
-.sample{margin-top:20px;font-size:12px;color:var(--faint);text-align:right}
-.float{position:absolute;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
-.toast{right:-28px;top:-34px;width:318px;padding:16px 18px;display:flex;gap:14px;animation:float 6s ease-in-out infinite}
-.toast .av{flex:none;width:36px;height:36px;border-radius:10px;background:color-mix(in srgb,var(--down) 12%,transparent);color:var(--down);display:grid;place-items:center;font-weight:700}
-.toast b{display:block;font-size:14px;font-weight:500}
-.toast span{font-size:13px;color:var(--muted);display:block}
-.toast em{font:11.5px var(--mono);color:var(--faint);font-style:normal;margin-top:6px;display:block}
-.probes{left:-36px;bottom:-72px;width:232px;padding:14px 18px;animation:float 7s -2s ease-in-out infinite}
-.probes h4{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
-.probes div{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
-.probes div span:last-child{font-family:var(--mono);color:var(--accent)}
+/* stage */
+.stage{position:relative;max-width:960px;margin:64px auto 0;text-align:left}
+.float{position:absolute;z-index:3;border-radius:14px}
+.toast{left:-64px;top:72px;width:300px;padding:14px;display:flex;gap:12px;background:var(--surface);border:1px solid var(--line);box-shadow:0 24px 48px -20px rgba(11,19,16,.28);animation:float 6s ease-in-out infinite}
+.toast .av{width:34px;height:34px;flex:none;border-radius:9px;background:var(--down-weak);color:var(--down);display:grid;place-items:center}
+.toast b{display:block;font-size:14px;font-weight:600}
+.toast b span{font:inherit}
+.toast .tm{font-family:var(--mono)}
+.toast p{font-size:13px;color:var(--muted);margin-top:2px}
+.toast em{display:block;font:11.5px var(--mono);font-style:normal;color:var(--faint);margin-top:8px}
+.inc{right:-56px;bottom:96px;width:236px;padding:14px 16px;background:var(--dark);color:#fff;border:1px solid var(--dark-line);box-shadow:0 24px 48px -20px rgba(11,19,16,.45);animation:float 7s -2s ease-in-out infinite}
+.inc h4{font:500 11px var(--mono);color:#8fd9b0;letter-spacing:.06em;text-transform:uppercase}
+.inc div{display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:13px}
+.inc p{display:flex;align-items:center;gap:8px}
+.inc p i{width:8px;height:8px;border-radius:50%;background:#e0a325}
+.inc p:nth-child(2) i{background:#5aa9e6}.inc p:nth-child(3) i{background:#3ddc84}
+.inc p em{margin-left:auto;font:normal 13px var(--mono);color:#9aa59f}
 @keyframes float{50%{transform:translateY(-6px)}}
+.frame{position:relative;padding:10px;border-radius:26px;background:var(--frame);border:1px solid var(--frame-line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 50px 100px -48px rgba(11,19,16,.35)}
+.dash{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 28px -18px rgba(11,19,16,.22);overflow:hidden}
+.dash-top{height:44px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line-soft);background:var(--surface-2)}
+.dots{display:flex;gap:6px}.dots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.urlbar{margin:0 auto;padding:4px 14px;border-radius:8px;background:var(--tile);font:12px var(--mono);color:var(--muted)}
+.dash-body{padding:32px 36px 28px}
+.dash-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px}
+.brand i{width:26px;height:26px;border-radius:7px;background:var(--ink)}
+.pill-ok{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:var(--accent-weak);color:var(--accent-ink);font-size:13px;font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.kpi{padding:16px 18px;border-radius:12px;background:var(--tile)}
+.kpi b{display:block;font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.3}
+.kpi span{font-size:13px;color:var(--muted)}
+.mons{display:flex;flex-direction:column;gap:18px;margin-top:28px}
+.mon-n{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:8px}
+.mon-n i{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.mon-n i.w{background:var(--warn)}
+.mon-n b{font-weight:500}
+.mon-n small{font:12px var(--mono);color:var(--faint)}
+.mon-n span{margin-left:auto;font:12px var(--mono);color:var(--faint)}
+.bars{display:flex;gap:2px;height:30px;animation:reveal 1.1s .25s cubic-bezier(.2,.7,.2,1) both}
+@keyframes reveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.bars i{flex:1;min-width:1px;border-radius:2px;background:#22b06a}
+.bars i.w{background:#e0a325}.bars i.d{background:#d93a3a}
+.axis{display:flex;justify-content:space-between;margin-top:10px;font:11.5px var(--mono);color:var(--faint)}
+.sample{margin-top:18px;font-size:12px;color:var(--faint)}
 
 /* integrations */
-.int{padding:116px 0 0}
-@media (max-width:1180px){.toast{right:14px}.probes{left:14px}}
-.int p{font:13px var(--mono);color:var(--faint);text-align:center;letter-spacing:.04em}
-.int-row{display:flex;flex-wrap:wrap;gap:10px 12px;justify-content:center;margin-top:24px}
-.fl{margin-top:72px}
-.fl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"g1 g2 g4" "g1 g3 g5" "g6 g6 g6";gap:18px;margin-top:32px;text-align:left}
-.fl-g.g1{grid-area:g1}.fl-g.g2{grid-area:g2}.fl-g.g3{grid-area:g3}.fl-g.g4{grid-area:g4}.fl-g.g5{grid-area:g5}.fl-g.g6{grid-area:g6}
-.fl-g{position:relative;overflow:hidden;border:1px solid var(--line);background:var(--surface);border-radius:18px;padding:26px 26px 28px;box-shadow:var(--shadow-sm);transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease}
-.fl-g:hover{transform:translateY(-3px);border-color:var(--accent-line);box-shadow:var(--shadow)}
-.fl-h{position:relative;display:flex;align-items:center;gap:14px;margin-bottom:20px}
-.fl-ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;color:var(--accent);background:var(--accent-weak)}
-.fl-g h3{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0}
-.fl-g ul{position:relative;list-style:none;margin:0;padding:0;display:grid;gap:13px}
-.fl-g.g6 ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 40px}
-.fl-g li{position:relative;padding-left:30px;font-size:14.5px;line-height:1.5;color:var(--muted)}
-.fl-g li::before{content:"";position:absolute;left:0;top:1px;width:20px;height:20px;border-radius:50%;background:var(--accent-weak) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230f9d58' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E") center/11px no-repeat}
-:root[data-theme="dark"] .fl-g li::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ddc84' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E")}
-@media (max-width:980px){.fl-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"g1 g2" "g1 g3" "g4 g5" "g6 g6"}}
-@media (max-width:640px){.fl-grid{grid-template-columns:minmax(0,1fr);grid-template-areas:none}.fl-g.g1,.fl-g.g2,.fl-g.g3,.fl-g.g4,.fl-g.g5,.fl-g.g6{grid-area:auto}.fl-g.g6 ul{grid-template-columns:1fr}}
-@media (prefers-reduced-motion:reduce){.fl-g{transition:none}.fl-g:hover{transform:none}}
-.int-row .ch svg,.int-row .ch img{flex:none;display:block}
-.int-row span{display:inline-flex;align-items:center;gap:9px;font-size:14.5px;font-weight:500;color:var(--muted);border:1px solid var(--line);background:var(--surface);padding:8px 16px;border-radius:99px}
+.int{padding:72px 0 88px;text-align:center}
+.cap{font:500 12px var(--mono);letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+.int-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px}
+.int-row span{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:14px;font-weight:500;color:var(--ink-2)}
+.int-row svg,.int-row img{flex:none;display:block}
 
-/* steps */
-.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);border-radius:20px;background:var(--surface);box-shadow:var(--shadow-sm);overflow:hidden}
-.tl{padding:36px 34px 34px;border-right:1px solid var(--line);display:flex;flex-direction:column}
-.tl:last-child{border-right:0}
-.tl .n{font-family:var(--serif);font-size:64px;line-height:1;color:var(--accent);margin-bottom:22px;letter-spacing:-.02em}
-.tl .t{font:12px var(--mono);color:var(--faint);margin-bottom:12px}
-.tl h3{font-size:20px;letter-spacing:-.01em;margin-bottom:10px}
-.tl p{color:var(--muted);font-size:15.5px;margin-bottom:26px}
-.tl>a{margin-top:auto;color:var(--accent);font-size:14.5px}
-.tl pre{margin-top:auto;font:12.5px/1.75 var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto}
-.tl pre b{color:var(--ink);font-weight:500}.tl pre .g{color:var(--accent)}
+/* MCP */
+.mcp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center}
+.steps{list-style:none;padding:0;margin:40px 0 0}
+.steps li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:16px;padding:18px 0;border-top:1px solid var(--line-soft)}
+.steps li>span{width:32px;height:32px;border-radius:9px;background:var(--accent-weak);color:var(--accent-ink);display:grid;place-items:center;font:500 13px var(--mono)}
+.steps h3{margin-top:4px;font-size:16px;letter-spacing:-.01em}
+.steps p{margin-top:6px;font-size:14px;line-height:1.55;color:var(--muted)}
+.more{display:inline-flex;margin-top:16px;font-size:15px;font-weight:500;color:var(--accent-ink)}
+.agent{background:var(--dark);border:1px solid var(--dark-line);border-radius:20px;padding:8px;box-shadow:0 40px 80px -40px rgba(11,19,16,.5)}
+.agent-top{display:flex;align-items:center;gap:10px;padding:10px 14px 14px;font-size:13px}
+.agent-top .dots i{background:#2a332e}
+.agent-top b{margin-left:8px;font-weight:500;color:#fff}
+.agent-top em{margin-left:auto;display:flex;align-items:center;gap:6px;font:normal 11.5px var(--mono);color:#8fd9b0}
+.agent-top em::before{content:"";width:6px;height:6px;border-radius:50%;background:#3ddc84}
+.chat{background:var(--dark-2);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px;color:#c9d1cc}
+.msg{align-self:flex-end;max-width:85%;padding:12px 16px;border-radius:14px 14px 4px 14px;background:#24302a;color:#eef1ee;font-size:14px;line-height:1.5}
+.tool{border:1px solid #26312b;border-radius:12px;overflow:hidden;font:12px var(--mono);color:#9aa59f}
+.tool>div,.tool.solo{display:flex;align-items:center;gap:8px;padding:10px 14px}
+.tool>div{background:#18221d}
+.tool em{margin-left:auto;font-style:normal;color:#3ddc84}
+.tool pre{margin:0;padding:14px;font:12.5px/1.6 var(--mono);color:#c9d1cc;white-space:pre-wrap}
+.ok{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(61,220,132,.08);color:#c9f0d9;font-size:13.5px}
+.ok em{margin-left:auto;font:normal 12px var(--mono);color:#8fd9b0}
+.chat small{font:11px var(--mono);color:#6f7a74}
 
-/* problem */
-.band{background:var(--surface-2);border-block:1px solid var(--line)}
-.grid{display:grid;gap:18px}
-.g3{grid-template-columns:repeat(3,1fr)}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:32px;box-shadow:var(--shadow-sm)}
-.card h3{font-size:19px;letter-spacing:-.01em;margin-bottom:10px}
-.card p{color:var(--muted);font-size:15.5px}
-.num{font:500 13px var(--mono);color:var(--down);background:color-mix(in srgb,var(--down) 10%,transparent);border-radius:8px;padding:5px 10px;display:inline-block;margin-bottom:26px}
+/* why */
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:48px}
+.pain{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.pain-v{height:168px;padding:24px;background:var(--surface-2);border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column}
+.tag{align-self:flex-start;font:12px var(--mono);padding:3px 8px;border-radius:6px;background:var(--down-weak);color:var(--down-ink)}
+.rise{flex:1;display:flex;align-items:flex-end;gap:8px;margin-top:12px}
+.rise i{flex:1;border-radius:4px;background:var(--line)}
+.rise i:nth-child(1){height:14%}.rise i:nth-child(2){height:22%}.rise i:nth-child(3){height:30%;background:var(--line-2)}.rise i:nth-child(4){height:44%;background:var(--line-2)}
+.rise i:nth-child(5){height:62%;background:#f0b4b4}.rise i:nth-child(6){height:82%;background:#e57373}.rise i:nth-child(7){height:100%;background:#d93a3a}
+.box{flex:1;margin-top:12px;border:1.5px dashed #e57373;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:12px;padding:0 12px}
+.box span,.chip{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--line);font:12px var(--mono);color:var(--ink-2)}
+.box span::before{content:"";width:7px;height:7px;border-radius:50%;background:#d93a3a}
+.clicks{flex:1;margin-top:12px;display:flex;flex-direction:column;gap:6px;justify-content:center;position:relative}
+.clicks span{height:26px;border-radius:7px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--faint)}
+.clicks svg{position:absolute;right:28px;bottom:6px}
+.pain-b{padding:22px 24px 26px}
+.pain h3,.cell h3{font-size:17px;letter-spacing:-.015em}
+.pain p,.cell p{margin-top:8px;font-size:14px;line-height:1.55;color:var(--muted)}
 
-/* bento */
-.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:18px}
-.b4{grid-column:span 4}.b2{grid-column:span 2}
-.bento .card{display:flex;flex-direction:column;overflow:hidden}
-.viz{margin-top:auto;padding-top:28px}
-.logline{font:12.5px/2 var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 16px}
-.logline span{color:var(--accent)}.logline .a{color:var(--faint)}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
-.chips span{font:12px var(--mono);color:var(--muted);border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:4px 10px}
-.regions svg{width:100%;height:auto;display:block;max-height:150px}
-.regions .ln{stroke:var(--line-2);stroke-width:1.5;stroke-dasharray:4 5;animation:dash 1.6s linear infinite}
-@keyframes dash{to{stroke-dashoffset:-18}}
-.regions .nd{fill:var(--surface);stroke:var(--accent);stroke-width:2}
-.regions .core{fill:var(--accent)}
-.regions text{font:11px var(--mono);fill:var(--muted)}
-.sp{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:4px 16px}
-.sp div{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:11px 0;border-bottom:1px solid var(--line)}
-.sp div:last-child{border:0}
-.sp em{font-style:normal;font-size:13px;color:var(--accent);display:inline-flex;gap:8px;align-items:center}
-.sp em::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
-.sp em.w{color:var(--warn)}
-.al{display:grid;gap:10px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
-.al-r{display:flex;overflow:hidden}
-.al-t{display:flex;gap:10px;width:max-content;animation:alx 38s linear infinite}
-.al-r.rev .al-t{animation-direction:reverse}
-.al:hover .al-t{animation-play-state:paused}
-.al-dup{display:contents}
-.al-i{display:inline-flex;align-items:center;gap:11px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:8px 14px 8px 8px;font-size:13.5px;white-space:nowrap;flex:none}
-.al-i i{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-style:normal;color:var(--ink);background:var(--surface);border:1px solid var(--line);flex:none}
-.al-i i img{display:block;border-radius:4px}
-.al-i small{font:11.5px var(--mono);color:var(--faint)}
-@keyframes alx{to{transform:translateX(-50%)}}
-@media (prefers-reduced-motion:reduce){.al-t{animation:none}.al{-webkit-mask-image:none;mask-image:none;overflow:auto}}
-.code{font:12px/1.8 var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;white-space:pre-wrap;word-break:break-all}
-.code .k{color:var(--accent)}.code .s{color:var(--ink)}
+/* features */
+.bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-top:48px}
+.cell{grid-column:span 2;border:1px solid var(--line);border-radius:20px;background:var(--bg);overflow:hidden;display:flex;flex-direction:column}
+.cell.w4{grid-column:span 4}
+.cell-v{padding:28px 28px 0;flex:1}
+.cell-b{padding:24px 28px 28px}
+.cell h3{font-size:18px;letter-spacing:-.02em}
+.cell.w4 h3{font-size:20px}
+.cell.w4 p{font-size:14.5px;max-width:56ch}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills span{font:12px var(--mono);padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.pills span:first-child{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.log{margin-top:20px;background:var(--dark);border:1px solid var(--dark-line);border-radius:14px;padding:18px 20px;font:13px/2 var(--mono);color:#c9d1cc;overflow:hidden}
+.log div{display:flex;gap:16px;white-space:nowrap}
+.log .t{color:#6f7a74}.log .g{color:#3ddc84}.log .f{color:#9aa59f}.log .e{margin-left:auto;color:#3ddc84}
+.wcard{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.tline{display:grid;grid-template-columns:14px minmax(0,1fr) auto;column-gap:12px;padding:18px 18px 22px;font-size:13.5px}
+.tline i{width:10px;height:10px;border-radius:50%;margin-top:6px;background:var(--warn)}
+.tline i.b{background:#3b82c4}.tline i.g{background:var(--accent)}
+.tline b{font-weight:500}
+.tline em{font:normal 12px var(--mono);color:var(--faint);padding-top:3px}
+.tline s{width:2px;height:18px;background:var(--line);margin-left:4px;grid-column:1/-1}
+.slist{overflow:hidden;font-size:13.5px}
+.slist div{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+.slist div:last-child{border:0}
+.slist b{font-weight:500}
+.slist em{margin-left:auto;display:flex;align-items:center;gap:6px;font-style:normal;font-size:12.5px;color:var(--accent-ink)}
+.slist em::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.slist em.w{color:var(--warn-ink)}.slist em.w::before{background:var(--warn)}
+.bell{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center}
+.bell>span{width:52px;height:52px;border-radius:14px;background:var(--down-weak);color:var(--down);display:grid;place-items:center}
+.bell>div{display:flex;flex-direction:column;gap:6px;padding-left:22px;border-left:2px solid var(--line);margin-left:16px}
+.bell>div span{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:9px;background:var(--surface);border:1px solid var(--line);font-size:13px}
+.bell>div span::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--c)}
+.bell small{margin-left:auto;font:11.5px var(--mono);color:var(--faint)}
+.curl{margin:0;background:var(--dark);border:1px solid var(--dark-line);border-radius:14px;padding:16px 18px;font:11.5px/1.7 var(--mono);color:#c9d1cc;white-space:pre-wrap;word-break:break-all}
+.curl b{color:#3ddc84;font-weight:400}
+.all{margin-top:72px;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--surface)}
+.all-h{padding:20px 28px;border-bottom:1px solid var(--line-soft)}
+.all-b{display:grid;grid-template-columns:280px minmax(0,1fr)}
+.tabs{display:flex;flex-direction:column;gap:4px;padding:16px;border-right:1px solid var(--line-soft);background:var(--surface-2)}
+.tabs button{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:none;font-size:14.5px;text-align:left;cursor:pointer}
+.tabs button::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--line-2);flex:none}
+.tabs button small{margin-left:auto;font:12px var(--mono);color:var(--faint)}
+.tabs button:hover{background:var(--surface)}
+.tabs button[aria-selected=true]{background:var(--surface);border-color:var(--line);font-weight:600}
+.tabs button[aria-selected=true]::before{background:var(--accent)}
+.panel{list-style:none;margin:0;padding:28px 32px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 28px;align-content:start}
+.panel li{display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.5;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+.panel li::before{content:"";flex:none;width:18px;height:18px;margin-top:2px;background:var(--accent);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/contain no-repeat}
+.js .panel:not(.on){display:none}
+.no-js-h{display:none}
 
 /* compare */
-.tbl{border:1px solid var(--line);border-radius:20px;background:var(--surface);box-shadow:var(--shadow-sm);overflow:hidden}
-.tr{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;align-items:center;border-bottom:1px solid var(--line)}
+.tbl-w{max-width:920px;margin:48px auto 0;overflow-x:auto}
+.tbl{min-width:600px;background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.tr{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));align-items:stretch;border-bottom:1px solid var(--line-soft);font-size:15px}
 .tr:last-child{border:0}
-.tr>*{padding:20px 24px}
-.tr.h{background:var(--surface-2);font:500 13px var(--mono);color:var(--muted)}
-.tr .us{background:var(--accent-weak);align-self:stretch;display:flex;align-items:center}
-.tr.h .us{color:var(--accent)}
-.tr>:not(:first-child){text-align:center;justify-content:center}
-.m{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-size:14px;font-weight:600}
-.m.y{background:var(--accent);color:#fff}
-:root[data-theme="dark"] .m.y{color:#04140a}
-.m.n{color:var(--faint)}
-.m.p{border:1.5px solid var(--warn);color:var(--warn);font-size:11px}
-
-/* open */
-.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.fact{padding:32px;border:1px solid var(--line);border-radius:20px;background:var(--surface);box-shadow:var(--shadow-sm)}
-.fact b{display:block;font:400 64px/1 var(--serif);letter-spacing:-.03em;margin-bottom:14px}
-.fact span{color:var(--muted);font-size:15.5px}
+.tr>div{display:flex;align-items:center;justify-content:center;padding:16px 12px}
+.tr>div:first-child{justify-content:flex-start;padding-left:24px;font-weight:500}
+.tr.h{font-size:13.5px;color:var(--muted)}
+.tr.h>div{padding:18px 12px;text-align:center}
+.tr .us{background:var(--accent-tint)}
+.tr.h .us{background:var(--dark);color:#fff;font-weight:600;gap:8px}
+.tr.h .us::before{content:"";width:8px;height:8px;border-radius:50%;background:#3ddc84}
+.m{display:grid;place-items:center}
+.m.y{width:22px;height:22px;border-radius:50%;background:var(--accent-weak)}
+.m.y::after,.us .m.y::after{content:"";width:14px;height:14px;background:var(--accent-ink);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/contain no-repeat}
+.us .m.y{width:24px;height:24px;background:#0f9d58}
+.us .m.y::after{background:#fff}
+.m.p{width:18px;height:18px;border-radius:50%;border:2px solid #b7790a;background:linear-gradient(90deg,#b7790a 50%,transparent 50%)}
+.m.n{width:14px;height:2px;border-radius:2px;background:var(--line-2)}
 
 /* before / after */
-.ba{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-.ba .card{padding:38px}
-.ba h3{font:500 12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:26px}
-.ba .after{background:linear-gradient(180deg,var(--accent-weak),transparent 70%),var(--surface);border-color:var(--accent-line)}
-.ba .after h3{color:var(--accent)}
-.ba ul{list-style:none;padding:0;display:grid;gap:18px}
-.ba li{display:flex;gap:14px;color:var(--muted);font-size:16.5px}
-.ba li::before{content:"×";font:500 16px var(--mono);color:var(--down);flex:none;width:18px}
-.ba .after li{color:var(--ink)}
-.ba .after li::before{content:"✓";color:var(--accent)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:48px}
+.ba{border:1px solid var(--line);border-radius:20px;padding:28px;background:var(--bg)}
+.ba h3{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--muted)}
+.ba h3::before{content:"";width:8px;height:8px;border-radius:50%;background:#d93a3a}
+.ba ul{list-style:none;padding:0;margin:20px 0 0}
+.ba li{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line);font-size:15px;line-height:1.5;color:var(--ink-2)}
+.ba li::before{content:"";flex:none;width:24px;height:24px;border-radius:7px;background:var(--down-weak) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c42f2f' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7L7 17'/%3E%3C/svg%3E") center/13px no-repeat}
+.ba.after{background:var(--dark);border-color:var(--dark-line);color:#eef1ee}
+.ba.after h3{color:#fff}.ba.after h3::before{background:#3ddc84}
+.ba.after li{border-color:#222b26;color:#eef1ee}
+.ba.after li::before{background:rgba(61,220,132,.16) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ddc84' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/13px no-repeat}
+
+/* open */
+.open-h{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;align-items:end}
+.open-h h2{max-width:16ch}
+.open-h .lead{margin:0;max-width:44ch}
+.fact{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:28px}
+.fact b{display:block;font-size:56px;font-weight:600;letter-spacing:-.05em;line-height:1}
+.fact b.g{color:var(--accent)}
+.fact span{display:block;margin-top:20px;font-size:14.5px;line-height:1.55;color:var(--muted)}
+.clone{margin-top:16px;display:flex;align-items:center;gap:14px;padding:18px 24px;border-radius:16px;background:var(--dark);border:1px solid var(--dark-line);color:#c9d1cc;font:14px var(--mono);overflow-x:auto;white-space:nowrap}
+.clone .p{color:#6f7a74}
+.clone em{margin-left:auto;font-style:normal;color:#3ddc84}
 
 /* final */
-.final{text-align:center;overflow:hidden}
-.final::before{content:"";position:absolute;inset:auto 0 0 0;height:420px;background:radial-gradient(60% 100% at 50% 100%,var(--accent-weak),transparent 70%);pointer-events:none}
-.final h2{margin-inline:auto;max-width:20ch;font-size:clamp(40px,6vw,76px)}
-.final .lead{margin-inline:auto}
+.final{overflow:hidden;padding:120px 0;background:var(--dark);color:#fff;text-align:center;border-top:0}
+.final-bars{position:absolute;left:0;right:0;bottom:0;height:120px;display:flex;gap:3px;align-items:flex-end;padding:0 24px;opacity:.5;pointer-events:none}
+.final-bars i{flex:1;border-radius:3px 3px 0 0;background:#3ddc84}
 .final .wrap{position:relative}
+.final h2{margin:0 auto;max-width:18ch;font-size:clamp(34px,4.6vw,60px);line-height:1.04;letter-spacing:-.045em}
+.final .lead{margin:22px auto 0;color:#a9b3ad;white-space:nowrap;max-width:none}
+.final .btn{border-color:#2f3a34;background:transparent;color:#fff}
+.final .btn.go{background:#3ddc84;border-color:#3ddc84;color:#0b1310;font-weight:600;box-shadow:none}
 
 /* footer */
-footer{border-top:1px solid var(--line);padding:64px 0 40px;font-size:14.5px;color:var(--muted)}
-.f-grid{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr;gap:40px}
-.f-grid h4{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:16px}
+footer{padding:72px 0 40px;font-size:14px;color:var(--muted);border-top:1px solid var(--line)}
+.f-grid{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:32px}
+.f-grid p{margin-top:14px;max-width:34ch;line-height:1.55}
+.f-grid h4{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:14px}
 .f-grid a{display:block;padding:5px 0;transition:color .15s}.f-grid a:hover{color:var(--ink)}
+.f-grid .logo{color:var(--ink)}
 .f-grid a.f-status{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--ink);background:var(--surface)}
-.f-status[hidden]{display:none!important}
 .f-status i{width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .f-status.degraded i{background:#d9a300}.f-status.outage i{background:#d93025}
+.f-bot{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-top:56px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
 .f-bot .lang{margin-left:auto}
-.f-bot .lang-menu{top:auto;bottom:calc(100% + 6px)}
-.f-bot{align-items:center;margin-top:56px;padding-top:24px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;font-size:13px;color:var(--faint)}
 
 /* reveal on scroll */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
 .js .rv.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){
   .js .rv{opacity:1;transform:none;transition:none}
-  .toast,.probes,.bars,.regions .ln,.pill-ok::before{animation:none}
+  .toast,.inc,.bars{animation:none}
 }
-
+@media (max-width:1180px){.toast{left:-16px}.inc{right:-16px}}
 @media (max-width:980px){
-  .toast{top:-30px;width:280px}
-  .bento{grid-template-columns:1fr 1fr}
-  .b4,.b2{grid-column:span 1}
-  .bento .b4:first-child{grid-column:span 2}
-  .timeline{grid-template-columns:1fr}
-  .tl{border-right:0;border-bottom:1px solid var(--line)}.tl:last-child{border:0}
+  .mcp,.open-h{grid-template-columns:1fr;gap:40px}
+  .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cell,.cell.w4{grid-column:span 1}.cell.w4{grid-column:1/-1}
+  .f-grid{grid-template-columns:repeat(3,1fr)}.f-grid>div:first-child{grid-column:1/-1}
 }
 @media (max-width:760px){
+  .bars{gap:1px}
   section{padding:80px 0}
   .wrap{padding:0 20px}
   .nav-links{display:none}
   .nav-in{display:flex;gap:12px}
-  .nav-r{margin-left:auto}
-  .btn.gh{display:none}
+  .nav-r{margin-left:auto;gap:6px}
   .hero{padding-top:56px}
-  .g3,.facts,.ba,.bento{grid-template-columns:1fr}
-  .bento .b4:first-child,.b4,.b2{grid-column:auto}
-  .f-grid{grid-template-columns:1fr 1fr}
-  .dash-body{padding:22px 18px 18px}
-  .mon{grid-template-columns:1fr 70px;gap:12px 14px}
-  .mon .bars{grid-column:1/-1;order:3}
-  .axis{display:none}
-  .toast{position:relative;right:auto;top:auto;width:auto;margin:0 0 16px;animation:none}
-  .probes{display:none}
   .stage{margin-top:48px}
-  .kpi{padding:14px}.kpi b{font-size:19px}
-  .tr{grid-template-columns:1.2fr .8fr .8fr .8fr}.tr>*{padding:16px 10px;font-size:13px}
-  .install{padding-left:14px}
-  .copy span{display:none}
-  .nav-r{gap:6px}
-  .tl{padding:28px 20px}
+  .toast{position:relative;left:auto;top:auto;width:auto;margin:0 0 16px;animation:none}
+  .inc{display:none}
+  .frame{padding:6px;border-radius:20px}
+  .dash-body{padding:22px 18px 18px}
+  .kpi{padding:12px}.kpi b{font-size:19px}
+  .mon-n small{display:none}
+  .three,.two,.bento{grid-template-columns:1fr}
+  .cell,.cell.w4{grid-column:auto}
+  .all-b{grid-template-columns:1fr}
+  .tabs{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line-soft)}
+  .tabs button{flex:none;white-space:nowrap}
+  .panel{grid-template-columns:1fr;padding:12px 20px 20px}
+  .final .lead{white-space:normal}
+  .f-grid{grid-template-columns:1fr 1fr}
+  .log{font-size:12px}.log div{gap:10px}
 }
 html,body{overflow-x:clip}
 </style>
@@ -381,274 +419,269 @@ html,body{overflow-x:clip}
 
 <!-- 1 · Hero -->
 <header class="hero" id="top">
-  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <svg class="beat" width="1800" height="160" viewBox="0 0 1800 160" fill="none" aria-hidden="true">
+    <defs><linearGradient id="beat" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-opacity="0"/><stop offset=".22" stop-opacity=".55"/><stop offset=".78" stop-opacity=".55"/><stop offset="1" stop-opacity="0"/></linearGradient></defs>
+    <path d="M0 80H240l14-26 22 64 26-92 22 70 12-16H380l10-14 14 28 10-14H1386l10-14 14 28 10-14H1464l14-26 22 64 26-92 22 70 12-16H1800" stroke="url(#beat)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="1600" cy="80" r="12" opacity=".15"/><circle cx="1600" cy="80" r="5"/>
+  </svg>
   <div class="wrap">
-    <div class="badge"><b data-i18n="hero.tag">Código abierto</b><b data-i18n="hero.agents">Pensado para agentes</b></div>
-    <h1><span data-i18n="hero.h1a">Monitorización de uptime asequible</span> <i data-i18n="hero.h1b">que tu agente de IA puede gestionar.</i></h1>
+    <div class="badge"><b data-i18n="hero.tag">Código abierto</b><span data-i18n="hero.agents">Pensado para agentes</span></div>
+    <h1><span data-i18n="hero.h1a">Monitorización de uptime asequible</span><span><span data-i18n="hero.h1b">que tu</span><span class="ai" data-i18n="hero.h1c">agente de IA</span><span data-i18n="hero.h1d">puede gestionar.</span></span></h1>
     <p class="lead" data-i18n="hero.lead">Comprobaciones, alertas y páginas de estado que gestionas desde Claude, Cursor o cualquier cliente MCP. Código abierto, sin tarifas por monitor.</p>
     <div class="cta-row">
       <a class="btn primary" href="/app"><span data-i18n="hero.cta1">Pruébalo ahora</span><span aria-hidden="true">→</span></a>
-      <a class="btn" id="cta-status" href="/status/openuptime" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span data-i18n="hero.cta2">Ver demo en vivo</span></a>
+      <a class="btn" id="cta-status" href="/status/openuptime" hidden><span class="live"></span><span data-i18n="hero.cta2">Ver demo en vivo</span></a>
     </div>
     <p class="hero-note" data-i18n="hero.note">Código abierto (MIT). El software no envía telemetría.</p>
 
     <div class="stage" aria-label="Status page preview">
       <div class="float toast">
-        <div class="av">!</div>
+        <span class="av"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg></span>
         <div>
-          <b><span style="display:inline;font-family:var(--mono);color:inherit;font-size:inherit">api.acme.dev</span> <span data-i18n="toast.t" style="display:inline;color:inherit;font-size:inherit">está caído</span></b>
-          <span data-i18n="toast.d">Tras 3 comprobaciones fallidas seguidas</span>
-          <em>Slack · #incidents · <span data-i18n="toast.time" style="display:inline;font:inherit;color:inherit">ahora mismo</span></em>
+          <b><span class="mono">api.acme.dev</span> <span data-i18n="toast.t">está caído</span></b>
+          <p data-i18n="toast.d">Tras 3 comprobaciones fallidas seguidas</p>
+          <em>Slack · #incidents · <span data-i18n="toast.time">ahora mismo</span></em>
         </div>
       </div>
-
-      <div class="dash">
-        <div class="dash-top">
-          <div class="dots"><i></i><i></i><i></i></div>
-          <div class="urlbar">status.acme.dev</div>
-          <span style="width:46px"></span>
-        </div>
-        <div class="dash-body">
-          <div class="dash-head">
-            <div class="brand"><i></i>Acme Status</div>
-            <div class="pill-ok" data-i18n="dash.ok">Todos los sistemas operativos</div>
-          </div>
-          <div class="kpis">
-            <div class="kpi"><b>99.98%</b><span data-i18n="dash.uptime">Uptime a 30 días</span></div>
-            <div class="kpi"><b>148 ms</b><span data-i18n="dash.resp">Respuesta media</span></div>
-            <div class="kpi"><b>3</b><span data-i18n="dash.regions">Componentes</span></div>
-          </div>
-          <div class="mons" id="mons"></div>
-          <div class="axis"><span data-i18n="dash.ago">Hace 90 días</span><span data-i18n="dash.today">Hoy</span></div>
-          <p class="sample" data-i18n="dash.sample">Datos de ejemplo, solo ilustrativos.</p>
+      <div class="float inc" aria-hidden="true">
+        <h4 data-i18n="inc.t">Incidente</h4>
+        <div>
+          <p><i></i><span data-i18n="inc.1">Investigando</span><em>14:02</em></p>
+          <p><i></i><span data-i18n="inc.2">Identificado</span><em>14:09</em></p>
+          <p><i></i><span data-i18n="inc.3">Resuelto</span><em>14:21</em></p>
         </div>
       </div>
-
+      <div class="frame">
+        <div class="dash">
+          <div class="dash-top">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="urlbar">status.acme.dev</div>
+            <span style="width:46px"></span>
+          </div>
+          <div class="dash-body">
+            <div class="dash-head">
+              <div class="brand"><i></i>Acme Status</div>
+              <div class="pill-ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span data-i18n="dash.ok">Todos los sistemas operativos</span></div>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><b>99.98%</b><span data-i18n="dash.uptime">Uptime a 30 días</span></div>
+              <div class="kpi"><b>148 ms</b><span data-i18n="dash.resp">Respuesta media</span></div>
+              <div class="kpi"><b>3</b><span data-i18n="dash.regions">Componentes</span></div>
+            </div>
+            <div class="mons" id="mons"></div>
+            <div class="axis"><span data-i18n="dash.ago">Hace 90 días</span><span data-i18n="dash.today">Hoy</span></div>
+            <p class="sample" data-i18n="dash.sample">Datos de ejemplo, solo ilustrativos.</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="int">
-      <p data-i18n="int.t">ALERTAS Y AUTOMATIZACIÓN QUE ENCAJAN EN TU STACK</p>
+      <p class="cap" data-i18n="int.t">ALERTAS Y AUTOMATIZACIÓN QUE ENCAJAN EN TU STACK</p>
       <div class="int-row">
         <span class="ch"><svg viewBox="0 0 256 256" width="16" height="16" aria-hidden="true"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg>Slack</span><span class="ch"><img src="/icons/lark.png" width="18" height="18" alt="" loading="lazy">Lark</span><span class="ch"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#229ED9" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>Telegram</span><span class="ch"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#06AC38" d="M16.965 1.18C15.085.164 13.769 0 10.683 0H3.73v14.55h6.926c2.743 0 4.8-.164 6.61-1.37 1.975-1.303 3.004-3.484 3.004-6.007 0-2.716-1.262-4.896-3.305-5.994zm-5.5 10.326h-4.21V3.113l3.977-.027c3.62-.028 5.43 1.234 5.43 4.128 0 3.113-2.248 4.292-5.197 4.292zM3.73 17.61h3.525V24H3.73Z"/></svg>PagerDuty</span><span class="ch"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>Email</span><span class="ch"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg>Webhook</span><span class="ch"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg>REST API</span>
-      </div>
-      <div class="fl rv">
-        <p data-i18n="fl.t">TODO LO QUE OPENUPTIME SOPORTA</p>
-        <div class="fl-grid">
-          <section class="fl-g g1">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
-            <h3 data-i18n="fl.g1">Monitorización</h3></div>
-            <ul>
-              <li data-i18n="fl.g1i1">Comprobaciones HTTP y HTTPS</li>
-              <li data-i18n="fl.g1i2">Puerto TCP, DNS, PostgreSQL, MySQL y Redis</li>
-              <li data-i18n="fl.g1i3">Monitores heartbeat para cron y workers</li>
-              <li data-i18n="fl.g1i4">Palabra clave presente o ausente, estado esperado, método y cabeceras propios</li>
-              <li data-i18n="fl.g1i5">Alertas por umbral de respuesta lenta</li>
-              <li data-i18n="fl.g1i6">Comprobaciones cada minuto como mínimo, con umbral de fallos</li>
-              <li data-i18n="fl.g1i7">Pausa y reanudación, importación y exportación JSON</li>
-            </ul>
-          </section>
-          <section class="fl-g g2">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
-            <h3 data-i18n="fl.g2">Incidentes</h3></div>
-            <ul>
-              <li data-i18n="fl.g2i1">Los incidentes se abren y se resuelven solos</li>
-              <li data-i18n="fl.g2i2">Incidentes manuales con actualizaciones, de «investigando» a «resuelto»</li>
-              <li data-i18n="fl.g2i3">Reconocer incidentes, con registro de quién responde</li>
-              <li data-i18n="fl.g2i4">Ventanas de mantenimiento programado que silencian las alertas</li>
-              <li data-i18n="fl.g2i5">Los envíos fallidos se reintentan; registro completo de alertas</li>
-            </ul>
-          </section>
-          <section class="fl-g g3">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span>
-            <h3 data-i18n="fl.g3">Canales de alerta</h3></div>
-            <ul>
-              <li data-i18n="fl.g3i1">Slack, Lark, Telegram, PagerDuty, correo y webhooks</li>
-              <li data-i18n="fl.g3i2">Elige qué canales avisa cada monitor</li>
-            </ul>
-          </section>
-          <section class="fl-g g4">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span>
-            <h3 data-i18n="fl.g4">Páginas de estado</h3></div>
-            <ul>
-              <li data-i18n="fl.g4i1">Componentes agrupados con historial de 90 días</li>
-              <li data-i18n="fl.g4i2">Cronología de incidentes y suscriptores por correo</li>
-              <li data-i18n="fl.g4i3">Tema claro, oscuro o automático; tiempos de respuesta opcionales</li>
-              <li data-i18n="fl.g4i4">Feed RSS, insignia SVG de estado y resumen incrustable</li>
-              <li data-i18n="fl.g4i5">Enlace opcional a tu sitio web en la cabecera</li>
-            </ul>
-          </section>
-          <section class="fl-g g5">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg></span>
-            <h3 data-i18n="fl.g5">Automatización</h3></div>
-            <ul>
-              <li data-i18n="fl.g5i1">API REST para todo lo que hace la aplicación</li>
-              <li data-i18n="fl.g5i2">Claves de API para scripts, Terraform y CI</li>
-              <li data-i18n="fl.g5i3">Servidor MCP con OAuth, limitado a espacios de trabajo o proyectos</li>
-            </ul>
-          </section>
-          <section class="fl-g g6">
-            <div class="fl-h"><span class="fl-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg></span>
-            <h3 data-i18n="fl.g6">Equipos y cuenta</h3></div>
-            <ul>
-              <li data-i18n="fl.g6i1">Espacios de trabajo y proyectos, con roles de propietario, administrador y miembro</li>
-              <li data-i18n="fl.g6i2">Invitaciones por correo, acceso con GitHub y verificación en dos pasos</li>
-              <li data-i18n="fl.g6i3">Aplicación en inglés y chino, exportación de datos de la cuenta</li>
-              <li data-i18n="fl.g6i4">Autoalojable en Cloudflare Workers y Postgres, licencia MIT</li>
-            </ul>
-          </section>
-        </div>
       </div>
     </div>
   </div>
 </header>
 
-<!-- 1b · MCP -->
-<section id="mcp">
-  <div class="wrap">
-    <div class="sec-head rv">
-      <span class="eyebrow" data-i18n="mcp.eyebrow">MCP</span>
+<!-- 2 · MCP -->
+<section class="alt" id="mcp">
+  <div class="wrap mcp">
+    <div class="rv">
+      <span class="eyebrow g" data-i18n="mcp.eyebrow">MCP</span>
       <h2 data-i18n="mcp.title">Deja que tu agente de IA gestione la monitorización</h2>
       <p class="lead" data-i18n="mcp.lead">OpenUptime incluye un servidor MCP. Conecta Claude, Cursor o cualquier cliente MCP y pídelo con tus palabras.</p>
+      <ol class="steps">
+        <li><span>1</span><div><h3 data-i18n="mcp.s1t">Conecta tu cliente</h3><p data-i18n="mcp.s1d">Añade la dirección de tu OpenUptime con /api/mcp en cualquier cliente MCP que admita servidores remotos.</p></div></li>
+        <li><span>2</span><div><h3 data-i18n="mcp.s2t">Autoriza con OAuth</h3><p data-i18n="mcp.s2d">Inicia sesión y elige a qué puede acceder el agente: todos los espacios, los seleccionados o solo proyectos concretos. Puedes revocarlo cuando quieras.</p></div></li>
+        <li><span>3</span><div><h3 data-i18n="mcp.s3t">Pide lo que necesites</h3><p data-i18n="mcp.s3d">Crea y pausa monitores, ejecuta comprobaciones, abre y actualiza incidentes. Donde lo permitas, también crea proyectos y espacios.</p><a class="more" href="/docs/mcp" data-i18n="mcp.cta">Leer la guía de MCP →</a></div></li>
+      </ol>
     </div>
-    <div class="timeline rv">
-      <div class="tl">
-        <div class="n">1</div>
-        <h3 data-i18n="mcp.s1t">Conecta tu cliente</h3>
-        <p data-i18n="mcp.s1d">Añade la dirección de tu OpenUptime con /api/mcp en cualquier cliente MCP que admita servidores remotos.</p>
-      </div>
-      <div class="tl">
-        <div class="n">2</div>
-        <h3 data-i18n="mcp.s2t">Autoriza con OAuth</h3>
-        <p data-i18n="mcp.s2d">Inicia sesión y elige a qué puede acceder el agente: todos los espacios, los seleccionados o solo proyectos concretos. Puedes revocarlo cuando quieras.</p>
-      </div>
-      <div class="tl">
-        <div class="n">3</div>
-        <h3 data-i18n="mcp.s3t">Pide lo que necesites</h3>
-        <p data-i18n="mcp.s3d">Crea y pausa monitores, ejecuta comprobaciones, abre y actualiza incidentes. Donde lo permitas, también crea proyectos y espacios.</p>
-        <a href="/docs/mcp" data-i18n="mcp.cta">Leer la guía de MCP →</a>
+    <div class="agent rv" aria-hidden="true">
+      <div class="agent-top"><div class="dots"><i></i><i></i><i></i></div><b>Claude</b><em>openuptime · connected</em></div>
+      <div class="chat">
+        <div class="msg" data-i18n="chat.u1">Añade un monitor para acme.dev/health, cada minuto, con alertas en #incidents.</div>
+        <div class="tool">
+          <div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>create_monitor<em>done</em></div>
+          <pre>{ "type": "http",
+  "target": "https://acme.dev/health",
+  "interval": 60 }</pre>
+        </div>
+        <div class="ok"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span data-i18n="chat.up">El monitor está activo</span><em>200 · 92 ms</em></div>
+        <div class="msg" data-i18n="chat.u2">Páusalo durante el despliegue de esta noche.</div>
+        <div class="tool solo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e0a325" stroke-width="2.4" stroke-linecap="round"><path d="M9 6v12M15 6v12"/></svg>pause_monitor<em>done</em></div>
+        <small data-i18n="chat.ill">Ilustración</small>
       </div>
     </div>
   </div>
 </section>
 
 <!-- 3 · Problem -->
-<section class="band" id="why">
+<section id="why">
   <div class="wrap">
-    <div class="sec-head rv">
+    <div class="head rv">
       <span class="eyebrow" data-i18n="why.eyebrow">El statu quo</span>
       <h2 data-i18n="why.title">Cada opción te obliga a ceder en algo</h2>
       <p class="lead" data-i18n="why.lead">Lo que la mayoría de los equipos quiere es sencillo: alertas fiables, una página de estado que dé gusto enseñar y ningún vendor lock-in.</p>
     </div>
-    <div class="grid g3 rv">
-      <div class="card"><span class="num">$ / mo</span>
-        <h3 data-i18n="why.p1t">Facturas que crecen más rápido que tú</h3>
-        <p data-i18n="why.p1d">Los monitores SaaS cobran por monitor, intervalo, usuario y página de estado. Con cada servicio nuevo, la monitorización se vuelve una partida propia.</p></div>
-      <div class="card"><span class="num">1 box</span>
-        <h3 data-i18n="why.p2t">Un monitor que corre la misma suerte que tus servidores</h3>
-        <p data-i18n="why.p2d">Las herramientas autoalojadas viven en la misma infraestructura que vigilan. Cuando esa máquina o esa red falla, las alertas caen con ella.</p></div>
-      <div class="card"><span class="num">no API</span>
-        <h3 data-i18n="why.p3t">Automatizar sin una API</h3>
-        <p data-i18n="why.p3d">Servicio nuevo, monitor nuevo, más clics. Sin una API completa no puedes integrar la monitorización en Terraform ni en CI.</p></div>
+    <div class="three rv">
+      <div class="pain">
+        <div class="pain-v"><span class="tag">$ / mo</span><div class="rise"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="pain-b"><h3 data-i18n="why.p1t">Facturas que crecen más rápido que tú</h3><p data-i18n="why.p1d">Los monitores SaaS cobran por monitor, intervalo, usuario y página de estado. Con cada servicio nuevo, la monitorización se vuelve una partida propia.</p></div>
+      </div>
+      <div class="pain">
+        <div class="pain-v"><span class="tag">1 box</span><div class="box"><span>app</span><span>monitor</span></div></div>
+        <div class="pain-b"><h3 data-i18n="why.p2t">Un monitor que corre la misma suerte que tus servidores</h3><p data-i18n="why.p2d">Las herramientas autoalojadas viven en la misma infraestructura que vigilan. Cuando esa máquina o esa red falla, las alertas caen con ella.</p></div>
+      </div>
+      <div class="pain">
+        <div class="pain-v"><span class="tag">no API</span><div class="clicks"><span data-i18n="why.new">+ Nuevo monitor</span><span data-i18n="why.new">+ Nuevo monitor</span><span data-i18n="why.new">+ Nuevo monitor</span><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 1.5L10 19z" fill="var(--ink)" stroke="var(--surface)" stroke-width="1.5" stroke-linejoin="round"/></svg></div></div>
+        <div class="pain-b"><h3 data-i18n="why.p3t">Automatizar sin una API</h3><p data-i18n="why.p3d">Servicio nuevo, monitor nuevo, más clics. Sin una API completa no puedes integrar la monitorización en Terraform ni en CI.</p></div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- 4 · Value stack -->
-<section id="features">
+<!-- 4 · Features -->
+<section class="alt" id="features">
   <div class="wrap">
-    <div class="sec-head rv">
-      <span class="eyebrow" data-i18n="feat.eyebrow">Qué incluye</span>
-      <h2 data-i18n="feat.title">Monitorización, alertas y páginas de estado en un solo paquete</h2>
+    <div class="head-row rv">
+      <div>
+        <span class="eyebrow g" data-i18n="feat.eyebrow">Qué incluye</span>
+        <h2 data-i18n="feat.title">Monitorización, alertas y páginas de estado en un solo paquete</h2>
+      </div>
       <p class="lead" data-i18n="feat.lead">Código abierto con licencia MIT. Ejecútalo en Cloudflare o en un único contenedor Docker.</p>
     </div>
     <div class="bento rv">
-      <div class="card b4">
-        <h3 data-i18n="feat.f1t">Comprobaciones que van más allá del código de estado</h3>
-        <p data-i18n="feat.f1d">HTTP, TCP, DNS y heartbeats cada minuto. Valida una palabra clave —o su ausencia—, no solo un 200 OK.</p>
-        <div class="chips"><span>HTTP(S)</span><span>TCP</span><span>DNS</span><span>Heartbeat</span><span>Keyword</span></div>
-        <div class="viz"><div class="logline"><span class="a">12:04:00</span> GET /health <span>200</span> 92ms ✓<br><span class="a">12:05:00</span> GET /health <span>200</span> 88ms ✓<br><span class="a">12:06:00</span> JSON $.status == "ok" <span>pass</span> ✓</div></div>
-      </div>
-      <div class="card b2">
-        <h3 data-i18n="feat.f2t">Incidentes que se explican solos</h3>
-        <p data-i18n="feat.f2d">Los incidentes se abren solos tras fallos consecutivos. Publica actualizaciones de «investigando» a «resuelto» y tus suscriptores reciben un correo.</p>
-        <div class="viz"><div class="sp">
-          <div><span data-i18n="inc.1">Investigando</span><em class="w">14:02</em></div>
-          <div><span data-i18n="inc.2">Identificado</span><em class="w">14:09</em></div>
-          <div><span data-i18n="inc.3">Resuelto</span><em>14:21</em></div>
-        </div></div>
-      </div>
-      <div class="card b2">
-        <h3 data-i18n="feat.f3t">Páginas de estado que inspiran confianza</h3>
-        <p data-i18n="feat.f3d">Componentes agrupados, historial de 90 días, cronología de incidentes y suscriptores por correo.</p>
-        <div class="viz"><div class="sp">
-          <div><span data-i18n="mon.api">API</span><em data-i18n="st.op">Operativo</em></div>
-          <div><span data-i18n="mon.web">Sitio web</span><em data-i18n="st.op">Operativo</em></div>
-          <div><span data-i18n="mon.pay">Webhook de pagos</span><em class="w" data-i18n="st.deg">Degradado</em></div>
-        </div></div>
-      </div>
-      <div class="card b2">
-        <h3 data-i18n="feat.f4t">Alertas donde ya estás</h3>
-        <p data-i18n="feat.f4d">Slack, Lark, Telegram, PagerDuty, correo y webhooks. Elige a qué canales avisa cada monitor.</p>
-        <div class="viz al">
-          <div class="al-r"><div class="al-t"><span class="al-i"><i><svg viewBox="0 0 256 256" width="16" height="16" aria-hidden="true"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg></i>Slack<small>#incidents</small></span><span class="al-i"><i><img src="/icons/lark.png" width="18" height="18" alt="" loading="lazy"></i>Lark<small>Ops group</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#229ED9" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></i>Telegram<small>@oncall</small></span><span class="al-i"><i><svg viewBox="0 0 256 256" width="16" height="16" aria-hidden="true"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg></i>Slack<small>#incidents</small></span><span class="al-i"><i><img src="/icons/lark.png" width="18" height="18" alt="" loading="lazy"></i>Lark<small>Ops group</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#229ED9" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></i>Telegram<small>@oncall</small></span><span class="al-dup" aria-hidden="true"><span class="al-i"><i><svg viewBox="0 0 256 256" width="16" height="16" aria-hidden="true"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg></i>Slack<small>#incidents</small></span><span class="al-i"><i><img src="/icons/lark.png" width="18" height="18" alt="" loading="lazy"></i>Lark<small>Ops group</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#229ED9" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></i>Telegram<small>@oncall</small></span><span class="al-i"><i><svg viewBox="0 0 256 256" width="16" height="16" aria-hidden="true"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg></i>Slack<small>#incidents</small></span><span class="al-i"><i><img src="/icons/lark.png" width="18" height="18" alt="" loading="lazy"></i>Lark<small>Ops group</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#229ED9" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></i>Telegram<small>@oncall</small></span></span></div></div>
-          <div class="al-r rev"><div class="al-t"><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#06AC38" d="M16.965 1.18C15.085.164 13.769 0 10.683 0H3.73v14.55h6.926c2.743 0 4.8-.164 6.61-1.37 1.975-1.303 3.004-3.484 3.004-6.007 0-2.716-1.262-4.896-3.305-5.994zm-5.5 10.326h-4.21V3.113l3.977-.027c3.62-.028 5.43 1.234 5.43 4.128 0 3.113-2.248 4.292-5.197 4.292zM3.73 17.61h3.525V24H3.73Z"/></svg></i>PagerDuty<small>On-call</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></i>Email<small>team@acme.dev</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg></i>Webhook<small>POST</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#06AC38" d="M16.965 1.18C15.085.164 13.769 0 10.683 0H3.73v14.55h6.926c2.743 0 4.8-.164 6.61-1.37 1.975-1.303 3.004-3.484 3.004-6.007 0-2.716-1.262-4.896-3.305-5.994zm-5.5 10.326h-4.21V3.113l3.977-.027c3.62-.028 5.43 1.234 5.43 4.128 0 3.113-2.248 4.292-5.197 4.292zM3.73 17.61h3.525V24H3.73Z"/></svg></i>PagerDuty<small>On-call</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></i>Email<small>team@acme.dev</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg></i>Webhook<small>POST</small></span><span class="al-dup" aria-hidden="true"><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#06AC38" d="M16.965 1.18C15.085.164 13.769 0 10.683 0H3.73v14.55h6.926c2.743 0 4.8-.164 6.61-1.37 1.975-1.303 3.004-3.484 3.004-6.007 0-2.716-1.262-4.896-3.305-5.994zm-5.5 10.326h-4.21V3.113l3.977-.027c3.62-.028 5.43 1.234 5.43 4.128 0 3.113-2.248 4.292-5.197 4.292zM3.73 17.61h3.525V24H3.73Z"/></svg></i>PagerDuty<small>On-call</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></i>Email<small>team@acme.dev</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg></i>Webhook<small>POST</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#06AC38" d="M16.965 1.18C15.085.164 13.769 0 10.683 0H3.73v14.55h6.926c2.743 0 4.8-.164 6.61-1.37 1.975-1.303 3.004-3.484 3.004-6.007 0-2.716-1.262-4.896-3.305-5.994zm-5.5 10.326h-4.21V3.113l3.977-.027c3.62-.028 5.43 1.234 5.43 4.128 0 3.113-2.248 4.292-5.197 4.292zM3.73 17.61h3.525V24H3.73Z"/></svg></i>PagerDuty<small>On-call</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></i>Email<small>team@acme.dev</small></span><span class="al-i"><i><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg></i>Webhook<small>POST</small></span></span></div></div>
+      <div class="cell w4">
+        <div class="cell-v">
+          <div class="pills"><span>HTTP(S)</span><span>TCP</span><span>DNS</span><span>Heartbeat</span><span>Keyword</span></div>
+          <div class="log" aria-hidden="true">
+            <div><span class="t">12:04:00</span><span>GET /health</span><span class="g">200</span><span class="f">92ms</span><span class="e">✓</span></div>
+            <div><span class="t">12:05:00</span><span>GET /health</span><span class="g">200</span><span class="f">88ms</span><span class="e">✓</span></div>
+            <div><span class="t">12:06:00</span><span>JSON $.status == "ok"</span><span class="g">pass</span><span class="e">✓</span></div>
+          </div>
         </div>
+        <div class="cell-b"><h3 data-i18n="feat.f1t">Comprobaciones que van más allá del código de estado</h3><p data-i18n="feat.f1d">HTTP, TCP, DNS y heartbeats cada minuto. Valida una palabra clave —o su ausencia—, no solo un 200 OK.</p></div>
       </div>
-      <div class="card b2">
-        <h3 data-i18n="feat.f5t">API primero, por diseño</h3>
-        <p data-i18n="feat.f5d">Todo lo que hace la interfaz, lo hace la API. Crea monitores, canales y páginas de estado con claves de API.</p>
-        <div class="viz"><div class="code"><span class="k">curl</span> -X POST /api/monitors \
-  -H <span class="s">"Authorization: Bearer $TOKEN"</span> \
-  -d <span class="s">'{"name":"Acme","type":"http","target":"https://acme.dev"}'</span></div></div>
+      <div class="cell">
+        <div class="cell-v"><div class="wcard tline">
+          <i></i><b data-i18n="inc.1">Investigando</b><em>14:02</em><s></s>
+          <i class="b"></i><b data-i18n="inc.2">Identificado</b><em>14:09</em><s></s>
+          <i class="g"></i><b data-i18n="inc.3">Resuelto</b><em>14:21</em>
+        </div></div>
+        <div class="cell-b"><h3 data-i18n="feat.f2t">Incidentes que se explican solos</h3><p data-i18n="feat.f2d">Los incidentes se abren solos tras fallos consecutivos. Publica actualizaciones de «investigando» a «resuelto» y tus suscriptores reciben un correo.</p></div>
+      </div>
+      <div class="cell">
+        <div class="cell-v"><div class="wcard slist">
+          <div><b data-i18n="mon.api">API</b><em data-i18n="st.op">Operativo</em></div>
+          <div><b data-i18n="mon.web">Sitio web</b><em data-i18n="st.op">Operativo</em></div>
+          <div><b data-i18n="mon.pay">Webhook de pagos</b><em class="w" data-i18n="st.deg">Degradado</em></div>
+        </div></div>
+        <div class="cell-b"><h3 data-i18n="feat.f3t">Páginas de estado que inspiran confianza</h3><p data-i18n="feat.f3d">Componentes agrupados, historial de 90 días, cronología de incidentes y suscriptores por correo.</p></div>
+      </div>
+      <div class="cell">
+        <div class="cell-v"><div class="bell">
+          <span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span>
+          <div><span style="--c:#611f69">Slack<small>#incidents</small></span><span style="--c:#2aabee">Telegram<small>@oncall</small></span><span style="--c:var(--ink)">Webhook<small>POST</small></span></div>
+        </div></div>
+        <div class="cell-b"><h3 data-i18n="feat.f4t">Alertas donde ya estás</h3><p data-i18n="feat.f4d">Slack, Lark, Telegram, PagerDuty, correo y webhooks. Elige a qué canales avisa cada monitor.</p></div>
+      </div>
+      <div class="cell">
+        <div class="cell-v"><pre class="curl"><b>curl</b> -X POST /api/monitors \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Acme","type":"http",
+       "target":"https://acme.dev"}'</pre></div>
+        <div class="cell-b"><h3 data-i18n="feat.f5t">API primero, por diseño</h3><p data-i18n="feat.f5d">Todo lo que hace la interfaz, lo hace la API. Crea monitores, canales y páginas de estado con claves de API.</p></div>
+      </div>
+    </div>
+
+    <div class="all rv">
+      <div class="all-h"><p class="cap" data-i18n="fl.t">TODO LO QUE OPENUPTIME SOPORTA</p></div>
+      <div class="all-b">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="true" data-g="1"><span data-i18n="fl.g1">Monitorización</span><small>7</small></button>
+          <button type="button" role="tab" aria-selected="false" data-g="2"><span data-i18n="fl.g2">Incidentes</span><small>5</small></button>
+          <button type="button" role="tab" aria-selected="false" data-g="3"><span data-i18n="fl.g3">Canales de alerta</span><small>2</small></button>
+          <button type="button" role="tab" aria-selected="false" data-g="4"><span data-i18n="fl.g4">Páginas de estado</span><small>5</small></button>
+          <button type="button" role="tab" aria-selected="false" data-g="5"><span data-i18n="fl.g5">Automatización</span><small>3</small></button>
+          <button type="button" role="tab" aria-selected="false" data-g="6"><span data-i18n="fl.g6">Equipos y cuenta</span><small>4</small></button>
+        </div>
+        <div>
+          <ul class="panel on" role="tabpanel" data-g="1">
+            <li data-i18n="fl.g1i1">Comprobaciones HTTP y HTTPS</li>
+            <li data-i18n="fl.g1i2">Puerto TCP, DNS, PostgreSQL, MySQL y Redis</li>
+            <li data-i18n="fl.g1i3">Monitores heartbeat para cron y workers</li>
+            <li data-i18n="fl.g1i4">Palabra clave presente o ausente, estado esperado, método y cabeceras propios</li>
+            <li data-i18n="fl.g1i5">Alertas por umbral de respuesta lenta</li>
+            <li data-i18n="fl.g1i6">Comprobaciones cada minuto como mínimo, con umbral de fallos</li>
+            <li data-i18n="fl.g1i7">Pausa y reanudación, importación y exportación JSON</li>
+          </ul>
+          <ul class="panel" role="tabpanel" data-g="2">
+            <li data-i18n="fl.g2i1">Los incidentes se abren y se resuelven solos</li>
+            <li data-i18n="fl.g2i2">Incidentes manuales con actualizaciones, de «investigando» a «resuelto»</li>
+            <li data-i18n="fl.g2i3">Reconocer incidentes, con registro de quién responde</li>
+            <li data-i18n="fl.g2i4">Ventanas de mantenimiento programado que silencian las alertas</li>
+            <li data-i18n="fl.g2i5">Los envíos fallidos se reintentan; registro completo de alertas</li>
+          </ul>
+          <ul class="panel" role="tabpanel" data-g="3">
+            <li data-i18n="fl.g3i1">Slack, Lark, Telegram, PagerDuty, correo y webhooks</li>
+            <li data-i18n="fl.g3i2">Elige qué canales avisa cada monitor</li>
+          </ul>
+          <ul class="panel" role="tabpanel" data-g="4">
+            <li data-i18n="fl.g4i1">Componentes agrupados con historial de 90 días</li>
+            <li data-i18n="fl.g4i2">Cronología de incidentes y suscriptores por correo</li>
+            <li data-i18n="fl.g4i3">Tema claro, oscuro o automático; tiempos de respuesta opcionales</li>
+            <li data-i18n="fl.g4i4">Feed RSS, insignia SVG de estado y resumen incrustable</li>
+            <li data-i18n="fl.g4i5">Enlace opcional a tu sitio web en la cabecera</li>
+          </ul>
+          <ul class="panel" role="tabpanel" data-g="5">
+            <li data-i18n="fl.g5i1">API REST para todo lo que hace la aplicación</li>
+            <li data-i18n="fl.g5i2">Claves de API para scripts, Terraform y CI</li>
+            <li data-i18n="fl.g5i3">Servidor MCP con OAuth, limitado a espacios de trabajo o proyectos</li>
+          </ul>
+          <ul class="panel" role="tabpanel" data-g="6">
+            <li data-i18n="fl.g6i1">Espacios de trabajo y proyectos, con roles de propietario, administrador y miembro</li>
+            <li data-i18n="fl.g6i2">Invitaciones por correo, acceso con GitHub y verificación en dos pasos</li>
+            <li data-i18n="fl.g6i3">Aplicación en inglés y chino, exportación de datos de la cuenta</li>
+            <li data-i18n="fl.g6i4">Autoalojable en Cloudflare Workers y Postgres, licencia MIT</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- compare -->
-<section class="band">
+<!-- 5 · Compare -->
+<section>
   <div class="wrap">
-    <div class="sec-head rv">
+    <div class="center rv">
       <span class="eyebrow" data-i18n="cmp.eyebrow">Cara a cara</span>
       <h2 data-i18n="cmp.title">Por qué los equipos se cambian</h2>
     </div>
-    <div class="tbl rv">
+    <div class="tbl-w rv"><div class="tbl">
       <div class="tr h"><div></div><div data-i18n="cmp.c1">SaaS alojado</div><div data-i18n="cmp.c2">Autoalojado típico</div><div class="us">OpenUptime</div></div>
-      <div class="tr"><div data-i18n="cmp.r1">Sin servidores que mantener</div><div><span class="m y">✓</span></div><div><span class="m n">—</span></div><div class="us"><span class="m y">✓</span></div></div>
-      <div class="tr"><div data-i18n="cmp.r2">Páginas de estado públicas incluidas</div><div><span class="m y">✓</span></div><div><span class="m p">½</span></div><div class="us"><span class="m y">✓</span></div></div>
-      <div class="tr"><div data-i18n="cmp.r3">API REST completa</div><div><span class="m y">✓</span></div><div><span class="m p">½</span></div><div class="us"><span class="m y">✓</span></div></div>
-      <div class="tr"><div data-i18n="cmp.r4">Tus datos se quedan contigo</div><div><span class="m n">—</span></div><div><span class="m y">✓</span></div><div class="us"><span class="m y">✓</span></div></div>
-      <div class="tr"><div data-i18n="cmp.r5">Gratis para autoalojar</div><div><span class="m n">—</span></div><div><span class="m y">✓</span></div><div class="us"><span class="m y">✓</span></div></div>
-      <div class="tr"><div data-i18n="cmp.r6">Servidor MCP integrado para agentes de IA</div><div><span class="m p">½</span></div><div><span class="m n">—</span></div><div class="us"><span class="m y">✓</span></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- 5 · Proof -->
-<section id="open">
-  <div class="wrap">
-    <div class="sec-head rv">
-      <span class="eyebrow" data-i18n="open.eyebrow">Construido en abierto</span>
-      <h2 data-i18n="open.title">Código, hoja de ruta y debates, todo público</h2>
-      <p class="lead" data-i18n="open.lead">Una herramienta de monitorización tiene que merecer confianza en tu peor día. Por eso cada decisión se toma a la vista.</p>
-    </div>
-    <div class="facts rv">
-      <div class="fact"><b>MIT</b><span data-i18n="open.f1">Licencia que permite uso comercial, modificación y redistribución.</span></div>
-      <div class="fact"><b>0</b><span data-i18n="open.f2">Telemetría en el software. No se envía nada; las analíticas de página solo si las activas.</span></div>
-      <div class="fact"><b data-i18n="open.f3b">Gratis</b><span data-i18n="open.f3">para autoalojar. Usa tu propia cuenta de Cloudflare y Postgres.</span></div>
-    </div>
+      <div class="tr"><div data-i18n="cmp.r1">Sin servidores que mantener</div><div><span class="m y" aria-label="yes"></span></div><div><span class="m n" aria-label="no"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+      <div class="tr"><div data-i18n="cmp.r2">Páginas de estado públicas incluidas</div><div><span class="m y" aria-label="yes"></span></div><div><span class="m p" aria-label="partly"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+      <div class="tr"><div data-i18n="cmp.r3">API REST completa</div><div><span class="m y" aria-label="yes"></span></div><div><span class="m p" aria-label="partly"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+      <div class="tr"><div data-i18n="cmp.r4">Tus datos se quedan contigo</div><div><span class="m n" aria-label="no"></span></div><div><span class="m y" aria-label="yes"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+      <div class="tr"><div data-i18n="cmp.r5">Gratis para autoalojar</div><div><span class="m n" aria-label="no"></span></div><div><span class="m y" aria-label="yes"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+      <div class="tr"><div data-i18n="cmp.r6">Servidor MCP integrado para agentes de IA</div><div><span class="m p" aria-label="partly"></span></div><div><span class="m n" aria-label="no"></span></div><div class="us"><span class="m y" aria-label="yes"></span></div></div>
+    </div></div>
   </div>
 </section>
 
 <!-- 6 · Transformation -->
-<section class="band">
+<section class="alt">
   <div class="wrap">
-    <div class="sec-head rv">
+    <div class="head rv">
       <span class="eyebrow" data-i18n="ba.eyebrow">Otra mañana</span>
       <h2 data-i18n="ba.title">De que te avisen los usuarios a enterarte tú primero</h2>
     </div>
-    <div class="ba rv">
-      <div class="card">
+    <div class="two rv">
+      <div class="ba">
         <h3 data-i18n="ba.before">Antes</h3>
         <ul>
           <li data-i18n="ba.b1">Te enteras a las 2 de la madrugada porque un cliente te escribe</li>
@@ -657,7 +690,7 @@ html,body{overflow-x:clip}
           <li data-i18n="ba.b4">La factura de monitorización llega a fin de mes</li>
         </ul>
       </div>
-      <div class="card after">
+      <div class="ba after">
         <h3 data-i18n="ba.after">Con OpenUptime</h3>
         <ul>
           <li data-i18n="ba.a1">Slack se enciende en cuanto se alcanza el umbral de fallos</li>
@@ -670,25 +703,45 @@ html,body{overflow-x:clip}
   </div>
 </section>
 
-<!-- 7 · Final CTA -->
+<!-- 7 · Open -->
+<section id="open">
+  <div class="wrap">
+    <div class="open-h rv">
+      <div>
+        <span class="eyebrow g" data-i18n="open.eyebrow">Construido en abierto</span>
+        <h2 data-i18n="open.title">Código, hoja de ruta y debates, todo público</h2>
+      </div>
+      <p class="lead" data-i18n="open.lead">Una herramienta de monitorización tiene que merecer confianza en tu peor día. Por eso cada decisión se toma a la vista.</p>
+    </div>
+    <div class="three rv">
+      <div class="fact"><b>MIT</b><span data-i18n="open.f1">Licencia que permite uso comercial, modificación y redistribución.</span></div>
+      <div class="fact"><b class="g">0</b><span data-i18n="open.f2">Telemetría en el software. No se envía nada; las analíticas de página solo si las activas.</span></div>
+      <div class="fact"><b data-i18n="open.f3b">Gratis</b><span data-i18n="open.f3">para autoalojar. Usa tu propia cuenta de Cloudflare y Postgres, o ejecútalo con Docker.</span></div>
+    </div>
+    <a class="clone rv" href="https://github.com/becoolme/openuptime"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span><span class="p">$</span> git clone github.com/becoolme/openuptime</span><em>GitHub →</em></a>
+  </div>
+</section>
+
+<!-- 8 · Final CTA -->
 <section class="final">
+  <div class="final-bars" aria-hidden="true"><i style="height:30%"></i><i style="height:67%"></i><i style="height:34%"></i><i style="height:71%"></i><i style="height:38%"></i><i style="height:75%"></i><i style="height:42%"></i><i style="height:79%"></i><i style="height:46%"></i><i style="height:83%"></i><i style="height:50%"></i><i style="height:87%"></i><i style="height:54%"></i><i style="height:91%"></i><i style="height:58%"></i><i style="height:95%"></i><i style="height:62%"></i><i style="height:99%"></i><i style="height:66%"></i><i style="height:33%"></i><i style="height:70%"></i><i style="height:37%"></i><i style="height:74%"></i><i style="height:41%;background:#e0a325"></i><i style="height:78%"></i><i style="height:45%"></i><i style="height:82%"></i><i style="height:49%"></i><i style="height:86%"></i><i style="height:53%"></i><i style="height:90%"></i><i style="height:57%"></i><i style="height:94%"></i><i style="height:61%"></i><i style="height:98%"></i><i style="height:65%"></i><i style="height:32%"></i><i style="height:69%"></i><i style="height:36%"></i><i style="height:73%"></i><i style="height:40%"></i><i style="height:77%;background:#d93a3a"></i><i style="height:44%"></i><i style="height:81%"></i><i style="height:48%"></i><i style="height:85%"></i><i style="height:52%"></i><i style="height:89%"></i><i style="height:56%"></i><i style="height:93%"></i><i style="height:60%"></i><i style="height:97%"></i><i style="height:64%"></i><i style="height:31%"></i><i style="height:68%"></i><i style="height:35%"></i><i style="height:72%"></i><i style="height:39%"></i><i style="height:76%"></i><i style="height:43%"></i></div>
   <div class="wrap rv">
     <h2 data-i18n="fin.title">Monitorización que sigue en pie cuando tus servidores caen</h2>
-    <p class="lead" data-i18n="fin.lead">Despliégalo en tu cuenta de Cloudflare. ¿No te convence? Elimina el Worker y no queda nada.</p>
+    <p class="lead" data-i18n="fin.lead">Despliégalo en Cloudflare o ejecútalo donde quieras con Docker.</p>
     <div class="cta-row">
-      <a class="btn primary" href="/app"><span data-i18n="fin.cta1">Pruébalo ahora</span><span aria-hidden="true">→</span></a>
+      <a class="btn go" href="/app"><span data-i18n="fin.cta1">Pruébalo ahora</span><span aria-hidden="true">→</span></a>
       <a class="btn" href="/docs" data-i18n="fin.cta2">Leer la documentación</a>
     </div>
   </div>
 </section>
 
-<!-- 8 · Footer -->
+<!-- 9 · Footer -->
 <footer>
   <div class="wrap">
     <div class="f-grid">
       <div>
-        <a class="logo" href="#top" style="margin-bottom:14px;display:inline-flex"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>OpenUptime</a>
-        <p style="max-width:34ch" data-i18n="ft.tag">Monitorización de uptime y páginas de estado de código abierto para Cloudflare Workers y Postgres.</p>
+        <a class="logo" href="#top"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>OpenUptime</a>
+        <p data-i18n="ft.tag">Monitorización de uptime y páginas de estado de código abierto para Cloudflare Workers y Postgres, o Docker.</p>
         <a class="f-status" id="f-status" href="/status/openuptime" hidden><i></i><span id="f-status-t"></span></a>
       </div>
       <div><h4 data-i18n="ft.product">Producto</h4><a href="#features" data-i18n="nav.features">Funciones</a><a href="/ios" data-i18n="ft.ios">App para iOS</a><a href="/alternatives" data-i18n="ft.alt">Alternativas</a><a href="/for" data-i18n="ft.for">Casos de uso</a><a href="/status/openuptime" id="ft-status" data-i18n="ft.status" hidden>Estado del sistema</a></div>
@@ -718,11 +771,19 @@ html,body{overflow-x:clip}
 // English lives in the HTML itself; it is captured once and used as the fallback.
 var T={
 'zh-CN':{
+'why.new':"+ 新建监控",
+'chat.ill':"示意图",
+'chat.u2':"今晚发布时先暂停它。",
+'chat.up':"监控正常",
+'chat.u1':"给 acme.dev/health 加个监控，每分钟检测一次，告警发到 #incidents。",
+'inc.t':"事件",
+'hero.h1d':"来管。",
+'hero.h1c':"AI Agent",
  title:'OpenUptime — 开源网站监控、可用性监控与状态页',
  desc:'开源的网站监控与可用性监控（Uptime），不按监控项收费。支持 HTTP、TCP、DNS 和心跳检测，宕机时通过 Slack、飞书 / Lark、Telegram、邮件告警，自带公开状态页。',
  'nav.features':'功能',
  'inc.1':'排查中','inc.2':'已定位原因','inc.3':'已恢复','hero.tag':'开源','hero.agents':'为 Agent 而生','mcp.eyebrow':'MCP','mcp.title':'让 AI Agent 替你管监控','mcp.lead':'OpenUptime 自带 MCP 服务。接入 Claude、Cursor 或任意 MCP 客户端，用自然语言就能操作。','mcp.s1t':'接入客户端','mcp.s1d':'在支持远程服务的 MCP 客户端里，添加你的 OpenUptime 地址加上 /api/mcp。','mcp.s2t':'用 OAuth 授权','mcp.s2d':'登录后选择 Agent 能访问的范围：所有工作区、选定的工作区，或只有选定的项目。可随时撤销。','mcp.s3t':'直接提需求','mcp.s3d':'创建监控、暂停、立即检测、创建和更新事件。在你允许的范围内，Agent 还能创建项目和工作区。','mcp.cta':'阅读 MCP 文档 →',
- 'hero.h1a':'价格实惠的可用性监控，','hero.h1b':'交给 AI Agent 来管。',
+ 'hero.h1a':'价格实惠的可用性监控，','hero.h1b':"交给",
  'hero.lead':'检测、告警、状态页，用 Claude、Cursor 或任意 MCP 客户端就能管理。开源，没有按监控项收费。',
  'nav.signin':'登录','nav.app':'进入控制台','hero.cta1':'立即试用','hero.cta2':'查看在线演示','copy':'复制','copied':'已复制',
  'hero.note':'开源（MIT）。软件本身不收集遥测数据。',
@@ -744,20 +805,28 @@ var T={
  'cmp.eyebrow':'横向对比','cmp.title':'他们为什么换过来','cmp.c1':'SaaS 托管服务','cmp.c2':'常见自建方案',
  'cmp.r1':'不用维护服务器','cmp.r2':'自带公开状态页','cmp.r3':'完整的 REST API','cmp.r4':'数据在自己手里','cmp.r5':'可免费自托管','cmp.r6':'内置 MCP 服务，AI Agent 直接可用',
  'open.eyebrow':'公开开发','open.title':'代码、路线图和讨论，全部公开','open.lead':'监控工具得在你最糟糕的那天依然可靠，所以每个决定，都在你看得见的地方做出。',
- 'open.f1':'协议，商用、修改和再分发都不受限制。','open.f2':'软件自带的遥测。不会向任何地方回传数据；页面统计需要你自己开启。','open.f3b':'免费','open.f3':'自托管。用你自己的 Cloudflare 账号和 Postgres 即可。',
+ 'open.f1':'协议，商用、修改和再分发都不受限制。','open.f2':'软件自带的遥测。不会向任何地方回传数据；页面统计需要你自己开启。','open.f3b':'免费','open.f3':"自托管。用你自己的 Cloudflare 账号和 Postgres，或者用 Docker 运行。",
  'ba.eyebrow':'换一种早晨','ba.title':'从“被用户告知”，到“自己先知道”',
  'ba.before':'以前','ba.after':'用上 OpenUptime 之后',
  'ba.b1':'凌晨 2 点被客户的消息吵醒，才知道服务挂了','ba.b2':'状态页靠手动更新，经常忘','ba.b3':'自建监控和服务器一起宕机，什么都发不出来','ba.b4':'月底账单到了，才知道监控花了多少',
  'ba.a1':'一达到失败阈值，Slack 立刻提醒','ba.a2':'状态页自动切换，并附带时间线','ba.a3':'监控即代码，跟着服务一起上线','ba.a4':'一个 Worker 加你自己的 Postgres，成本自己说了算',
- 'fin.title':'服务器挂了，监控不会挂','fin.lead':'部署在你自己的 Cloudflare 账号里。用着不合适？删掉 Worker，不会留下任何东西。','fin.cta1':'立即试用','fin.cta2':'阅读文档',
- 'ft.tag':'面向 Cloudflare Workers 与 Postgres 的开源可用性监控与状态页。','ft.alt':'替代方案对比','ft.for':'使用场景','ft.ios':'iOS 应用','ft.product':'产品','ft.selfhost':'自托管','ft.status':'服务状态','ft.embed':'嵌入状态','ft.changelog':'更新日志','ft.dev':'开发者','ft.docs':'文档','ft.api':'API 参考','ft.contrib':'贡献指南','ft.comm':'社区','ft.sec':'安全披露','ft.priv':'隐私','ft.terms':'服务条款','ft.legal':'© 2026 OpenUptime 贡献者 · MIT 许可证','ft.built':'公开开发。'
+ 'fin.title':'服务器挂了，监控不会挂','fin.lead':"部署到 Cloudflare，或用 Docker 在任何地方运行。",'fin.cta1':'立即试用','fin.cta2':'阅读文档',
+ 'ft.tag':"面向 Cloudflare Workers 与 Postgres（或 Docker）的开源可用性监控与状态页。",'ft.alt':'替代方案对比','ft.for':'使用场景','ft.ios':'iOS 应用','ft.product':'产品','ft.selfhost':'自托管','ft.status':'服务状态','ft.embed':'嵌入状态','ft.changelog':'更新日志','ft.dev':'开发者','ft.docs':'文档','ft.api':'API 参考','ft.contrib':'贡献指南','ft.comm':'社区','ft.sec':'安全披露','ft.priv':'隐私','ft.terms':'服务条款','ft.legal':'© 2026 OpenUptime 贡献者 · MIT 许可证','ft.built':'公开开发。'
 },
 ja:{
+'why.new':"+ 新しいモニター",
+'chat.ill':"イメージ",
+'chat.u2':"今夜のデプロイ中は一時停止して。",
+'chat.up':"モニターは正常",
+'chat.u1':"acme.dev/health のモニターを追加して。1分ごとにチェックして、#incidents に通知。",
+'inc.t':"インシデント",
+'hero.h1d':"に任せられる。",
+'hero.h1c':"AIエージェント",
  title:'OpenUptime — 手頃な価格のUptime監視とステータスページ',
  desc:'モニター数による課金のない、オープンソースのUptime監視。HTTP・TCP・DNS・ハートビート監視、Slack・Lark・Telegram・メール通知、公開ステータスページに対応します。',
  'nav.features':'機能',
  'inc.1':'調査中','inc.2':'原因特定','inc.3':'解決済み','hero.tag':'オープンソース','hero.agents':'エージェント対応','mcp.eyebrow':'MCP','mcp.title':'監視の運用をAIエージェントに任せる','mcp.lead':'OpenUptimeにはMCPサーバーが付属しています。ClaudeやCursorなどのMCPクライアントをつなぎ、普通の言葉で頼めます。','mcp.s1t':'クライアントを接続','mcp.s1d':'リモートサーバーに対応したMCPクライアントに、OpenUptimeのアドレスと /api/mcp を追加します。','mcp.s2t':'OAuthで承認','mcp.s2d':'ログインして、エージェントが触れる範囲（すべてのワークスペース、選んだワークスペース、選んだプロジェクトのみ）を選びます。いつでも取り消せます。','mcp.s3t':'やりたいことを頼む','mcp.s3d':'モニターの作成・一時停止、即時チェック、インシデントの作成と更新。許可した範囲ではプロジェクトやワークスペースの作成もできます。','mcp.cta':'MCPガイドを読む →',
- 'hero.h1a':'手頃な価格のUptime監視、','hero.h1b':'AIエージェントに任せられる。',
+ 'hero.h1a':'手頃な価格のUptime監視、','hero.h1b':"あなたの",
  'hero.lead':'監視もアラートもステータスページも、ClaudeやCursor、任意のMCPクライアントから操作できます。オープンソースで、モニター数による課金はありません。',
  'nav.signin':'ログイン','nav.app':'ダッシュボード','hero.cta1':'今すぐ試す','hero.cta2':'ライブデモを見る','copy':'コピー','copied':'コピー済み',
  'hero.note':'オープンソース（MIT）。ソフトウェア自体はテレメトリを送信しません。',
@@ -779,20 +848,28 @@ ja:{
  'cmp.eyebrow':'比較','cmp.title':'チームが乗り換える理由','cmp.c1':'ホスト型SaaS','cmp.c2':'一般的なセルフホスト',
  'cmp.r1':'サーバー運用が不要','cmp.r2':'公開ステータスページを標準搭載','cmp.r3':'完全なREST API','cmp.r4':'データは手元に残る','cmp.r5':'セルフホストは無料','cmp.r6':'AIエージェント向けMCPサーバーを内蔵',
  'open.eyebrow':'オープンに開発','open.title':'コードもロードマップも議論も、すべて公開','open.lead':'監視ツールは、最悪の日にこそ信頼できなければなりません。だから、あらゆる判断を見える場所で行います。',
- 'open.f1':'ライセンス。商用利用、改変、再配布が自由です。','open.f2':'ソフトウェアに組み込まれたテレメトリ。外部への送信はありません。ページ解析は有効にした場合のみ動作します。','open.f3b':'無料','open.f3':'でセルフホストできます。ご自身の Cloudflare アカウントと Postgres をお使いください。',
+ 'open.f1':'ライセンス。商用利用、改変、再配布が自由です。','open.f2':'ソフトウェアに組み込まれたテレメトリ。外部への送信はありません。ページ解析は有効にした場合のみ動作します。','open.f3b':'無料','open.f3':"でセルフホストできます。ご自身の Cloudflare アカウントと Postgres、または Docker で動かせます。",
  'ba.eyebrow':'朝の景色が変わる','ba.title':'「知らされる」から「先に知る」へ',
  'ba.before':'これまで','ba.after':'OpenUptimeなら',
  'ba.b1':'深夜2時、顧客からの連絡で初めて障害に気づく','ba.b2':'ステータスページは手動更新で、更新されないことも','ba.b3':'自前の監視がサーバーごと落ちて、障害に気づけない','ba.b4':'月末の請求を見て、初めて監視のコストを知る',
  'ba.a1':'失敗のしきい値に達した瞬間にSlackが鳴る','ba.a2':'ステータスページが自動で切り替わり、時系列も残る','ba.a3':'監視をコードで管理し、サービスと一緒にリリース','ba.a4':'WorkerとPostgresだけ。コストは自分で決められる',
- 'fin.title':'サーバーが落ちても、監視は落ちない','fin.lead':'自分のCloudflareアカウントにデプロイ。合わなければWorkerを削除するだけ。何も残りません。','fin.cta1':'今すぐ試す','fin.cta2':'ドキュメントを読む',
- 'ft.tag':'Cloudflare WorkersとPostgres向けの、オープンソースのUptime監視とステータスページ。','ft.alt':'代替ツールとの比較','ft.for':'ユースケース','ft.ios':'iOS アプリ','ft.product':'プロダクト','ft.selfhost':'セルフホスト','ft.status':'システム状況','ft.embed':'ステータスを埋め込む','ft.changelog':'更新履歴','ft.dev':'開発者','ft.docs':'ドキュメント','ft.api':'APIリファレンス','ft.contrib':'コントリビュート','ft.comm':'コミュニティ','ft.sec':'セキュリティ','ft.priv':'プライバシー','ft.terms':'利用規約','ft.legal':'© 2026 OpenUptime contributors · MITライセンス','ft.built':'オープンに開発中。'
+ 'fin.title':'サーバーが落ちても、監視は落ちない','fin.lead':"Cloudflare にデプロイ、または Docker でどこでも動かせます。",'fin.cta1':'今すぐ試す','fin.cta2':'ドキュメントを読む',
+ 'ft.tag':"Cloudflare WorkersとPostgres、またはDocker向けの、オープンソースのUptime監視とステータスページ。",'ft.alt':'代替ツールとの比較','ft.for':'ユースケース','ft.ios':'iOS アプリ','ft.product':'プロダクト','ft.selfhost':'セルフホスト','ft.status':'システム状況','ft.embed':'ステータスを埋め込む','ft.changelog':'更新履歴','ft.dev':'開発者','ft.docs':'ドキュメント','ft.api':'APIリファレンス','ft.contrib':'コントリビュート','ft.comm':'コミュニティ','ft.sec':'セキュリティ','ft.priv':'プライバシー','ft.terms':'利用規約','ft.legal':'© 2026 OpenUptime contributors · MITライセンス','ft.built':'オープンに開発中。'
 },
 es:{
+'why.new':"+ Nuevo monitor",
+'chat.ill':"Ilustración",
+'chat.u2':"Páusalo durante el despliegue de esta noche.",
+'chat.up':"El monitor está activo",
+'chat.u1':"Añade un monitor para acme.dev/health, cada minuto, con alertas en #incidents.",
+'inc.t':"Incidente",
+'hero.h1d':"puede gestionar.",
+'hero.h1c':"agente de IA",
  title:'OpenUptime — Monitorización de uptime asequible y páginas de estado',
  desc:'Monitorización de uptime de código abierto, sin tarifas por monitor. Comprobaciones HTTP, TCP, DNS y heartbeat, alertas por Slack, Lark, Telegram y correo, y páginas de estado públicas.',
  'nav.features':'Funciones',
  'inc.1':'Investigando','inc.2':'Identificado','inc.3':'Resuelto','hero.tag':'Código abierto','hero.agents':'Pensado para agentes','mcp.eyebrow':'MCP','mcp.title':'Deja que tu agente de IA gestione la monitorización','mcp.lead':'OpenUptime incluye un servidor MCP. Conecta Claude, Cursor o cualquier cliente MCP y pídelo con tus palabras.','mcp.s1t':'Conecta tu cliente','mcp.s1d':'Añade la dirección de tu OpenUptime con /api/mcp en cualquier cliente MCP que admita servidores remotos.','mcp.s2t':'Autoriza con OAuth','mcp.s2d':'Inicia sesión y elige a qué puede acceder el agente: todos los espacios, los seleccionados o solo proyectos concretos. Puedes revocarlo cuando quieras.','mcp.s3t':'Pide lo que necesites','mcp.s3d':'Crea y pausa monitores, ejecuta comprobaciones, abre y actualiza incidentes. Donde lo permitas, también crea proyectos y espacios.','mcp.cta':'Leer la guía de MCP →',
- 'hero.h1a':'Monitorización de uptime asequible','hero.h1b':'que tu agente de IA puede gestionar.',
+ 'hero.h1a':'Monitorización de uptime asequible','hero.h1b':"que tu",
  'hero.lead':'Comprobaciones, alertas y páginas de estado que gestionas desde Claude, Cursor o cualquier cliente MCP. Código abierto, sin tarifas por monitor.',
  'nav.signin':'Iniciar sesión','nav.app':'Panel','hero.cta1':'Pruébalo ahora','hero.cta2':'Ver demo en vivo','copy':'Copiar','copied':'Copiado',
  'hero.note':'Código abierto (MIT). El software no envía telemetría.',
@@ -814,13 +891,13 @@ es:{
  'cmp.eyebrow':'Cara a cara','cmp.title':'Por qué los equipos se cambian','cmp.c1':'SaaS alojado','cmp.c2':'Autoalojado típico',
  'cmp.r1':'Sin servidores que mantener','cmp.r2':'Páginas de estado públicas incluidas','cmp.r3':'API REST completa','cmp.r4':'Tus datos se quedan contigo','cmp.r5':'Gratis para autoalojar','cmp.r6':'Servidor MCP integrado para agentes de IA',
  'open.eyebrow':'Construido en abierto','open.title':'Código, hoja de ruta y debates, todo público','open.lead':'Una herramienta de monitorización tiene que merecer confianza en tu peor día. Por eso cada decisión se toma a la vista.',
- 'open.f1':'Licencia que permite uso comercial, modificación y redistribución.','open.f2':'Telemetría en el software. No se envía nada; las analíticas de página solo si las activas.','open.f3b':'Gratis','open.f3':'para autoalojar. Usa tu propia cuenta de Cloudflare y Postgres.',
+ 'open.f1':'Licencia que permite uso comercial, modificación y redistribución.','open.f2':'Telemetría en el software. No se envía nada; las analíticas de página solo si las activas.','open.f3b':'Gratis','open.f3':"para autoalojar. Usa tu propia cuenta de Cloudflare y Postgres, o ejecútalo con Docker.",
  'ba.eyebrow':'Otra mañana','ba.title':'De que te avisen los usuarios a enterarte tú primero',
  'ba.before':'Antes','ba.after':'Con OpenUptime',
  'ba.b1':'Te enteras a las 2 de la madrugada porque un cliente te escribe','ba.b2':'La página de estado se actualiza a mano, si es que se actualiza','ba.b3':'Tu monitor autoalojado cae junto con el servidor donde corre','ba.b4':'La factura de monitorización llega a fin de mes',
  'ba.a1':'Slack se enciende en cuanto se alcanza el umbral de fallos','ba.a2':'La página de estado cambia sola, con su cronología','ba.a3':'Monitores como código, desplegados junto al servicio','ba.a4':'Workers más un Postgres tuyo. Tú decides cuánto cuesta.',
- 'fin.title':'Monitorización que sigue en pie cuando tus servidores caen','fin.lead':'Despliégalo en tu cuenta de Cloudflare. ¿No te convence? Elimina el Worker y no queda nada.','fin.cta1':'Pruébalo ahora','fin.cta2':'Leer la documentación',
- 'ft.tag':'Monitorización de uptime y páginas de estado de código abierto para Cloudflare Workers y Postgres.','ft.alt':'Alternativas','ft.for':'Casos de uso','ft.ios':'App para iOS','ft.product':'Producto','ft.selfhost':'Autoalojamiento','ft.status':'Estado del sistema','ft.embed':'Insertar estado','ft.changelog':'Novedades','ft.dev':'Desarrolladores','ft.docs':'Documentación','ft.api':'Referencia de la API','ft.contrib':'Contribuir','ft.comm':'Comunidad','ft.sec':'Seguridad','ft.priv':'Privacidad','ft.terms':'Términos','ft.legal':'© 2026 colaboradores de OpenUptime · Licencia MIT','ft.built':'Construido en abierto.'
+ 'fin.title':'Monitorización que sigue en pie cuando tus servidores caen','fin.lead':"Despliégalo en Cloudflare o ejecútalo donde quieras con Docker.",'fin.cta1':'Pruébalo ahora','fin.cta2':'Leer la documentación',
+ 'ft.tag':"Monitorización de uptime y páginas de estado de código abierto para Cloudflare Workers y Postgres, o Docker.",'ft.alt':'Alternativas','ft.for':'Casos de uso','ft.ios':'App para iOS','ft.product':'Producto','ft.selfhost':'Autoalojamiento','ft.status':'Estado del sistema','ft.embed':'Insertar estado','ft.changelog':'Novedades','ft.dev':'Desarrolladores','ft.docs':'Documentación','ft.api':'Referencia de la API','ft.contrib':'Contribuir','ft.comm':'Comunidad','ft.sec':'Seguridad','ft.priv':'Privacidad','ft.terms':'Términos','ft.legal':'© 2026 colaboradores de OpenUptime · Licencia MIT','ft.built':'Construido en abierto.'
 }};
 
 var EN={},root=document.documentElement,nodes=document.querySelectorAll('[data-i18n]');
@@ -874,12 +951,12 @@ function renderMonitors(){
     var r=rng(m.seed),bars='';
     for(var i=0;i<N;i++){
       var c=m.d.indexOf(i)>-1?'d':m.w.indexOf(i)>-1?'w':'';
-      var h=c?100:(62+Math.floor(r()*38));
-      bars+='<i class="'+c+'" style="height:'+h+'%"></i>';
+      r();
+      bars+='<i'+(c?' class="'+c+'"':'')+'></i>';
     }
     box.insertAdjacentHTML('beforeend',
-      '<div class="mon"><div class="mon-n"><i></i><div>'+(d[m.k]||EN[m.k])+'<small>'+m.m+'</small></div></div>'+
-      '<div class="bars">'+bars+'</div><div class="mon-v"><b>'+m.u+'</b>'+m.ms+'</div></div>');
+      '<div class="mon"><div class="mon-n"><i'+(m.w.length||m.d.length?' class="w"':'')+'></i><b>'+(d[m.k]||EN[m.k])+'</b><small>'+m.m+'</small><span>'+m.u+'</span></div>'+
+      '<div class="bars">'+bars+'</div></div>');
   });
 }
 
@@ -892,6 +969,14 @@ function renderMonitors(){
   menu.addEventListener('click',function(e){var a=e.target.closest('a[data-l]');if(a)document.cookie='ou_lang='+a.dataset.l+';path=/;max-age=31536000;samesite=lax'});
   document.addEventListener('click',close);
   document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+})();
+/* feature list tabs */
+(function(){
+  var tabs=document.querySelectorAll('.tabs [data-g]'),panels=document.querySelectorAll('.panel[data-g]');
+  tabs.forEach(function(t){t.addEventListener('click',function(){
+    tabs.forEach(function(b){b.setAttribute('aria-selected',b===t)});
+    panels.forEach(function(p){p.classList.toggle('on',p.dataset.g===t.dataset.g)});
+  })});
 })();
 document.getElementById('theme').addEventListener('click',function(){
   setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
