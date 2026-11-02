@@ -14,6 +14,9 @@ const CLAIM_LIMIT = 1000;
 const MAX_ROUNDS = 10;
 /** Without a queue the checks run inside the cron invocation; stay under the Free plan's 50 subrequests. */
 const INLINE_LIMIT = 40;
+/** No transaction of the app takes minutes; one open this long belongs to a worker that is gone. */
+const STUCK_TRANSACTION_SEC = 300;
+const OVERDUE_SEC = 600;
 
 /** Checks of one cron tick are spread over this many delay slots so they don't all hit the network in the same second. */
 const SLOTS = 6;
@@ -104,6 +107,13 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
   if (new Date().getMinutes() === 0) await repo.purgeExpired();
   // reminders and reports are claimed in the database before they are sent, so a coarse cadence is enough
   if (new Date().getMinutes() % 5 === 0) {
+    // A worker killed mid-transaction can leave its connection open and its rows locked; claims skip locked monitors
+    // without a word, so end such sessions and say when monitors fall behind.
+    await step("stuck work", async () => {
+      const stuck = await repo.endStuckWork?.({ transactionSec: STUCK_TRANSACTION_SEC, overdueSec: OVERDUE_SEC });
+      if (stuck?.ended) console.error(`ended ${stuck.ended} database sessions stuck in a transaction`);
+      if (stuck?.overdue) console.error(`${stuck.overdue} monitors are more than ${OVERDUE_SEC / 60} minutes overdue`);
+    });
     await sendMaintenanceReminders(repo, entitlements).catch((e) => console.error("maintenance reminders failed", e));
     await sendMonthlyReports(repo, new Date(), entitlements).catch((e) => console.error("monthly reports failed", e));
   }

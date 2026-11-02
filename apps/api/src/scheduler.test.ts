@@ -75,6 +75,27 @@ describe("housekeeping", () => {
     expect(failing.called).toEqual(all);
     error.mockRestore();
   });
+
+  it("ends stuck transactions and reports overdue monitors every five minutes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { repo } = idleRepo(async () => ({ mcpAlerts: false, deliveries: false, followUps: false }));
+      const asked: unknown[] = [];
+      Object.assign(repo, { endStuckWork: async (o: unknown) => (asked.push(o), { ended: 2, overdue: 3 }) });
+      vi.setSystemTime(new Date("2026-01-01T00:04:00Z"));
+      await runDueChecks(repo);
+      expect(asked).toEqual([]);
+      vi.setSystemTime(new Date("2026-01-01T00:05:00Z"));
+      await runDueChecks(repo);
+      expect(asked).toEqual([{ transactionSec: 300, overdueSec: 600 }]);
+      expect(error).toHaveBeenCalledWith("ended 2 database sessions stuck in a transaction");
+      expect(error).toHaveBeenCalledWith("3 monitors are more than 10 minutes overdue");
+    } finally {
+      error.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("queue delivery", () => {

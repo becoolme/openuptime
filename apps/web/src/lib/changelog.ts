@@ -27,6 +27,27 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "stuck-transactions-ended", date: "2026-11-02", edition: "community",
+    title: { en: "Monitors no longer stall on stuck sessions", zh: "监控不再被卡住的会话拖停" },
+    summary: { en: "A worker that stops in the middle of writing a result no longer keeps its monitors from being checked.", zh: "Worker 在写入检测结果的中途停止后，不会再让相关监控一直无法检测。" },
+    points: [
+      { en: "When a worker stopped mid-transaction, its database connection could stay open and keep the monitor's rows locked, so the scheduler skipped those monitors until someone ended the session.", zh: "以前 Worker 在事务中途停止时，数据库连接可能一直不断开、持续锁住监控的数据行，调度器会一直跳过这些监控，直到有人手动结束该会话。" },
+      { en: "Every five minutes the scheduler now ends the app's own database sessions whose transaction has been open for more than five minutes.", zh: "现在调度器每五分钟结束一次本应用自己的、事务已开启超过五分钟的数据库会话。" },
+      { en: "It also logs an error when unpaused monitors are more than ten minutes overdue, so a stalled schedule shows up in the logs.", zh: "如果有未暂停的监控超时十分钟以上仍未检测，调度器也会记录一条错误日志，调度停滞能在日志中看到。" },
+    ],
+  },
+  {
+    id: "lighter-api-on-workers", date: "2026-11-02", edition: "community",
+    title: { en: "Less work per request and check", zh: "请求和检测的开销更小" },
+    summary: { en: "The API does less per request, per check and per scheduler run, which matters most on the Cloudflare Workers Free plan.", zh: "API 处理每个请求、每次检测和每次调度时的工作量都减少了，这对 Cloudflare Workers 免费套餐最有帮助。" },
+    points: [
+      { en: "A heartbeat ping now runs 9 database statements instead of 13, and a scheduled check saves the same four.", zh: "一次心跳上报现在执行 9 条数据库语句，原来是 13 条；每次定时检测同样少 4 条。" },
+      { en: "Heartbeat pings, health checks and public status pages no longer load the sign-in library.", zh: "心跳上报、健康检查和公开状态页不再加载登录相关的库。" },
+      { en: "A scheduler run with no alerts to send, retry or repeat skips the alert housekeeping queries.", zh: "没有需要发送、重试或重复提醒的告警时，调度器会跳过告警相关的维护查询。" },
+      { en: "The Worker bundle is about 720 KB smaller.", zh: "Worker 打包体积减小约 720 KB。" },
+    ],
+  },
+  {
     id: "spread-check-schedule", date: "2026-11-02", edition: "community",
     title: { en: "Checks spread over their interval", zh: "检测分散到整个间隔" },
     summary: { en: "Monitors that share an interval no longer all run in the same minute.", zh: "间隔相同的监控项不再挤在同一分钟内检测。" },

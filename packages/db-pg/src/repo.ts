@@ -1406,6 +1406,15 @@ export function createRepo(db: DbExecutor): Repo {
           and (next_reminder_at <= now() or next_escalation_at <= now())) as follow_ups`);
       return { mcpAlerts: row.mcp_alerts, deliveries: row.deliveries, followUps: row.follow_ups };
     },
+    async endStuckWork(o) {
+      // Only sessions of this role, database and application name; pg_terminate_backend runs on the filtered rows alone.
+      const [row] = await db.execute<{ ended: number; overdue: number }>(sql`select
+        (select count(*) filter (where pg_terminate_backend(s.pid)) from (select pid from pg_stat_activity
+          where usename = current_user and datname = current_database() and application_name = current_setting('application_name')
+            and pid <> pg_backend_pid() and xact_start < now() - make_interval(secs => ${o.transactionSec})) s)::int as ended,
+        (select count(*) from monitor where not paused and next_check_at < now() - make_interval(secs => ${o.overdueSec}))::int as overdue`);
+      return { ended: Number(row.ended), overdue: Number(row.overdue) };
+    },
     async sweepStuckDeliveries(o) {
       const t = schema.alertDelivery;
       // an interrupted attempt counts as an attempt: after the last one the row is failed for good

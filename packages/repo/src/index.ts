@@ -695,6 +695,12 @@ export interface Repo {
    * be nothing to do, never false when there is. Optional: without it every housekeeping step runs on every tick.
    */
   pendingHousekeeping?(): Promise<{ mcpAlerts: boolean; deliveries: boolean; followUps: boolean }>;
+  /**
+   * End this app's database sessions whose transaction has been open longer than `transactionSec` (a worker that died
+   * mid-transaction keeps its row locks, and claims skip locked monitors), and count unpaused monitors overdue by more than
+   * `overdueSec`. Optional: a repo without it does neither.
+   */
+  endStuckWork?(o: { transactionSec: number; overdueSec: number }): Promise<{ ended: number; overdue: number }>;
   /** All alerts of one incident, oldest first. */
   incidentDeliveries(orgId: string, incidentId: string): Promise<AlertDelivery[]>;
   channelsByIds(orgId: string, ids: string[]): Promise<AlertChannel[]>;

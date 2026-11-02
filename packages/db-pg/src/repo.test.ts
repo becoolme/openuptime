@@ -527,6 +527,30 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
     await db.update(schema.incident).set({ resolvedAt: new Date(), nextEscalationAt: null }).where(eq(schema.incident.id, reminder.id));
   });
 
+  it("ends only this app's sessions stuck in a transaction", async () => {
+    // a name of its own keeps the sweep away from the sessions of other suites running at the same time
+    const name = `openuptime-test-${crypto.randomUUID().slice(0, 8)}`;
+    const own = createDb(url!, { max: 2, applicationName: name });
+    const other = createDb(url!, { max: 1, applicationName: `${name}-other` });
+    try {
+      // reserve() waits for an open connection and never opens one itself
+      await Promise.all([own.$client`select 1`, other.$client`select 1`]);
+      const stuck = await own.$client.reserve();
+      const bystander = await other.$client.reserve();
+      for (const s of [stuck, bystander]) await s`begin`;
+      await new Promise((r) => setTimeout(r, 1100));
+      const swept = await createRepo(own).endStuckWork!({ transactionSec: 1, overdueSec: 86400 * 365 });
+      expect(swept.ended).toBe(1);
+      await expect(stuck`select 1`).rejects.toThrow();
+      stuck.release();
+      expect(await bystander`select 1 as ok`).toEqual([{ ok: 1 }]);
+      await bystander`rollback`;
+      bystander.release();
+    } finally {
+      await Promise.all([own.$client.end({ timeout: 1 }), other.$client.end({ timeout: 1 })]);
+    }
+  });
+
   it("lets exactly one of many concurrent workers claim a delivery", async () => {
     const d = await queue(null);
     const claims = await Promise.all(Array.from({ length: 8 }, () => repo.claimDelivery(d.id)));

@@ -7,9 +7,12 @@ import * as schema from "./schema";
  * `prepare: false` keeps it compatible with pgbouncer / Hyperdrive; `fetch_types: false` skips a pg_type lookup
  * that would cost one extra round trip on every new connection (one per request on Workers).
  * One client per request on Workers — Hyperdrive does the real pooling.
+ * The application name marks the app's own sessions, the only ones the scheduler may end when they are stuck.
  */
-export function createDb(connectionString: string, opts: { max?: number } = {}) {
-  const client = postgres(connectionString, { prepare: false, fetch_types: false, max: opts.max ?? 5 });
+export function createDb(connectionString: string, opts: { max?: number; applicationName?: string } = {}) {
+  const client = postgres(connectionString, {
+    prepare: false, fetch_types: false, max: opts.max ?? 5, connection: { application_name: opts.applicationName ?? "openuptime" },
+  });
   return Object.assign(drizzle(client, { schema }), { $client: client });
 }
 export type Db = ReturnType<typeof createDb>;
