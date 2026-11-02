@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAuth, currentSession, NATIVE_CALLBACK, signupDisabled, slugify, turnstile } from "./auth";
 import { connectionString, type AppEnv } from "./env";
+import { lazy } from "./lazy";
 import { mountMcp } from "./mcp-route";
 import { rejectInAllProjects, requireOrg } from "./middleware";
 import { alertLog, settings } from "./routes/alert-log";
@@ -38,7 +39,8 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     const database = openDatabase(connectionString(c.env), { max: 1 });
     c.set("repo", database.repo);
     c.set("database", database);
-    c.set("auth", createAuth(database, c.env));
+    // most requests (heartbeats, public status pages, API keys) never touch the session library: build it on first use
+    c.set("auth", lazy(() => createAuth(database, c.env)));
     c.set("entitlements", edition.entitlements({ database, env: c.env }));
     try {
       await next();
