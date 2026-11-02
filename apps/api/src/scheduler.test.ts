@@ -1,7 +1,7 @@
 import type { Monitor, Repo } from "@openuptime/repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureProbes } from "./probes";
-import { resetSelfCheck } from "./selfcheck";
+import { resetSelfCheck } from "@openuptime/kit/selfcheck";
 import { unmetered, type Entitlements } from "./entitlements";
 import { MESSAGE_SIZE, checkOne, resolveIncident, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 

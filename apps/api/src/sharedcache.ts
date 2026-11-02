@@ -1,4 +1,4 @@
-import { ttlCache } from "./ttlcache";
+import { ttlCache } from "@openuptime/kit/ttlcache";
 
 // Short-lived copies of read-mostly payloads. Every process keeps its own in memory (Docker, Node, a Worker isolate). The
 // Workers entry points also register the data centre's cache (`caches.default`), which every isolate in that data centre

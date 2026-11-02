@@ -93,7 +93,7 @@ describe("environment variables", () => {
 
 describe("SELFCHECK_URLS", () => {
   it("compose does not default it to anything but the code's reference URLs", () => {
-    const codeDefaults = [...read("apps/api/src/selfcheck.ts").match(/REFERENCE_URLS = \[([\s\S]*?)\]/)![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const codeDefaults = [...read("packages/kit/src/selfcheck.ts").match(/REFERENCE_URLS = \[([\s\S]*?)\]/)![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(codeDefaults.length).toBeGreaterThan(0);
     const line = read("docker-compose.yml").match(/^\s*SELFCHECK_URLS:\s*(.+)$/m)?.[1];
     if (!line) return; // not passed on at all: the code default applies

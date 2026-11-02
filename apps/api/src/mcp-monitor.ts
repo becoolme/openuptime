@@ -5,7 +5,7 @@ import { McpClient, McpFailure } from "./mcp-monitor-transport";
 import { mcpSchemaDrift } from "./mcp-monitor-schema";
 export { mcpSchemaDrift, mcpSchemaChanges, mcpToolsEqual } from "./mcp-monitor-schema";
 export { MCP_PROTOCOL_VERSIONS, MCP_MAX_RESPONSE_BYTES, MCP_MAX_TOTAL_BYTES, MCP_MAX_RESUMES } from "./mcp-monitor-transport";
-import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
+import { networkLevelError, proberOnline, proberSideError } from "@openuptime/kit/selfcheck";
 
 export const MCP_MAX_PAGES = 20;
 export const MCP_MAX_TOOLS = 1000;

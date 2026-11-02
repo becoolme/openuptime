@@ -1,5 +1,5 @@
 import { checkUserAgent, dialEach, guardedFetch, hostPort, readCapped, targetIsPrivate } from "./netguard";
-import { networkLevelError, proberOnline, proberSideError } from "./selfcheck";
+import { networkLevelError, proberOnline, proberSideError } from "@openuptime/kit/selfcheck";
 import { dnsCheck } from "./dns";
 import { requestBodyProblem } from "./http-request";
 import type { DomainExpiry, Repo, McpConfig, McpToolSchema, McpObservation } from "@openuptime/repo";

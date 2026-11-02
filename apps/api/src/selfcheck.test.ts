@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCheck } from "./checker";
-import { configureSelfCheck, networkLevelError, proberOnline, proberSideError, resetSelfCheck } from "./selfcheck";
+import { configureSelfCheck, networkLevelError, proberOnline, proberSideError, resetSelfCheck } from "@openuptime/kit/selfcheck";
 
 beforeEach(() => { configureSelfCheck(undefined); resetSelfCheck(); });
 afterEach(() => vi.unstubAllGlobals());

@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { domainCheck, expiration, registryUrl, DOMAIN_TTL_MS, UNKNOWN_TTL_MS } from "./domain-expiry";
 import { domainName } from "./domain-name";
 import { guardedFetch } from "./netguard";
-import { proberOnline } from "./selfcheck";
+import { proberOnline } from "@openuptime/kit/selfcheck";
 vi.mock("./netguard", () => ({ guardedFetch: vi.fn() }));
-vi.mock("./selfcheck", async original => ({ ...await original<typeof import("./selfcheck")>(), proberOnline: vi.fn(async () => true) }));
+vi.mock("@openuptime/kit/selfcheck", async original => ({ ...await original<typeof import("@openuptime/kit/selfcheck")>(), proberOnline: vi.fn(async () => true) }));
 const bootstrap = { services: [[["com"], ["https://registry.example/rdap/"]]] };
 const record = (days = 60) => ({ objectClassName: "domain", ldhName: "example.com", events: [{ eventAction: "expiration", eventDate: new Date(Date.now() + days * 864e5).toISOString() }] });
 function cache() {

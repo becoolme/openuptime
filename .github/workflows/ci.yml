@@ -28,6 +28,7 @@ jobs:
       - run: pnpm --filter @openuptime/web exec astro build
       - run: pnpm --filter @openuptime/web test
       - run: pnpm --filter @openuptime/mcp-rest test
+      - run: pnpm --filter @openuptime/kit test
       - run: pnpm --filter @openuptime/probe test
       # the migrations must apply to an empty database
       - run: pnpm db:migrate

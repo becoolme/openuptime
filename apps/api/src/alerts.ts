@@ -4,7 +4,7 @@ import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 import { guardedFetch, readCapped } from "./netguard";
-import { ttlCache } from "./ttlcache";
+import { ttlCache } from "@openuptime/kit/ttlcache";
 
 type Event = {
   /** a reminder or escalation repeats the down alert for an incident nobody has acknowledged */

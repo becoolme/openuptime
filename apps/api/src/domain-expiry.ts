@@ -2,7 +2,7 @@ import type { DomainExpiry, Repo } from "@openuptime/repo";
 import type { CheckOutcome } from "./checker";
 import { domainName } from "./domain-name";
 import { guardedFetch } from "./netguard";
-import { proberOnline, proberSideError } from "./selfcheck";
+import { proberOnline, proberSideError } from "@openuptime/kit/selfcheck";
 
 const BOOTSTRAP = "https://data.iana.org/rdap/dns.json";
 export const DOMAIN_TTL_MS = 26 * 3600_000;

@@ -4,7 +4,7 @@ import { guardedFetch } from "./netguard";
 import { mcpAssertionPasses, mcpCheck, mcpSchemaChanges, mcpSchemaDrift, mcpSchemaShape, MCP_MAX_PAGES, MCP_MAX_RESPONSE_BYTES, MCP_MAX_RESUMES } from "./mcp-monitor";
 
 vi.mock("./netguard", () => ({ guardedFetch: vi.fn(), checkUserAgent: () => "OpenUptime test", targetIsPrivate: vi.fn(async () => false) }));
-vi.mock("./selfcheck", async original => ({ ...await original<typeof import("./selfcheck")>(), proberOnline: vi.fn(async () => true) }));
+vi.mock("@openuptime/kit/selfcheck", async original => ({ ...await original<typeof import("@openuptime/kit/selfcheck")>(), proberOnline: vi.fn(async () => true) }));
 const input = { target: "https://mcp.example/mcp", timeoutMs: 1000 };
 const tool = (name = "lookup", schema: Record<string, unknown> = { type: "object", properties: { name: { type: "string" } } }): McpToolSchema => ({ name, inputSchema: schema });
 const init = { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fixture", version: "1" } };

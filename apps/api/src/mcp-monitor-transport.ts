@@ -1,5 +1,5 @@
 import { checkUserAgent, guardedFetch } from "./netguard";
-import { networkLevelError } from "./selfcheck";
+import { networkLevelError } from "@openuptime/kit/selfcheck";
 
 type Obj = Record<string, unknown>;
 const object = (v: unknown): v is Obj => v !== null && typeof v === "object" && !Array.isArray(v);

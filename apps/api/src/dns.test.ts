@@ -3,7 +3,7 @@ import { dnsCheck } from "./dns";
 import { runCheck, type CheckInput } from "./checker";
 import { monitorCreateSchema, monitorPatchSchema } from "./routes/monitors";
 
-vi.mock("./selfcheck", () => ({ networkLevelError: () => false, proberOnline: async () => true, proberSideError: () => false }));
+vi.mock("@openuptime/kit/selfcheck", () => ({ networkLevelError: () => false, proberOnline: async () => true, proberSideError: () => false }));
 const input: CheckInput = { type: "dns", target: "example.com", method: "GET", expectedStatus: 200, timeoutMs: 1000 };
 const answer = (type: number, data: string, owner = "example.com.") => ({ name: owner, type, data });
 function reply(Answer: unknown[] = [], Status = 0) {

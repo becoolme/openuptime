@@ -25,6 +25,9 @@ importers:
       '@openuptime/db-pg':
         specifier: workspace:*
         version: link:../../packages/db-pg
+      '@openuptime/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
       '@openuptime/mcp-rest':
         specifier: workspace:*
         version: link:../../packages/mcp-rest
@@ -86,6 +89,9 @@ importers:
 
   apps/probe:
     dependencies:
+      '@openuptime/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -176,6 +182,21 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/kit:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20261006.1
+        version: 5.20261010.1
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
