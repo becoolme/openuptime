@@ -40,10 +40,10 @@ const resolvedByPerson = (incidentId: Parameters<typeof inArray>[0]): SQL =>
  */
 const notMcpOutbox = sql`not exists (select 1 from mcp_alert_outbox q where q.id = ${schema.alertDelivery.id})`;
 
-/** Postgres implementation of the storage contract, on drizzle + postgres.js. */
 /** Seconds into its interval at which a monitor is checked: stable per monitor, spread evenly across monitors. */
 const phaseSec = sql`mod(('x' || substr(md5(${schema.monitor.id}::text), 1, 8))::bit(32)::bigint, ${schema.monitor.intervalSec})`;
 
+/** Postgres implementation of the storage contract, on drizzle + postgres.js. */
 export function createRepo(db: DbExecutor): Repo {
   const rows = async <T>(q: PromiseLike<unknown>) => (await q) as unknown as T[];
 
