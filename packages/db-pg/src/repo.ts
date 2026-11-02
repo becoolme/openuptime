@@ -688,8 +688,20 @@ export function createRepo(db: DbExecutor): Repo {
     recordHeartbeatObservation: (m) => recordHeartbeatObservation(db, m),
     timeCoverage: (orgId, monitorId, scope, days, now) => timeCoverage(db, orgId, monitorId, scope, days, now),
     async recordCheck(r) {
-      await db.insert(schema.checkResult).values({ monitorId: r.monitorId, region: r.region ?? "auto", ok: r.ok, statusCode: r.statusCode, latencyMs: r.latencyMs, error: r.error, mcp: r.mcp });
-      await foldIntoRollup(r.monitorId, r.ok, r.latencyMs ?? null);
+      // the raw result and its hourly rollup in one round trip
+      const latency = r.latencyMs ?? null;
+      await db.execute(sql`
+        with result as (
+          insert into check_result (monitor_id, region, ok, status_code, latency_ms, error, mcp)
+          values (${r.monitorId}, ${r.region ?? "auto"}, ${r.ok}, ${r.statusCode ?? null}, ${latency}, ${r.error ?? null}, ${r.mcp == null ? null : JSON.stringify(r.mcp)}::jsonb)
+        )
+        insert into check_rollup (monitor_id, bucket, total, ok, latency_sum, latency_n)
+        values (${r.monitorId}, date_trunc('hour', now()), 1, ${r.ok ? 1 : 0}, ${latency ?? 0}, ${latency == null ? 0 : 1})
+        on conflict (monitor_id, bucket) do update set
+          total = check_rollup.total + 1,
+          ok = check_rollup.ok + excluded.ok,
+          latency_sum = check_rollup.latency_sum + excluded.latency_sum,
+          latency_n = check_rollup.latency_n + excluded.latency_n`);
     },
     async recordRegionResults(monitorId, results, summary) {
       if (!results.length) return;

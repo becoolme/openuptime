@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createDb, createRepo, eq, schema } from "./index";
+import { createDb, createRepo, desc, eq, schema } from "./index";
 
 const url = process.env.DATABASE_URL;
 const db = url ? createDb(url, { max: 4 }) : undefined!;
@@ -108,6 +108,21 @@ describe.skipIf(!url)("bounded observation time coverage", () => {
     expect(rows.every((r) => r.observedAt.getTime() <= Date.now())).toBe(true);
     expect(rows.some((r) => r.state === "down")).toBe(true);
     expect(await repo.recordObservation(m, { ok: true })).toBe(true);
+  });
+
+  it("moves a future event back by its whole window and keeps the new observation last", async () => {
+    const m = await monitor();
+    const future = new Date(Date.now() + 86400_000);
+    const [repaired] = await db.insert(schema.monitorObservation)
+      .values({ monitorId: m.id, observedAt: future, validUntil: new Date(future.getTime() + 90_000), state: "up", revision: 0 }).returning();
+    expect(await repo.recordObservation(m, { ok: false })).toBe(true);
+    const rows = await db.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, m.id))
+      .orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id));
+    const moved = rows.find((r) => r.id === repaired.id)!;
+    expect(moved.observedAt.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(moved.validUntil!.getTime() - moved.observedAt.getTime()).toBe(90_000);
+    expect(rows[0].state).toBe("down");
+    expect(rows[0].observedAt.getTime()).toBeGreaterThanOrEqual(moved.observedAt.getTime());
   });
 
   it("uses heartbeat grace, rejects a missed check racing a new ping, and leaves expired coverage unknown", async () => {
