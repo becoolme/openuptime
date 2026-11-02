@@ -1,7 +1,7 @@
 import { apiKey } from "@better-auth/api-key";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Database } from "@openuptime/repo";
-import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth/minimal";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { captcha, jwt, oneTimeToken, organization, twoFactor } from "better-auth/plugins";
 import { actionEmail, appUrl, sendEmail } from "./email";
