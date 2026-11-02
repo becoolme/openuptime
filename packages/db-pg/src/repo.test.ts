@@ -219,6 +219,20 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     }
   });
 
+  it("records each check and folds it into the hourly rollup", async () => {
+    const [m] = await seed(1);
+    await repo.recordCheck({ monitorId: m.id, ok: true, statusCode: 200, latencyMs: 100 });
+    await repo.recordCheck({ monitorId: m.id, region: "fra", ok: false, error: "timeout" });
+    await repo.recordCheck({ monitorId: m.id, ok: true, latencyMs: 300, mcp: { stages: [] } as never });
+    const results = await db.select().from(schema.checkResult).where(eq(schema.checkResult.monitorId, m.id));
+    expect(results).toHaveLength(3);
+    expect(results.find((r) => r.statusCode === 200)).toMatchObject({ region: "auto", ok: true, latencyMs: 100, error: null, mcp: null });
+    expect(results.find((r) => r.region === "fra")).toMatchObject({ ok: false, latencyMs: null, error: "timeout" });
+    expect(results.find((r) => r.latencyMs === 300)?.mcp).toEqual({ stages: [] });
+    const [rollup] = await db.select().from(schema.checkRollup).where(eq(schema.checkRollup.monitorId, m.id));
+    expect(rollup).toMatchObject({ total: 3, ok: 2, latencySum: 400, latencyN: 2 });
+  });
+
   it("treats a resolve by a person (API key or agent included) as a person's even after the account is deleted, and does not count it as flapping", async () => {
     const [m] = await seed(1);
     const userId = `u-${crypto.randomUUID()}`;

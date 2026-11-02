@@ -7,15 +7,23 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /** Bound application clock skew by the database clock; repair impossible future events on the next write. */
 export async function coverageTime(tx: Tx, monitorId: string, completedAt = new Date()): Promise<Date> {
-  const [clock] = await tx.execute<{ at: Date }>(sql`select clock_timestamp() as at`);
-  const dbAt = new Date(clock.at);
-  await tx.update(schema.monitorObservation).set({
-    observedAt: dbAt,
-    validUntil: sql`case when ${schema.monitorObservation.validUntil} is null then null else ${schema.monitorObservation.validUntil} - (${schema.monitorObservation.observedAt} - ${dbAt.toISOString()}::timestamptz) end`,
-  }).where(and(eq(schema.monitorObservation.monitorId, monitorId), gt(schema.monitorObservation.observedAt, dbAt)));
-  const [last] = await tx.select({ at: schema.monitorObservation.observedAt }).from(schema.monitorObservation)
-    .where(eq(schema.monitorObservation.monitorId, monitorId)).orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
-  return new Date(Math.max(Math.min(completedAt.getTime(), dbAt.getTime()), last?.at.getTime() ?? 0));
+  // One round trip. The clock is cut to milliseconds, the precision of the times written after it. Rows after the clock
+  // move back to it, so the latest observation afterwards is the earlier of the latest one before and the clock; the
+  // final select reads the statement's snapshot, from before the update.
+  const [row] = await tx.execute<{ at: Date | string; last: Date | string | null }>(sql`
+    with clock as materialized (select date_trunc('milliseconds', clock_timestamp()) as at),
+    moved as (
+      update monitor_observation o
+      set observed_at = clock.at,
+        valid_until = case when o.valid_until is null then null else o.valid_until - (o.observed_at - clock.at) end
+      from clock
+      where o.monitor_id = ${monitorId} and o.observed_at > clock.at
+    )
+    select clock.at, case when latest.at is null then null else least(latest.at, clock.at) end as last
+    from clock, (select max(observed_at) as at from monitor_observation where monitor_id = ${monitorId}) latest`);
+  const dbAt = new Date(row.at);
+  const last = row.last == null ? 0 : new Date(row.last).getTime();
+  return new Date(Math.max(Math.min(completedAt.getTime(), dbAt.getTime()), last));
 }
 
 export async function recordObservation(db: Db, snapshot: Monitor, result: { ok: boolean; latencyMs?: number | null; degraded?: boolean }, options: { generation?: number; heartbeatPing?: boolean } = {}): Promise<boolean> {
@@ -38,8 +46,11 @@ async function appendObservation(db: Db, snapshot: Monitor, result: { ok: boolea
     const generation = options.generation;
     if (generation !== undefined && (!Number.isSafeInteger(generation) || generation <= 0 || generation > current.runGeneration || generation <= current.coverageGeneration)) return null;
     const at = await coverageTime(tx, current.id, completedAt);
-    const [last] = await tx.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, snapshot.id))
-      .orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1);
+    // Only a failed scheduled heartbeat check compares itself with the last observation.
+    const [last] = current.type === "heartbeat" && !options.heartbeatPing && !result.ok
+      ? await tx.select().from(schema.monitorObservation).where(eq(schema.monitorObservation.monitorId, snapshot.id))
+        .orderBy(desc(schema.monitorObservation.observedAt), desc(schema.monitorObservation.id)).limit(1)
+      : [];
     // The ping fence is committed with the observation, not the later mutable lastCheckedAt/incident updates.
     if (current.type === "heartbeat" && !options.heartbeatPing && current.coverageHeartbeatVersion !== (snapshot.coverageHeartbeatVersion ?? 0)) return null;
     // A scheduler may load the new ping version before the ping handler updates nextCheckAt.
