@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "spread-check-schedule", date: "2026-11-02", edition: "community",
+    title: { en: "Checks spread over their interval", zh: "检测分散到整个间隔" },
+    summary: { en: "Monitors that share an interval no longer all run in the same minute.", zh: "间隔相同的监控项不再挤在同一分钟内检测。" },
+    points: [
+      { en: "Each monitor checked less often than once a minute runs at its own fixed offset within the interval, so the work of every scheduler run stays small.", zh: "检测间隔超过一分钟的监控项各自在间隔内的固定时间点运行，每次调度的工作量因此保持较小。" },
+      { en: "Existing monitors move to their offset on their next check, which comes at most one interval later, never later than before.", zh: "现有监控项会在下一次检测时移到各自的时间点；下一次检测最多在一个间隔之后，不会比原来更晚。" },
+      { en: "Heartbeat deadlines and one-minute monitors keep their timing.", zh: "心跳截止时间和每分钟检测的监控项时间不变。" },
+    ],
+    link: { href: "/docs/self-host", label: { en: "Read how checks run", zh: "了解检测如何运行" } },
+  },
+  {
     id: "dns-monitors-on-workers", date: "2026-11-02", edition: "community",
     title: { en: "DNS monitors work on Workers again", zh: "DNS 监控在 Workers 上恢复正常" },
     summary: { en: "DNS checks run by a Cloudflare Workers deployment no longer fail on every lookup.", zh: "Cloudflare Workers 部署执行的 DNS 检测不再每次查询都失败。" },
