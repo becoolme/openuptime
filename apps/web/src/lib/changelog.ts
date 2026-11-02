@@ -38,6 +38,16 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     link: { href: "/docs/self-host", label: { en: "Read how checks run", zh: "了解检测如何运行" } },
   },
   {
+    id: "dns-monitors-on-workers", date: "2026-11-02", edition: "community",
+    title: { en: "DNS monitors work on Workers again", zh: "DNS 监控在 Workers 上恢复正常" },
+    summary: { en: "DNS checks run by a Cloudflare Workers deployment no longer fail on every lookup.", zh: "Cloudflare Workers 部署执行的 DNS 检测不再每次查询都失败。" },
+    points: [
+      { en: "Since October 29, a DNS check run on Workers failed before it reached the resolver, so DNS monitors reported down and could alert while the record was fine.", zh: "自 10 月 29 日起，在 Workers 上执行的 DNS 检测还没到达解析器就会失败，导致记录本身正常时 DNS 监控也显示为宕机，并可能发出告警。" },
+      { en: "Docker and Node deployments, and checks run by regional probes, were not affected.", zh: "Docker 和 Node 部署，以及由区域探针执行的检测不受影响。" },
+    ],
+    cloud: { en: "On the hosted service, this affected DNS monitors checked from the Auto region.", zh: "在托管服务上，受影响的是使用「自动」区域检测的 DNS 监控。" },
+  },
+  {
     id: "blockchain-node-monitors", date: "2026-10-31", edition: "community",
     title: { en: "Blockchain node monitors", zh: "区块链节点监控" },
     summary: { en: "Monitor the health of EVM and Solana RPC nodes.", zh: "监控 EVM 和 Solana RPC 节点的健康状态。" },

@@ -41,7 +41,8 @@ export async function dnsCheck(m: CheckInput, started: number): Promise<CheckOut
   const type = m.dnsRecordType ?? "A";
   const done = (error?: string): CheckOutcome => ({ ok: !error, latencyMs: Date.now() - started, ...(error ? { error } : {}) });
   const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name(m.target))}&type=${type}`;
-  const res = await fetch(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(m.timeoutMs), redirect: "error" });
+  // Workers allow only the follow and manual redirect modes; a redirect is not ok here, so it fails like any other bad status
+  const res = await fetch(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(m.timeoutMs), redirect: "manual" });
   if (!res.ok) {
     await res.body?.cancel();
     return done(`DNS resolver HTTP ${res.status}`);
