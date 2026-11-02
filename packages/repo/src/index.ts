@@ -690,6 +690,11 @@ export interface Repo {
   claimRetries(limit: number): Promise<DeliveryRetry[]>;
   /** Housekeeping: hand rows stuck in `sending` back to pending, or fail them after `maxAttempts`. Returns how many moved. */
   sweepStuckDeliveries(o: { stuckSec: number; maxAttempts: number }): Promise<number>;
+  /**
+   * Which kinds of scheduler housekeeping could have work, in one cheap read. Each flag may be true when there turns out to
+   * be nothing to do, never false when there is. Optional: without it every housekeeping step runs on every tick.
+   */
+  pendingHousekeeping?(): Promise<{ mcpAlerts: boolean; deliveries: boolean; followUps: boolean }>;
   /** All alerts of one incident, oldest first. */
   incidentDeliveries(orgId: string, incidentId: string): Promise<AlertDelivery[]>;
   channelsByIds(orgId: string, ids: string[]): Promise<AlertChannel[]>;

@@ -1388,6 +1388,16 @@ export function createRepo(db: DbExecutor): Repo {
       }
       return out;
     },
+    async pendingHousekeeping() {
+      // Supersets of what the claim queries below select, each answered from an index, so an idle tick costs one round trip.
+      const [row] = await db.execute<{ mcp_alerts: boolean; deliveries: boolean; follow_ups: boolean }>(sql`select
+        exists (select 1 from mcp_alert_outbox where status in ('pending', 'leased')) as mcp_alerts,
+        exists (select 1 from alert_delivery where status in ('pending', 'sending'))
+          or exists (select 1 from alert_delivery where status is null and ok = false and next_attempt_at <= now()) as deliveries,
+        exists (select 1 from incident where resolved_at is null and acknowledged_at is null
+          and (next_reminder_at <= now() or next_escalation_at <= now())) as follow_ups`);
+      return { mcpAlerts: row.mcp_alerts, deliveries: row.deliveries, followUps: row.follow_ups };
+    },
     async sweepStuckDeliveries(o) {
       const t = schema.alertDelivery;
       // an interrupted attempt counts as an attempt: after the last one the row is failed for good
