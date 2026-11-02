@@ -31,6 +31,52 @@ describe("runDueChecks", () => {
   });
 });
 
+describe("housekeeping", () => {
+  /** A repo with nothing due to check, recording which housekeeping claims the tick made. */
+  function idleRepo(pending: (() => Promise<{ mcpAlerts: boolean; deliveries: boolean; followUps: boolean }>) | undefined) {
+    const called: string[] = [];
+    const record = <T,>(name: string, value: T) => async () => (called.push(name), value);
+    const repo = {
+      claimDue: async () => [],
+      pendingHousekeeping: pending,
+      claimMcpAlerts: record("mcp", []),
+      sweepStuckDeliveries: record("sweep", 0),
+      claimRetries: record("retry", []),
+      claimReminders: record("reminders", []),
+      claimEscalations: record("escalations", []),
+      purgeExpired: async () => {},
+    } as unknown as Repo;
+    return { repo, called };
+  }
+
+  it("skips every step when nothing is pending", async () => {
+    const { repo, called } = idleRepo(async () => ({ mcpAlerts: false, deliveries: false, followUps: false }));
+    await runDueChecks(repo);
+    expect(called).toEqual([]);
+  });
+
+  it("runs only the steps that may have work", async () => {
+    const { repo, called } = idleRepo(async () => ({ mcpAlerts: false, deliveries: false, followUps: true }));
+    await runDueChecks(repo);
+    expect(called).toEqual(["reminders", "escalations"]);
+    const deliveries = idleRepo(async () => ({ mcpAlerts: false, deliveries: true, followUps: false }));
+    await runDueChecks(deliveries.repo);
+    expect(deliveries.called).toEqual(["sweep", "retry"]);
+  });
+
+  it("runs every step when the check is missing or fails", async () => {
+    const all = ["mcp", "sweep", "retry", "reminders", "escalations"];
+    const missing = idleRepo(undefined);
+    await runDueChecks(missing.repo);
+    expect(missing.called).toEqual(all);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = idleRepo(async () => { throw new Error("database unavailable"); });
+    await runDueChecks(failing.repo);
+    expect(failing.called).toEqual(all);
+    error.mockRestore();
+  });
+});
+
 describe("queue delivery", () => {
   const at = new Date("2026-01-01T00:01:00.000Z");
   const http = (id: string, over: Partial<Monitor> = {}) => ({ id, organizationId: "o", type: "http", target: "not a url", paused: false, nextCheckAt: at, ...over }) as Monitor;

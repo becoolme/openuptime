@@ -86,14 +86,20 @@ const step = async (what: string, run: () => Promise<unknown>) => {
 };
 
 async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0, entitlements: Entitlements = unmetered) {
-  await step("MCP alert outbox", () => drainMcpAlerts(repo, entitlements, queue ? 20 : 5));
-  // alerts a dead worker left half-sent go back in line before the retries are picked up
-  await step("delivery sweep", () => sweepDeliveries(repo));
-  // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
-  await step("alert retry", () => retryDeliveries(repo, queue ? 10 : 3, entitlements));
-  // incidents nobody has acknowledged: repeat the alert, escalate to the next level
-  await step("alert reminders", () => sendReminders(repo, entitlements, queue ? 10 : 3));
-  await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));
+  // most ticks have nothing to deliver: one read decides which steps run, and a failed read runs them all
+  const pending = await repo.pendingHousekeeping?.().catch((e) => (console.error("housekeeping check failed, running every step", e), undefined));
+  if (!pending || pending.mcpAlerts) await step("MCP alert outbox", () => drainMcpAlerts(repo, entitlements, queue ? 20 : 5));
+  if (!pending || pending.deliveries) {
+    // alerts a dead worker left half-sent go back in line before the retries are picked up
+    await step("delivery sweep", () => sweepDeliveries(repo));
+    // failed incident alerts get another attempt (a few per tick; fewer when everything runs inline)
+    await step("alert retry", () => retryDeliveries(repo, queue ? 10 : 3, entitlements));
+  }
+  if (!pending || pending.followUps) {
+    // incidents nobody has acknowledged: repeat the alert, escalate to the next level
+    await step("alert reminders", () => sendReminders(repo, entitlements, queue ? 10 : 3));
+    await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));
+  }
   // cheap housekeeping once an hour
   if (new Date().getMinutes() === 0) await repo.purgeExpired();
   // reminders and reports are claimed in the database before they are sent, so a coarse cadence is enough

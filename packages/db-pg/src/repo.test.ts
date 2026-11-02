@@ -472,6 +472,18 @@ describe.skipIf(!url)("alert deliveries, reminders and escalation", () => {
   const row = async (id: string) => (await db.select().from(schema.alertDelivery).where(eq(schema.alertDelivery.id, id)))[0];
   const ago = (min: number) => new Date(Date.now() - min * 60_000);
 
+  it("reports housekeeping as pending whenever a claim would find work", async () => {
+    // other suites share this database, so only the direction that matters is asserted: work present means true
+    const d = await queue(null);
+    expect((await repo.pendingHousekeeping!()).deliveries).toBe(true);
+    await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
+    const reminder = await incident({ nextReminderAt: ago(1) });
+    expect((await repo.pendingHousekeeping!()).followUps).toBe(true);
+    await db.update(schema.incident).set({ nextReminderAt: null, nextEscalationAt: ago(1) }).where(eq(schema.incident.id, reminder.id));
+    expect((await repo.pendingHousekeeping!()).followUps).toBe(true);
+    await db.update(schema.incident).set({ resolvedAt: new Date(), nextEscalationAt: null }).where(eq(schema.incident.id, reminder.id));
+  });
+
   it("lets exactly one of many concurrent workers claim a delivery", async () => {
     const d = await queue(null);
     const claims = await Promise.all(Array.from({ length: 8 }, () => repo.claimDelivery(d.id)));
