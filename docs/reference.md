@@ -26,7 +26,8 @@ and skip `wrangler queues create`: the minute cron then runs up to 40 monitors i
 ## How checks run
 
 1. A Cron Trigger fires every minute (`* * * * *`, minimum interval: 60s).
-2. It atomically leases due monitors (`UPDATE … FOR UPDATE SKIP LOCKED`), so overlapping runs never duplicate work.
+2. It atomically leases due monitors (`UPDATE … FOR UPDATE SKIP LOCKED`), so overlapping runs never duplicate work. A monitor with an interval longer than a minute is checked at a fixed offset within that interval,
+   derived from its id, so monitors created at the same time are spread over the interval instead of running in one tick.
 3. Leased monitors are packed 25 per message into the `openuptime-checks` Queue.
 4. The queue consumer (same Worker) runs each pack with its own invocation budget, writes results, opens and resolves incidents, and fans out alerts (Slack, Lark / Feishu, webhook, Telegram, PagerDuty, email).
 

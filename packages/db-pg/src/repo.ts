@@ -41,6 +41,9 @@ const resolvedByPerson = (incidentId: Parameters<typeof inArray>[0]): SQL =>
 const notMcpOutbox = sql`not exists (select 1 from mcp_alert_outbox q where q.id = ${schema.alertDelivery.id})`;
 
 /** Postgres implementation of the storage contract, on drizzle + postgres.js. */
+/** Seconds into its interval at which a monitor is checked: stable per monitor, spread evenly across monitors. */
+const phaseSec = sql`mod(('x' || substr(md5(${schema.monitor.id}::text), 1, 8))::bit(32)::bigint, ${schema.monitor.intervalSec})`;
+
 export function createRepo(db: DbExecutor): Repo {
   const rows = async <T>(q: PromiseLike<unknown>) => (await q) as unknown as T[];
 
@@ -636,11 +639,16 @@ export function createRepo(db: DbExecutor): Repo {
       db
         .update(schema.monitor)
         // advance from the scheduled time, so finishing a check late never pushes the next one past a whole cron tick;
-        // a monitor that is far behind (paused, outage of the scheduler) restarts from now instead of catching up in a burst
+        // a monitor that is far behind (paused, outage of the scheduler) restarts from now instead of catching up in a burst.
+        // Intervals longer than a cron tick are anchored to a fixed offset derived from the monitor id, so monitors created
+        // together do not all come due in the same tick; one that is out of phase moves into it with one shorter interval.
         .set({
           runGeneration: sql`${schema.monitor.runGeneration} + 1`,
-          nextCheckAt: sql`case when ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec}) > now()
-            then ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec})
+          nextCheckAt: sql`case
+            when ${schema.monitor.type} <> 'heartbeat' and ${schema.monitor.intervalSec} > 60
+              then to_timestamp((floor((extract(epoch from now()) - ${phaseSec}) / ${schema.monitor.intervalSec}) + 1) * ${schema.monitor.intervalSec} + ${phaseSec})
+            when ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec}) > now()
+              then ${schema.monitor.nextCheckAt} + make_interval(secs => ${schema.monitor.intervalSec})
             else now() + make_interval(secs => ${schema.monitor.intervalSec}) end`,
         })
         .where(

@@ -101,6 +101,35 @@ describe.skipIf(!url)("monitors and maintenance", () => {
     expect(late.nextCheckAt.getTime()).toBeGreaterThan(Date.now() + 50_000);
   });
 
+  it("spreads monitors that come due together across their interval, and keeps each on its own offset", async () => {
+    const ids = (await seed(40)).map((m) => m.id);
+    const due = new Date(Date.now() - 5_000);
+    await db.update(schema.monitor).set({ intervalSec: 300, nextCheckAt: due }).where(sql`${schema.monitor.id} in ${ids}`);
+    const before = Date.now();
+    const leased = (await repo.claimDue(1000)).filter((x) => ids.includes(x.id));
+    expect(leased).toHaveLength(40);
+    for (const m of leased) {
+      // never later than one interval from now, never in the past
+      expect(m.nextCheckAt.getTime()).toBeGreaterThan(before - 1_000);
+      expect(m.nextCheckAt.getTime()).toBeLessThanOrEqual(Date.now() + 300_000);
+    }
+    // all 40 were due in the same tick; afterwards they are spread over the five minutes of the interval
+    expect(new Set(leased.map((m) => Math.floor(m.nextCheckAt.getTime() / 60_000))).size).toBeGreaterThanOrEqual(4);
+    // one interval later each monitor comes due at the same offset again
+    const [first] = leased;
+    await db.update(schema.monitor).set({ nextCheckAt: new Date(first.nextCheckAt.getTime() - 300_000) }).where(eq(schema.monitor.id, first.id));
+    const [again] = (await repo.claimDue(1000)).filter((x) => x.id === first.id);
+    expect(again.nextCheckAt.getTime()).toBe(first.nextCheckAt.getTime());
+  });
+
+  it("keeps heartbeat deadlines and one-minute intervals anchored to the previous due time", async () => {
+    const [m] = await seed(1);
+    const due = new Date(Date.now() - 5_000);
+    await db.update(schema.monitor).set({ type: "heartbeat", target: "", intervalSec: 300, nextCheckAt: due }).where(eq(schema.monitor.id, m.id));
+    const [leased] = (await repo.claimDue(1000)).filter((x) => x.id === m.id);
+    expect(leased.nextCheckAt.getTime()).toBe(due.getTime() + 300_000);
+  });
+
   it("starts a claimed run once, and hands unqueued claims back", async () => {
     const [m] = await seed(1);
     await db.update(schema.monitor).set({ nextCheckAt: new Date(Date.now() - 5_000) }).where(eq(schema.monitor.id, m.id));

@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc titleZh="自托管：Cloudflare Workers 或 Docker" descriptionZh="在 Cloudflare Workers 加 Postgres 上运行 OpenUptime，或用一个 Docker 容器部署。" description="Run OpenUptime on Cloudflare Workers with Postgres, or in one Docker container." title="Self-host" updated="2026-10-12" toc>
+<Doc titleZh="自托管：Cloudflare Workers 或 Docker" descriptionZh="在 Cloudflare Workers 加 Postgres 上运行 OpenUptime，或用一个 Docker 容器部署。" description="Run OpenUptime on Cloudflare Workers with Postgres, or in one Docker container." title="Self-host" updated="2026-11-02" toc>
   <div lang="en">
     <h1>Self-host OpenUptime</h1>
     <p class="lede">Run your own copy on Cloudflare Workers or in Docker. Both use the same code and a Postgres database you control.</p>
@@ -122,7 +122,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
       </tbody>
     </table>
     <h3>How checks run</h3>
-    <p>A cron trigger fires every minute and leases the monitors that are due. In Queue mode it packs them 25 per message into the <code>openuptime-checks</code> Queue, and the queue consumer runs each pack, records results, opens and resolves incidents and sends alerts. In inline mode the cron does all of that itself for up to 40 monitors per run.</p>
+    <p>A cron trigger fires every minute and leases the monitors that are due. In Queue mode it packs them 25 per message into the <code>openuptime-checks</code> Queue, and the queue consumer runs each pack, records results, opens and resolves incidents and sends alerts. In inline mode the cron does all of that itself for up to 40 monitors per run. A monitor checked less often than once a minute runs at a fixed offset within its interval, derived from its id, so monitors created together do not all run in the same minute.</p>
     <h3>Upgrade</h3>
     <p>Pull the new code, run the migration again (it only applies what is new), then deploy the API and the web Worker in that order.</p>
     <h3>Switching modes later</h3>
@@ -341,7 +341,7 @@ cd ../web &amp;&amp; pnpm build &amp;&amp; pnpm exec wrangler deploy</code></pre
       </tbody>
     </table>
     <h3>检测如何运行</h3>
-    <p>cron 每分钟触发一次并租约到期的监控项。Queue 模式下每 25 个打包成一条消息放入 <code>openuptime-checks</code> 队列，由消费者执行每个分组，记录结果、开启和解决事件并发送告警。内联模式下这些都由 cron 自己完成，每次最多 40 个监控项。</p>
+    <p>cron 每分钟触发一次并租约到期的监控项。Queue 模式下每 25 个打包成一条消息放入 <code>openuptime-checks</code> 队列，由消费者执行每个分组，记录结果、开启和解决事件并发送告警。内联模式下这些都由 cron 自己完成，每次最多 40 个监控项。检测间隔超过一分钟的监控项会在间隔内一个固定的时间点运行（由监控项 ID 决定），因此同时创建的监控项不会都挤在同一分钟检测。</p>
     <h3>升级</h3>
     <p>拉取新代码，重新执行迁移（只会应用新增的部分），然后先部署 API、再部署 web Worker。</p>
     <h3>之后切换模式</h3>
