@@ -19,7 +19,7 @@ export default function TimeCoverage({ id }: { id: string }) {
     const a = document.createElement("a"); a.href = url; a.download = `monitor-${id}-time-coverage.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return <section className="card sect">
+  return <section className="card sect" style={{ marginBottom: 26 }}>
     <h3>{t("Time coverage")}</h3>
     <p className="muted">{t("Time inferred from fresh checks, not exact outage duration. Missing history stays unknown. Maintenance is included.")}</p>
     <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>

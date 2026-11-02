@@ -56,7 +56,7 @@ export default function McpHistory({ id }: { id: string }) {
   }, [id, days, reload]);
   const stages = Object.keys(report?.metrics.stages ?? {});
   const shownStage = stage === "total" || stages.includes(stage) ? stage : "total";
-  return <section className="card sect">
+  return <section className="card sect" style={{ marginBottom: 26 }}>
     <h3>{t("MCP stage history")}</h3>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
       <select className="in" style={{ width: "auto" }} aria-label={t("History window")} value={days} onChange={(e) => setDays(Number(e.target.value) as 7 | 30)}><option value={7}>{t("7 days")}</option><option value={30}>{t("30 days")}</option></select>

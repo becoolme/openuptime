@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitor-page-spacing", date: "2026-11-02", edition: "community",
+    title: { en: "Spacing on the monitor page", zh: "监控详情页间距" },
+    summary: { en: "The time coverage report and the MCP history no longer touch the cards below them.", zh: "时间覆盖报告和 MCP 历史卡片不再与下方卡片贴在一起。" },
+    points: [
+      { en: "A monitor's page now leaves the same gap below these cards as between its other sections.", zh: "监控详情页中，这两张卡片下方现在留出与其他区块相同的间距。" },
+    ],
+  },
+  {
     id: "stuck-transactions-ended", date: "2026-11-02", edition: "community",
     title: { en: "Monitors no longer stall on stuck sessions", zh: "监控不再被卡住的会话拖停" },
     summary: { en: "A worker that stops in the middle of writing a result no longer keeps its monitors from being checked.", zh: "Worker 在写入检测结果的中途停止后，不会再让相关监控一直无法检测。" },
