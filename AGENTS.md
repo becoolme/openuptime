@@ -45,6 +45,7 @@ keep one Community entry and describe the hosted difference in its `cloud` field
     { en: "What they can now do, or what no longer goes wrong.", zh: "…" },
   ],
   cloud: { en: "What this means on the hosted service.", zh: "…" },   // optional, Community entries only
+  upgrade: { en: "What a self-hosted install must do when upgrading.", zh: "…" },   // optional
   link: { href: "/docs/regions", label: { en: "Read the multi-region docs", zh: "阅读多区域检测文档" } }, // optional
 }
 ```
@@ -62,6 +63,8 @@ Writing rules:
 - **State only what is true.** Numbers, limits and regions come from the code or the docs. No marketing adjectives, no
   promises about the future.
 - **Add the entry at the top of its list.** The page sorts by date, newest first, and keeps list order within a day.
+- Put what someone running their own copy must do on upgrade (update the probe, set a new variable, run a step by
+  hand) in `upgrade`, not in `points`. Leave it out when upgrading needs nothing beyond the usual steps.
 - Link to the relevant docs page when there is one. Links are site paths (`/docs/...`), not absolute URLs.
 - Never put secrets, customer names, internal hostnames or incident detail in an entry.
 

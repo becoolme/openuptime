@@ -21,6 +21,8 @@ export interface ChangelogEntry {
   points: L[];
   /** what the same change means on the hosted service, for a community entry */
   cloud?: L;
+  /** what someone running their own copy has to do when upgrading past this change (a probe to update, a variable to set) */
+  upgrade?: L;
   link?: { href: string; label: L };
 }
 
@@ -42,8 +44,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "A cookie is only sent back to the host that set it, and a Secure cookie only over HTTPS.", zh: "Cookie 只会发回设置它的主机，带 Secure 标记的 Cookie 只通过 HTTPS 发送。" },
       { en: "A Cookie header set on the monitor is still sent on every request.", zh: "监控上设置的 Cookie 请求头仍会随每个请求发送。" },
-      { en: "Checks from other regions get this once their probe is updated.", zh: "其他区域的检测需在探针更新后生效。" },
     ],
+    upgrade: { en: "Update your regional probes for checks from those regions to keep cookies too.", zh: "请升级区域探针，这些区域的检测才会同样保留 Cookie。" },
   },
   {
     id: "deleted-monitor-incidents", date: "2026-11-03", edition: "community",
@@ -105,8 +107,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Add up to 10 assertions, each a path such as $.data.items[0].status with a comparison: equals, does not equal, contains, exists, does not exist, greater than or less than.", zh: "最多可添加 10 条断言，每条由路径（如 $.data.items[0].status）和比较方式组成：等于、不等于、包含、存在、不存在、大于或小于。" },
       { en: "A number, true, false or null in the response is compared by value, so 200 also matches 200.0.", zh: "响应中的数字、true、false 和 null 按值比较，例如 200 也能匹配 200.0。" },
       { en: "A failed check names the path, the expected value and what the response held.", zh: "检测失败时会写明路径、期望值以及响应中的实际值。" },
-      { en: "Self-hosted regional probes must be updated before monitors with assertions can run from them; until then those regions report that an upgrade is needed instead of passing.", zh: "自托管的区域探针需要先升级，带断言的监控才能从这些区域检测；升级前这些区域会提示需要升级，而不会误判为通过。" },
     ],
+    upgrade: { en: "Update your regional probes before monitors with assertions run from them; until then those regions report that an upgrade is needed instead of passing.", zh: "请先升级区域探针，带断言的监控才能从这些区域检测；升级前这些区域会提示需要升级，而不会误判为通过。" },
     link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
   },
   {

@@ -70,6 +70,12 @@ const hasCloud = CLOUD_ENTRIES.length > 0;
                 <span><span lang="en">{e.cloud.en}</span><span lang="zh-CN">{e.cloud.zh}</span></span>
               </div>
             )}
+            {e.upgrade && (
+              <div class="cl-note">
+                <span class="cl-badge upgrade sm"><span lang="en">Self-hosting</span><span lang="zh-CN">自托管</span></span>
+                <span><span lang="en">{e.upgrade.en}</span><span lang="zh-CN">{e.upgrade.zh}</span></span>
+              </div>
+            )}
             {e.link && (
               <a class="cl-link" href={e.link.href}><span lang="en">{e.link.label.en}</span><span lang="zh-CN">{e.link.label.zh}</span> →</a>
             )}
@@ -137,6 +143,7 @@ const hasCloud = CLOUD_ENTRIES.length > 0;
   .cl-badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 12px var(--sans); white-space: nowrap; }
   .cl-badge.community { color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .cl-badge.cloud { background: var(--ink); color: var(--bg); }
+  .cl-badge.upgrade { color: var(--ink); border: 1px solid var(--line); background: var(--surface); }
   .cl-badge.sm { height: 22px; padding: 0 8px; font-size: 11.5px; flex: none; }
   .cl-bar { display: inline-flex; gap: 4px; padding: 4px; margin: 28px 0 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
   .cl-bar button { height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: 500 14px var(--sans); cursor: pointer; }
