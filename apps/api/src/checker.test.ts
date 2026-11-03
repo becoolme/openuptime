@@ -39,6 +39,37 @@ describe("http keyword checks", () => {
   });
 });
 
+describe("http JSON assertions", () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/big") return res.end(JSON.stringify({ pad: "x".repeat(MAX_BODY_BYTES), status: "ok" }));
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ status: "ok", count: 3 }));
+  });
+  let base = "";
+  beforeAll(async () => {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(() => void server.close());
+  const check = (over: Partial<CheckInput> & { path?: string }) =>
+    runCheck({ type: "http", target: base + (over.path ?? "/"), method: "GET", expectedStatus: 200, timeoutMs: 3000, ...over });
+
+  it("passes and fails on the body's values", async () => {
+    expect((await check({ jsonAssertions: [{ path: "$.status", op: "equals", value: "ok" }, { path: "$.count", op: "greater_than", value: "2" }] })).ok).toBe(true);
+    const r = await check({ jsonAssertions: [{ path: "$.count", op: "less_than", value: "2" }] });
+    expect(r).toMatchObject({ ok: false, error: 'Expected JSON $.count to be less than "2", got 3' });
+  });
+  it("fails a HEAD check that has assertions, since there is no body to read", async () => {
+    const r = await check({ method: "HEAD", jsonAssertions: [{ path: "$.status", op: "equals", value: "ok" }] });
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/need a response body/) });
+    expect((await check({ method: "HEAD" })).ok).toBe(true);
+  });
+  it("says a body was too large rather than malformed", async () => {
+    const r = await check({ path: "/big", jsonAssertions: [{ path: "$.status", op: "exists", value: "" }] });
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/larger than 1 MB/) });
+  });
+});
+
 describe("database probes", () => {
   type Handler = (s: import("node:net").Socket) => void;
   const servers: import("node:net").Server[] = [];

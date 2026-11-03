@@ -5,8 +5,9 @@ import Select from "./Select";
 import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { ago, api, everyShort, type Channel, type Incident, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type JsonAssertion, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
+import { toast } from "../lib/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
@@ -86,6 +87,73 @@ function IntervalTag({ monitor, onChanged }: { monitor: Monitor; onChanged: (sec
   );
 }
 
+type BulkAction = "pause" | "resume" | "delete" | "add_channels" | "remove_channels";
+
+/** The bar above the list while monitors are ticked: one action for all of them, with a report of the ones it missed. */
+function BulkBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => void; onClear: () => void }) {
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.channels().then(setChannels).catch(() => {}); }, []);
+  async function run(action: BulkAction, channelIds?: string[]) {
+    if (action === "delete" && !confirm(t("Delete {n} monitors and their history? This cannot be undone.").replace("{n}", String(ids.length)))) return;
+    setBusy(true);
+    try {
+      const r = await api.bulkMonitors({ ids, action, ...(channelIds ? { channelIds } : {}) });
+      const done = t("{n} monitors updated").replace("{n}", String(r.done.length));
+      if (r.failed.length) toast(`${done} · ${t("{n} failed").replace("{n}", String(r.failed.length))}: ${[...new Set(r.failed.map((f) => f.error))].join("; ")}`, "err", { sticky: true });
+      else toast(done);
+      onDone();
+    } catch (e) {
+      const x = e as Error & { code?: string };
+      toast(x.code === "monitor_limit" ? t("You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.") : x.message, "err");
+    }
+    setBusy(false);
+  }
+  const channelOptions = [{ value: "", label: "" }, ...channels.map((c) => ({ value: c.id, label: c.name }))];
+  return (
+    <div className="bulk" role="toolbar" aria-label={t("Selected monitors")}>
+      <b>{t("{n} selected").replace("{n}", String(ids.length))}</b>
+      <button className="btn sm" disabled={busy} onClick={() => run("pause")}>{t("Pause")}</button>
+      <button className="btn sm" disabled={busy} onClick={() => run("resume")}>{t("Resume")}</button>
+      {channels.length > 0 && <>
+        <Select compact className="in" value="" label={t("Add alert channel")} options={channelOptions.map((o) => (o.value ? o : { ...o, label: t("Add alert channel") }))} onChange={(v) => v && run("add_channels", [v])} />
+        <Select compact className="in" value="" label={t("Remove alert channel")} options={channelOptions.map((o) => (o.value ? o : { ...o, label: t("Remove alert channel") }))} onChange={(v) => v && run("remove_channels", [v])} />
+      </>}
+      <button className="btn sm danger-l" disabled={busy} onClick={() => run("delete")}>{t("Delete")}</button>
+      <button className="btn sm" disabled={busy} onClick={onClear}>{t("Clear selection")}</button>
+    </div>
+  );
+}
+
+// The list's sort is the viewer's own preference, kept in this browser only.
+type SortKey = "name" | "status" | "uptime" | "latency" | "checked";
+type Sort = { key: SortKey; desc: boolean } | null;
+const SORT_STORE = "ou_monitor_sort";
+const SORT_KEYS: SortKey[] = ["name", "status", "uptime", "latency", "checked"];
+function readSort(): Sort {
+  try {
+    const [key, dir] = (localStorage.getItem(SORT_STORE) ?? "").split(":");
+    return SORT_KEYS.includes(key as SortKey) ? { key: key as SortKey, desc: dir === "desc" } : null;
+  } catch { return null; }
+}
+function saveSort(s: Sort) {
+  try { if (s) localStorage.setItem(SORT_STORE, `${s.key}:${s.desc ? "desc" : "asc"}`); else localStorage.removeItem(SORT_STORE); } catch {}
+}
+// what needs attention first: down, then degraded, up, waiting for a first check, paused
+const statusRank = (m: Monitor) => (m.paused ? 4 : m.status === "down" ? 0 : m.status === "degraded" ? 1 : m.status === "up" ? 2 : 3);
+const sortValue = (m: Monitor, key: SortKey): string | number | null =>
+  key === "name" ? m.name.toLowerCase() : key === "status" ? statusRank(m) : key === "uptime" ? m.uptime24h ?? null : key === "latency" ? m.avgLatency24h ?? null : m.lastCheckedAt ? Date.parse(m.lastCheckedAt) : null;
+/** Sorted copy; monitors without a value (no checks yet) stay at the end in either direction. */
+export function sortMonitors(list: Monitor[], sort: Sort): Monitor[] {
+  if (!sort) return list;
+  return [...list].sort((a, b) => {
+    const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
+    if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+    const c = x < y ? -1 : x > y ? 1 : 0;
+    return sort.desc ? -c : c;
+  });
+}
+
 export default function Monitors() {
   const [items, setItems] = useState<Monitor[] | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -96,6 +164,15 @@ export default function Monitors() {
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<Sort>(null);
+  useEffect(() => setSort(readSort()), []);
+  // a click sorts by the column, a second click reverses it, a third goes back to the default order
+  const sortBy = (key: SortKey) => {
+    const next: Sort = sort?.key !== key ? { key, desc: key === "checked" } : sort.desc === (key === "checked") ? { key, desc: !sort.desc } : null;
+    setSort(next);
+    saveSort(next);
+  };
   // "All projects": every project of the workspace in one read-only list, with a summary per project on top
   const everything = isAllProjects();
   const projects = useProjects();
@@ -130,15 +207,24 @@ export default function Monitors() {
   const withLat = all.filter((m) => m.avgLatency24h != null);
   const avgLat = withLat.length ? Math.round(withLat.reduce((a, m) => a + (m.avgLatency24h as number), 0) / withLat.length) : null;
   const openInc = incidents.filter((i) => i.status !== "resolved");
-  const shown = all.filter((m) => {
+  const shown = sortMonitors(all.filter((m) => {
     if (tab === "up" && (!(m.status === "up" || m.status === "degraded") || domainAttention(m))) return false;
     if (tab === "down" && m.status !== "down" && !domainAttention(m)) return false;
     if (tab === "paused" && !m.paused) return false;
     const n = q.trim().toLowerCase();
     if (tag && !(m.tags ?? []).includes(tag)) return false;
     return !n || m.name.toLowerCase().includes(n) || m.target.toLowerCase().includes(n) || (m.tags ?? []).some((x) => x.toLowerCase().includes(n));
-  });
+  }), sort);
+  const head = (key: SortKey, label: string) => (
+    <button type="button" className={`sort-h ${sort?.key === key ? "on" : ""}`} onClick={() => sortBy(key)}>
+      {t(label)}{sort?.key === key && <i aria-hidden="true">{sort.desc ? "↓" : "↑"}</i>}
+    </button>
+  );
   const allTags = [...new Set(all.flatMap((m) => m.tags ?? []))].sort();
+  // only ticked monitors the list shows count: one hidden by a search or tag, or deleted elsewhere, is never acted on
+  const pickedIds = shown.filter((m) => picked.has(m.id)).map((m) => m.id);
+  const allShownPicked = shown.length > 0 && shown.every((m) => picked.has(m.id));
+  const pick = (id: string, on: boolean) => setPicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   async function importFile(file: File) {
     setNote(null);
@@ -251,18 +337,21 @@ export default function Monitors() {
               {allTags.map((x) => <button key={x} className={`tab ${tag === x ? "on" : ""}`} onClick={() => setTag(tag === x ? "" : x)}>{x}</button>)}
             </div>
           )}
+          {!everything && pickedIds.length > 0 && <BulkBar ids={pickedIds} onClear={() => setPicked(new Set())} onDone={() => { setPicked(new Set()); load(); window.dispatchEvent(new Event("ou:changed")); }} />}
           <div className="card tbl mon-tbl">
-            <div className="tr th"><span>{t("Monitor")}</span><span>{t("Status")}</span><span>{t("Response")}</span><span>{t("Uptime 24h")}</span><span>{t("Latency")}</span><span>{t("Checked")}</span></div>
+            <div className="tr th"><span className="nm">{!everything && <input type="checkbox" className="pick" aria-label={t("Select all shown monitors")} checked={allShownPicked} onChange={(e) => setPicked((s) => { const n = new Set(s); for (const m of shown) { if (e.target.checked) n.add(m.id); else n.delete(m.id); } return n; })} />}{head("name", "Monitor")}</span><span>{head("status", "Status")}</span><span>{t("Response")}</span><span>{head("uptime", "Uptime 24h")}</span><span>{head("latency", "Latency")}</span><span>{head("checked", "Checked")}</span></div>
             {shown.map((m) => (
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
+                  {/* the row is a link: ticking the box must not open the monitor */}
+                  {!everything && <span className="pick-w" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) e.preventDefault(); }}><input type="checkbox" className="pick" aria-label={t("Select {name}").replace("{name}", m.name)} checked={picked.has(m.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => pick(m.id, e.target.checked)} /></span>}
                   <span className="chip">{TYPE_LABEL[m.type]}</span>
                   {everything || m.type === "heartbeat" ? <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span> : <IntervalTag monitor={m} onChanged={(sec) => setItems((xs) => xs && xs.map((x) => (x.id === m.id ? { ...x, intervalSec: sec } : x)))} />}
                   <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
                 </div>
                 <span><span className={`pill ${monitorState(m).tone}`}>{t(monitorState(m).label)}</span></span>
                 <span className="spk"><Spark data={m.spark ?? []} status={m.status} /></span>
-                <span className="num">{m.uptime24h == null ? "—" : `${m.uptime24h}%`}</span>
+                <span className="num">{m.uptime24h == null ? "—" : `${m.uptime24h.toFixed(2)}%`}</span>
                 <span className="num">{m.avgLatency24h == null ? "—" : `${m.avgLatency24h} ms`}</span>
                 <span className="muted">{ago(m.lastCheckedAt)}</span>
               </a>
@@ -287,6 +376,9 @@ const STATUS_NAMES: Record<number, string> = {
 /** The common statuses, plus whatever an existing monitor already expects (it may predate the list). */
 const statusOptions = (current: number) =>
   [...new Set([...Object.keys(STATUS_NAMES).map(Number), current])].sort((a, b) => a - b).map((n) => ({ value: n, label: STATUS_NAMES[n] ? `${n} ${STATUS_NAMES[n]}` : String(n) }));
+
+const JSON_OPS: [JsonAssertion["op"], string][] = [["equals", "equals"], ["not_equals", "does not equal"], ["contains", "contains"], ["exists", "exists"], ["not_exists", "does not exist"], ["greater_than", "greater than"], ["less_than", "less than"]];
+const VALUELESS: JsonAssertion["op"][] = ["exists", "not_exists"];
 
 /** Types whose checks can run from a probe region (the API's PROBE_TYPES). */
 const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp"];
@@ -316,6 +408,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [tagText, setTagText] = useState((monitor?.tags ?? []).join(", "));
   const [hdrs, setHdrs] = useState<{ k: string; v: string }[]>(Object.entries(monitor?.headers ?? {}).map(([k, v]) => ({ k, v })));
   const setHdr = (i: number, p: Partial<{ k: string; v: string }>) => setHdrs((h) => h.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const [asserts, setAsserts] = useState<JsonAssertion[]>(monitor?.jsonAssertions ?? []);
+  const setAssert = (i: number, p: Partial<JsonAssertion>) => setAsserts((a) => a.map((r, j) => (j === i ? { ...r, ...p } : r)));
   const [channels, setChannels] = useState<Channel[]>([]);
   useEffect(() => {
     api.channels().then((list) => {
@@ -382,7 +476,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [] };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         if (monitor.mcpConfigRedacted) { delete (patch as Partial<typeof patch>).target; delete (patch as Partial<typeof patch>).headers; }
@@ -498,6 +592,21 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <label className="fld">{t("Mode")}
               <Select className="in" value={f.keywordMode as string} onChange={(v) => set("keywordMode", v as "contains" | "absent")} options={[{ value: "contains", label: t("must contain") }, { value: "absent", label: t("must not contain") }]} />
             </label>
+          </div>
+        )}
+        {f.type === "http" && (
+          <div className="fld">
+            {t("JSON assertions (optional)")}
+            {asserts.map((a, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <input className="in mono" style={{ flex: "2 1 160px", minWidth: 0 }} value={a.path} placeholder="$.data.status" aria-label={t("JSON path")} maxLength={256} onChange={(e) => setAssert(i, { path: e.target.value })} />
+                <Select className="in" value={a.op as string} onChange={(v) => setAssert(i, { op: v as JsonAssertion["op"] })} label={t("Comparison")} options={JSON_OPS.map(([value, label]) => ({ value, label: t(label) }))} />
+                {!VALUELESS.includes(a.op) && <input className="in mono" style={{ flex: "1 1 100px", minWidth: 0 }} value={a.value} placeholder="ok" aria-label={t("Expected value")} maxLength={500} onChange={(e) => setAssert(i, { value: e.target.value })} />}
+                <button type="button" className="btn" onClick={() => setAsserts((x) => x.filter((_, j) => j !== i))}>{t("Remove")}</button>
+              </div>
+            ))}
+            {asserts.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setAsserts((x) => [...x, { path: "", op: "equals", value: "" }])}>{t("Add assertion")}</button></div>}
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.")}</span>
           </div>
         )}
         {(f.type === "http" || f.type === "websocket" || f.type === "evm" || f.type === "solana" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (

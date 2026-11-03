@@ -26,7 +26,7 @@ describe("the changelog", () => {
   });
   it("is written in both languages", () => {
     for (const e of ENTRIES) {
-      const strings = [e.title, e.summary, ...e.points, ...(e.cloud ? [e.cloud] : []), ...(e.link ? [e.link.label] : [])];
+      const strings = [e.title, e.summary, ...e.points, ...(e.cloud ? [e.cloud] : []), ...(e.upgrade ? [e.upgrade] : []), ...(e.link ? [e.link.label] : [])];
       for (const s of strings) {
         expect(s.en.trim()).not.toBe("");
         expect(s.zh.trim()).not.toBe("");

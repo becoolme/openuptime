@@ -107,7 +107,7 @@ export function StatusPageEditor({ id }: { id: string }) {
     setPending("save");
     setErr("");
     try {
-      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), hideBranding: !!page!.hideBranding, uptimeOkPct: page!.uptimeOkPct ?? 99.9, uptimeWarnPct: page!.uptimeWarnPct ?? 98, mcpEnabled: page!.mcpEnabled !== false, maintenanceReminderHours: page!.maintenanceReminderHours ?? 24, components: comps } as Partial<StatusPage>);
+      await api.updateStatusPage(id, { title: page!.title, theme: page!.theme, showLatency: page!.showLatency, externalUrl: (page!.externalUrl ?? "").trim(), hideBranding: !!page!.hideBranding, uptimeOkPct: page!.uptimeOkPct ?? 99.9, uptimeWarnPct: page!.uptimeWarnPct ?? 98, mcpEnabled: page!.mcpEnabled !== false, maintenanceReminderHours: page!.maintenanceReminderHours ?? 24, customCss: page!.customCss ?? "", components: comps } as Partial<StatusPage>);
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch (e) {
@@ -180,6 +180,14 @@ export function StatusPageEditor({ id }: { id: string }) {
               <div><b style={{ fontWeight: 500 }}>{t("Allow the public MCP tools to read this page")}</b><small>{t("Controls the public, read-only MCP tools only. The page, its feeds and llms.txt stay public either way.")}</small></div>
               <span className={`tg ${page.mcpEnabled !== false ? "on" : ""}`} />
             </button>
+          </div>
+
+          <div className="card cc">
+            <div className="cc-h"><h3>{t("Custom CSS")}</h3></div>
+            <label className="fld">{t("Stylesheet for the public page (optional)")}
+              <textarea className="in mono" rows={8} maxLength={20000} spellCheck={false} value={page.customCss ?? ""} placeholder={".pub-hd h1 { letter-spacing: -0.02em; }\n:root { --accent: #2563eb; }"} onChange={(e) => setPage({ ...page, customCss: e.target.value })} />
+              <small className="faint">{t("Applied after the page's own styles. It cannot load anything: url(), @import, @font-face and escapes are refused. Up to 20,000 characters.")}</small>
+            </label>
           </div>
 
           <div className="card cc">

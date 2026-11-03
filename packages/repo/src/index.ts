@@ -59,6 +59,8 @@ export type McpConfig = {
     assertions: { path: string; operator: "equals" | "contains" | "exists"; value?: unknown }[];
   } | null;
 };
+/** http: one check on the JSON response body; `value` is ignored by exists and not_exists. */
+export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string };
 export type McpToolSchema = { name: string; inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>; description?: string; annotations?: Record<string, unknown> };
 export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string; tool: string; path?: string; message: string };
 /** Bounded diagnostics, never raw tool results or server error messages. */
@@ -135,6 +137,8 @@ export interface Monitor {
   keyword: string | null;
   keywordMode: string;
   expectedLocation: string | null;
+  /** http: every assertion must hold on the JSON response body */
+  jsonAssertions: JsonAssertion[];
   headers: Record<string, string>;
   /** websocket: text sent once the connection is open; null = only the handshake (and a greeting, with a keyword) */
   wsMessage: string | null;
@@ -158,7 +162,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
-  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "jsonAssertions" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type ImportMonitor = { source: string; sourceId: string; input: NewMonitor };
@@ -384,10 +388,12 @@ export interface StatusPage {
   mcpEnabled: boolean;
   /** hours before maintenance starts that subscribers are reminded; 0 = never */
   maintenanceReminderHours: number;
+  /** the owner's stylesheet for the public page; null = none */
+  customCss: string | null;
   createdAt: Date;
 }
 export type NewStatusPage = { slug: string; title: string; theme?: string; showLatency?: boolean; externalUrl?: string | null; hideBranding?: boolean };
-export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding" | "uptimeOkPct" | "uptimeWarnPct" | "mcpEnabled" | "maintenanceReminderHours">>;
+export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding" | "uptimeOkPct" | "uptimeWarnPct" | "mcpEnabled" | "maintenanceReminderHours" | "customCss">>;
 export type PageComponentInput = { monitorId: string; groupName?: string };
 export interface Subscriber {
   id: string;
@@ -431,6 +437,9 @@ export interface StatusBoard {
     group: string;
     status: MonitorStatus | "unknown";
     uptime90d: number | null;
+    /** uptime over the last 7 and 30 days, from the daily buckets; null while the history is hourly or empty */
+    uptime7d: number | null;
+    uptime30d: number | null;
     days: { day: string; uptime: number }[];
   }[];
   /** unresolved incidents of the page, newest first; `updates` holds the public ones only */
@@ -744,7 +753,7 @@ export interface Repo {
   statusPageBySlug(slug: string): Promise<StatusPage | null>;
   statusBoard(page: StatusPage): Promise<StatusBoard>;
   /** Incidents shown on a page (its monitors' plus workspace-level ones), newest first. */
-  pageIncidents(page: StatusPage, o: { limit: number; before?: Date }): Promise<IncidentWithUpdates[]>;
+  pageIncidents(page: StatusPage, o: { limit: number; before?: Date; overlapping?: { from: Date; to: Date } }): Promise<IncidentWithUpdates[]>;
   subscriberCount(pageId: string): Promise<number>;
   /**
    * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row).

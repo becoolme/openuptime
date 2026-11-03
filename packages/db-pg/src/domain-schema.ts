@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DomainExpiry, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
+import type { DomainExpiry, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
 export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]);
@@ -97,6 +97,8 @@ export const monitor = pgTable(
     keywordMode: text("keyword_mode").notNull().default("contains"),
     /** http, with a redirect status expected: where the redirect must lead (absolute URL, or a path on the target's site) */
     expectedLocation: text("expected_location"),
+    /** http: assertions on the JSON response body, all of which must hold */
+    jsonAssertions: jsonb("json_assertions").$type<JsonAssertion[]>().notNull().default([]),
     /** http: extra request headers (also used for bearer / basic auth) */
     headers: jsonb("headers").$type<Record<string, string>>().notNull().default({}),
     /** websocket: text sent once the connection is open; a reply must then come back */
@@ -384,6 +386,8 @@ export const statusPage = pgTable(
     mcpEnabled: boolean("mcp_enabled").notNull().default(true),
     /** subscribers get a reminder this many hours before maintenance starts; 0 turns it off */
     maintenanceReminderHours: integer("maintenance_reminder_hours").notNull().default(24),
+    /** the owner's stylesheet for the public page, checked on save so it cannot load anything or leave its <style> */
+    customCss: text("custom_css"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("status_page_slug_idx").on(t.slug)],

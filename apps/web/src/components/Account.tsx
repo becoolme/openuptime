@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import QRCode from "qrcode";
 import { toast } from "../lib/toast";
+import { type Clock, fmtTime, getClock, setClock } from "../lib/time";
 
 type Me = { name?: string; email?: string; locale?: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null };
 
@@ -209,6 +210,25 @@ function ConnectedAccounts({ accounts, load }: { accounts: Linked[] | null; load
   );
 }
 
+/** 12- or 24-hour clock for this browser; times are always shown in the browser's time zone. */
+function TimeFormat() {
+  const [clock, setC] = useState<Clock>("auto");
+  useEffect(() => setC(getClock()), []);
+  const pick = (c: Clock) => { setClock(c); setC(c); };
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const sample = new Date(new Date().setHours(14, 5, 0, 0));
+  return (
+    <div className="card sect">
+      <h3>{t("Time format")}</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>{t("Times are shown in this browser's time zone ({zone}). The choice is kept in this browser.").replace("{zone}", zone)}</p>
+      <div className="seg" style={{ maxWidth: 360 }}>
+        {([["auto", "Automatic"], ["24", "24-hour"], ["12", "12-hour"]] as [Clock, string][]).map(([c, label]) => <i key={c} className={clock === c ? "on" : ""} onClick={() => pick(c)}>{t(label)}</i>)}
+      </div>
+      <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Example")}: {fmtTime(sample, { clock })}</p>
+    </div>
+  );
+}
+
 /** Personal settings: who you are and which language emails (and the app) use. API keys live on their own page. */
 export default function Account() {
   const [me, setMe] = useState<Me | null>(null);
@@ -249,6 +269,7 @@ export default function Account() {
             {saved && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Saved")}</p>}
           </div>
         )}
+        {me && <TimeFormat />}
         {me && <ConnectedAccounts accounts={accounts} load={loadAccounts} />}
         {me && <Security me={me} reload={load} hasPassword={!accounts || accounts.length === 0 || accounts.some((a) => a.providerId === "credential")} />}
       </div>

@@ -10,6 +10,7 @@ export type McpObservation = { toolsComplete?: boolean; id?: string; schemaHash?
 export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "checkedAt" | "stage" | "timings" | "changes" | "drift" | "protocolVersion" | "transport">;
 export type McpHistory = { results: (CheckResult & { mcp: McpCheckDiagnostics })[]; metrics: { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> }; changes: { id: string; checkedAt: string; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] }[] };
 export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation };
+export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string };
 export type Monitor = {
   id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana"; target: string; method: string; requestBody?: string | null;
   mcpConfig?: McpConfig | null;
@@ -23,7 +24,7 @@ export type Monitor = {
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
   dnsRecordType?: "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS"; dnsExpectedValue?: string | null; dnsMatchMode?: "exact" | "contains";
-  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
+  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; jsonAssertions?: JsonAssertion[]; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   /** the project the monitor belongs to (the lists of the "All projects" view mix several) */
   projectId?: string | null;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;
@@ -69,7 +70,7 @@ export type Incident = {
 
 export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string; topic?: string; token?: string; priority?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
 export type WorkspaceSettings = { alertLogRetentionDays: number; checkRetentionDays: number; monthlyReport: boolean };
-export type StatusPage = { id: string; projectId?: string | null; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
+export type StatusPage = { id: string; projectId?: string | null; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; customCss?: string | null; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
 
 // Requests started as soon as the page's HTML is parsed (lib/boot.ts), in parallel with the JS bundles loading:
 // the first GET for a path is answered by that in-flight request, so a page load is HTML (static) + one parallel API round.
@@ -213,6 +214,8 @@ export const api = {
   createMonitor: (b: Partial<Monitor> & { name: string }) => req<Monitor>("/monitors", { method: "POST", body: JSON.stringify(b) }),
   updateMonitor: (id: string, b: Partial<Monitor>) => req<Monitor>(`/monitors/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteMonitor: (id: string) => req<void>(`/monitors/${id}`, { method: "DELETE" }),
+  bulkMonitors: (b: { ids: string[]; action: "pause" | "resume" | "delete" | "add_channels" | "remove_channels"; channelIds?: string[] }) =>
+    req<{ action: string; done: string[]; failed: { id: string; error: string }[] }>("/monitors/bulk", { method: "POST", body: JSON.stringify(b) }),
   previewMcp: (body: { region?: string; monitorId?: string; target: string; headers: Record<string, string>; timeoutMs: number; mcpConfig: McpConfig }) => req<McpPreview>("/monitors/mcp/preview", { method: "POST", body: JSON.stringify(body) }),
   mcpHistory: (id: string, days: 7 | 30) => req<McpHistory>(`/monitors/${id}/mcp-history?days=${days}&limit=120`),
   acceptMcpBaseline: (id: string, observationId: string, schemaHash: string) => req<{ ok: true }>(`/monitors/${id}/mcp-baseline/accept`, { method: "POST", body: JSON.stringify({ observationId, schemaHash }) }),

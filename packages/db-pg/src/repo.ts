@@ -75,7 +75,8 @@ export function createRepo(db: DbExecutor): Repo {
 
   /** Incidents shown on a page: those of its own monitors, plus manual ones (no monitor) of the page's own project. */
   function pageScope(orgId: string, projectId: string | null, monitorIds: string[] | SQLWrapper) {
-    const manual = and(isNull(schema.incident.monitorId), projectId ? eq(schema.incident.projectId, projectId) : isNull(schema.incident.projectId));
+    // declared by hand for the whole project; an automatic incident whose monitor was deleted is not one
+    const manual = and(isNull(schema.incident.monitorId), eq(schema.incident.auto, false), projectId ? eq(schema.incident.projectId, projectId) : isNull(schema.incident.projectId));
     const own = Array.isArray(monitorIds) ? (monitorIds.length ? inArray(schema.incident.monitorId, monitorIds) : undefined) : inArray(schema.incident.monitorId, monitorIds);
     return and(eq(schema.incident.organizationId, orgId), own ? or(manual, own) : manual);
   }
@@ -549,7 +550,7 @@ export function createRepo(db: DbExecutor): Repo {
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage", "mcpConfig"];
+        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "headers", "wsMessage", "mcpConfig"];
         const comparable = (key: string, value: unknown) => JSON.stringify(
           key === "regions" && Array.isArray(value) ? [...value].sort()
             : key === "mcpConfig" ? comparableMcpConfig(value as import("@openuptime/repo").McpConfig | null | undefined) : value,
@@ -578,7 +579,15 @@ export function createRepo(db: DbExecutor): Repo {
       });
     },
     async deleteMonitor(orgId, id, scope) {
-      await db.delete(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)));
+      const mine = and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId));
+      await db.transaction(async (tx) => {
+        // an outage of a monitor that no longer exists can never recover, so it is closed here rather than left open
+        const owned = tx.select({ id: schema.monitor.id }).from(schema.monitor).where(mine);
+        const closed = await tx.update(schema.incident).set({ status: "resolved", resolvedAt: new Date() }).where(and(inArray(schema.incident.monitorId, owned), isNull(schema.incident.resolvedAt))).returning({ id: schema.incident.id });
+        // the timeline says why it ended, as it does when checks pass again
+        if (closed.length) await tx.insert(schema.incidentUpdate).values(closed.map((inc) => ({ incidentId: inc.id, status: "resolved" as const, body: "The monitor was deleted." })));
+        await tx.delete(schema.monitor).where(mine);
+      });
     },
     async ownedMonitorIds(orgId, ids, scope) {
       if (!ids.length) return [];
@@ -1752,6 +1761,14 @@ export function createRepo(db: DbExecutor): Repo {
           const mine = days.filter((d) => d.monitorId === m.id);
           const total = mine.reduce((a, d) => a + d.total, 0);
           const ok = mine.reduce((a, d) => a + d.ok, 0);
+          // the last n daily buckets, today included; hourly history is too short for these
+          const recent = (n: number) => {
+            if (hourly || m.type === "domain") return null;
+            const since = new Date(Date.now() - (n - 1) * 864e5).toISOString().slice(0, 10);
+            const r = mine.filter((d) => d.day >= since);
+            const t = r.reduce((a, d) => a + d.total, 0);
+            return t ? Math.round((r.reduce((a, d) => a + d.ok, 0) / t) * 10000) / 100 : null;
+          };
           return {
             id: m.id,
             name: m.name,
@@ -1759,6 +1776,8 @@ export function createRepo(db: DbExecutor): Repo {
             status: publicMonitorStatus(m),
             // Registration checks are not service uptime samples.
             uptime90d: m.type === "domain" ? null : total ? Math.round((ok / total) * 10000) / 100 : null,
+            uptime7d: recent(7),
+            uptime30d: recent(30),
             days: m.type === "domain" ? [] : mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
           };
         }),
@@ -1769,7 +1788,14 @@ export function createRepo(db: DbExecutor): Repo {
       const list = await db
         .select()
         .from(schema.incident)
-        .where(and(pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)), o.before ? lt(schema.incident.startedAt, o.before) : undefined))
+        .where(
+          and(
+            pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)),
+            o.before ? lt(schema.incident.startedAt, o.before) : undefined,
+            // open at some point in [from, to): started before its end and not resolved before its start
+            o.overlapping ? and(lt(schema.incident.startedAt, o.overlapping.to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, o.overlapping.from))) : undefined,
+          ),
+        )
         .orderBy(desc(schema.incident.startedAt))
         .limit(o.limit);
       return withUpdates(list);

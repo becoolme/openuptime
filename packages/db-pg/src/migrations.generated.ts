@@ -229,5 +229,15 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0045_tense_the_order",
     "when": 1793464990155,
     "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'evm';--> statement-breakpoint\nALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'solana';"
+  },
+  {
+    "tag": "0046_cooing_warstar",
+    "when": 1793724107749,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"json_assertions\" jsonb DEFAULT '[]'::jsonb NOT NULL;"
+  },
+  {
+    "tag": "0047_eager_smasher",
+    "when": 1793724427189,
+    "sql": "ALTER TABLE \"status_page\" ADD COLUMN \"custom_css\" text;"
   }
 ];

@@ -1,0 +1,1 @@
+ALTER TABLE "status_page" ADD COLUMN "custom_css" text;

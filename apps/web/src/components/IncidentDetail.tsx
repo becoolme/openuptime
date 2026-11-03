@@ -1,5 +1,6 @@
 import { adoptProject, backToAll } from "../lib/nav";
 import { t } from "../lib/i18n";
+import { fmtTime } from "../lib/time";
 import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
 import { ago, api, type Incident } from "../lib/api";
@@ -8,7 +9,7 @@ import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 const KIND: Record<string, string> = { "incident.opened": "Down alert", "incident.resolved": "Recovery alert", "incident.reminder": "Reminder", "incident.escalated": "Escalation", "incident.muted": "Down alert muted" };
 
 const STATES: Incident["status"][] = ["investigating", "identified", "monitoring", "resolved"];
-const utc = (iso: string) => new Date(iso).toISOString().slice(11, 16) + " UTC";
+const utc = (iso: string) => fmtTime(iso, { utc: true });
 const dur = (a: string, b: string | null) => {
   const m = Math.max(0, Math.round(((b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime()) / 60000));
   return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} d`;
@@ -127,7 +128,7 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div className="rr res th"><span>{t("Time (UTC)")}</span><span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
               {inc.checks.map((r) => (
                 <div className="rr res" key={r.id}>
-                  <span className="mono muted">{new Date(r.checkedAt).toISOString().slice(11, 19)}</span>
+                  <span className="mono muted">{fmtTime(r.checkedAt, { utc: true, seconds: true })}</span>
                   <span><span className="pill down">{t("Failed")}</span></span>
                   <span className="mono">{r.statusCode ?? "—"}</span>
                   <span className="mono">{r.latencyMs ?? "—"} ms</span>

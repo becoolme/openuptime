@@ -944,6 +944,53 @@ describe.skipIf(!url)("manual incidents stay inside their project", () => {
     expect(third).toMatchObject({ locale: "en", token: "t1", confirmed: true, created: false });
     expect((await rows())[0]).toMatchObject({ locale: "en", monitorIds: [mid] });
   });
+
+  it("closes a deleted monitor's open incident and keeps its incidents off the project's pages", async () => {
+    const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "E" }).returning())[0];
+    const pg = await repo.createStatusPage(orgId, pr.id, { slug: `e${crypto.randomUUID().slice(0, 8)}`, title: "E" });
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "gone", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    const open = await repo.createIncident({ organizationId: orgId, monitorId: m.id, projectId: pr.id, title: "auto-open", auto: true });
+    await repo.createIncident({ organizationId: orgId, projectId: pr.id, title: "by-hand", auto: false });
+    const [kept] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "kept", type: "tcp", target: "127.0.0.1:2", intervalSec: 60 }).returning();
+    const other = await repo.createIncident({ organizationId: orgId, monitorId: kept.id, projectId: pr.id, title: "still-open", auto: true });
+    // another workspace cannot delete it, and nothing is closed then
+    await repo.deleteMonitor(crypto.randomUUID(), m.id, null);
+    expect((await db.select().from(schema.incident).where(eq(schema.incident.id, open.id)))[0].resolvedAt).toBeNull();
+    await repo.deleteMonitor(orgId, m.id, null);
+
+    const [row] = await db.select().from(schema.incident).where(eq(schema.incident.id, open.id));
+    expect(row).toMatchObject({ monitorId: null, status: "resolved" });
+    expect(row.resolvedAt).not.toBeNull();
+    expect((await db.select().from(schema.incidentUpdate).where(eq(schema.incidentUpdate.incidentId, open.id))).map((u) => [u.status, u.body])).toContainEqual(["resolved", "The monitor was deleted."]);
+    expect((await db.select().from(schema.incident).where(eq(schema.incident.id, other.id)))[0].resolvedAt).toBeNull();
+    expect((await repo.pageIncidents(pg, { limit: 10 })).map((i) => i.title)).toEqual(["by-hand"]);
+  });
+
+  it("gives 7-, 30- and 90-day uptime from daily history and finds the incidents open on a day", async () => {
+    const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "D" }).returning())[0];
+    const pg = await repo.createStatusPage(orgId, pr.id, { slug: `d${crypto.randomUUID().slice(0, 8)}`, title: "D" });
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "ranged", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    await db.insert(schema.statusPageComponent).values({ statusPageId: pg.id, monitorId: m.id });
+    const ago = (d: number) => new Date(Date.now() - d * 864e5);
+    // all fine this week, a bad day 20 days ago, a worse one 60 days ago
+    await db.insert(schema.checkRollup).values([
+      { monitorId: m.id, bucket: ago(1), total: 100, ok: 100 },
+      { monitorId: m.id, bucket: ago(20), total: 100, ok: 50 },
+      { monitorId: m.id, bucket: ago(60), total: 100, ok: 0 },
+    ] as never);
+    const [c] = (await repo.statusBoard(pg)).components;
+    expect(c).toMatchObject({ uptime7d: 100, uptime30d: 75, uptime90d: 50 });
+
+    await db.insert(schema.incident).values([
+      { organizationId: orgId, monitorId: m.id, title: "that-day", startedAt: ago(20.5), resolvedAt: ago(20.4) },
+      { organizationId: orgId, monitorId: m.id, title: "still-open", startedAt: ago(25) },
+      { organizationId: orgId, monitorId: m.id, title: "earlier", startedAt: ago(30), resolvedAt: ago(29) },
+    ] as never);
+    const day = ago(20.5);
+    const from = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()));
+    const open = await repo.pageIncidents(pg, { limit: 10, overlapping: { from, to: new Date(from.getTime() + 864e5) } });
+    expect(open.map((i) => i.title).sort()).toEqual(["still-open", "that-day"]);
+  });
 });
 
 describe.skipIf(!url)("maintenance windows and pages without a project", () => {

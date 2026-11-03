@@ -94,19 +94,25 @@ async function post(url: string, body: unknown) {
   if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
 }
 
+/**
+ * The text cut to `max` UTF-16 code units (what Discord and Telegram count, and what slice() cuts at) with an ellipsis;
+ * dropping a trailing lone high surrogate keeps the cut from splitting an emoji into invalid text.
+ */
+export const cutText = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "")}…`);
+
 /** Teams rejects a message body over 4000 characters. */
 const TEAMS_LIMIT = 4000;
 /**
  * Backslash-escape the Markdown control characters Adaptive Card TextBlocks interpret, then cap the length (escapes included).
  * Both JS and the limit count UTF-16 code units; iterating by code point keeps a surrogate pair (emoji) from being cut in half.
  */
-export function teamsText(text: string): string {
+export function teamsText(text: string, limit = TEAMS_LIMIT): string {
   // each piece is one whole code point with its escape, so a cut can neither split a surrogate pair nor leave a lone backslash
   const pieces = Array.from(text, (ch) => (/[\\*_\[\]()`]/.test(ch) ? `\\${ch}` : ch));
-  if (pieces.reduce((n, piece) => n + piece.length, 0) <= TEAMS_LIMIT) return pieces.join("");
+  if (pieces.reduce((n, piece) => n + piece.length, 0) <= limit) return pieces.join("");
   let out = "";
   for (const piece of pieces) {
-    if (out.length + piece.length > TEAMS_LIMIT - 1) break;
+    if (out.length + piece.length > limit - 1) break;
     out += piece;
   }
   return `${out}…`;
@@ -431,20 +437,24 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
   const opened = ev.kind !== "incident.resolved";
   const cfg = c.config as Record<string, string | undefined>;
   const need = (v: unknown, what: string) => { if (!v) throw new Skipped(`skipped: the channel has no ${what}`); };
+  // chat messages end with a link to the incident, as the email's button does; a test alert has no incident to open,
+  // and without a configured web origin there is no address to give. Where a message is shortened to fit, the text is
+  // cut and the link kept whole.
+  const link = !ev.test && appUrl() ? `${appUrl().replace(/\/+$/, "")}/app/incidents/${ev.incident.id}` : "";
+  const linked = (body: string) => (link ? `${body}\n${link}` : body);
+  const room = (limit: number) => limit - (link ? link.length + 1 : 0);
   switch (c.type) {
     case "slack":
       need(cfg.url, "webhook URL");
-      await post(cfg.url!, { text });
+      await post(cfg.url!, { text: linked(text) });
       break;
     case "discord": {
       need(cfg.url, "webhook URL");
       const endpoint = new URL(cfg.url!);
       // Wait for Discord to confirm creation, instead of accepting a fire-and-forget response.
       endpoint.searchParams.set("wait", "true");
-      // Discord counts a message's length in UTF-16 code units (JS string length), which is also what slice() cuts at;
-      // dropping a trailing lone high surrogate keeps the cut from splitting an emoji into invalid text.
-      const content = text.length <= 2000 ? text : `${text.slice(0, 1999).replace(/[\uD800-\uDBFF]$/, "")}…`;
-      await post(endpoint.href, { content, allowed_mentions: { parse: [] } });
+      // Discord refuses a message over 2000 characters
+      await post(endpoint.href, { content: linked(cutText(text, room(2000))), allowed_mentions: { parse: [] } });
       break;
     }
     case "teams": {
@@ -455,7 +465,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         await post(cfg.url!, { type: "message", attachments: [{
           contentType: "application/vnd.microsoft.card.adaptive", contentUrl: null,
           content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.2",
-            body: [{ type: "TextBlock", text: teamsText(text), wrap: true }], msteams: { width: "Full" } },
+            body: [{ type: "TextBlock", text: link ? `${teamsText(text, TEAMS_LIMIT - teamsText(link).length - 1)}\n${teamsText(link)}` : teamsText(text), wrap: true }], msteams: { width: "Full" } },
         }] });
       } catch (e) {
         // The Workflow trigger must allow "Anyone"; a tenant/user-authenticated trigger answers 401 or 403 to us.
@@ -467,13 +477,15 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
     case "ntfy": {
       need(cfg.url && cfg.topic, "server URL or topic");
       // Keep the UTF-8 message under ntfy's default 4096-byte limit, without creating an attachment.
+      const budget = 4000 - (link ? new TextEncoder().encode(link).length + 1 : 0);
       let content = "";
       let bytes = 0;
       for (const character of text) {
         const size = new TextEncoder().encode(character).length;
-        if (bytes + size > 4000) { content += "…"; break; }
+        if (bytes + size > budget) { content += "…"; break; }
         content += character; bytes += size;
       }
+      content = linked(content);
       let res: Response;
       try {
         const init = json({ topic: cfg.topic, message: content, title: "OpenUptime", priority: Number(cfg.priority || "3") });
@@ -487,7 +499,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
     }
     case "lark":
       need(cfg.url, "webhook URL");
-      await postLark(cfg.url!, text, cfg.secret || undefined);
+      await postLark(cfg.url!, linked(text), cfg.secret || undefined);
       break;
     case "webhook":
       need(cfg.url, "webhook URL");
@@ -495,7 +507,8 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       break;
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
-      await post(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, { chat_id: cfg.chatId, text });
+      // Telegram refuses a message over 4096 characters
+      await post(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, { chat_id: cfg.chatId, text: linked(cutText(text, room(4096))) });
       break;
     case "pagerduty":
       need(cfg.routingKey, "routing key");
@@ -637,10 +650,12 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
 /** A manual incident update (investigating → identified → … → resolved) goes to the same subscribers. */
 export async function notifyIncidentUpdate(
   repo: Repo,
-  inc: { organizationId: string; monitorId: string | null; projectId?: string | null; title: string },
+  inc: { organizationId: string; monitorId: string | null; projectId?: string | null; auto?: boolean; title: string },
   update: { status: string; body: string },
   entitlements: Entitlements = unmetered,
 ) {
+  // an automatic incident whose monitor was deleted is on no status page, so nobody subscribed to it
+  if (!inc.monitorId && inc.auto) return;
   let subs: SubscriberTarget[];
   try {
     ({ send: subs } = await subscriberAllowance(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId)));

@@ -21,11 +21,119 @@ export interface ChangelogEntry {
   points: L[];
   /** what the same change means on the hosted service, for a community entry */
   cloud?: L;
+  /** what someone running their own copy has to do when upgrading past this change (a probe to update, a variable to set) */
+  upgrade?: L;
   link?: { href: string; label: L };
 }
 
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
+  {
+    id: "outbound-proxy", date: "2026-11-03", edition: "community",
+    title: { en: "Run checks through a proxy", zh: "通过代理发起检测" },
+    summary: { en: "Self-hosted servers and probes that may only reach the internet through a proxy can now send their checks through it with OUTBOUND_PROXY.", zh: "只能通过代理访问外网的自托管服务器和探针，现在可以用 OUTBOUND_PROXY 让检测经由代理发出。" },
+    points: [
+      { en: "HTTP, MCP and blockchain checks, domain expiry lookups, alert webhooks and the offline self-check go through the proxy; TCP, DNS, database and WebSocket checks still connect directly.", zh: "HTTP、MCP 和区块链检测、域名到期查询、告警 Webhook 以及断网自检都会经过代理；TCP、DNS、数据库和 WebSocket 检测仍直接连接。" },
+      { en: "Private targets stay refused behind the proxy: each request is tunnelled to the address that was already checked, not to a name the proxy looks up itself.", zh: "使用代理后私有地址仍会被拒绝：每个请求都通过隧道连到已经校验过的地址，而不是交给代理自己解析域名。" },
+      { en: "The proxy may ask for a user name and password, given in the URL.", zh: "代理需要认证时，可以在地址中写上用户名和密码。" },
+    ],
+    link: { href: "/docs/self-host", label: { en: "Read the self-hosting docs", zh: "阅读自托管文档" } },
+  },
+  {
+    id: "chat-alert-incident-link", date: "2026-11-03", edition: "community",
+    title: { en: "Incident links in chat alerts", zh: "聊天告警附带事件链接" },
+    summary: { en: "Alerts sent to Slack, Discord, Microsoft Teams, Telegram, Lark and ntfy now end with a link to the incident.", zh: "发送到 Slack、Discord、Microsoft Teams、Telegram、飞书和 ntfy 的告警末尾现在附带事件链接。" },
+    points: [
+      { en: "Open the incident to acknowledge it or read its timeline in one tap, as the email alert already allowed.", zh: "点一下即可打开事件进行确认或查看时间线，和邮件告警一样方便。" },
+      { en: "Self-hosted installs add the link when the web address is configured.", zh: "自托管部署在配置了网页地址后才会附带该链接。" },
+    ],
+  },
+  {
+    id: "redirect-cookies", date: "2026-11-03", edition: "community",
+    title: { en: "Cookies kept across redirects", zh: "跳转时保留 Cookie" },
+    summary: { en: "HTTP checks now send back cookies a site sets while redirecting, so sign-in and consent redirects no longer loop or fail.", zh: "HTTP 检测现在会在跳转过程中带上网站设置的 Cookie，登录或同意页的跳转不再循环或失败。" },
+    points: [
+      { en: "A cookie is only sent back to the host that set it, and a Secure cookie only over HTTPS.", zh: "Cookie 只会发回设置它的主机，带 Secure 标记的 Cookie 只通过 HTTPS 发送。" },
+      { en: "A Cookie header set on the monitor is still sent on every request.", zh: "监控上设置的 Cookie 请求头仍会随每个请求发送。" },
+    ],
+    upgrade: { en: "Update your regional probes for checks from those regions to keep cookies too.", zh: "请升级区域探针，这些区域的检测才会同样保留 Cookie。" },
+  },
+  {
+    id: "deleted-monitor-incidents", date: "2026-11-03", edition: "community",
+    title: { en: "Deleting a monitor closes its incident", zh: "删除监控时关闭其事件" },
+    summary: { en: "An incident left open by a monitor you delete is now resolved, and no longer appears on status pages as a project-wide incident.", zh: "删除监控后，它留下的未结束事件会被标记为已解决，也不会再作为整个项目的事件出现在状态页上。" },
+    points: [
+      { en: "Before, the incident lost its monitor but stayed open, so the status page showed it as an outage of the whole page.", zh: "此前，事件在监控删除后失去了关联，却仍处于未结束状态，状态页会把它当成整个页面的故障显示。" },
+      { en: "Incidents you declared by hand for the whole project still show as before.", zh: "手动为整个项目创建的事件仍照常显示。" },
+      { en: "Updates to such an incident no longer go to status page subscribers.", zh: "这类事件的后续更新不再发送给状态页订阅者。" },
+    ],
+  },
+  {
+    id: "monitor-list-sort-and-clock", date: "2026-11-03", edition: "community",
+    title: { en: "Sort monitors and pick a clock", zh: "监控排序与时间格式" },
+    summary: { en: "Sort the monitor list by any column, and choose whether times use a 12- or 24-hour clock.", zh: "监控列表可以按任意列排序，时间也可以选择 12 小时制或 24 小时制显示。" },
+    points: [
+      { en: "Click a column header to sort by name, status, uptime, latency or last check; click again to reverse it, a third time to go back to the default order. The browser remembers your choice.", zh: "点击列标题即可按名称、状态、可用率、延迟或最近检测时间排序；再次点击反向排序，第三次恢复默认顺序。浏览器会记住你的选择。" },
+      { en: "Monitors that have no checks yet stay at the end of the list in either direction.", zh: "尚未检测过的监控无论升序还是降序都排在最后。" },
+      { en: "The time format is set under Account; times are shown in the browser's time zone, and incident times keep their UTC label.", zh: "时间格式可在“账号”中设置；时间按浏览器所在时区显示，事件时间仍标注为 UTC。" },
+      { en: "Uptime in the monitor list and in each region's figures is shown with two decimals.", zh: "监控列表和各区域数据中的可用率显示到小数点后两位。" },
+    ],
+  },
+  {
+    id: "status-page-day-incidents", date: "2026-11-03", edition: "community",
+    title: { en: "See a day's incidents on the status page", zh: "在状态页查看某天的事件" },
+    summary: { en: "Visitors can click a day on a component's uptime bar to see the incidents that were open that day.", zh: "访客点击组件可用率条上的某一天，即可看到当天发生的事件。" },
+    points: [
+      { en: "The list shows the incidents of that component and those affecting the whole page, with their status and times.", zh: "列表会显示该组件的事件以及影响整个页面的事件，并附带状态和时间。" },
+      { en: "Days can be opened with the keyboard as well as the mouse.", zh: "也可以用键盘打开某一天的事件。" },
+      { en: "The same list is available from the public API for any of the last 92 days.", zh: "公开 API 也提供同样的列表，可查询最近 92 天中的任意一天。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
+    id: "status-page-uptime-range", date: "2026-11-03", edition: "community",
+    title: { en: "Choose the status page's time range", zh: "选择状态页的时间范围" },
+    summary: { en: "Visitors can switch a status page between the last 7, 30 and 90 days.", zh: "访客可以在最近 7 天、30 天和 90 天之间切换状态页的显示范围。" },
+    points: [
+      { en: "The uptime bars, the uptime figures and the overall ring follow the chosen range, and the choice is kept in the address so it can be shared.", zh: "可用率条、可用率数值和总体环形图都会随所选范围变化，所选范围保存在网址中，方便分享。" },
+      { en: "Uptime is shown with two decimals.", zh: "可用率显示到小数点后两位。" },
+      { en: "While a page has less than four days of history it keeps its hourly view and the range picker is hidden.", zh: "页面历史不足四天时仍按小时显示，此时不显示范围选择。" },
+    ],
+  },
+  {
+    id: "status-page-custom-css", date: "2026-11-03", edition: "community",
+    title: { en: "Custom CSS for status pages", zh: "状态页自定义 CSS" },
+    summary: { en: "Add your own stylesheet to a status page to match it to your brand.", zh: "为状态页添加自己的样式表，使其与品牌风格一致。" },
+    points: [
+      { en: "Write up to 20,000 characters of CSS in the status page settings; it is applied to the public page.", zh: "可在状态页设置中填写最多 20,000 个字符的 CSS，它会应用到公开页面。" },
+      { en: "To keep visitors' requests private, the stylesheet cannot load images, fonts or other files, so url(), @import and @font-face are refused with an explanation.", zh: "为保护访客隐私，样式表不能加载图片、字体或其他文件，因此 url()、@import 和 @font-face 会被拒绝并给出原因。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
+    id: "json-assertions", date: "2026-11-03", edition: "community",
+    title: { en: "Check values in JSON responses", zh: "校验 JSON 响应中的值" },
+    summary: { en: "An HTTP monitor can now read fields from a JSON response and fail when they are not what you expect.", zh: "HTTP 监控现在可以读取 JSON 响应中的字段，值不符合预期时判定为失败。" },
+    points: [
+      { en: "Add up to 10 assertions, each a path such as $.data.items[0].status with a comparison: equals, does not equal, contains, exists, does not exist, greater than or less than.", zh: "最多可添加 10 条断言，每条由路径（如 $.data.items[0].status）和比较方式组成：等于、不等于、包含、存在、不存在、大于或小于。" },
+      { en: "A number, true, false or null in the response is compared by value, so 200 also matches 200.0.", zh: "响应中的数字、true、false 和 null 按值比较，例如 200 也能匹配 200.0。" },
+      { en: "A failed check names the path, the expected value and what the response held.", zh: "检测失败时会写明路径、期望值以及响应中的实际值。" },
+    ],
+    upgrade: { en: "Update your regional probes before monitors with assertions run from them; until then those regions report that an upgrade is needed instead of passing.", zh: "请先升级区域探针，带断言的监控才能从这些区域检测；升级前这些区域会提示需要升级，而不会误判为通过。" },
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
+    id: "bulk-monitor-actions", date: "2026-11-03", edition: "community",
+    title: { en: "Act on several monitors at once", zh: "批量操作监控" },
+    summary: { en: "Tick monitors in the list to pause, resume, delete them or change their alert channels in one step.", zh: "在监控列表里勾选多个监控，一次完成暂停、恢复、删除或调整告警渠道。" },
+    points: [
+      { en: "Each row has a checkbox, and the header box selects every monitor the current filter shows.", zh: "每一行都有复选框，表头的复选框会选中当前筛选结果中的全部监控。" },
+      { en: "Adding or removing an alert channel leaves each monitor's other channels as they were.", zh: "添加或移除告警渠道时，各监控原有的其他渠道保持不变。" },
+      { en: "Monitors that could not be changed are reported with the reason, while the rest are still applied.", zh: "无法处理的监控会单独列出原因，其余监控照常生效。" },
+      { en: "The API offers the same through POST /monitors/bulk, for up to 200 monitors per request.", zh: "API 也提供同样的能力：POST /monitors/bulk，每次最多 200 个监控。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
   {
     id: "monitor-page-spacing", date: "2026-11-02", edition: "community",
     title: { en: "Spacing on the monitor page", zh: "监控详情页间距" },

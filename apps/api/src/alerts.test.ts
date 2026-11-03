@@ -1,17 +1,58 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendPush } from "./apns";
-import { sendEmail } from "./email";
+import { configureEmail, sendEmail } from "./email";
 import { clearProjectNames, deliver, dispatchAlert, retryDeliveries, sendEscalations, sendReminders, withProject } from "./alerts";
 
 // these tests stub the global fetch and use made-up host names; the pinned connection would bypass the stub and go to the real network
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
 vi.mock("./email", async (orig) => ({ ...(await orig<typeof import("./email")>()), sendEmail: vi.fn(async () => {}) }));
 vi.mock("./apns", () => ({ sendPush: vi.fn(async () => {}) }));
-vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) }));
+vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init), outboundProxy: () => null, useOutboundProxy: () => {} }));
 
 const ev = { kind: "incident.opened" as const, incident: { id: "i1", title: "Down" }, monitor: { name: "API", target: "https://x" } };
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("incident link in chat alerts", () => {
+  afterEach(() => configureEmail({ WEB_ORIGIN: "" } as never));
+
+  it("ends a chat message with the incident's address, but not a test alert or a webhook", async () => {
+    configureEmail({ WEB_ORIGIN: "https://app.example.test" } as never);
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const slack = { type: "slack", config: { url: "https://hooks.example.test/a" } };
+    await deliver(slack, ev, "🔴 API is down");
+    await deliver(slack, { ...ev, test: true }, "test");
+    await deliver({ type: "webhook", config: { url: "https://hooks.example.test/b" } }, ev, "🔴 API is down");
+    const bodies = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body));
+    expect(bodies[0].text).toBe("🔴 API is down\nhttps://app.example.test/app/incidents/i1");
+    expect(bodies[1].text).toBe("test");
+    expect(JSON.stringify(bodies[2])).not.toContain("/app/incidents/");
+  });
+
+  it("keeps the link whole when a long message is cut to fit the channel", async () => {
+    configureEmail({ WEB_ORIGIN: "https://app.example.test/" } as never);
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const long = "🔴 API is down: " + "错".repeat(5000);
+    const link = "https://app.example.test/app/incidents/i1";
+    await deliver({ type: "discord", config: { url: "https://discord.example.test/api/webhooks/1/x" } }, ev, long);
+    await deliver({ type: "telegram", config: { botToken: "t", chatId: "1" } }, ev, long);
+    await deliver({ type: "ntfy", config: { url: "https://ntfy.example.test", topic: "t" } }, ev, long);
+    await deliver({ type: "teams", config: { url: "https://teams.example.test/hook" } }, ev, long);
+    const [discord, telegram, ntfy, teams] = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body));
+    const card = teams.attachments[0].content.body[0].text as string;
+    for (const [text, limit] of [[discord.content, 2000], [telegram.text, 4096], [card, 4000]] as [string, number][]) {
+      expect(text.length).toBeLessThanOrEqual(limit);
+      expect(text).toMatch(/…\n/);
+    }
+    expect(discord.content.endsWith(`\n${link}`)).toBe(true);
+    expect(telegram.text.endsWith(`\n${link}`)).toBe(true);
+    expect(card.endsWith("/app/incidents/i1")).toBe(true);
+    expect(new TextEncoder().encode(ntfy.message).length).toBeLessThanOrEqual(4096);
+    expect(ntfy.message.endsWith(`…\n${link}`)).toBe(true);
+  });
+});
 
 describe("lark channel", () => {
   it("posts a text message, signed when a secret is set", async () => {

@@ -7,7 +7,7 @@ vi.mock("./checker", () => ({ runCheck: vi.fn() }));
 const observation: McpObservation = { stage: "complete", toolsComplete: true, timings: { "tools/list": 5 }, tools: [{ name: "lookup", inputSchema: { type: "object", properties: { q: { type: "string" } } } }], changes: [] };
 const m: Monitor = { id: "m", organizationId: "fixture", projectId: null, name: "Regional MCP",
   intervalSec: 60, failureThreshold: 3, status: "up", consecutiveFailures: 0, lastCheckedAt: null, nextCheckAt: new Date(), paused: false,
-  heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
+  heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, jsonAssertions: [], headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
   slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, createdAt: new Date(), type: "mcp", target: "http://10.0.0.1/mcp", method: "GET", expectedStatus: 200, timeoutMs: 1000, regions: ["private-a", "private-b"], minRegionsFailing: 0, mcpConfig: { requiredTools: [], schemaCheck: true, toolCall: null }, mcpBaseline: null };
 function configure() { configureProbes({ PROBE_SECRET: "fixture-secret", PROBE_REGIONS: JSON.stringify({ "private-a": { url: "https://probe.example/a", private: true }, "private-b": { url: "https://probe.example/b", private: true }, public: "https://probe.example/public" }) }); }
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); configureProbes({}); });

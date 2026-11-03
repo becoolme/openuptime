@@ -3,6 +3,7 @@ import { mcpToolsEqual } from "./mcp-monitor-schema";
 import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
+import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -115,6 +116,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     type: input.type, target: input.target, method: input.method, expectedStatus: input.expectedStatus, timeoutMs: input.timeoutMs,
     keyword: input.keyword ?? null, keywordMode: input.keywordMode ?? "contains", expectedLocation: input.expectedLocation ?? null, headers: input.headers ?? {},
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
+    ...(input.type === "http" && input.jsonAssertions?.length ? { jsonAssertions: input.jsonAssertions } : {}),
     ...(input.type === "mcp" ? { mcpConfig: input.mcpConfig ?? null, mcpBaseline: input.mcpBaseline ?? null } : {}),
   });
   try {
@@ -126,16 +128,22 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     }
     // Old probes ignore unknown fields: verify support BEFORE sending a payload. A positive answer is remembered
     // briefly so every check does not pay for a second request; a rolled-back probe is noticed within CAPABILITY_TTL_MS.
-    if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method)) && (capable.get(probe.url) ?? 0) <= Date.now()) {
+    const needs: [string, string][] = [];
+    if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) needs.push([HTTP_REQUEST_CAPABILITY, "Probe upgrade required for HTTP request bodies and methods"]);
+    if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
+    const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
+    if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
       const capabilities: unknown = health.ok ? JSON.parse(await readCapped(health, 4096)) : null;
       if (!health.ok) await health.body?.cancel();
       const advertised = (capabilities as { capabilities?: unknown } | null)?.capabilities;
-      if (!Array.isArray(advertised) || !advertised.includes(HTTP_REQUEST_CAPABILITY)) {
-        capable.delete(probe.url);
-        return { region, unreachable: "Probe upgrade required for HTTP request bodies and methods" };
+      for (const [cap, missing] of unknown) {
+        if (!Array.isArray(advertised) || !advertised.includes(cap)) {
+          capable.delete(`${probe.url} ${cap}`);
+          return { region, unreachable: missing };
+        }
+        capable.set(`${probe.url} ${cap}`, Date.now() + CAPABILITY_TTL_MS);
       }
-      capable.set(probe.url, Date.now() + CAPABILITY_TTL_MS);
     }
     const ts = Math.floor(Date.now() / 1000);
     const res = await fetch(probe.url, {
