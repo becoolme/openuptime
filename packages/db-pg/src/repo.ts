@@ -75,7 +75,8 @@ export function createRepo(db: DbExecutor): Repo {
 
   /** Incidents shown on a page: those of its own monitors, plus manual ones (no monitor) of the page's own project. */
   function pageScope(orgId: string, projectId: string | null, monitorIds: string[] | SQLWrapper) {
-    const manual = and(isNull(schema.incident.monitorId), projectId ? eq(schema.incident.projectId, projectId) : isNull(schema.incident.projectId));
+    // declared by hand for the whole project; an automatic incident whose monitor was deleted is not one
+    const manual = and(isNull(schema.incident.monitorId), eq(schema.incident.auto, false), projectId ? eq(schema.incident.projectId, projectId) : isNull(schema.incident.projectId));
     const own = Array.isArray(monitorIds) ? (monitorIds.length ? inArray(schema.incident.monitorId, monitorIds) : undefined) : inArray(schema.incident.monitorId, monitorIds);
     return and(eq(schema.incident.organizationId, orgId), own ? or(manual, own) : manual);
   }
@@ -578,7 +579,15 @@ export function createRepo(db: DbExecutor): Repo {
       });
     },
     async deleteMonitor(orgId, id, scope) {
-      await db.delete(schema.monitor).where(and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId)));
+      const mine = and(eq(schema.monitor.id, id), eq(schema.monitor.organizationId, orgId), inScope(scope, schema.monitor.projectId));
+      await db.transaction(async (tx) => {
+        // an outage of a monitor that no longer exists can never recover, so it is closed here rather than left open
+        const owned = tx.select({ id: schema.monitor.id }).from(schema.monitor).where(mine);
+        const closed = await tx.update(schema.incident).set({ status: "resolved", resolvedAt: new Date() }).where(and(inArray(schema.incident.monitorId, owned), isNull(schema.incident.resolvedAt))).returning({ id: schema.incident.id });
+        // the timeline says why it ended, as it does when checks pass again
+        if (closed.length) await tx.insert(schema.incidentUpdate).values(closed.map((inc) => ({ incidentId: inc.id, status: "resolved" as const, body: "The monitor was deleted." })));
+        await tx.delete(schema.monitor).where(mine);
+      });
     },
     async ownedMonitorIds(orgId, ids, scope) {
       if (!ids.length) return [];

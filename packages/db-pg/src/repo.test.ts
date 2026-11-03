@@ -945,6 +945,27 @@ describe.skipIf(!url)("manual incidents stay inside their project", () => {
     expect((await rows())[0]).toMatchObject({ locale: "en", monitorIds: [mid] });
   });
 
+  it("closes a deleted monitor's open incident and keeps its incidents off the project's pages", async () => {
+    const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "E" }).returning())[0];
+    const pg = await repo.createStatusPage(orgId, pr.id, { slug: `e${crypto.randomUUID().slice(0, 8)}`, title: "E" });
+    const [m] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "gone", type: "tcp", target: "127.0.0.1:1", intervalSec: 60 }).returning();
+    const open = await repo.createIncident({ organizationId: orgId, monitorId: m.id, projectId: pr.id, title: "auto-open", auto: true });
+    await repo.createIncident({ organizationId: orgId, projectId: pr.id, title: "by-hand", auto: false });
+    const [kept] = await db.insert(schema.monitor).values({ organizationId: orgId, projectId: pr.id, name: "kept", type: "tcp", target: "127.0.0.1:2", intervalSec: 60 }).returning();
+    const other = await repo.createIncident({ organizationId: orgId, monitorId: kept.id, projectId: pr.id, title: "still-open", auto: true });
+    // another workspace cannot delete it, and nothing is closed then
+    await repo.deleteMonitor(crypto.randomUUID(), m.id, null);
+    expect((await db.select().from(schema.incident).where(eq(schema.incident.id, open.id)))[0].resolvedAt).toBeNull();
+    await repo.deleteMonitor(orgId, m.id, null);
+
+    const [row] = await db.select().from(schema.incident).where(eq(schema.incident.id, open.id));
+    expect(row).toMatchObject({ monitorId: null, status: "resolved" });
+    expect(row.resolvedAt).not.toBeNull();
+    expect((await db.select().from(schema.incidentUpdate).where(eq(schema.incidentUpdate.incidentId, open.id))).map((u) => [u.status, u.body])).toContainEqual(["resolved", "The monitor was deleted."]);
+    expect((await db.select().from(schema.incident).where(eq(schema.incident.id, other.id)))[0].resolvedAt).toBeNull();
+    expect((await repo.pageIncidents(pg, { limit: 10 })).map((i) => i.title)).toEqual(["by-hand"]);
+  });
+
   it("gives 7-, 30- and 90-day uptime from daily history and finds the incidents open on a day", async () => {
     const pr = (await db.insert(schema.project).values({ organizationId: orgId, name: "D" }).returning())[0];
     const pg = await repo.createStatusPage(orgId, pr.id, { slug: `d${crypto.randomUUID().slice(0, 8)}`, title: "D" });

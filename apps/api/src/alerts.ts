@@ -637,10 +637,12 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
 /** A manual incident update (investigating → identified → … → resolved) goes to the same subscribers. */
 export async function notifyIncidentUpdate(
   repo: Repo,
-  inc: { organizationId: string; monitorId: string | null; projectId?: string | null; title: string },
+  inc: { organizationId: string; monitorId: string | null; projectId?: string | null; auto?: boolean; title: string },
   update: { status: string; body: string },
   entitlements: Entitlements = unmetered,
 ) {
+  // an automatic incident whose monitor was deleted is on no status page, so nobody subscribed to it
+  if (!inc.monitorId && inc.auto) return;
   let subs: SubscriberTarget[];
   try {
     ({ send: subs } = await subscriberAllowance(entitlements, inc.organizationId, await repo.subscribersFor(inc.organizationId, inc.monitorId, inc.projectId)));

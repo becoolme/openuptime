@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "deleted-monitor-incidents", date: "2026-11-03", edition: "community",
+    title: { en: "Deleting a monitor closes its incident", zh: "删除监控时关闭其事件" },
+    summary: { en: "An incident left open by a monitor you delete is now resolved, and no longer appears on status pages as a project-wide incident.", zh: "删除监控后，它留下的未结束事件会被标记为已解决，也不会再作为整个项目的事件出现在状态页上。" },
+    points: [
+      { en: "Before, the incident lost its monitor but stayed open, so the status page showed it as an outage of the whole page.", zh: "此前，事件在监控删除后失去了关联，却仍处于未结束状态，状态页会把它当成整个页面的故障显示。" },
+      { en: "Incidents you declared by hand for the whole project still show as before.", zh: "手动为整个项目创建的事件仍照常显示。" },
+      { en: "Updates to such an incident no longer go to status page subscribers.", zh: "这类事件的后续更新不再发送给状态页订阅者。" },
+    ],
+  },
+  {
     id: "monitor-list-sort-and-clock", date: "2026-11-03", edition: "community",
     title: { en: "Sort monitors and pick a clock", zh: "监控排序与时间格式" },
     summary: { en: "Sort the monitor list by any column, and choose whether times use a 12- or 24-hour clock.", zh: "监控列表可以按任意列排序，时间也可以选择 12 小时制或 24 小时制显示。" },
