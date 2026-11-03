@@ -330,6 +330,13 @@
       "when": 1793724107749,
       "tag": "0046_cooing_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793724427189,
+      "tag": "0047_eager_smasher",
+      "breakpoints": true
     }
   ]
 }

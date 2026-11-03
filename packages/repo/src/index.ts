@@ -388,10 +388,12 @@ export interface StatusPage {
   mcpEnabled: boolean;
   /** hours before maintenance starts that subscribers are reminded; 0 = never */
   maintenanceReminderHours: number;
+  /** the owner's stylesheet for the public page; null = none */
+  customCss: string | null;
   createdAt: Date;
 }
 export type NewStatusPage = { slug: string; title: string; theme?: string; showLatency?: boolean; externalUrl?: string | null; hideBranding?: boolean };
-export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding" | "uptimeOkPct" | "uptimeWarnPct" | "mcpEnabled" | "maintenanceReminderHours">>;
+export type StatusPagePatch = Partial<Pick<StatusPage, "title" | "theme" | "showLatency" | "externalUrl" | "hideBranding" | "uptimeOkPct" | "uptimeWarnPct" | "mcpEnabled" | "maintenanceReminderHours" | "customCss">>;
 export type PageComponentInput = { monitorId: string; groupName?: string };
 export interface Subscriber {
   id: string;
@@ -435,6 +437,9 @@ export interface StatusBoard {
     group: string;
     status: MonitorStatus | "unknown";
     uptime90d: number | null;
+    /** uptime over the last 7 and 30 days, from the daily buckets; null while the history is hourly or empty */
+    uptime7d: number | null;
+    uptime30d: number | null;
     days: { day: string; uptime: number }[];
   }[];
   /** unresolved incidents of the page, newest first; `updates` holds the public ones only */
@@ -748,7 +753,7 @@ export interface Repo {
   statusPageBySlug(slug: string): Promise<StatusPage | null>;
   statusBoard(page: StatusPage): Promise<StatusBoard>;
   /** Incidents shown on a page (its monitors' plus workspace-level ones), newest first. */
-  pageIncidents(page: StatusPage, o: { limit: number; before?: Date }): Promise<IncidentWithUpdates[]>;
+  pageIncidents(page: StatusPage, o: { limit: number; before?: Date; overlapping?: { from: Date; to: Date } }): Promise<IncidentWithUpdates[]>;
   subscriberCount(pageId: string): Promise<number>;
   /**
    * Adds the address, or finds the row it already has. `token` is the stored one (the given token only for a new row).

@@ -1752,6 +1752,14 @@ export function createRepo(db: DbExecutor): Repo {
           const mine = days.filter((d) => d.monitorId === m.id);
           const total = mine.reduce((a, d) => a + d.total, 0);
           const ok = mine.reduce((a, d) => a + d.ok, 0);
+          // the last n daily buckets, today included; hourly history is too short for these
+          const recent = (n: number) => {
+            if (hourly || m.type === "domain") return null;
+            const since = new Date(Date.now() - (n - 1) * 864e5).toISOString().slice(0, 10);
+            const r = mine.filter((d) => d.day >= since);
+            const t = r.reduce((a, d) => a + d.total, 0);
+            return t ? Math.round((r.reduce((a, d) => a + d.ok, 0) / t) * 10000) / 100 : null;
+          };
           return {
             id: m.id,
             name: m.name,
@@ -1759,6 +1767,8 @@ export function createRepo(db: DbExecutor): Repo {
             status: publicMonitorStatus(m),
             // Registration checks are not service uptime samples.
             uptime90d: m.type === "domain" ? null : total ? Math.round((ok / total) * 10000) / 100 : null,
+            uptime7d: recent(7),
+            uptime30d: recent(30),
             days: m.type === "domain" ? [] : mine.map((d) => ({ day: d.day, uptime: d.total ? d.ok / d.total : 1 })),
           };
         }),
@@ -1769,7 +1779,14 @@ export function createRepo(db: DbExecutor): Repo {
       const list = await db
         .select()
         .from(schema.incident)
-        .where(and(pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)), o.before ? lt(schema.incident.startedAt, o.before) : undefined))
+        .where(
+          and(
+            pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)),
+            o.before ? lt(schema.incident.startedAt, o.before) : undefined,
+            // open at some point in [from, to): started before its end and not resolved before its start
+            o.overlapping ? and(lt(schema.incident.startedAt, o.overlapping.to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, o.overlapping.from))) : undefined,
+          ),
+        )
         .orderBy(desc(schema.incident.startedAt))
         .limit(o.limit);
       return withUpdates(list);

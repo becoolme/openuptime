@@ -27,6 +27,37 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "status-page-day-incidents", date: "2026-11-03", edition: "community",
+    title: { en: "See a day's incidents on the status page", zh: "在状态页查看某天的事件" },
+    summary: { en: "Visitors can click a day on a component's uptime bar to see the incidents that were open that day.", zh: "访客点击组件可用率条上的某一天，即可看到当天发生的事件。" },
+    points: [
+      { en: "The list shows the incidents of that component and those affecting the whole page, with their status and times.", zh: "列表会显示该组件的事件以及影响整个页面的事件，并附带状态和时间。" },
+      { en: "Days can be opened with the keyboard as well as the mouse.", zh: "也可以用键盘打开某一天的事件。" },
+      { en: "The same list is available from the public API for any of the last 92 days.", zh: "公开 API 也提供同样的列表，可查询最近 92 天中的任意一天。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
+    id: "status-page-uptime-range", date: "2026-11-03", edition: "community",
+    title: { en: "Choose the status page's time range", zh: "选择状态页的时间范围" },
+    summary: { en: "Visitors can switch a status page between the last 7, 30 and 90 days.", zh: "访客可以在最近 7 天、30 天和 90 天之间切换状态页的显示范围。" },
+    points: [
+      { en: "The uptime bars, the uptime figures and the overall ring follow the chosen range, and the choice is kept in the address so it can be shared.", zh: "可用率条、可用率数值和总体环形图都会随所选范围变化，所选范围保存在网址中，方便分享。" },
+      { en: "Uptime is shown with two decimals.", zh: "可用率显示到小数点后两位。" },
+      { en: "While a page has less than four days of history it keeps its hourly view and the range picker is hidden.", zh: "页面历史不足四天时仍按小时显示，此时不显示范围选择。" },
+    ],
+  },
+  {
+    id: "status-page-custom-css", date: "2026-11-03", edition: "community",
+    title: { en: "Custom CSS for status pages", zh: "状态页自定义 CSS" },
+    summary: { en: "Add your own stylesheet to a status page to match it to your brand.", zh: "为状态页添加自己的样式表，使其与品牌风格一致。" },
+    points: [
+      { en: "Write up to 20,000 characters of CSS in the status page settings; it is applied to the public page.", zh: "可在状态页设置中填写最多 20,000 个字符的 CSS，它会应用到公开页面。" },
+      { en: "To keep visitors' requests private, the stylesheet cannot load images, fonts or other files, so url(), @import and @font-face are refused with an explanation.", zh: "为保护访客隐私，样式表不能加载图片、字体或其他文件，因此 url()、@import 和 @font-face 会被拒绝并给出原因。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
     id: "json-assertions", date: "2026-11-03", edition: "community",
     title: { en: "Check values in JSON responses", zh: "校验 JSON 响应中的值" },
     summary: { en: "An HTTP monitor can now read fields from a JSON response and fail when they are not what you expect.", zh: "HTTP 监控现在可以读取 JSON 响应中的字段，值不符合预期时判定为失败。" },

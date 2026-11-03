@@ -714,4 +714,9 @@ export const zh: Record<string, string> = {
   "JSON assertions (optional)": "JSON 断言（可选）", "JSON path": "JSON 路径", "Comparison": "比较方式", "Expected value": "期望值",
   "equals": "等于", "does not equal": "不等于", "contains": "包含", "exists": "存在", "does not exist": "不存在", "greater than": "大于", "less than": "小于",
   "Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.": "每条断言从 JSON 响应体中读取一个值（如 $.data.items[0].status），全部成立检测才算通过。数字、true、false 和 null 按类型比较。最多 10 条。",
+  "Custom CSS": "自定义 CSS", "Stylesheet for the public page (optional)": "公开状态页的样式表（可选）",
+  "Applied after the page's own styles. It cannot load anything: url(), @import, @font-face and escapes are refused. Up to 20,000 characters.": "在页面自带样式之后生效。样式表不能加载任何外部资源：url()、@import、@font-face 和转义字符都会被拒绝。最多 20,000 个字符。",
+  "Last 7 days": "最近 7 天", "Last 30 days": "最近 30 天", "Last 90 days": "最近 90 天", "Uptime range": "可用率时间范围",
+  "7-day uptime": "7 天可用率", "30-day uptime": "30 天可用率", "7 days ago": "7 天前", "30 days ago": "30 天前",
+  "No incidents on this day.": "当天没有事件。", "Could not load this day.": "无法加载当天的数据。", "Affects all components": "影响所有组件",
 };

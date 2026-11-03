@@ -70,7 +70,7 @@ export type Incident = {
 
 export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string; topic?: string; token?: string; priority?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
 export type WorkspaceSettings = { alertLogRetentionDays: number; checkRetentionDays: number; monthlyReport: boolean };
-export type StatusPage = { id: string; projectId?: string | null; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
+export type StatusPage = { id: string; projectId?: string | null; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; customCss?: string | null; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
 
 // Requests started as soon as the page's HTML is parsed (lib/boot.ts), in parallel with the JS bundles loading:
 // the first GET for a path is answered by that in-flight request, so a page load is HTML (static) + one parallel API round.

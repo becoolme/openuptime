@@ -386,6 +386,8 @@ export const statusPage = pgTable(
     mcpEnabled: boolean("mcp_enabled").notNull().default(true),
     /** subscribers get a reminder this many hours before maintenance starts; 0 turns it off */
     maintenanceReminderHours: integer("maintenance_reminder_hours").notNull().default(24),
+    /** the owner's stylesheet for the public page, checked on save so it cannot load anything or leave its <style> */
+    customCss: text("custom_css"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("status_page_slug_idx").on(t.slug)],

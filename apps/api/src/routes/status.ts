@@ -9,6 +9,7 @@ import type { Plan } from "../entitlements";
 import { requireManager, uuidParams } from "../middleware";
 import { clientIp } from "../ratelimit";
 import { sharedCache, waitUntilOf } from "../sharedcache";
+import { customCssProblem, MAX_CUSTOM_CSS, stripCssComments } from "../status-css";
 import { buildIcs, buildLlmsTxt, buildRss, FEED_LIMIT, ICS_LIMIT } from "../status-feeds";
 
 // optional link to the owner's own website; "" clears it
@@ -19,6 +20,18 @@ const externalUrl = z
   .refine((v) => v === "" || /^https?:\/\//i.test(v) && URL.canParse(v), "Must be an http(s) URL")
   .transform((v) => v || null)
   .nullable()
+  .optional();
+// the owner's stylesheet, stored without comments; "" or null removes it. The check runs on what was sent and strips
+// comments once, exactly as the stored text is made, so what is served is what was checked
+const customCss = z
+  .string()
+  .max(MAX_CUSTOM_CSS)
+  .nullable()
+  .superRefine((v, ctx) => {
+    const problem = v == null ? null : customCssProblem(v);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  })
+  .transform((v) => (v == null ? null : stripCssComments(v).trim() || null))
   .optional();
 /** Whether the plan lets a status page hide OpenUptime's branding. Editions without plans (null) allow it. */
 const brandingAllowed = (plan: Plan | null) => plan?.hideBranding !== false;
@@ -35,6 +48,7 @@ const pageBody = z.object({
   mcpEnabled: z.boolean().optional(),
   // hours before maintenance starts that subscribers are reminded; 0 = never
   maintenanceReminderHours: z.number().int().min(0).max(168).optional(),
+  customCss,
   monitorIds: z.array(z.string().uuid()).optional(),
   // ordered, optionally grouped; takes precedence over monitorIds
   components: z.array(z.object({ monitorId: z.string().uuid(), groupName: z.string().trim().min(1).max(60).optional() })).max(200).optional(),
@@ -225,6 +239,31 @@ async function statusAccess(c: Context<AppEnv>, next: () => Promise<void>) {
   c.header("vary", "Cookie, Authorization");
 }
 
+const DAY_LIMIT = 50;
+async function dayIncidents(c: Context<AppEnv>, day: string) {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T00:00:00Z`) : null;
+  // the bars reach back 90 days; anything else is refused rather than scanned
+  if (!from || Number.isNaN(from.getTime()) || from.toISOString().slice(0, 10) !== day || Date.now() - from.getTime() > 92 * 864e5 || from.getTime() > Date.now())
+    return c.json({ error: "day must be a YYYY-MM-DD date within the last 90 days" }, 400);
+  const slug = c.req.param("slug")!;
+  const refused = await mcpDenied(c, slug);
+  if (refused) return refused;
+  const body = await historyCache.cached(
+    `${slug}|day|${day}`,
+    async () => {
+      const repo = c.get("repo");
+      const page = await repo.statusPageBySlug(slug);
+      if (!page) return undefined;
+      const shown = new Set((await repo.pageComponents(page.id)).map((x) => x.monitorId));
+      const rows = await repo.pageIncidents(page, { limit: DAY_LIMIT, overlapping: { from, to: new Date(from.getTime() + 864e5) } });
+      return { day, items: rows.map((i) => ({ ...toPublic(i), componentId: i.monitorId && shown.has(i.monitorId) ? i.monitorId : null })) };
+    },
+    waitUntilOf(c),
+    { bypass: c.get("statusResponsePrivate") },
+  );
+  return body ? c.json(body) : c.json({ error: "Not found" }, 404);
+}
+
 export const publicStatus = new Hono<AppEnv>()
   .use("/:slug", statusAccess)
   .use("/:slug/*", statusAccess)
@@ -256,8 +295,11 @@ export const publicStatus = new Hono<AppEnv>()
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="22" role="img" aria-label="${esc(left)}: ${esc(right)}"><title>${esc(left)}: ${esc(right)}</title><clipPath id="r"><rect width="${w}" height="22" rx="4"/></clipPath><g clip-path="url(#r)"><rect width="${lw}" height="22" fill="#555"/><rect x="${lw}" width="${rw}" height="22" fill="${color}"/></g><g fill="#fff" font-family="Verdana,Geneva,DejaVu Sans,sans-serif,PingFang SC,Microsoft YaHei" font-size="11" text-anchor="middle"><text x="${lw / 2}" y="15">${esc(left)}</text><text x="${lw + rw / 2}" y="15">${esc(right)}</text></g></svg>`;
     return c.body(svg, 200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "public, max-age=60" });
   })
-  // incident history, newest first, cursor = startedAt of the last item of the previous page
+  // incident history, newest first, cursor = startedAt of the last item of the previous page; with ?day=YYYY-MM-DD, the
+  // incidents that were open at some point on that UTC day instead, each with the component it belongs to (null = all)
   .get("/:slug/incidents", async (c) => {
+    const day = c.req.query("day");
+    if (day !== undefined) return dayIncidents(c, day);
     const before = c.req.query("before");
     const cursor = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : undefined;
     const slug = c.req.param("slug");
@@ -402,7 +444,7 @@ export const publicStatus = new Hono<AppEnv>()
         if (!page) return undefined;
         const board = await repo.statusBoard(page);
         return {
-          page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page), uptimeOkPct: page.uptimeOkPct, uptimeWarnPct: page.uptimeWarnPct },
+          page: { slug: page.slug, title: page.title, theme: page.theme, showLatency: page.showLatency, externalUrl: page.externalUrl, hideBranding: await brandingHidden(c, page), uptimeOkPct: page.uptimeOkPct, uptimeWarnPct: page.uptimeWarnPct, customCss: page.customCss },
           overall: overallOf(board.components.map((x) => x.status)),
           bucket: board.bucket,
           components: board.components,
