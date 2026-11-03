@@ -59,6 +59,8 @@ export type McpConfig = {
     assertions: { path: string; operator: "equals" | "contains" | "exists"; value?: unknown }[];
   } | null;
 };
+/** http: one check on the JSON response body; `value` is ignored by exists and not_exists. */
+export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string };
 export type McpToolSchema = { name: string; inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>; description?: string; annotations?: Record<string, unknown> };
 export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string; tool: string; path?: string; message: string };
 /** Bounded diagnostics, never raw tool results or server error messages. */
@@ -135,6 +137,8 @@ export interface Monitor {
   keyword: string | null;
   keywordMode: string;
   expectedLocation: string | null;
+  /** http: every assertion must hold on the JSON response body */
+  jsonAssertions: JsonAssertion[];
   headers: Record<string, string>;
   /** websocket: text sent once the connection is open; null = only the handshake (and a greeting, with a keyword) */
   wsMessage: string | null;
@@ -158,7 +162,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
-  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "jsonAssertions" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type ImportMonitor = { source: string; sourceId: string; input: NewMonitor };

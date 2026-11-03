@@ -22,7 +22,7 @@ async function signed(body: unknown, o: { secret?: string; ts?: number } = {}) {
 describe("probe handler", () => {
   it("answers a health GET without credentials", async () => {
     const res = await handleProbe(new Request("http://probe/"), { secret, region: "fra1" });
-    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1", "mcp-monitor-v2"] });
+    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1", "mcp-monitor-v2", "json-assert-v1"] });
   });
 
   it("is not an open proxy: unsigned, wrongly signed and stale requests are refused", async () => {
@@ -44,6 +44,8 @@ describe("probe handler", () => {
     expect(parseCheck({ ...check, type: "websocket", wsMessage: "x".repeat(2001) })).toHaveProperty("error");
     expect(parseCheck({ ...check, timeoutMs: 999_999 })).toHaveProperty("error");
     expect(parseCheck({ ...check, headers: { a: 1 } })).toHaveProperty("error");
+    expect(parseCheck({ ...check, jsonAssertions: [{ path: "$.a", op: "equals", value: "1" }] })).toMatchObject({ input: { jsonAssertions: [{ path: "$.a", op: "equals", value: "1" }] } });
+    expect(parseCheck({ ...check, jsonAssertions: [{ path: "$..a", op: "exists" }] })).toEqual({ error: "jsonAssertions are not acceptable" });
     expect(parseCheck({ ...check, expectedLocation: 5 })).toHaveProperty("error");
     expect(parseCheck({ ...check, expectedStatus: 301, expectedLocation: "/new" })).toMatchObject({ input: { expectedLocation: "/new" } });
   });

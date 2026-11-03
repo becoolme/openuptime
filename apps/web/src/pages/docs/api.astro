@@ -18,6 +18,8 @@ regions        string[], ids from GET /regions                 (default ["auto"]
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
 expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus: the redirect is not followed; Location must equal this URL or path (default null = any)
+jsonAssertions { path: string, op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than", value?: string }[], max 10
+               http only: each path ($.a.b[0], $["odd key"]) is read from the JSON body (first 1 MB) and must hold (default [])
 headers        { [name: string]: string }  http, mcp, or the websocket handshake (default {})
 mcpConfig      { transport?: "auto" | "streamable-http" | "sse", oauth?: object | null, listPrompts?: boolean, listResources?: boolean, driftPolicy?: "down" | "degraded" | "record", requiredTools: string[], schemaCheck: boolean, toolCall: null | { enabled: boolean, name: string, arguments: object, assertions: { path: string, operator: "equals" | "contains" | "exists", value?: JSON }[] } } (mcp only; schemaCheck false and toolCall null by default)
 wsMessage      string | null, max 2000  websocket: text sent once connected; a message must come back within timeoutMs (default null = handshake only; not a secret)

@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "json-assertions", date: "2026-11-03", edition: "community",
+    title: { en: "Check values in JSON responses", zh: "校验 JSON 响应中的值" },
+    summary: { en: "An HTTP monitor can now read fields from a JSON response and fail when they are not what you expect.", zh: "HTTP 监控现在可以读取 JSON 响应中的字段，值不符合预期时判定为失败。" },
+    points: [
+      { en: "Add up to 10 assertions, each a path such as $.data.items[0].status with a comparison: equals, does not equal, contains, exists, does not exist, greater than or less than.", zh: "最多可添加 10 条断言，每条由路径（如 $.data.items[0].status）和比较方式组成：等于、不等于、包含、存在、不存在、大于或小于。" },
+      { en: "A number, true, false or null in the response is compared by value, so 200 also matches 200.0.", zh: "响应中的数字、true、false 和 null 按值比较，例如 200 也能匹配 200.0。" },
+      { en: "A failed check names the path, the expected value and what the response held.", zh: "检测失败时会写明路径、期望值以及响应中的实际值。" },
+      { en: "Self-hosted regional probes must be updated before monitors with assertions can run from them; until then those regions report that an upgrade is needed instead of passing.", zh: "自托管的区域探针需要先升级，带断言的监控才能从这些区域检测；升级前这些区域会提示需要升级，而不会误判为通过。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
     id: "bulk-monitor-actions", date: "2026-11-03", edition: "community",
     title: { en: "Act on several monitors at once", zh: "批量操作监控" },
     summary: { en: "Tick monitors in the list to pause, resume, delete them or change their alert channels in one step.", zh: "在监控列表里勾选多个监控，一次完成暂停、恢复、删除或调整告警渠道。" },

@@ -1,0 +1,1 @@
+ALTER TABLE "monitor" ADD COLUMN "json_assertions" jsonb DEFAULT '[]'::jsonb NOT NULL;

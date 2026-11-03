@@ -5,7 +5,7 @@ import Select from "./Select";
 import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { ago, api, everyShort, type Channel, type Incident, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type JsonAssertion, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
@@ -335,6 +335,9 @@ const STATUS_NAMES: Record<number, string> = {
 const statusOptions = (current: number) =>
   [...new Set([...Object.keys(STATUS_NAMES).map(Number), current])].sort((a, b) => a - b).map((n) => ({ value: n, label: STATUS_NAMES[n] ? `${n} ${STATUS_NAMES[n]}` : String(n) }));
 
+const JSON_OPS: [JsonAssertion["op"], string][] = [["equals", "equals"], ["not_equals", "does not equal"], ["contains", "contains"], ["exists", "exists"], ["not_exists", "does not exist"], ["greater_than", "greater than"], ["less_than", "less than"]];
+const VALUELESS: JsonAssertion["op"][] = ["exists", "not_exists"];
+
 /** Types whose checks can run from a probe region (the API's PROBE_TYPES). */
 const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp"];
 
@@ -363,6 +366,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [tagText, setTagText] = useState((monitor?.tags ?? []).join(", "));
   const [hdrs, setHdrs] = useState<{ k: string; v: string }[]>(Object.entries(monitor?.headers ?? {}).map(([k, v]) => ({ k, v })));
   const setHdr = (i: number, p: Partial<{ k: string; v: string }>) => setHdrs((h) => h.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const [asserts, setAsserts] = useState<JsonAssertion[]>(monitor?.jsonAssertions ?? []);
+  const setAssert = (i: number, p: Partial<JsonAssertion>) => setAsserts((a) => a.map((r, j) => (j === i ? { ...r, ...p } : r)));
   const [channels, setChannels] = useState<Channel[]>([]);
   useEffect(() => {
     api.channels().then((list) => {
@@ -429,7 +434,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null };
+      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [] };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         if (monitor.mcpConfigRedacted) { delete (patch as Partial<typeof patch>).target; delete (patch as Partial<typeof patch>).headers; }
@@ -545,6 +550,21 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             <label className="fld">{t("Mode")}
               <Select className="in" value={f.keywordMode as string} onChange={(v) => set("keywordMode", v as "contains" | "absent")} options={[{ value: "contains", label: t("must contain") }, { value: "absent", label: t("must not contain") }]} />
             </label>
+          </div>
+        )}
+        {f.type === "http" && (
+          <div className="fld">
+            {t("JSON assertions (optional)")}
+            {asserts.map((a, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <input className="in mono" style={{ flex: "2 1 160px", minWidth: 0 }} value={a.path} placeholder="$.data.status" aria-label={t("JSON path")} maxLength={256} onChange={(e) => setAssert(i, { path: e.target.value })} />
+                <Select className="in" value={a.op as string} onChange={(v) => setAssert(i, { op: v as JsonAssertion["op"] })} label={t("Comparison")} options={JSON_OPS.map(([value, label]) => ({ value, label: t(label) }))} />
+                {!VALUELESS.includes(a.op) && <input className="in mono" style={{ flex: "1 1 100px", minWidth: 0 }} value={a.value} placeholder="ok" aria-label={t("Expected value")} maxLength={500} onChange={(e) => setAssert(i, { value: e.target.value })} />}
+                <button type="button" className="btn" onClick={() => setAsserts((x) => x.filter((_, j) => j !== i))}>{t("Remove")}</button>
+              </div>
+            ))}
+            {asserts.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setAsserts((x) => [...x, { path: "", op: "equals", value: "" }])}>{t("Add assertion")}</button></div>}
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.")}</span>
           </div>
         )}
         {(f.type === "http" || f.type === "websocket" || f.type === "evm" || f.type === "solana" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (

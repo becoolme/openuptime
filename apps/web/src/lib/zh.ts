@@ -711,4 +711,7 @@ export const zh: Record<string, string> = {
   "{n} monitors updated": "已处理 {n} 个监控", "{n} failed": "{n} 个失败", "Selected monitors": "已选监控", "{n} selected": "已选 {n} 个",
   "Add alert channel": "添加告警渠道", "Remove alert channel": "移除告警渠道", "Clear selection": "取消选择",
   "Select all shown monitors": "选择当前显示的全部监控", "Select {name}": "选择 {name}",
+  "JSON assertions (optional)": "JSON 断言（可选）", "JSON path": "JSON 路径", "Comparison": "比较方式", "Expected value": "期望值",
+  "equals": "等于", "does not equal": "不等于", "contains": "包含", "exists": "存在", "does not exist": "不存在", "greater than": "大于", "less than": "小于",
+  "Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.": "每条断言从 JSON 响应体中读取一个值（如 $.data.items[0].status），全部成立检测才算通过。数字、true、false 和 null 按类型比较。最多 10 条。",
 };

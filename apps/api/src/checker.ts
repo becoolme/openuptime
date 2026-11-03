@@ -8,6 +8,8 @@ import { mcpCheck } from "./mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
+import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
+import type { JsonAssertion } from "@openuptime/repo";
 
 export type CheckInput = {
   type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana";
@@ -23,6 +25,8 @@ export type CheckInput = {
   keywordMode?: string;
   /** With a redirect status expected: where the redirect must lead (an absolute URL, or a path on the target's own site). */
   expectedLocation?: string | null;
+  /** http: checks on the JSON response body, all of which must hold */
+  jsonAssertions?: JsonAssertion[];
   headers?: Record<string, string>;
   /** websocket: text sent once the connection is open; the reply must arrive (and match the keyword, when one is set). */
   wsMessage?: string | null;
@@ -129,21 +133,27 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
       return { ok: false, statusCode: res.status, latencyMs: Date.now() - started, error: got ? `Redirects to ${got}, expected ${want ?? m.expectedLocation}` : `Expected a redirect to ${want ?? m.expectedLocation}, but there is no Location header` };
     }
   }
-  if (!m.keyword || m.method === "HEAD") {
+  const asserts = m.jsonAssertions ?? [];
+  if ((!m.keyword && !asserts.length) || m.method === "HEAD") {
     await res.body?.cancel();
     const latencyMs = Date.now() - started;
-    return { ok: statusOk, statusCode: res.status, latencyMs, error: statusOk ? undefined : `Expected ${m.expectedStatus}, got ${res.status}${where}` };
+    if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
+    // a HEAD answer has no body: assertions on it could never be checked, so they fail instead of passing unseen
+    if (asserts.length) return { ok: false, statusCode: res.status, latencyMs, error: "JSON assertions need a response body; use GET instead of HEAD" };
+    return { ok: true, statusCode: res.status, latencyMs };
   }
   const body = await readCapped(res, MAX_BODY_BYTES);
   const latencyMs = Date.now() - started;
   if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
-  const found = body.includes(m.keyword);
-  const wantFound = m.keywordMode !== "absent";
-  const ok = found === wantFound;
-  return {
-    ok, statusCode: res.status, latencyMs,
-    error: ok ? undefined : wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response`,
-  };
+  if (m.keyword) {
+    const found = body.includes(m.keyword);
+    const wantFound = m.keywordMode !== "absent";
+    if (found !== wantFound) return { ok: false, statusCode: res.status, latencyMs, error: wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response` };
+  }
+  let failed = asserts.length ? jsonAssertionProblem(body, asserts) : null;
+  // only the first MAX_BODY_BYTES are read: a longer document is cut off, not malformed
+  if (failed === NOT_JSON && new TextEncoder().encode(body).byteLength >= MAX_BODY_BYTES) failed = `Response is larger than ${MAX_BODY_BYTES / 1_000_000} MB, too large to check as JSON`;
+  return { ok: !failed, statusCode: res.status, latencyMs, error: failed ?? undefined };
 }
 
 /** Cloudflare's socket API. The import fails anywhere else (Node, tests), whatever the runtime words the error as. */

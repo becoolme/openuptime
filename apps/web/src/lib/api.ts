@@ -10,6 +10,7 @@ export type McpObservation = { toolsComplete?: boolean; id?: string; schemaHash?
 export type McpCheckDiagnostics = Pick<McpObservation, "id" | "schemaHash" | "checkedAt" | "stage" | "timings" | "changes" | "drift" | "protocolVersion" | "transport">;
 export type McpHistory = { results: (CheckResult & { mcp: McpCheckDiagnostics })[]; metrics: { samples: number; p50: number | null; p95: number | null; stages: Record<string, { samples: number; p50: number | null; p95: number | null }> }; changes: { id: string; checkedAt: string; severity: "breaking" | "warning" | "info"; changes: string[]; drift: McpDrift[] }[] };
 export type McpPreview = { ok: boolean; latencyMs?: number; error?: string; mcp: McpObservation };
+export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string };
 export type Monitor = {
   id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana"; target: string; method: string; requestBody?: string | null;
   mcpConfig?: McpConfig | null;
@@ -23,7 +24,7 @@ export type Monitor = {
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
   dnsRecordType?: "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS"; dnsExpectedValue?: string | null; dnsMatchMode?: "exact" | "contains";
-  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
+  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; jsonAssertions?: JsonAssertion[]; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   /** the project the monitor belongs to (the lists of the "All projects" view mix several) */
   projectId?: string | null;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;

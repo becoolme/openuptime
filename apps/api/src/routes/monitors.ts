@@ -15,6 +15,7 @@ import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
+import { jsonAssertionsSchema } from "../json-assert";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
@@ -55,6 +56,7 @@ const fields = {
   keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body (or the WebSocket message) must contain keyword or must not contain it."),
   // an absolute http(s) URL or a path; blank means "any destination"
   expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
+  jsonAssertions: jsonAssertionsSchema.describe("HTTP only: up to 10 checks on the JSON response body, all of which must hold. path is like $.data.status or $.items[0].id; op is equals, not_equals, contains, exists, not_exists, greater_than or less_than; value is compared as text, number, boolean or null to match the JSON value. A supplied list replaces the existing one."),
   headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP (or WebSocket handshake) request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
   // sent as one text message after the handshake; blank means "handshake only"
   wsMessage: z.string().max(2000).transform((v) => v || null).nullable().describe("WebSocket only: text message sent once the connection is open; a message must then come back within the timeout. Not a secret: put credentials in headers. Null or empty string checks the handshake only."),
@@ -90,6 +92,7 @@ const body = z.object({
   keyword: fields.keyword.default(null),
   keywordMode: fields.keywordMode.default("contains"),
   expectedLocation: fields.expectedLocation.default(null),
+  jsonAssertions: fields.jsonAssertions.default([]),
   headers: fields.headers.default({}),
   wsMessage: fields.wsMessage.default(null),
   dnsRecordType: fields.dnsRecordType.default("A"),

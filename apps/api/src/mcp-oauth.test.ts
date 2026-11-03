@@ -11,7 +11,7 @@ let metadata: Record<string, unknown>, resource: Record<string, unknown>, token:
 function savedMonitor(): Monitor {
   return { id: crypto.randomUUID(), organizationId: "fixture", projectId: null, name: "OAuth",
     intervalSec: 60, failureThreshold: 3, regions: ["auto"], status: "up", consecutiveFailures: 0, lastCheckedAt: null, nextCheckAt: new Date(), paused: false,
-    heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
+    heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, jsonAssertions: [], headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
     slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, timeoutMs: 1000,
     mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { ...auth, mode: "refresh_token", refreshToken: "old-token" } } };
 }
@@ -72,7 +72,7 @@ describe("MCP unattended OAuth", () => {
     token.refresh_token = "next-token";
     const input: Monitor = { id: crypto.randomUUID(), organizationId: "fixture", projectId: null, name: "OAuth",
       intervalSec: 60, failureThreshold: 3, regions: ["auto"], status: "up", consecutiveFailures: 0, lastCheckedAt: null, nextCheckAt: new Date(), paused: false,
-      heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
+      heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, jsonAssertions: [], headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
       slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, timeoutMs: 1000, mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { ...auth, mode: "refresh_token", refreshToken: "old-token" } } };
     const current = { ...input, mcpConfig: { ...input.mcpConfig!, oauth: { ...input.mcpConfig!.oauth!, refreshToken: "current-token" } } };
     const rotate = vi.fn(async () => true);

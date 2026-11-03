@@ -549,7 +549,7 @@ export function createRepo(db: DbExecutor): Repo {
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "headers", "wsMessage", "mcpConfig"];
+        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "headers", "wsMessage", "mcpConfig"];
         const comparable = (key: string, value: unknown) => JSON.stringify(
           key === "regions" && Array.isArray(value) ? [...value].sort()
             : key === "mcpConfig" ? comparableMcpConfig(value as import("@openuptime/repo").McpConfig | null | undefined) : value,
