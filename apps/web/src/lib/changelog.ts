@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "chat-alert-incident-link", date: "2026-11-03", edition: "community",
+    title: { en: "Incident links in chat alerts", zh: "聊天告警附带事件链接" },
+    summary: { en: "Alerts sent to Slack, Discord, Microsoft Teams, Telegram, Lark and ntfy now end with a link to the incident.", zh: "发送到 Slack、Discord、Microsoft Teams、Telegram、飞书和 ntfy 的告警末尾现在附带事件链接。" },
+    points: [
+      { en: "Open the incident to acknowledge it or read its timeline in one tap, as the email alert already allowed.", zh: "点一下即可打开事件进行确认或查看时间线，和邮件告警一样方便。" },
+      { en: "Self-hosted installs add the link when the web address is configured.", zh: "自托管部署在配置了网页地址后才会附带该链接。" },
+    ],
+  },
+  {
     id: "redirect-cookies", date: "2026-11-03", edition: "community",
     title: { en: "Cookies kept across redirects", zh: "跳转时保留 Cookie" },
     summary: { en: "HTTP checks now send back cookies a site sets while redirecting, so sign-in and consent redirects no longer loop or fail.", zh: "HTTP 检测现在会在跳转过程中带上网站设置的 Cookie，登录或同意页的跳转不再循环或失败。" },
