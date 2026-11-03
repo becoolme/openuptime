@@ -36,6 +36,8 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
       # "true" lets monitors and alert webhooks target private / internal addresses (127.x, 10.x, 192.168.x, compose service names)
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
+      # proxy for HTTP checks and webhook alerts (http://user:pass@host:port, used as a CONNECT tunnel); unset = direct
+      OUTBOUND_PROXY: ${OUTBOUND_PROXY:-}
       # User-Agent of HTTP checks (default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime))
       CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
       # reference URLs of the offline self-check; unset = defaults, set but empty = self-check off (no colon on purpose)

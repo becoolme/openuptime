@@ -24,6 +24,8 @@ services:
       CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
       # "true" lets this probe check private / internal addresses of the network it runs in (an office or home probe)
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
+      # proxy for HTTP checks (http://user:pass@host:port, used as a CONNECT tunnel); unset = direct
+      OUTBOUND_PROXY: ${OUTBOUND_PROXY:-}
     # loopback only: the proxy (or the tls profile below) is the way in. Set PROBE_BIND=0.0.0.0 to publish it directly.
     ports: ["${PROBE_BIND:-127.0.0.1}:${PROBE_PORT:-8787}:8787"]
     read_only: true

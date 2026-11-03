@@ -43,6 +43,8 @@ export type Bindings = {
   INVITE_TTL_DAYS?: string;
   /** "true" lets monitors and alert webhooks target private, loopback and link-local addresses (default: refused). */
   ALLOW_PRIVATE_TARGETS?: string;
+  /** http(s)://[user:pass@]host:port of a proxy that HTTP checks and webhook alerts go through (Node/Docker only). Default: direct. */
+  OUTBOUND_PROXY?: string;
   /** User-Agent of HTTP checks. Default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime). */
   CHECK_USER_AGENT?: string;
   /** Comma-separated URLs a failed network-level check fetches to tell "the target is down" from "this machine is offline". Unset: three well-known public URLs; empty: no self-check. */

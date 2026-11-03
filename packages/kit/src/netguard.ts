@@ -10,7 +10,7 @@
  * the platform itself refuses private ranges, so only the static checks run there.
  */
 
-import { pinnedFetch } from "./pinnedfetch";
+import { outboundProxy, pinnedFetch } from "./pinnedfetch";
 
 let allowPrivate = false;
 
@@ -335,7 +335,8 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
     let res: Response;
     try {
-      res = addresses ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
+      // behind an outbound proxy every request takes the tunnel, also when there is nothing to pin
+      res = addresses || outboundProxy() ? await pinnedFetch(current, req, addresses) : await fetch(current, req);
     } catch (e) {
       // The cached lookup may be stale (the name moved): forget it and try once more on a fresh, re-validated one.
       // (connect-phase errors only: a request that may have reached the server is never sent twice)

@@ -5,6 +5,8 @@
  * instead of opening an outage.
  */
 
+import { outboundProxy, pinnedFetch } from "./pinnedfetch";
+
 export const REFERENCE_URLS = [
   "https://www.cloudflare.com/cdn-cgi/trace",
   "https://www.gstatic.com/generate_204",
@@ -59,7 +61,8 @@ export function proberOnline(opts: { urls?: string[]; fetch?: Fetcher; now?: () 
   const now = (opts.now ?? Date.now)();
   if (last && now - last.at < VERDICT_TTL_MS) return Promise.resolve(last.online);
   if (inflight) return inflight;
-  const run = probeReferences(urls, opts.fetch ?? ((u, i) => fetch(u, i)))
+  // behind an outbound proxy the reference URLs are fetched through it, as the checks are
+  const run = probeReferences(urls, opts.fetch ?? ((u, i) => outboundProxy() ? pinnedFetch(u, i, null) : fetch(u, i)))
     .then((online) => {
       last = { at: now, online };
       return online;

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const lookup = vi.fn();
 const pinned = vi.fn();
 vi.mock("node:dns/promises", () => ({ lookup }));
-vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: pinned }));
+vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: pinned, outboundProxy: () => null, useOutboundProxy: () => {} }));
 
 const { configureNetGuard, dialEach, guardAddresses, guardHost, guardHosts, guardedFetch, targetIsPrivate, targetProblem } = await import("./netguard");
 

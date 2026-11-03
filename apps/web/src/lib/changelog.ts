@@ -29,6 +29,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "outbound-proxy", date: "2026-11-03", edition: "community",
+    title: { en: "Run checks through a proxy", zh: "通过代理发起检测" },
+    summary: { en: "Self-hosted servers and probes that may only reach the internet through a proxy can now send their checks through it with OUTBOUND_PROXY.", zh: "只能通过代理访问外网的自托管服务器和探针，现在可以用 OUTBOUND_PROXY 让检测经由代理发出。" },
+    points: [
+      { en: "HTTP, MCP and blockchain checks, domain expiry lookups, alert webhooks and the offline self-check go through the proxy; TCP, DNS, database and WebSocket checks still connect directly.", zh: "HTTP、MCP 和区块链检测、域名到期查询、告警 Webhook 以及断网自检都会经过代理；TCP、DNS、数据库和 WebSocket 检测仍直接连接。" },
+      { en: "Private targets stay refused behind the proxy: each request is tunnelled to the address that was already checked, not to a name the proxy looks up itself.", zh: "使用代理后私有地址仍会被拒绝：每个请求都通过隧道连到已经校验过的地址，而不是交给代理自己解析域名。" },
+      { en: "The proxy may ask for a user name and password, given in the URL.", zh: "代理需要认证时，可以在地址中写上用户名和密码。" },
+    ],
+    link: { href: "/docs/self-host", label: { en: "Read the self-hosting docs", zh: "阅读自托管文档" } },
+  },
+  {
     id: "chat-alert-incident-link", date: "2026-11-03", edition: "community",
     title: { en: "Incident links in chat alerts", zh: "聊天告警附带事件链接" },
     summary: { en: "Alerts sent to Slack, Discord, Microsoft Teams, Telegram, Lark and ntfy now end with a link to the incident.", zh: "发送到 Slack、Discord、Microsoft Teams、Telegram、飞书和 ntfy 的告警末尾现在附带事件链接。" },

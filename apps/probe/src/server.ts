@@ -11,7 +11,7 @@ const secret = process.env.PROBE_SECRET?.trim() || undefined;
 
 // Same names as on the API, so the probe's requests look like the scheduler's. Private targets stay refused unless the
 // operator of this probe opts in: that is how a probe inside an office or home network checks internal services.
-configureNetGuard({ CHECK_USER_AGENT: process.env.CHECK_USER_AGENT, ALLOW_PRIVATE_TARGETS: process.env.ALLOW_PRIVATE_TARGETS });
+configureNetGuard({ CHECK_USER_AGENT: process.env.CHECK_USER_AGENT, ALLOW_PRIVATE_TARGETS: process.env.ALLOW_PRIVATE_TARGETS, OUTBOUND_PROXY: process.env.OUTBOUND_PROXY });
 
 const server = createProbeServer({ secret, region });
 server.listen(port, host, () => console.log(`OpenUptime probe${region ? ` (${region})` : ""} listening on ${host}:${(server.address() as AddressInfo).port}`));

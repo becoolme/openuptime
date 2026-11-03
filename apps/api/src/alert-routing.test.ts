@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { dispatchAlert, retryDeliveries, sendReminders } from "./alerts";
 import { unmetered, type Entitlements } from "./entitlements";
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
-vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) }));
+vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init), outboundProxy: () => null, useOutboundProxy: () => {} }));
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 const at = new Date("2026-10-28T00:00:00Z");
 async function run(policy?: Entitlements["allowAlertChannel"], kind: "incident.opened" | "incident.resolved" | "incident.reminder" | "incident.escalated" = "incident.opened", noRows = false, ageSec = 60) {
