@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "bulk-monitor-actions", date: "2026-11-03", edition: "community",
+    title: { en: "Act on several monitors at once", zh: "批量操作监控" },
+    summary: { en: "Tick monitors in the list to pause, resume, delete them or change their alert channels in one step.", zh: "在监控列表里勾选多个监控，一次完成暂停、恢复、删除或调整告警渠道。" },
+    points: [
+      { en: "Each row has a checkbox, and the header box selects every monitor the current filter shows.", zh: "每一行都有复选框，表头的复选框会选中当前筛选结果中的全部监控。" },
+      { en: "Adding or removing an alert channel leaves each monitor's other channels as they were.", zh: "添加或移除告警渠道时，各监控原有的其他渠道保持不变。" },
+      { en: "Monitors that could not be changed are reported with the reason, while the rest are still applied.", zh: "无法处理的监控会单独列出原因，其余监控照常生效。" },
+      { en: "The API offers the same through POST /monitors/bulk, for up to 200 monitors per request.", zh: "API 也提供同样的能力：POST /monitors/bulk，每次最多 200 个监控。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
     id: "monitor-page-spacing", date: "2026-11-02", edition: "community",
     title: { en: "Spacing on the monitor page", zh: "监控详情页间距" },
     summary: { en: "The time coverage report and the MCP history no longer touch the cards below them.", zh: "时间覆盖报告和 MCP 历史卡片不再与下方卡片贴在一起。" },

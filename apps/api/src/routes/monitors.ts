@@ -104,6 +104,12 @@ const body = z.object({
   minRegionsFailing: fields.minRegionsFailing.default(0),
 });
 
+const bulkBody = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200).transform((ids) => [...new Set(ids)]).describe("Monitor UUIDs in the active project, up to 200."),
+  action: z.enum(["pause", "resume", "delete", "add_channels", "remove_channels"]).describe("pause and resume act like pause_monitor/resume_monitor; delete needs an owner or admin; add_channels and remove_channels change which alert channels each monitor uses."),
+  channelIds: z.array(z.string().uuid()).max(50).default([]).describe("Alert-channel UUIDs for add_channels and remove_channels."),
+});
+
 const IMPORT_MAX = 500;
 const sourceSchema = z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9._:-]+$/);
 export const monitorImportSchema = z.object({
@@ -414,6 +420,46 @@ export const monitors = new Hono<AppEnv>()
     const monitors = (await shown(c, rows)).map((m) => (m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig, { clientSecret: true }) } : m)).map((m) => Object.fromEntries(FIELD_KEYS.filter((k) => k !== "channelIds" && k !== "dependsOnMonitorId").map((k) => [k, (m as unknown as Record<string, unknown>)[k]]).concat([["source", m.importSource ?? "openuptime"], ["sourceId", m.importSourceId ?? m.id]])));
     c.header("content-disposition", 'attachment; filename="openuptime-monitors.json"');
     return c.json({ version: 1, exportedAt: new Date().toISOString(), monitors });
+  })
+  // One action over many monitors. Each monitor gets the checks a single change would; those refused are listed, not hidden.
+  .post("/bulk", zValidator("json", bulkBody), async (c) => {
+    const repo = c.get("repo"), orgId = c.get("orgId");
+    const { ids, action, channelIds } = c.req.valid("json");
+    const channelAction = action === "add_channels" || action === "remove_channels";
+    if (channelAction && !channelIds.length) return c.json({ error: "channelIds: choose at least one channel" }, 400);
+    const manager = await isManager(c);
+    if (action === "delete" && !manager) return c.json({ error: "Only workspace owners and admins can delete monitors" }, 403);
+    if (action === "add_channels") {
+      const known = new Set((await repo.channelsToAlert(orgId, { channelIds, projectId: c.get("projectId"), withDisabled: true })).map((ch) => ch.id));
+      const unknown = channelIds.filter((id) => !known.has(id));
+      if (unknown.length) return c.json({ error: `Unknown alert channel: ${unknown.join(", ")}`, code: "unknown_channel" }, 400);
+    }
+    const owned = new Set(await repo.ownedMonitorIds(orgId, ids, c.get("projectScope")));
+    const rows = new Map((await repo.monitorsByIds([...owned])).map((m) => [m.id, m]));
+    const done: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+    const targets = ids.filter((id) => rows.has(id) || (failed.push({ id, error: "Not found" }), false)).map((id) => rows.get(id)!);
+    if (action === "resume") {
+      const resuming = targets.filter((m) => m.paused).length;
+      const refused = await overPlan(c, { add: resuming });
+      if (refused) return refused;
+    }
+    for (const m of targets) {
+      if (action === "delete") { await repo.deleteMonitor(orgId, m.id, c.get("projectScope")); done.push(m.id); continue; }
+      let patch: Parameters<Repo["updateMonitor"]>[3] | null = null;
+      if (action === "pause") patch = m.paused ? null : { paused: true, status: "paused", nextCheckAt: new Date() };
+      else if (action === "resume") {
+        if (m.type === "mcp" && m.mcpConfig?.toolCall?.enabled && !manager) { failed.push({ id: m.id, error: "Only workspace owners and admins can resume enabled MCP tool calls" }); continue; }
+        patch = m.paused ? { paused: false, status: "pending", nextCheckAt: new Date() } : null;
+      } else {
+        const next = action === "add_channels" ? [...new Set([...m.channelIds, ...channelIds])] : m.channelIds.filter((id) => !channelIds.includes(id));
+        if (next.length > 50) { failed.push({ id: m.id, error: "A monitor alerts at most 50 channels" }); continue; }
+        patch = sameJson(next, m.channelIds) ? null : { channelIds: next };
+      }
+      if (patch && !(await repo.updateMonitor(orgId, m.id, c.get("projectScope"), patch))) { failed.push({ id: m.id, error: "Not found" }); continue; }
+      done.push(m.id);
+    }
+    return c.json({ action, done, failed });
   })
   .post("/import/preview", bodyLimit({ maxSize: 4 * 1024 * 1024 }), (c) => importMonitors(c, true))
   .post("/import", bodyLimit({ maxSize: 4 * 1024 * 1024 }), (c) => importMonitors(c, false))

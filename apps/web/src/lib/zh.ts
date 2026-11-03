@@ -707,4 +707,8 @@ export const zh: Record<string, string> = {
   "This page belongs to a single project. Choose one to continue.": "此页面属于单个项目，请选择一个项目继续。",
   "No open incidents": "没有未解决事件",
   "Choose a project to add the first one.": "请选择一个项目来添加第一个监控。",
+  "Delete {n} monitors and their history? This cannot be undone.": "删除这 {n} 个监控及其历史记录？此操作无法撤销。",
+  "{n} monitors updated": "已处理 {n} 个监控", "{n} failed": "{n} 个失败", "Selected monitors": "已选监控", "{n} selected": "已选 {n} 个",
+  "Add alert channel": "添加告警渠道", "Remove alert channel": "移除告警渠道", "Clear selection": "取消选择",
+  "Select all shown monitors": "选择当前显示的全部监控", "Select {name}": "选择 {name}",
 };

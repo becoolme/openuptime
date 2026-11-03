@@ -213,6 +213,8 @@ export const api = {
   createMonitor: (b: Partial<Monitor> & { name: string }) => req<Monitor>("/monitors", { method: "POST", body: JSON.stringify(b) }),
   updateMonitor: (id: string, b: Partial<Monitor>) => req<Monitor>(`/monitors/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteMonitor: (id: string) => req<void>(`/monitors/${id}`, { method: "DELETE" }),
+  bulkMonitors: (b: { ids: string[]; action: "pause" | "resume" | "delete" | "add_channels" | "remove_channels"; channelIds?: string[] }) =>
+    req<{ action: string; done: string[]; failed: { id: string; error: string }[] }>("/monitors/bulk", { method: "POST", body: JSON.stringify(b) }),
   previewMcp: (body: { region?: string; monitorId?: string; target: string; headers: Record<string, string>; timeoutMs: number; mcpConfig: McpConfig }) => req<McpPreview>("/monitors/mcp/preview", { method: "POST", body: JSON.stringify(body) }),
   mcpHistory: (id: string, days: 7 | 30) => req<McpHistory>(`/monitors/${id}/mcp-history?days=${days}&limit=120`),
   acceptMcpBaseline: (id: string, observationId: string, schemaHash: string) => req<{ ok: true }>(`/monitors/${id}/mcp-baseline/accept`, { method: "POST", body: JSON.stringify({ observationId, schemaHash }) }),

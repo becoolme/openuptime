@@ -7,6 +7,7 @@ import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { ago, api, everyShort, type Channel, type Incident, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
+import { toast } from "../lib/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
@@ -86,6 +87,44 @@ function IntervalTag({ monitor, onChanged }: { monitor: Monitor; onChanged: (sec
   );
 }
 
+type BulkAction = "pause" | "resume" | "delete" | "add_channels" | "remove_channels";
+
+/** The bar above the list while monitors are ticked: one action for all of them, with a report of the ones it missed. */
+function BulkBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => void; onClear: () => void }) {
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.channels().then(setChannels).catch(() => {}); }, []);
+  async function run(action: BulkAction, channelIds?: string[]) {
+    if (action === "delete" && !confirm(t("Delete {n} monitors and their history? This cannot be undone.").replace("{n}", String(ids.length)))) return;
+    setBusy(true);
+    try {
+      const r = await api.bulkMonitors({ ids, action, ...(channelIds ? { channelIds } : {}) });
+      const done = t("{n} monitors updated").replace("{n}", String(r.done.length));
+      if (r.failed.length) toast(`${done} · ${t("{n} failed").replace("{n}", String(r.failed.length))}: ${[...new Set(r.failed.map((f) => f.error))].join("; ")}`, "err", { sticky: true });
+      else toast(done);
+      onDone();
+    } catch (e) {
+      const x = e as Error & { code?: string };
+      toast(x.code === "monitor_limit" ? t("You have reached your plan's active monitor limit. Pause a monitor or upgrade your plan.") : x.message, "err");
+    }
+    setBusy(false);
+  }
+  const channelOptions = [{ value: "", label: "" }, ...channels.map((c) => ({ value: c.id, label: c.name }))];
+  return (
+    <div className="bulk" role="toolbar" aria-label={t("Selected monitors")}>
+      <b>{t("{n} selected").replace("{n}", String(ids.length))}</b>
+      <button className="btn sm" disabled={busy} onClick={() => run("pause")}>{t("Pause")}</button>
+      <button className="btn sm" disabled={busy} onClick={() => run("resume")}>{t("Resume")}</button>
+      {channels.length > 0 && <>
+        <Select compact className="in" value="" label={t("Add alert channel")} options={channelOptions.map((o) => (o.value ? o : { ...o, label: t("Add alert channel") }))} onChange={(v) => v && run("add_channels", [v])} />
+        <Select compact className="in" value="" label={t("Remove alert channel")} options={channelOptions.map((o) => (o.value ? o : { ...o, label: t("Remove alert channel") }))} onChange={(v) => v && run("remove_channels", [v])} />
+      </>}
+      <button className="btn sm danger-l" disabled={busy} onClick={() => run("delete")}>{t("Delete")}</button>
+      <button className="btn sm" disabled={busy} onClick={onClear}>{t("Clear selection")}</button>
+    </div>
+  );
+}
+
 export default function Monitors() {
   const [items, setItems] = useState<Monitor[] | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -96,6 +135,7 @@ export default function Monitors() {
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   // "All projects": every project of the workspace in one read-only list, with a summary per project on top
   const everything = isAllProjects();
   const projects = useProjects();
@@ -139,6 +179,10 @@ export default function Monitors() {
     return !n || m.name.toLowerCase().includes(n) || m.target.toLowerCase().includes(n) || (m.tags ?? []).some((x) => x.toLowerCase().includes(n));
   });
   const allTags = [...new Set(all.flatMap((m) => m.tags ?? []))].sort();
+  // only ticked monitors the list shows count: one hidden by a search or tag, or deleted elsewhere, is never acted on
+  const pickedIds = shown.filter((m) => picked.has(m.id)).map((m) => m.id);
+  const allShownPicked = shown.length > 0 && shown.every((m) => picked.has(m.id));
+  const pick = (id: string, on: boolean) => setPicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   async function importFile(file: File) {
     setNote(null);
@@ -251,11 +295,14 @@ export default function Monitors() {
               {allTags.map((x) => <button key={x} className={`tab ${tag === x ? "on" : ""}`} onClick={() => setTag(tag === x ? "" : x)}>{x}</button>)}
             </div>
           )}
+          {!everything && pickedIds.length > 0 && <BulkBar ids={pickedIds} onClear={() => setPicked(new Set())} onDone={() => { setPicked(new Set()); load(); window.dispatchEvent(new Event("ou:changed")); }} />}
           <div className="card tbl mon-tbl">
-            <div className="tr th"><span>{t("Monitor")}</span><span>{t("Status")}</span><span>{t("Response")}</span><span>{t("Uptime 24h")}</span><span>{t("Latency")}</span><span>{t("Checked")}</span></div>
+            <div className="tr th"><span className="nm">{!everything && <input type="checkbox" className="pick" aria-label={t("Select all shown monitors")} checked={allShownPicked} onChange={(e) => setPicked((s) => { const n = new Set(s); for (const m of shown) { if (e.target.checked) n.add(m.id); else n.delete(m.id); } return n; })} />}{t("Monitor")}</span><span>{t("Status")}</span><span>{t("Response")}</span><span>{t("Uptime 24h")}</span><span>{t("Latency")}</span><span>{t("Checked")}</span></div>
             {shown.map((m) => (
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
+                  {/* the row is a link: ticking the box must not open the monitor */}
+                  {!everything && <span className="pick-w" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) e.preventDefault(); }}><input type="checkbox" className="pick" aria-label={t("Select {name}").replace("{name}", m.name)} checked={picked.has(m.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => pick(m.id, e.target.checked)} /></span>}
                   <span className="chip">{TYPE_LABEL[m.type]}</span>
                   {everything || m.type === "heartbeat" ? <span className="chip" title={t("Check interval")}>{everyShort(m.intervalSec)}</span> : <IntervalTag monitor={m} onChanged={(sec) => setItems((xs) => xs && xs.map((x) => (x.id === m.id ? { ...x, intervalSec: sec } : x)))} />}
                   <div style={{ minWidth: 0 }}><b>{m.name}</b><small>{everything && <ProjectBadge id={m.projectId} projects={projects} />}{m.target || m.type}{(m.tags ?? []).length > 0 && ` · ${(m.tags ?? []).map((x) => `#${x}`).join(" ")}`}</small></div>
