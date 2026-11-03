@@ -272,6 +272,48 @@ export function connectFailure(e: unknown): boolean {
 const PORTABLE = ["user-agent", "accept", "accept-language", "accept-encoding", "content-type"];
 
 /**
+ * Cookies set by redirect responses, kept for the rest of one guardedFetch: sign-in and consent redirects often set a
+ * cookie and then check for it, and loop without it. Like a host-only cookie in a browser, one goes back only to the
+ * host that set it (a Domain attribute is not honoured), a Secure one only over https, and an expired one is removed.
+ */
+export class RedirectCookies {
+  private jar = new Map<string, Map<string, { value: string; secure: boolean }>>();
+  take(host: string, res: Response) {
+    const lines = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
+    for (const line of lines) {
+      const [pair, ...attrs] = line.split(";");
+      const eq = pair.indexOf("=");
+      const name = (eq < 0 ? "" : pair.slice(0, eq)).trim();
+      if (!name || /[\s,;]/.test(name)) continue;
+      const value = pair.slice(eq + 1).trim();
+      if (name.length + value.length > 4096) continue;
+      let secure = false;
+      let maxAge: number | null = null;
+      let expires: number | null = null;
+      for (const a of attrs) {
+        const [k, v = ""] = a.split("=").map((x) => x.trim());
+        const key = k.toLowerCase();
+        if (key === "secure") secure = true;
+        else if (key === "max-age" && /^-?\d+$/.test(v)) maxAge = Number(v);
+        else if (key === "expires" && !Number.isNaN(Date.parse(v))) expires = Date.parse(v);
+      }
+      // as in a browser, Max-Age wins over Expires
+      const gone = maxAge != null ? maxAge <= 0 : expires != null && expires <= Date.now();
+      const forHost = this.jar.get(host) ?? new Map();
+      if (gone) forHost.delete(name);
+      // a site cannot grow the Cookie header without bound over a chain of redirects
+      else if (forHost.has(name) || forHost.size < 50) forHost.set(name, { value, secure });
+      this.jar.set(host, forHost);
+    }
+  }
+  /** The Cookie header for a request to this URL: the monitor's own cookies first, then the ones collected. */
+  header(u: URL, own: string | null): string | null {
+    const kept = [...(this.jar.get(u.hostname) ?? [])].filter(([, c]) => !c.secure || u.protocol === "https:").map(([n, c]) => `${n}=${c.value}`);
+    return [own, ...kept].filter(Boolean).join("; ") || null;
+  }
+}
+
+/**
  * fetch() that checks the host before every hop and follows redirects itself (so a public URL cannot bounce a check to
  * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop. With `follow: false` the
  * first response is returned as it is, redirect or not, so the caller can judge the redirect itself.
@@ -281,11 +323,15 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
   let method = init.method ?? "GET";
   let body = init.body;
   let headers = new Headers(init.headers);
+  const cookies = new RedirectCookies();
   for (let hop = 0; ; hop++) {
     const u = new URL(current);
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Unsupported protocol ${u.protocol}`);
     let { addresses } = await guardAddresses(u.hostname, publicOnly);
-    const req = { ...init, method, body, headers, redirect: "manual" as const };
+    const sent = new Headers(headers);
+    const cookie = hop ? cookies.header(u, headers.get("cookie")) : null;
+    if (cookie) sent.set("cookie", cookie);
+    const req = { ...init, method, body, headers: sent, redirect: "manual" as const };
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
     let res: Response;
     try {
@@ -305,6 +351,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     if (!follow || res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
     await res.body?.cancel();
     if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects");
+    cookies.take(u.hostname, res);
     const next = new URL(location, current);
     // like browsers: 303, and POST after 301/302, become a bodiless GET; 307 / 308 repeat the request
     const converts = res.status === 303 || ((res.status === 301 || res.status === 302) && method === "POST");

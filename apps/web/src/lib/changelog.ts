@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "redirect-cookies", date: "2026-11-03", edition: "community",
+    title: { en: "Cookies kept across redirects", zh: "跳转时保留 Cookie" },
+    summary: { en: "HTTP checks now send back cookies a site sets while redirecting, so sign-in and consent redirects no longer loop or fail.", zh: "HTTP 检测现在会在跳转过程中带上网站设置的 Cookie，登录或同意页的跳转不再循环或失败。" },
+    points: [
+      { en: "A cookie is only sent back to the host that set it, and a Secure cookie only over HTTPS.", zh: "Cookie 只会发回设置它的主机，带 Secure 标记的 Cookie 只通过 HTTPS 发送。" },
+      { en: "A Cookie header set on the monitor is still sent on every request.", zh: "监控上设置的 Cookie 请求头仍会随每个请求发送。" },
+      { en: "Checks from other regions get this once their probe is updated.", zh: "其他区域的检测需在探针更新后生效。" },
+    ],
+  },
+  {
     id: "deleted-monitor-incidents", date: "2026-11-03", edition: "community",
     title: { en: "Deleting a monitor closes its incident", zh: "删除监控时关闭其事件" },
     summary: { en: "An incident left open by a monitor you delete is now resolved, and no longer appears on status pages as a project-wide incident.", zh: "删除监控后，它留下的未结束事件会被标记为已解决，也不会再作为整个项目的事件出现在状态页上。" },
