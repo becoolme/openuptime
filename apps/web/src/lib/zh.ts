@@ -719,4 +719,10 @@ export const zh: Record<string, string> = {
   "Last 7 days": "最近 7 天", "Last 30 days": "最近 30 天", "Last 90 days": "最近 90 天", "Uptime range": "可用率时间范围",
   "7-day uptime": "7 天可用率", "30-day uptime": "30 天可用率", "7 days ago": "7 天前", "30 days ago": "30 天前",
   "No incidents on this day.": "当天没有事件。", "Could not load this day.": "无法加载当天的数据。", "Affects all components": "影响所有组件",
+  "Time format": "时间格式",
+  "Times are shown in this browser's time zone ({zone}). The choice is kept in this browser.": "时间按此浏览器的时区（{zone}）显示。此设置仅保存在当前浏览器中。",
+  "Automatic": "自动",
+  "24-hour": "24 小时制",
+  "12-hour": "12 小时制",
+  "Example": "示例",
 };

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
 import { api, type Maintenance as Window, type Monitor } from "../lib/api";
 import { t } from "../lib/i18n";
+import { fmtDateTime } from "../lib/time";
 
 const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
@@ -30,7 +31,7 @@ export default function Maintenance() {
     const now = Date.now();
     return now < +new Date(w.startsAt) ? "upcoming" : now > +new Date(w.endsAt) ? "ended" : "active";
   };
-  const fmt = (s: string) => new Date(s).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  const fmt = (s: string) => fmtDateTime(s);
   const names = (w: Window) => (w.monitorIds.length ? w.monitorIds.map((id) => monitors.find((m) => m.id === id)?.name ?? "…").join(", ") : t("All monitors"));
 
   return (
@@ -73,7 +74,7 @@ export default function Maintenance() {
         {f.frequency !== "none" && <>
           <label className="fld">{t("Recurrence time zone")}<input className="in" required value={f.timeZone} onChange={(e) => setF({ ...f, timeZone: e.target.value })} placeholder="America/Toronto" /></label>
           <p className="muted">{t("Repeats at the first start's local clock time in this zone. Duration stays fixed; skipped spring times move forward and repeated autumn times use the later occurrence.")}</p>
-          <p className="mono">{(() => { try { return new Date(f.startsAt).toLocaleString([], { timeZone: f.timeZone, dateStyle: "medium", timeStyle: "short" }); } catch { return "—"; } })()}</p>
+          <p className="mono">{(() => { try { return fmtDateTime(f.startsAt, { timeZone: f.timeZone }); } catch { return "—"; } })()}</p>
           <label className="fld">{t("Repeat until")}<input className="in" type="datetime-local" required value={f.until} onChange={(e) => setF({ ...f, until: e.target.value })} /></label>
           <p className="muted">{t("Choose an end within 366 days; each window may last up to 24 hours. Skip individual occurrences or cancel the series below.")}</p>
         </>}

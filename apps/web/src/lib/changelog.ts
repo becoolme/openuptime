@@ -27,6 +27,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitor-list-sort-and-clock", date: "2026-11-03", edition: "community",
+    title: { en: "Sort monitors and pick a clock", zh: "监控排序与时间格式" },
+    summary: { en: "Sort the monitor list by any column, and choose whether times use a 12- or 24-hour clock.", zh: "监控列表可以按任意列排序，时间也可以选择 12 小时制或 24 小时制显示。" },
+    points: [
+      { en: "Click a column header to sort by name, status, uptime, latency or last check; click again to reverse it, a third time to go back to the default order. The browser remembers your choice.", zh: "点击列标题即可按名称、状态、可用率、延迟或最近检测时间排序；再次点击反向排序，第三次恢复默认顺序。浏览器会记住你的选择。" },
+      { en: "Monitors that have no checks yet stay at the end of the list in either direction.", zh: "尚未检测过的监控无论升序还是降序都排在最后。" },
+      { en: "The time format is set under Account; times are shown in the browser's time zone, and incident times keep their UTC label.", zh: "时间格式可在“账号”中设置；时间按浏览器所在时区显示，事件时间仍标注为 UTC。" },
+      { en: "Uptime in the monitor list and in each region's figures is shown with two decimals.", zh: "监控列表和各区域数据中的可用率显示到小数点后两位。" },
+    ],
+  },
+  {
     id: "status-page-day-incidents", date: "2026-11-03", edition: "community",
     title: { en: "See a day's incidents on the status page", zh: "在状态页查看某天的事件" },
     summary: { en: "Visitors can click a day on a component's uptime bar to see the incidents that were open that day.", zh: "访客点击组件可用率条上的某一天，即可看到当天发生的事件。" },

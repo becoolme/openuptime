@@ -125,6 +125,35 @@ function BulkBar({ ids, onDone, onClear }: { ids: string[]; onDone: () => void; 
   );
 }
 
+// The list's sort is the viewer's own preference, kept in this browser only.
+type SortKey = "name" | "status" | "uptime" | "latency" | "checked";
+type Sort = { key: SortKey; desc: boolean } | null;
+const SORT_STORE = "ou_monitor_sort";
+const SORT_KEYS: SortKey[] = ["name", "status", "uptime", "latency", "checked"];
+function readSort(): Sort {
+  try {
+    const [key, dir] = (localStorage.getItem(SORT_STORE) ?? "").split(":");
+    return SORT_KEYS.includes(key as SortKey) ? { key: key as SortKey, desc: dir === "desc" } : null;
+  } catch { return null; }
+}
+function saveSort(s: Sort) {
+  try { if (s) localStorage.setItem(SORT_STORE, `${s.key}:${s.desc ? "desc" : "asc"}`); else localStorage.removeItem(SORT_STORE); } catch {}
+}
+// what needs attention first: down, then degraded, up, waiting for a first check, paused
+const statusRank = (m: Monitor) => (m.paused ? 4 : m.status === "down" ? 0 : m.status === "degraded" ? 1 : m.status === "up" ? 2 : 3);
+const sortValue = (m: Monitor, key: SortKey): string | number | null =>
+  key === "name" ? m.name.toLowerCase() : key === "status" ? statusRank(m) : key === "uptime" ? m.uptime24h ?? null : key === "latency" ? m.avgLatency24h ?? null : m.lastCheckedAt ? Date.parse(m.lastCheckedAt) : null;
+/** Sorted copy; monitors without a value (no checks yet) stay at the end in either direction. */
+export function sortMonitors(list: Monitor[], sort: Sort): Monitor[] {
+  if (!sort) return list;
+  return [...list].sort((a, b) => {
+    const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
+    if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+    const c = x < y ? -1 : x > y ? 1 : 0;
+    return sort.desc ? -c : c;
+  });
+}
+
 export default function Monitors() {
   const [items, setItems] = useState<Monitor[] | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -136,6 +165,14 @@ export default function Monitors() {
   const [tag, setTag] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<Sort>(null);
+  useEffect(() => setSort(readSort()), []);
+  // a click sorts by the column, a second click reverses it, a third goes back to the default order
+  const sortBy = (key: SortKey) => {
+    const next: Sort = sort?.key !== key ? { key, desc: key === "checked" } : sort.desc === (key === "checked") ? { key, desc: !sort.desc } : null;
+    setSort(next);
+    saveSort(next);
+  };
   // "All projects": every project of the workspace in one read-only list, with a summary per project on top
   const everything = isAllProjects();
   const projects = useProjects();
@@ -170,14 +207,19 @@ export default function Monitors() {
   const withLat = all.filter((m) => m.avgLatency24h != null);
   const avgLat = withLat.length ? Math.round(withLat.reduce((a, m) => a + (m.avgLatency24h as number), 0) / withLat.length) : null;
   const openInc = incidents.filter((i) => i.status !== "resolved");
-  const shown = all.filter((m) => {
+  const shown = sortMonitors(all.filter((m) => {
     if (tab === "up" && (!(m.status === "up" || m.status === "degraded") || domainAttention(m))) return false;
     if (tab === "down" && m.status !== "down" && !domainAttention(m)) return false;
     if (tab === "paused" && !m.paused) return false;
     const n = q.trim().toLowerCase();
     if (tag && !(m.tags ?? []).includes(tag)) return false;
     return !n || m.name.toLowerCase().includes(n) || m.target.toLowerCase().includes(n) || (m.tags ?? []).some((x) => x.toLowerCase().includes(n));
-  });
+  }), sort);
+  const head = (key: SortKey, label: string) => (
+    <button type="button" className={`sort-h ${sort?.key === key ? "on" : ""}`} onClick={() => sortBy(key)}>
+      {t(label)}{sort?.key === key && <i aria-hidden="true">{sort.desc ? "↓" : "↑"}</i>}
+    </button>
+  );
   const allTags = [...new Set(all.flatMap((m) => m.tags ?? []))].sort();
   // only ticked monitors the list shows count: one hidden by a search or tag, or deleted elsewhere, is never acted on
   const pickedIds = shown.filter((m) => picked.has(m.id)).map((m) => m.id);
@@ -297,7 +339,7 @@ export default function Monitors() {
           )}
           {!everything && pickedIds.length > 0 && <BulkBar ids={pickedIds} onClear={() => setPicked(new Set())} onDone={() => { setPicked(new Set()); load(); window.dispatchEvent(new Event("ou:changed")); }} />}
           <div className="card tbl mon-tbl">
-            <div className="tr th"><span className="nm">{!everything && <input type="checkbox" className="pick" aria-label={t("Select all shown monitors")} checked={allShownPicked} onChange={(e) => setPicked((s) => { const n = new Set(s); for (const m of shown) { if (e.target.checked) n.add(m.id); else n.delete(m.id); } return n; })} />}{t("Monitor")}</span><span>{t("Status")}</span><span>{t("Response")}</span><span>{t("Uptime 24h")}</span><span>{t("Latency")}</span><span>{t("Checked")}</span></div>
+            <div className="tr th"><span className="nm">{!everything && <input type="checkbox" className="pick" aria-label={t("Select all shown monitors")} checked={allShownPicked} onChange={(e) => setPicked((s) => { const n = new Set(s); for (const m of shown) { if (e.target.checked) n.add(m.id); else n.delete(m.id); } return n; })} />}{head("name", "Monitor")}</span><span>{head("status", "Status")}</span><span>{t("Response")}</span><span>{head("uptime", "Uptime 24h")}</span><span>{head("latency", "Latency")}</span><span>{head("checked", "Checked")}</span></div>
             {shown.map((m) => (
               <a className="tr" key={m.id} href={`/app/monitors/${m.id}`}>
                 <div className="nm">
@@ -309,7 +351,7 @@ export default function Monitors() {
                 </div>
                 <span><span className={`pill ${monitorState(m).tone}`}>{t(monitorState(m).label)}</span></span>
                 <span className="spk"><Spark data={m.spark ?? []} status={m.status} /></span>
-                <span className="num">{m.uptime24h == null ? "—" : `${m.uptime24h}%`}</span>
+                <span className="num">{m.uptime24h == null ? "—" : `${m.uptime24h.toFixed(2)}%`}</span>
                 <span className="num">{m.avgLatency24h == null ? "—" : `${m.avgLatency24h} ms`}</span>
                 <span className="muted">{ago(m.lastCheckedAt)}</span>
               </a>

@@ -4,6 +4,7 @@ import McpHistory from "./McpHistory";
 import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { monitorState } from "../lib/domain-expiry";
 import { t } from "../lib/i18n";
+import { fmtTime } from "../lib/time";
 import { useEffect, useState } from "react";
 import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, type RegionStat, type SpotCheck } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
@@ -123,7 +124,7 @@ export default function MonitorDetail({ id }: { id: string }) {
                   <i className={run.state === "up" ? "" : run.state === "down" ? "d" : "w"} style={{ height: `${Math.max(4, ((run.latencyMs ?? max) / max) * 100)}%` }} />
                   <span className="rt-tip">
                     <b>{run.latencyMs != null ? `${run.rows.length > 1 ? "avg " : ""}${run.latencyMs} ms` : "—"}</b>
-                    <small>{run.rows.length > 1 ? `${run.okCount}/${run.rows.length} OK` : run.rows[0].ok ? "OK" : run.rows[0].statusCode ?? "Failed"} · {new Date(run.at).toLocaleTimeString()}</small>
+                    <small>{run.rows.length > 1 ? `${run.okCount}/${run.rows.length} OK` : run.rows[0].ok ? "OK" : run.rows[0].statusCode ?? "Failed"} · {fmtTime(run.at, { seconds: true })}</small>
                     {run.rows.length > 1 && run.rows.map((r) => (
                       <small key={r.id} className={`rt-r${r.ok ? "" : " d"}`}>{regionName(r.region ?? "auto")} · {r.ok ? `${r.latencyMs ?? "—"} ms` : r.error ?? t("Failed")}</small>
                     ))}
@@ -132,7 +133,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               ))}
             </div>
             {chrono.length > 1 && (
-              <div className="ax"><span>{new Date(chrono[0].at).toLocaleTimeString()}</span><span>{new Date(chrono[chrono.length - 1].at).toLocaleTimeString()}</span></div>
+              <div className="ax"><span>{fmtTime(chrono[0].at, { seconds: true })}</span><span>{fmtTime(chrono[chrono.length - 1].at, { seconds: true })}</span></div>
             )}
           </div>
 
@@ -141,7 +142,7 @@ export default function MonitorDetail({ id }: { id: string }) {
             <div className={`rr res th${showRegion ? " has-rg" : ""}`}><span>{t("Time")}</span>{showRegion && <span className="rr-rg">{t("Region")}</span>}<span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Latency")}</span><span>{t("Error")}</span></div>
             {rows.map(({ r, lead, size }) => (
               <div className={`rr res${showRegion ? " has-rg" : ""}${size > 1 ? " grp" : ""}${lead ? "" : " in-run"}`} key={r.id}>
-                <span className="mono muted">{lead || size === 1 ? new Date(r.checkedAt).toLocaleTimeString([], { hour12: false }) : ""}</span>
+                <span className="mono muted">{lead || size === 1 ? fmtTime(r.checkedAt, { seconds: true, auto24: true }) : ""}</span>
                 {showRegion && <span className="rr-rg" title={regionName(r.region ?? "auto")}>{regionName(r.region ?? "auto")}</span>}
                 <span><span className={`pill ${r.ok ? "up" : "down"}`}>{r.ok ? t("OK") : t("Failed")}</span></span>
                 <span className="mono">{r.statusCode ?? "—"}</span>
@@ -162,7 +163,7 @@ export default function MonitorDetail({ id }: { id: string }) {
                   <i className={`dot ${s.last ? (s.last.ok ? "up" : "down") : "n"}`} aria-label={s.last ? (s.last.ok ? t("OK") : t("Failed")) : undefined} />
                   <span className="reg-n">{regionName(s.region)}</span>
                   <span className="mono reg-v">
-                    <b>{s.uptime24h == null ? "—" : `${s.uptime24h}%`}</b>
+                    <b>{s.uptime24h == null ? "—" : `${s.uptime24h.toFixed(2)}%`}</b>
                     <small>{s.avgLatency24h == null ? "—" : `${s.avgLatency24h} ms`}</small>
                   </span>
                 </div>

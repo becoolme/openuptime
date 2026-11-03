@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type McpHistory as History } from "../lib/api";
 import { t } from "../lib/i18n";
+import { fmtDateTime } from "../lib/time";
 
 const ms = (value: number | null) => value == null ? "—" : `${Math.round(value)} ms`;
 export function McpTimingChart({ rows, stage }: { rows: History["results"]; stage: string }) {
@@ -31,7 +32,7 @@ export function McpTimingChart({ rows, stage }: { rows: History["results"]; stag
         }).join(" ");
         return <g key={region} stroke={colors[regionIndex % colors.length]} fill={colors[regionIndex % colors.length]}>
           <path d={path} fill="none" strokeWidth={2} strokeDasharray={dash(regionIndex)} />
-          {points.map((row, i) => (row.region ?? "auto") === region && typeof value(row) === "number" ? <circle key={row.id} cx={x(i)} cy={145 - value(row)! / max * 120} r={2}><title>{new Date(row.checkedAt).toLocaleString()} · {region} · {ms(value(row)!)} · {row.ok ? t("OK") : t("Failed")}</title></circle> : null)}
+          {points.map((row, i) => (row.region ?? "auto") === region && typeof value(row) === "number" ? <circle key={row.id} cx={x(i)} cy={145 - value(row)! / max * 120} r={2}><title>{fmtDateTime(row.checkedAt)} · {region} · {ms(value(row)!)} · {row.ok ? t("OK") : t("Failed")}</title></circle> : null)}
         </g>;
       })}
     </svg>
@@ -71,9 +72,9 @@ export default function McpHistory({ id }: { id: string }) {
         <tr><td>{t("Total")}</td><td>{report.metrics.samples}</td><td>{ms(report.metrics.p50)}</td><td>{ms(report.metrics.p95)}</td></tr>
         {Object.entries(report.metrics.stages).map(([name, metric]) => <tr key={name}><td><code>{name}</code></td><td>{metric.samples}</td><td>{ms(metric.p50)}</td><td>{ms(metric.p95)}</td></tr>)}
       </tbody></table></div>
-      <details style={{ marginTop: 12 }}><summary>{t("Historical stage timings")}</summary><div style={{ maxHeight: 360, overflow: "auto" }}><table style={{ width: "100%" }}><thead><tr><th>{t("Time")}</th><th>{t("Region")}</th><th>{t("Result")}</th><th>{t("Stage timings")}</th></tr></thead><tbody>{report.results.map((row) => <tr key={row.id}><td>{new Date(row.checkedAt).toLocaleString()}</td><td>{row.region ?? "auto"}</td><td>{row.ok ? t("OK") : row.error}</td><td>{Object.entries(row.mcp.timings).map(([name, n]) => <div key={name}><code>{name}</code>: {ms(n)}</div>)}</td></tr>)}</tbody></table></div></details>
+      <details style={{ marginTop: 12 }}><summary>{t("Historical stage timings")}</summary><div style={{ maxHeight: 360, overflow: "auto" }}><table style={{ width: "100%" }}><thead><tr><th>{t("Time")}</th><th>{t("Region")}</th><th>{t("Result")}</th><th>{t("Stage timings")}</th></tr></thead><tbody>{report.results.map((row) => <tr key={row.id}><td>{fmtDateTime(row.checkedAt)}</td><td>{row.region ?? "auto"}</td><td>{row.ok ? t("OK") : row.error}</td><td>{Object.entries(row.mcp.timings).map(([name, n]) => <div key={name}><code>{name}</code>: {ms(n)}</div>)}</td></tr>)}</tbody></table></div></details>
       <h4 style={{ marginTop: 16 }}>{t("Schema change timeline")}</h4>
-      {report.changes.length ? <ol>{report.changes.map((event) => <li key={event.id}><time>{new Date(event.checkedAt).toLocaleString()}</time> <span className="chip">{t(event.severity)}</span><ul>{(event.drift.length ? event.drift.map((d) => `${d.tool}${d.path ?? ""}: ${d.message}`) : event.changes).map((change, i) => <li key={i}>{change}</li>)}</ul></li>)}</ol> : <p className="muted">{t("No schema changes in this history window.")}</p>}
+      {report.changes.length ? <ol>{report.changes.map((event) => <li key={event.id}><time>{fmtDateTime(event.checkedAt)}</time> <span className="chip">{t(event.severity)}</span><ul>{(event.drift.length ? event.drift.map((d) => `${d.tool}${d.path ?? ""}: ${d.message}`) : event.changes).map((change, i) => <li key={i}>{change}</li>)}</ul></li>)}</ol> : <p className="muted">{t("No schema changes in this history window.")}</p>}
     </>}
   </section>;
 }
