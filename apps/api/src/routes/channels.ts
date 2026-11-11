@@ -8,7 +8,7 @@ import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
 
-const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy"] as const;
+const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy", "bark", "apprise"] as const;
 type ChannelType = (typeof TYPES)[number];
 
 const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL");
@@ -24,6 +24,17 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
     // printable ASCII only: anything else cannot be sent in a header and would surface as "Could not reach host"; empty clears it
     token: z.string().trim().max(500).regex(/^[\x20-\x7E]*$/, "Use printable ASCII characters only").transform((v) => v || undefined).optional(),
     priority: z.enum(["1", "2", "3", "4", "5"]).default("3"),
+  }).refine((v) => !v.token || v.url.toLowerCase().startsWith("https://"), { path: ["token"], message: "An access token is only sent to an https:// server" }),
+  bark: z.object({
+    // empty means the public Bark server; a self-hosted server is given as an origin
+    url: url.refine((v) => { const u = new URL(v); return u.pathname === "/" && !u.search && !u.hash && !u.username && !u.password; }, "Use the server origin without a path, query or credentials").optional().or(z.literal("").transform(() => undefined)),
+    deviceKey: z.string().trim().regex(/^[A-Za-z0-9_-]{6,64}$/, "Use the 6–64 letters, digits, underscores or hyphens shown in the Bark app"),
+  }),
+  apprise: z.object({
+    // the stateless /notify endpoint would take arbitrary target URLs from us, so only a saved configuration key is accepted
+    url: url.refine((v) => { const u = new URL(v); return /^\/notify\/[A-Za-z0-9_-]{1,64}\/?$/.test(u.pathname) && !u.search && !u.hash && !u.username && !u.password; }, "Use the Apprise API URL of a saved configuration, such as https://apprise.example.com/notify/ops"),
+    tag: z.string().trim().max(100).regex(/^[A-Za-z0-9_, -]*$/, "Use letters, digits, spaces, commas, underscores or hyphens").transform((v) => v || undefined).optional(),
+    token: z.string().trim().max(500).regex(/^[\x20-\x7E]*$/, "Use printable ASCII characters only").transform((v) => v || undefined).optional(),
   }).refine((v) => !v.token || v.url.toLowerCase().startsWith("https://"), { path: ["token"], message: "An access token is only sent to an https:// server" }),
   webhook: z.object({ url }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),

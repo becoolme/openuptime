@@ -337,6 +337,13 @@
       "when": 1793724427189,
       "tag": "0047_eager_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794362860674,
+      "tag": "0048_majestic_jetstream",
+      "breakpoints": true
     }
   ]
 }

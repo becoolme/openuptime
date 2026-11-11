@@ -497,6 +497,36 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       if (!res.ok) throw new Error(`${hostOf(cfg.url!)} responded HTTP ${res.status}`);
       break;
     }
+    case "bark": {
+      need(cfg.deviceKey, "device key");
+      const server = cfg.url || "https://api.day.app";
+      let res: Response;
+      try {
+        // Bark's own URL scheme caps a push at a few KB; a time-sensitive level breaks through Focus modes for outages only.
+        const init = json({ device_key: cfg.deviceKey, title: "OpenUptime", body: text.length <= 1000 ? text : `${text.slice(0, 999).replace(/[\uD800-\uDBFF]$/, "")}…`, group: "OpenUptime", level: opened ? "timeSensitive" : "active" });
+        res = (await guardedFetch(`${server.replace(/\/$/, "")}/push`, init, { follow: false })).res;
+      } catch (e) {
+        throw new Error((e as Error).name === "TimeoutError" ? `${hostOf(server)} timed out` : `Could not reach ${hostOf(server)}`);
+      }
+      await res.body?.cancel().catch(() => {});
+      if (!res.ok) throw new Error(`${hostOf(server)} responded HTTP ${res.status}`);
+      break;
+    }
+    case "apprise": {
+      need(cfg.url, "Apprise API URL");
+      // Apprise's notification types colour the message on the services that support it.
+      const type = ev.kind === "incident.resolved" ? "success" : ev.slow || ev.schemaDrift ? "warning" : "failure";
+      let res: Response;
+      try {
+        const init = json({ title: "OpenUptime", body: text.length <= 4000 ? text : `${text.slice(0, 3999).replace(/[\uD800-\uDBFF]$/, "")}…`, type, ...(cfg.tag ? { tag: cfg.tag } : {}) });
+        res = (await guardedFetch(cfg.url!, { ...init, headers: { ...init.headers, ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}) } }, { follow: false })).res;
+      } catch (e) {
+        throw new Error((e as Error).name === "TimeoutError" ? `${hostOf(cfg.url!)} timed out` : `Could not reach ${hostOf(cfg.url!)}`);
+      }
+      await res.body?.cancel().catch(() => {});
+      if (!res.ok) throw new Error(`${hostOf(cfg.url!)} responded HTTP ${res.status}`);
+      break;
+    }
     case "lark":
       need(cfg.url, "webhook URL");
       await postLark(cfg.url!, linked(text), cfg.secret || undefined);

@@ -13,6 +13,8 @@ type Status = {
   incidents: { id: string; number?: number | null; title: string; status: string; updates: { id: string; body: string; status: string; createdAt: string }[] }[];
 };
 const { slug } = Astro.params;
+// ?embed=1 is the compact layout for an <iframe>: status, incidents and components only
+const embed = Astro.url.searchParams.get("embed") === "1";
 type History = { items: { id: string; number?: number | null; rootCause?: string | null; postmortem?: string | null; title: string; status: string; startedAt: string; resolvedAt: string | null; updates: { id: string; body: string; status: string; createdAt: string }[] }[]; next: string | null };
 const before = Astro.url.searchParams.get("before");
 // the two reads do not depend on each other
@@ -37,6 +39,7 @@ const askedRange = Number(Astro.url.searchParams.get("range"));
 const range = daily && (askedRange === 7 || askedRange === 30) ? askedRange : 90;
 const uptimeOf = (c: Status["components"][number]) => (range === 7 ? c.uptime7d ?? null : range === 30 ? c.uptime30d ?? null : c.uptime90d);
 const withRange = (q: string) => (range === 90 ? q : `${q}${q ? "&" : "?"}range=${range}`);
+const rangeHref = (n: number) => `/status/${slug}${[n === 90 ? "" : `range=${n}`, embed ? "embed=1" : ""].filter(Boolean).join("&").replace(/^(?=.)/, "?")}`;
 // always `range` slots (oldest → now); buckets without checks render as grey "no data"
 function slots(days: { day: string; uptime: number }[]) {
   const hourly = data?.bucket === "hour";
@@ -79,19 +82,20 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
   <Fragment slot="head">
     {!hideBrand && <meta name="generator" content="openuptime.app" />}
     <link rel="canonical" href={canon} />
+    {embed && <meta name="robots" content="noindex" />}
     <link rel="alternate" type="application/rss+xml" title={`${data.page.title} status`} href={`${base}/api/public/status/${slug}/rss.xml`} />
     <link rel="alternate" hreflang="en" href={`${base}/status/${slug}`} />
     <link rel="alternate" hreflang="zh-Hans" href={`${base}/zh-Hans/status/${slug}`} />
     <link rel="alternate" hreflang="x-default" href={`${base}/status/${slug}`} />
     {customCss && <style is:inline set:html={customCss} />}
   </Fragment>
-  <div class="pub">
-    <header class="pub-top"><div class="pub-wrap pub-top-in">
+  <div class={embed ? "pub embed" : "pub"}>
+    {!embed && <header class="pub-top"><div class="pub-wrap pub-top-in">
       <span class="pub-brand">{!hideBrand && !logo && <span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg></span>}{logo && <img class="pub-logo" src={logo} width="26" height="26" alt="" referrerpolicy="no-referrer" loading="eager" decoding="async" />}{data.page.title}{data.page.externalUrl && (
         <a class="pub-ext" href={data.page.externalUrl} target="_blank" rel="nofollow noopener noreferrer" aria-label={t("Visit website")} title={t("Visit website")}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg></a>
       )}</span>
       <a class="btn sm primary" href="#subscribe">{t("Subscribe")}</a>
-    </div></header>
+    </div></header>}
 
     <main class="pub-wrap">
       <section class="pub-hd">
@@ -106,11 +110,11 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
         )}
       </section>
 
-      <div class="pub-kpis">
+      {!embed && <div class="pub-kpis">
         <div><b>{opCount}/{data.components.length}</b><span>{t("Components operational")}</span></div>
         <div><b>{data.incidents.length}</b><span>{t("Active incidents")}</span></div>
         <div><b>{history.items.length}{history.next ? "+" : ""}</b><span>{t("Past incidents")}</span></div>
-      </div>
+      </div>}
 
       {notice && <p class="pill up" style="margin-bottom:16px">{t(notice)}</p>}
 
@@ -142,7 +146,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
           <div class="pub-st"><h2>{t("Components")}</h2>
             {daily && (
               <nav class="pub-range" aria-label={t("Uptime range")}>
-                {[7, 30, 90].map((n) => <a href={`/status/${slug}${n === 90 ? "" : `?range=${n}`}`} aria-current={n === range ? "true" : undefined}>{t(`Last ${n} days`)}</a>)}
+                {[7, 30, 90].map((n) => <a href={rangeHref(n)} aria-current={n === range ? "true" : undefined}>{t(`Last ${n} days`)}</a>)}
               </nav>
             )}
             <div class="pub-legend"><span><i></i>{t("Operational")}</span><span><i class="w"></i>{t("Degraded")}</span><span><i class="d"></i>{t("Outage")}</span></div>
@@ -178,6 +182,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
             <div class="pub-ups" id="pub-day-list"></div>
           </section>
 
+          {!embed && <>
           <div class="pub-st gap"><h2>{t("Past incidents")}</h2></div>
           <div class="card pub-incs">
             {history.items.length === 0 && <p class="muted" style="padding:6px 0">{t("No incidents reported.")}</p>}
@@ -199,9 +204,11 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
             {before && <a href={`/status/${slug}${withRange("")}`}>{t("Newest")}</a>}
             {history.next && <a href={`/status/${slug}${withRange(`?before=${encodeURIComponent(history.next)}`)}`}>{t("Older incidents")}</a>}
           </div>
+          </>}
+          {embed && <p class="pub-full"><a href={canon} target="_top">{t("View the full status page")}</a></p>}
         </div>
 
-        <aside class="pub-side">
+        {!embed && <aside class="pub-side">
           <section class="card pub-sub" id="subscribe">
             <h3>{t("Get updates")}</h3>
             <p class="muted">{t("We’ll email you when something breaks and when it’s fixed.")}</p>
@@ -221,7 +228,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
             <a href={`/api/public/status/${slug}/maintenance.ics`} class="pub-rss">{t("Maintenance calendar")}</a>
             <a href={`/api/public/status/${slug}/llms.txt`} class="pub-rss">llms.txt</a>
           </section>
-        </aside>
+        </aside>}
       </div>
     </main>
 
