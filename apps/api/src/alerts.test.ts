@@ -315,7 +315,7 @@ describe("project name in alerts", () => {
   it("covers reminder, escalation and recovery", async () => {
     expect((await sent({ ...opened, kind: "incident.reminder", count: 2 } as never, two)).bodies[0]).toEqual({ text: "⏰ [favicon.im] WWW homepage is still down and nobody has acknowledged it — reminder 2" });
     expect((await sent({ ...opened, kind: "incident.escalated" } as never, two)).bodies[0]).toEqual({ text: "🚨 [favicon.im] WWW homepage is still down and nobody has acknowledged it — escalated to you" });
-    expect((await sent({ ...opened, kind: "incident.resolved" } as never, two)).bodies[0]).toEqual({ text: "✅ [favicon.im] WWW homepage has recovered" });
+    expect((await sent({ ...opened, kind: "incident.resolved" } as never, two)).bodies[0]).toEqual({ text: "🟢 [favicon.im] WWW homepage has recovered" });
   });
 
   it("uses the same text on lark, telegram and the pagerduty summary", async () => {
@@ -403,7 +403,7 @@ describe("project name in alerts", () => {
     };
     const multi = { project: { id: "p1", name: "favicon.im" }, multiProject: true };
     expect((await send(multi, "en")).subject).toBe("[favicon.im] 🔴 WWW homepage is down · OpenUptime");
-    expect((await send({ ...multi, kind: "incident.resolved" }, "en")).subject).toBe("[favicon.im] ✅ WWW homepage has recovered · OpenUptime");
+    expect((await send({ ...multi, kind: "incident.resolved" }, "en")).subject).toBe("[favicon.im] 🟢 WWW homepage has recovered · OpenUptime");
     const zh = await send(multi, "zh-CN");
     expect(zh.subject).toMatch(/^\[favicon\.im\] 🔴 /);
     expect(JSON.stringify(zh)).toContain("项目");
