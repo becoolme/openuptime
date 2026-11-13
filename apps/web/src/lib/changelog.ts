@@ -29,6 +29,27 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "status-page-iframe", date: "2026-11-13", edition: "community",
+    title: { en: "Embed a status page in an iframe", zh: "用 iframe 嵌入状态页" },
+    summary: { en: "Add ?embed=1 to a status page address to get a compact layout you can place inside your own site.", zh: "在状态页地址后加上 ?embed=1，即可得到适合放进自己网站的精简布局。" },
+    points: [
+      { en: "The embedded layout shows the overall state, open incidents, maintenance and the component bars, and links to the full page.", zh: "嵌入布局显示整体状态、进行中的事件、维护和各组件的状态条，并带有指向完整页面的链接。" },
+      { en: "The Embed card in the status page settings now has a ready-to-copy iframe snippet.", zh: "状态页设置中的“嵌入”卡片新增了可直接复制的 iframe 代码。" },
+    ],
+    link: { href: "/docs/embed", label: { en: "Read the embed docs", zh: "阅读嵌入文档" } },
+  },
+  {
+    id: "bark-apprise-alerts", date: "2026-11-13", edition: "community",
+    title: { en: "Bark and Apprise alert channels", zh: "新增 Bark 和 Apprise 告警渠道" },
+    summary: { en: "Send alerts to an iPhone through Bark, or to any of the 100+ services your own Apprise API server supports.", zh: "通过 Bark 把告警推送到 iPhone，或转发到你自己的 Apprise API 服务，由它投递到 100 多种服务。" },
+    points: [
+      { en: "A Bark channel needs the device key from the Bark app; outages are sent as time-sensitive notifications, and a self-hosted Bark server can be used instead of the public one.", zh: "Bark 渠道只需 Bark 应用中的设备 Key；故障告警会以“时效性”通知发送，也可改用自建的 Bark 服务器。" },
+      { en: "An Apprise channel posts to the saved configuration on your Apprise API server, with optional tags and an access token; recoveries are sent as success and outages as failure.", zh: "Apprise 渠道会向你的 Apprise API 服务上已保存的配置发送告警，可选标签和访问令牌；恢复以“成功”、故障以“失败”类型发送。" },
+      { en: "Both follow the same rules as other alert channels: private addresses are refused by default, redirects are not followed, and keys and tokens are hidden from members who are not admins.", zh: "两者与其他告警渠道规则一致：默认拒绝私有地址，不跟随重定向，非管理员成员看不到密钥和令牌。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
+  },
+  {
     id: "matching-alert-status-icons", date: "2026-11-12", edition: "community",
     title: { en: "Matching alert status icons", zh: "统一告警状态图标" },
     summary: { en: "Recovery alerts now start with a green dot, matching the red and yellow ones.", zh: "恢复通知改为以绿色圆点开头，与红色、黄色圆点成为一套。" },

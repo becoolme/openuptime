@@ -30,7 +30,7 @@ Open-source uptime monitoring and status pages. Runs on Cloudflare Workers with 
 
 **Alerts**
 
-- [x] Slack, Discord, Microsoft Teams, Telegram, Lark / Feishu and ntfy
+- [x] Slack, Discord, Microsoft Teams, Telegram, Lark / Feishu, ntfy, Bark and Apprise
 - [x] PagerDuty, webhooks and email
 - [x] Push notifications to the [iOS app](https://openuptime.app/ios)
 - [x] Repeat reminders and escalation

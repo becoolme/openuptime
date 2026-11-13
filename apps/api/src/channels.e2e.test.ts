@@ -59,6 +59,21 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     expect(cleared.body.config).toEqual({ url: "https://ntfy.sh", topic: "ops", priority: "3" });
     expect((await call("DELETE", `/channels/${tokened.body.id}`)).status).toBe(204);
     expect((await call("DELETE", `/channels/${ntfy.body.id}`)).status).toBe(204);
+    const bark = await call("POST", "/channels", { type: "bark", name: "Bark", config: { deviceKey: "abcDEF123456" } });
+    expect(bark.status).toBe(201);
+    expect(bark.body.config).toEqual({ deviceKey: "abcDEF123456" });
+    for (const config of [{}, { deviceKey: "short" }, { deviceKey: "abcDEF123456", url: "https://bark.example.com/push" }, { deviceKey: "abcDEF123456", url: "http://127.0.0.1" }, { deviceKey: "abcDEF123456", url: "http://bark.example.com" }]) {
+      expect((await call("POST", "/channels", { type: "bark", name: "Invalid", config })).status).toBe(400);
+    }
+    expect((await call("DELETE", `/channels/${bark.body.id}`)).status).toBe(204);
+    const apprise = await call("POST", "/channels", { type: "apprise", name: "Apprise", config: { url: "https://apprise.example.com/notify/ops", tag: "oncall", token: "  t  " } });
+    expect(apprise.status).toBe(201);
+    expect(apprise.body.config).toEqual({ url: "https://apprise.example.com/notify/ops", tag: "oncall", token: "t" });
+    // only a saved configuration key is accepted: the stateless endpoint would let the channel name arbitrary targets
+    for (const config of [{ url: "https://apprise.example.com/notify" }, { url: "https://apprise.example.com/notify/ops?urls=mailto://x" }, { url: "http://apprise.example.com/notify/ops", token: "t" }, { url: "http://127.0.0.1/notify/ops" }]) {
+      expect((await call("POST", "/channels", { type: "apprise", name: "Invalid", config })).status).toBe(400);
+    }
+    expect((await call("DELETE", `/channels/${apprise.body.id}`)).status).toBe(204);
     const monitor = { name: "Site", type: "http", target: "https://example.com" };
 
     const plain = (await call("POST", "/channels", { type: "email", name: "Plain", config: { to: "a@example.com" } })).body;

@@ -14,6 +14,10 @@ import Doc from "../../layouts/Doc.astro";
     <h2 id="banner">Banner</h2>
     <p>The banner sits at the top of the page and only appears while something is degraded or down.</p>
     <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" data-mode="banner" async&gt;&lt;/script&gt;</code></pre>
+    <h2 id="iframe">Iframe</h2>
+    <p>To show the components and any open incidents inside your own page, embed the status page with <code>?embed=1</code>. This layout leaves out the header, the subscribe form and the incident history, and links back to the full page.</p>
+    <pre><code is:raw>&lt;iframe src="https://openuptime.app/status/my-page?embed=1" title="System status" width="100%" height="480" style="border:0" loading="lazy"&gt;&lt;/iframe&gt;</code></pre>
+    <p>The page sets no frame restrictions, so any site can embed it. The embedded layout is marked <code>noindex</code>, so search engines index the full page only.</p>
     <h2 id="options">Script options</h2>
     <ul>
       <li><code>data-slug</code>: the status page slug (required).</li>
@@ -65,6 +69,10 @@ import Doc from "../../layouts/Doc.astro";
     <h2 id="banner-zh">横幅</h2>
     <p>横幅显示在页面顶部，只在有服务降级或中断时才出现。</p>
     <pre><code is:raw>&lt;script src="https://openuptime.app/embed.js" data-slug="my-page" data-mode="banner" async&gt;&lt;/script&gt;</code></pre>
+    <h2 id="iframe-zh">Iframe</h2>
+    <p>想把组件状态和进行中的事件直接显示在自己的页面里，可以用 <code>?embed=1</code> 嵌入状态页。这个精简布局不含页头、订阅表单和历史事件，并带有指向完整状态页的链接。</p>
+    <pre><code is:raw>&lt;iframe src="https://openuptime.app/status/my-page?embed=1" title="服务状态" width="100%" height="480" style="border:0" loading="lazy"&gt;&lt;/iframe&gt;</code></pre>
+    <p>状态页没有设置任何框架限制，任何网站都可以嵌入。嵌入布局带有 <code>noindex</code>，搜索引擎只会收录完整页面。</p>
     <h2 id="options-zh">脚本参数</h2>
     <ul>
       <li><code>data-slug</code>：状态页 slug（必填）。</li>

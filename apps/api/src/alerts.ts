@@ -443,6 +443,19 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
   const link = !ev.test && appUrl() ? `${appUrl().replace(/\/+$/, "")}/app/incidents/${ev.incident.id}` : "";
   const linked = (body: string) => (link ? `${body}\n${link}` : body);
   const room = (limit: number) => limit - (link ? link.length + 1 : 0);
+  // slow responses and schema drift are warnings, not outages
+  const warning = !!(ev.slow || ev.schemaDrift);
+  /** POSTs to a user-chosen server without following redirects; errors name the host only, never the response. */
+  const postGuarded = async (url: string, init: RequestInit & { headers?: Record<string, string> }, token?: string) => {
+    let res: Response;
+    try {
+      res = (await guardedFetch(url, { ...init, headers: { ...init.headers, ...(token ? { authorization: `Bearer ${token}` } : {}) } }, { follow: false })).res;
+    } catch (e) {
+      throw new Error((e as Error).name === "TimeoutError" ? `${hostOf(url)} timed out` : `Could not reach ${hostOf(url)}`);
+    }
+    await res.body?.cancel().catch(() => {});
+    if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
+  };
   switch (c.type) {
     case "slack":
       need(cfg.url, "webhook URL");
@@ -486,15 +499,21 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         content += character; bytes += size;
       }
       content = linked(content);
-      let res: Response;
-      try {
-        const init = json({ topic: cfg.topic, message: content, title: "OpenUptime", priority: Number(cfg.priority || "3") });
-        res = (await guardedFetch(cfg.url!, { ...init, headers: { ...init.headers, ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}) } }, { follow: false })).res;
-      } catch (e) {
-        throw new Error((e as Error).name === "TimeoutError" ? `${hostOf(cfg.url!)} timed out` : `Could not reach ${hostOf(cfg.url!)}`);
-      }
-      await res.body?.cancel().catch(() => {});
-      if (!res.ok) throw new Error(`${hostOf(cfg.url!)} responded HTTP ${res.status}`);
+      await postGuarded(cfg.url!, json({ topic: cfg.topic, message: content, title: "OpenUptime", priority: Number(cfg.priority || "3") }), cfg.token);
+      break;
+    }
+    case "bark": {
+      need(cfg.deviceKey, "device key");
+      const server = cfg.url || "https://api.day.app";
+      // Bark's own URL scheme caps a push at a few KB; a time-sensitive level breaks through Focus modes, so only outages get it.
+      await postGuarded(`${server.replace(/\/$/, "")}/push`, json({ device_key: cfg.deviceKey, title: "OpenUptime", body: linked(cutText(text, room(1000))), group: "OpenUptime", level: opened && !warning ? "timeSensitive" : "active" }));
+      break;
+    }
+    case "apprise": {
+      need(cfg.url, "Apprise API URL");
+      // Apprise's notification types colour the message on the services that support it.
+      const type = !opened ? "success" : warning ? "warning" : "failure";
+      await postGuarded(cfg.url!, json({ title: "OpenUptime", body: linked(cutText(text, room(4000))), type, ...(cfg.tag ? { tag: cfg.tag } : {}) }), cfg.token);
       break;
     }
     case "lark":

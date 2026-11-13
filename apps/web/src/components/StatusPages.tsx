@@ -288,6 +288,7 @@ function Embed({ slug }: { slug: string }) {
   const items = [
     { k: "badge", label: t("Badge"), code: `<script src="${origin}/embed.js" data-slug="${slug}" async></script>\n<noscript><a href="${origin}/status/${slug}">System status</a></noscript>` },
     { k: "banner", label: t("Banner (only during incidents)"), code: `<script src="${origin}/embed.js" data-slug="${slug}" data-mode="banner" async></script>` },
+    { k: "iframe", label: t("Iframe (components and incidents)"), code: `<iframe src="${origin}/status/${slug}?embed=1" title="System status" width="100%" height="480" style="border:0" loading="lazy"></iframe>` },
     { k: "img", label: t("Image (README, email)"), code: `<img src="${origin}/api/public/status/${slug}/badge.svg" alt="status">` },
     { k: "md", label: t("Markdown (README)"), code: `[![Status](${origin}/api/public/status/${slug}/badge.svg)](${origin}/status/${slug})` },
     { k: "rss", label: t("RSS feed"), code: `${origin}/api/public/status/${slug}/rss.xml` },
