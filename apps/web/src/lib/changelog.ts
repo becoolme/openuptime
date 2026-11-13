@@ -50,6 +50,14 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     link: { href: "/docs/api", label: { en: "Read the API reference", zh: "查看 API 文档" } },
   },
   {
+    id: "matching-alert-status-icons", date: "2026-11-12", edition: "community",
+    title: { en: "Matching alert status icons", zh: "统一告警状态图标" },
+    summary: { en: "Recovery alerts now start with a green dot, matching the red and yellow ones.", zh: "恢复通知改为以绿色圆点开头，与红色、黄色圆点成为一套。" },
+    points: [
+      { en: "Email subjects and chat messages use 🔴 for down, 🟡 for slow and 🟢 for recovered.", zh: "邮件标题和聊天消息中，🔴 表示宕机，🟡 表示变慢，🟢 表示已恢复。" },
+    ],
+  },
+  {
     id: "outbound-proxy", date: "2026-11-03", edition: "community",
     title: { en: "Run checks through a proxy", zh: "通过代理发起检测" },
     summary: { en: "Self-hosted servers and probes that may only reach the internet through a proxy can now send their checks through it with OUTBOUND_PROXY.", zh: "只能通过代理访问外网的自托管服务器和探针，现在可以用 OUTBOUND_PROXY 让检测经由代理发出。" },

@@ -140,7 +140,7 @@ async function postLark(url: string, text: string, secret?: string) {
 const domainHeading = (ev: Event, opened = ev.kind !== "incident.resolved") => !opened ? "{name}: domain expiry verified" : (!ev.monitor.domainExpiry || ev.monitor.domainExpiry.state === "unknown") ? "{name}: domain expiry unknown" : ev.monitor.domainExpiry?.state === "expired" ? "{name}: registration date passed" : "{name}: domain renewal needed";
 const schemaHeading = (opened: boolean) => opened ? "{name}: tool schema changed" : "{name}: tool schema alert cleared";
 const alertText = (ev: Event) => ev.schemaDrift
-  ? `${ev.kind === "incident.resolved" ? "✅" : "🟡"} ${tag(ev)}${schemaHeading(ev.kind !== "incident.resolved").replace("{name}", ev.monitor.name)} — ${ev.reason ?? ev.incident.title}`
+  ? `${ev.kind === "incident.resolved" ? "🟢" : "🟡"} ${tag(ev)}${schemaHeading(ev.kind !== "incident.resolved").replace("{name}", ev.monitor.name)} — ${ev.reason ?? ev.incident.title}`
   : ev.monitor.type === "domain"
   ? `${tag(ev)}${domainHeading(ev).replace("{name}", ev.monitor.name)} — ${ev.kind === "incident.resolved" ? ev.monitor.target : ev.reason ?? ev.monitor.domainExpiry?.error ?? ev.incident.title}`
   :
@@ -150,7 +150,7 @@ const alertText = (ev: Event) => ev.schemaDrift
       ? `⏰ ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — reminder ${ev.count ?? 1}`
       : ev.kind === "incident.escalated"
         ? `🚨 ${tag(ev)}${ev.monitor.name} ${ev.slow ? "is still responding slowly" : "is still down"} and nobody has acknowledged it — escalated to you`
-        : `✅ ${tag(ev)}${ev.monitor.name} has recovered`;
+        : `🟢 ${tag(ev)}${ev.monitor.name} has recovered`;
 
 /** The alert is not sent, on purpose, and that is final (an allowance used up, a channel switched off); never retried. The message is the reason shown to people. */
 export class Skipped extends Error {}
@@ -606,7 +606,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
           footerUrl: { text: L("Manage alerting"), url: `${appUrl()}/app/alerting` },
           lang,
         });
-        await sendEmail({ to: cfg.to, subject: `${tag(ev)}${opened ? (ev.slow || ev.schemaDrift ? "🟡" : "🔴") : "✅"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
+        await sendEmail({ to: cfg.to, subject: `${tag(ev)}${opened ? (ev.slow || ev.schemaDrift ? "🟡" : "🔴") : "🟢"} ${L(heading, { name: ev.monitor.name })} · OpenUptime`, fromName: "OpenUptime Alerts", ...mail });
       }
       break;
   }
@@ -656,7 +656,7 @@ async function notifySubscribers(repo: Repo, orgId: string, ev: Event, entitleme
   }
   const { send: subs, skipped, denied } = allowance;
   const opened = ev.kind === "incident.opened";
-  const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "✅"} ${tr(lang, ev.monitor.type === "domain" ? domainHeading(ev, opened) : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
+  const head = (lang: Lang) => `${opened ? (ev.slow ? "🟡" : "🔴") : "🟢"} ${tr(lang, ev.monitor.type === "domain" ? domainHeading(ev, opened) : opened ? (ev.slow ? "{name} is responding slowly" : "{name} is down") : "{name} has recovered", { name: ev.monitor.name })}`;
   const sent = await mailSubscribers(subs, await mayHideBranding(entitlements, orgId), {
     subject: (p, lang) => `[${p}] ${head(lang)}`,
     title: head,
