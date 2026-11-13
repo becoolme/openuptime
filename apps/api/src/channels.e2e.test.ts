@@ -62,7 +62,7 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     const bark = await call("POST", "/channels", { type: "bark", name: "Bark", config: { deviceKey: "abcDEF123456" } });
     expect(bark.status).toBe(201);
     expect(bark.body.config).toEqual({ deviceKey: "abcDEF123456" });
-    for (const config of [{}, { deviceKey: "short" }, { deviceKey: "abcDEF123456", url: "https://bark.example.com/push" }, { deviceKey: "abcDEF123456", url: "http://127.0.0.1" }]) {
+    for (const config of [{}, { deviceKey: "short" }, { deviceKey: "abcDEF123456", url: "https://bark.example.com/push" }, { deviceKey: "abcDEF123456", url: "http://127.0.0.1" }, { deviceKey: "abcDEF123456", url: "http://bark.example.com" }]) {
       expect((await call("POST", "/channels", { type: "bark", name: "Invalid", config })).status).toBe(400);
     }
     expect((await call("DELETE", `/channels/${bark.body.id}`)).status).toBe(204);

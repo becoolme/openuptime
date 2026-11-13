@@ -21,7 +21,8 @@ const before = Astro.url.searchParams.get("before");
 type Maint = { items: { id: string; name: string; startsAt: string; endsAt: string; state: "scheduled" | "active" | "completed" }[] };
 const [{ status, data, privateResponse }, hist, maint] = await Promise.all([
   apiFetch<Status>(`/api/public/status/${slug}`, Astro.request),
-  apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`, Astro.request),
+  // the embedded layout shows no history
+  embed ? Promise.resolve({ status: 200, data: null as History | null, privateResponse: false }) : apiFetch<History>(`/api/public/status/${slug}/incidents${before ? `?before=${encodeURIComponent(before)}` : ""}`, Astro.request),
   apiFetch<Maint>(`/api/public/status/${slug}/maintenance`, Astro.request),
 ]);
 // a policy that is down answers 503: show that, not a missing page
@@ -83,6 +84,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
     {!hideBrand && <meta name="generator" content="openuptime.app" />}
     <link rel="canonical" href={canon} />
     {embed && <meta name="robots" content="noindex" />}
+    {embed && <base target="_top" />}
     <link rel="alternate" type="application/rss+xml" title={`${data.page.title} status`} href={`${base}/api/public/status/${slug}/rss.xml`} />
     <link rel="alternate" hreflang="en" href={`${base}/status/${slug}`} />
     <link rel="alternate" hreflang="zh-Hans" href={`${base}/zh-Hans/status/${slug}`} />
@@ -274,7 +276,7 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
       });
       document.getElementById("pub-day-x").addEventListener("click", () => { panel.hidden = true; asked++; });
     </script>
-    <script is:inline data-astro-rerun define:vars={{ slug, sending: t("Subscribing…"), ok: t("Check your inbox to confirm your subscription."), bad: t("Could not subscribe. Try again."), slow: t("Too many attempts. Please try again later.") }}>
+    {!embed && <script is:inline data-astro-rerun define:vars={{ slug, sending: t("Subscribing…"), ok: t("Check your inbox to confirm your subscription."), bad: t("Could not subscribe. Try again."), slow: t("Too many attempts. Please try again later.") }}>
       document.getElementById("sub").addEventListener("submit", async (e) => {
         e.preventDefault();
         const msg = document.getElementById("sub-msg");
@@ -291,6 +293,6 @@ Astro.response.headers.set("cache-control", privateResponse || hist.privateRespo
         btn.disabled = false;
         btn.textContent = label;
       });
-    </script>
+    </script>}
   </div>
 </Base>

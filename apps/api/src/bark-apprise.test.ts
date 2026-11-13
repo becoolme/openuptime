@@ -23,6 +23,18 @@ describe("bark delivery", () => {
     expect(String(url)).toBe("https://bark.example.com/push");
     expect(JSON.parse(init.body).level).toBe("active");
   });
+  it("keeps slow responses out of the time-sensitive level", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("{}")); vi.stubGlobal("fetch", fetch);
+    await deliver(bark, { ...event, slow: true }, "API is slow");
+    expect(JSON.parse(fetch.mock.calls[0][1].body).level).toBe("active");
+  });
+  it("cuts a long message to the Bark limit", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("{}")); vi.stubGlobal("fetch", fetch);
+    await deliver(bark, event, "x".repeat(5000));
+    const body = JSON.parse(fetch.mock.calls[0][1].body).body as string;
+    expect(body.length).toBe(1000);
+    expect(body.endsWith("…")).toBe(true);
+  });
   it("does not follow redirects and does not reflect provider content", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("abcDEF123456", { status: 307, headers: { location: "https://other.example/" } })); vi.stubGlobal("fetch", fetch);
     await expect(deliver(bark, event, "Down")).rejects.toThrow("api.day.app responded HTTP 307");

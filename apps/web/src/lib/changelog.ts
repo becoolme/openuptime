@@ -29,7 +29,7 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
-    id: "status-page-iframe", date: "2026-11-10", edition: "community",
+    id: "status-page-iframe", date: "2026-11-13", edition: "community",
     title: { en: "Embed a status page in an iframe", zh: "用 iframe 嵌入状态页" },
     summary: { en: "Add ?embed=1 to a status page address to get a compact layout you can place inside your own site.", zh: "在状态页地址后加上 ?embed=1，即可得到适合放进自己网站的精简布局。" },
     points: [
@@ -39,7 +39,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     link: { href: "/docs/embed", label: { en: "Read the embed docs", zh: "阅读嵌入文档" } },
   },
   {
-    id: "bark-apprise-alerts", date: "2026-11-10", edition: "community",
+    id: "bark-apprise-alerts", date: "2026-11-13", edition: "community",
     title: { en: "Bark and Apprise alert channels", zh: "新增 Bark 和 Apprise 告警渠道" },
     summary: { en: "Send alerts to an iPhone through Bark, or to any of the 100+ services your own Apprise API server supports.", zh: "通过 Bark 把告警推送到 iPhone，或转发到你自己的 Apprise API 服务，由它投递到 100 多种服务。" },
     points: [

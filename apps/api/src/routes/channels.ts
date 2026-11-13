@@ -29,7 +29,7 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
     // empty means the public Bark server; a self-hosted server is given as an origin
     url: url.refine((v) => { const u = new URL(v); return u.pathname === "/" && !u.search && !u.hash && !u.username && !u.password; }, "Use the server origin without a path, query or credentials").optional().or(z.literal("").transform(() => undefined)),
     deviceKey: z.string().trim().regex(/^[A-Za-z0-9_-]{6,64}$/, "Use the 6–64 letters, digits, underscores or hyphens shown in the Bark app"),
-  }),
+  }).refine((v) => !v.url || v.url.toLowerCase().startsWith("https://"), { path: ["url"], message: "The device key is only sent to an https:// server" }),
   apprise: z.object({
     // the stateless /notify endpoint would take arbitrary target URLs from us, so only a saved configuration key is accepted
     url: url.refine((v) => { const u = new URL(v); return /^\/notify\/[A-Za-z0-9_-]{1,64}\/?$/.test(u.pathname) && !u.search && !u.hash && !u.username && !u.password; }, "Use the Apprise API URL of a saved configuration, such as https://apprise.example.com/notify/ops"),
