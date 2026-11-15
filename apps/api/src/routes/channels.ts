@@ -7,7 +7,7 @@ import type { AppEnv } from "../env";
 import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
-import { newWebhookSecret, WEBHOOK_SECRET_RE } from "../webhook-signing";
+import { isWebhookSecret, newWebhookSecret } from "../webhook-signing";
 
 const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy", "bark", "apprise"] as const;
 type ChannelType = (typeof TYPES)[number];
@@ -38,7 +38,7 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
     token: z.string().trim().max(500).regex(/^[\x20-\x7E]*$/, "Use printable ASCII characters only").transform((v) => v || undefined).optional(),
   }).refine((v) => !v.token || v.url.toLowerCase().startsWith("https://"), { path: ["token"], message: "An access token is only sent to an https:// server" }),
   // requests are signed with this secret; one is generated when a channel is created without it
-  webhook: z.object({ url, secret: z.string().trim().regex(WEBHOOK_SECRET_RE, "Use a whsec_ secret of 24 to 64 base64-encoded bytes").optional() }),
+  webhook: z.object({ url, secret: z.string().trim().refine(isWebhookSecret, "Use a whsec_ secret of 24 to 64 base64-encoded bytes").optional() }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),
   telegram: z.object({ botToken: z.string().trim().min(1).max(200), chatId: z.string().trim().min(1).max(100) }),
   pagerduty: z.object({ routingKey: z.string().trim().min(1).max(200) }),

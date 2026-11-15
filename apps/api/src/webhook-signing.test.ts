@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newWebhookSecret, signWebhook, WEBHOOK_SECRET_RE, webhookHeaders } from "./webhook-signing";
+import { isWebhookSecret, newWebhookSecret, signWebhook, webhookHeaders } from "./webhook-signing";
 
 describe("webhook signing", () => {
   it("matches the Standard Webhooks reference signature", async () => {
@@ -9,9 +9,15 @@ describe("webhook signing", () => {
 
   it("creates distinct secrets in the accepted format", () => {
     const a = newWebhookSecret();
-    expect(a).toMatch(WEBHOOK_SECRET_RE);
+    expect(isWebhookSecret(a)).toBe(true);
     expect(a).not.toBe(newWebhookSecret());
-    for (const bad of ["", "whsec_", "whsec_short", "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw", "whsec_not base64 at all, really not"]) expect(bad).not.toMatch(WEBHOOK_SECRET_RE);
+    for (const bad of ["", "whsec_", "whsec_short", "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw", "whsec_not base64 at all, really not"]) expect(isWebhookSecret(bad)).toBe(false);
+  });
+
+  it("accepts 24 to 64 key bytes and nothing outside that", () => {
+    const of = (n: number) => "whsec_" + btoa("k".repeat(n));
+    for (const n of [24, 25, 26, 63, 64]) expect(isWebhookSecret(of(n))).toBe(true);
+    for (const n of [23, 65, 66, 68]) expect(isWebhookSecret(of(n))).toBe(false);
   });
 
   it("always sends the id and timestamp, and signs only with a secret", async () => {

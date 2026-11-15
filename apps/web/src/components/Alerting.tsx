@@ -89,7 +89,9 @@ export default function Alerting() {
         : f.type === "apprise" ? { url: f.url, tag: f.tag, token: f.token }
         : f.type === "ntfy" ? { url: f.url || "https://ntfy.sh", topic: f.topic, token: f.token, priority: f.priority }
         : f.type === "push" ? {}
-        : f.type === "lark" || f.type === "webhook" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
+        : f.type === "lark" || f.type === "webhook"
+          // an existing webhook's secret changes only through rotation, so a stale form cannot undo a rotation made elsewhere
+          ? { url: f.url, ...(f.secret && !(f.type === "webhook" && editId) ? { secret: f.secret } : {}) }
         : { url: f.url };
       if (editId) await api.updateChannel(editId, { name: f.name, config, autoEnable: f.auto });
       else {

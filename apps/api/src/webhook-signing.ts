@@ -10,8 +10,15 @@
  */
 
 const PREFIX = "whsec_";
-/** 24 to 64 key bytes, base64 encoded. */
-export const WEBHOOK_SECRET_RE = /^whsec_(?:[A-Za-z0-9+/]{4}){8,22}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const SHAPE = /^whsec_((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/;
+
+/** Whether this is a usable secret: "whsec_" and 24 to 64 key bytes, base64 encoded. */
+export function isWebhookSecret(secret: string): boolean {
+  const b64 = SHAPE.exec(secret)?.[1];
+  if (!b64) return false;
+  const bytes = (b64.length / 4) * 3 - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+  return bytes >= 24 && bytes <= 64;
+}
 
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
