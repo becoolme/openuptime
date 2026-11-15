@@ -16,6 +16,7 @@ import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../htt
 
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { jsonAssertionsSchema } from "../json-assert";
+import { MAX_STATUS_SPEC_LENGTH, parseStatusSpec } from "../status-spec";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
@@ -45,7 +46,13 @@ const fields = {
   domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
   method: z.enum(HTTP_METHODS).describe("HTTP request method; ignored for other monitor types."),
   requestBody: z.string().max(MAX_REQUEST_BODY_BYTES).nullable().describe("HTTP request body, up to 16384 UTF-8 bytes; unavailable with GET or HEAD. Set Content-Type using headers. Null clears it. Masked values preserve stored secrets on update; owners and admins can read bodies."),
-  expectedStatus: z.number().int().min(100).max(599).describe("HTTP response status that counts as healthy; an expected 3xx is checked without following the redirect."),
+  expectedStatus: z.number().int().min(100).max(599).describe("HTTP response status that counts as healthy (200 also accepts any 2xx); an expected 3xx is checked without following the redirect. acceptedStatuses replaces it when set."),
+  acceptedStatuses: z.string().max(MAX_STATUS_SPEC_LENGTH).transform((v, ctx) => {
+    if (!v.trim()) return null;
+    const parsed = parseStatusSpec(v);
+    if ("error" in parsed) { ctx.addIssue({ code: "custom", message: parsed.error }); return z.NEVER; }
+    return parsed.normalized;
+  }).nullable().describe("HTTP: statuses that count as healthy, as a comma-separated list of codes (401), ranges (200-299) and classes (2xx); prefix ! to exclude (200-499,!404), and exclusions alone accept everything else (!5xx). Replaces expectedStatus when set; when the list accepts a 301, 302, 303, 307 or 308, redirects are not followed. Null or empty string uses expectedStatus."),
   intervalSec: z.number().int().min(60).max(86400).describe("Seconds between checks, or the expected heartbeat period. Domain checks are raised to at least 3600 seconds; daily checks are recommended. Hosted plans may require a longer interval."),
   timeoutMs: z.number().int().min(1000).max(30000).describe("Maximum duration of a check in milliseconds; for domain checks, each IANA/registry request has this timeout and shared cache locks wait at most 3 seconds."),
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
@@ -84,6 +91,7 @@ const body = z.object({
   mcpConfig: fields.mcpConfig.default(null),
   domainExpiryWarnDays: fields.domainExpiryWarnDays.default(30),
   expectedStatus: fields.expectedStatus.default(200),
+  acceptedStatuses: fields.acceptedStatuses.default(null),
   intervalSec: fields.intervalSec.default(60),
   timeoutMs: fields.timeoutMs.default(10000),
   failureThreshold: fields.failureThreshold.default(3),
@@ -132,6 +140,9 @@ function normaliseImport(raw: unknown): unknown {
   r.intervalSec ??= typeof r.interval === "number" ? Math.max(60, r.interval) : undefined;
   if (Array.isArray(r.regions) && r.regions.length === 0) delete r.regions;
   r.keyword ??= r.keyword_value ?? r.expectedKeyword ?? undefined;
+  // Uptime Kuma keeps a list such as ["200-299", "401"]; the usual 2xx is our default and needs no list
+  const kuma = Array.isArray(r.accepted_statuscodes) ? r.accepted_statuscodes.filter((v): v is string => typeof v === "string") : [];
+  if (kuma.length && !(kuma.length === 1 && kuma[0] === "200-299")) r.acceptedStatuses ??= kuma.join(",");
   const t = typeof r.type === "string" ? r.type.toLowerCase() : undefined;
   if (t) r.type = ({ https: "http", keyword: "http", port: "tcp", "tcp-port": "tcp", mysql: "mysql", postgres: "postgres", postgresql: "postgres", "websocket-upgrade": "websocket", ws: "websocket" } as Record<string, string>)[t] ?? t;
   const o: Record<string, unknown> = {};
@@ -283,7 +294,7 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
   const report: Row[] = [];
   const candidates: { row: Row; value: z.infer<typeof body>; source: string; sourceId: string }[] = [];
   const plan = await c.get("entitlements").plan(c.get("orgId"));
-  const aliases = new Set(["source", "sourceId", "id", "friendly_name", "friendlyName", "url", "hostname", "host", "port", "interval", "keyword_value", "expectedKeyword"]);
+  const aliases = new Set(["source", "sourceId", "id", "friendly_name", "friendlyName", "url", "hostname", "host", "port", "interval", "keyword_value", "expectedKeyword", "accepted_statuscodes"]);
   const lookups = new Map<string, Promise<string | null>>();
   for (const [index, item] of list.entries()) {
     const r = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};

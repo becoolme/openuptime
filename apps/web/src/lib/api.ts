@@ -19,7 +19,7 @@ export type Monitor = {
   mcpObservation?: McpObservation | null;
   domainExpiryWarnDays?: number;
   domainExpiry?: { state: "valid" | "expiring" | "expired" | "unknown"; expiresAt: string | null; checkedAt: string; cacheUntil: string; source: string | null; error: string | null } | null;
-  expectedStatus: number; intervalSec: number; timeoutMs: number; failureThreshold: number; recoveryThreshold?: number; consecutiveSuccesses?: number;
+  expectedStatus: number; acceptedStatuses?: string | null; intervalSec: number; timeoutMs: number; failureThreshold: number; recoveryThreshold?: number; consecutiveSuccesses?: number;
   status: "pending" | "up" | "degraded" | "down" | "paused"; paused: boolean;
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];

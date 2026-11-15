@@ -201,8 +201,8 @@ export default function MonitorDetail({ id }: { id: string }) {
             <div className="kv">
               <div><span>{t("Type")}</span><b className="mono">{m.type.toUpperCase()}</b></div>
               {m.type === "http" && <div><span>{t("Method")}</span><b className="mono">{m.method}</b></div>}
-              {m.type === "http" && <div><span>{t("Expected status")}</span><b className="mono">{m.expectedStatus}</b></div>}
-              {m.type === "http" && m.expectedLocation && [301, 302, 303, 307, 308].includes(m.expectedStatus) && <div><span>{t("Redirects to")}</span><b className="mono">{m.expectedLocation}</b></div>}
+              {m.type === "http" && <div><span>{t("Expected status")}</span><b className="mono">{m.acceptedStatuses || m.expectedStatus}</b></div>}
+              {m.type === "http" && m.expectedLocation && (!!m.acceptedStatuses || [301, 302, 303, 307, 308].includes(m.expectedStatus)) && <div><span>{t("Redirects to")}</span><b className="mono">{m.expectedLocation}</b></div>}
               <div><span>{t("Interval")}</span><b className="mono">{every(m.intervalSec)}</b></div>
               <div><span>{t("Timeout")}</span><b className="mono">{m.timeoutMs / 1000} s</b></div>
               <div><span>{t("Failures before incident")}</span><b className="mono">{m.failureThreshold}</b></div>

@@ -4,6 +4,7 @@ import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import { JSON_ASSERT_CAPABILITY } from "./json-assert";
+import { STATUS_SPEC_CAPABILITY } from "./status-spec";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -117,6 +118,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     keyword: input.keyword ?? null, keywordMode: input.keywordMode ?? "contains", expectedLocation: input.expectedLocation ?? null, headers: input.headers ?? {},
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
     ...(input.type === "http" && input.jsonAssertions?.length ? { jsonAssertions: input.jsonAssertions } : {}),
+    ...(input.type === "http" && input.acceptedStatuses ? { acceptedStatuses: input.acceptedStatuses } : {}),
     ...(input.type === "mcp" ? { mcpConfig: input.mcpConfig ?? null, mcpBaseline: input.mcpBaseline ?? null } : {}),
   });
   try {
@@ -131,6 +133,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     const needs: [string, string][] = [];
     if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) needs.push([HTTP_REQUEST_CAPABILITY, "Probe upgrade required for HTTP request bodies and methods"]);
     if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
+    if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
     const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
     if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });

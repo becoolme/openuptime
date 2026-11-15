@@ -244,5 +244,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0048_majestic_jetstream",
     "when": 1794362860674,
     "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'bark';--> statement-breakpoint\nALTER TYPE \"public\".\"channel_type\" ADD VALUE 'apprise';"
+  },
+  {
+    "tag": "0049_mute_warpath",
+    "when": 1794720919524,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"accepted_statuses\" text;"
   }
 ];

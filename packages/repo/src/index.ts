@@ -116,6 +116,8 @@ export interface Monitor {
   /** HTTP payload; may contain secrets, visible only to managers. */
   requestBody?: string | null;
   expectedStatus: number;
+  /** http: statuses that count as healthy, such as "200-299,401"; when set it replaces expectedStatus */
+  acceptedStatuses: string | null;
   intervalSec: number;
   timeoutMs: number;
   failureThreshold: number;
@@ -161,7 +163,7 @@ export interface Monitor {
 /** Fields a user can set when creating a monitor. */
 export type MonitorInput = Pick<
   Monitor,
-  | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
+  | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "acceptedStatuses" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
   | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "jsonAssertions" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;

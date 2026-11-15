@@ -61,6 +61,16 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     expect((await call("POST", "/monitors/import", { monitors: [row("z")] }, { cookie: "ou_project=" + crypto.randomUUID() })).status).toBe(403);
   });
 
+  it("reads Uptime Kuma status lists", async () => {
+    const call = await account();
+    const res = await call("POST", "/monitors/import", { source: "kuma", monitors: [row("k1", { accepted_statuscodes: ["200-299", "401"] }), row("k2", { accepted_statuscodes: ["200-299"] })] });
+    expect(res.body).toMatchObject({ created: 2 });
+    expect(res.body.report.flatMap((r: { warnings: string[] }) => r.warnings)).toEqual([]);
+    const byId = Object.fromEntries((await call("GET", "/monitors")).body.map((m: { importSourceId: string; acceptedStatuses: string | null }) => [m.importSourceId, m.acceptedStatuses]));
+    // the usual 2xx is the default and needs no list
+    expect(byId).toEqual({ k1: "200-299,401", k2: null });
+  });
+
   it("normalizes source identity whitespace and recognizes legacy padded IDs", async () => {
     const call = await account();
     const input = { source: "test", monitors: [row("  item-1  "), row("item-1")] };

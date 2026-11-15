@@ -9,7 +9,10 @@ type           "http" | "tcp" | "websocket" | "dns" | "heartbeat" | "postgres" |
 target         string, max 2048   (URL for http, ws:// or wss:// URL for websocket, host:port for tcp/postgres/mysql/redis, hostname for dns)
 method         "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
 requestBody    string | null (max 16384 UTF-8 bytes; no body for GET/HEAD)
-expectedStatus integer 100-599                               (default 200)
+expectedStatus integer 100-599                               (default 200; 200 also accepts any 2xx)
+acceptedStatuses string | null, max 200  http: codes, ranges and classes such as "200-299,401" or "2xx,3xx"; "!" excludes ("200-499,!404"),
+               and exclusions alone accept every other status ("!5xx"). Replaces expectedStatus when set; when it accepts a
+               301/302/303/307/308 the redirect is not followed. Stored in normal form (default null = use expectedStatus)
 intervalSec    integer 60-86400                              (default 60)
 timeoutMs      integer 1000-30000                            (default 10000)
 failureThreshold integer 1-10  consecutive failures before an incident opens (default 3)
@@ -17,7 +20,7 @@ recoveryThreshold integer 1-10 successful runs or heartbeat pings before recover
 regions        string[], ids from GET /regions                 (default ["auto"]; http, tcp, websocket and mcp monitors only)
 keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent"                         (default "contains")
-expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus: the redirect is not followed; Location must equal this URL or path (default null = any)
+expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus (or acceptedStatuses that accept one): the redirect is not followed; Location must equal this URL or path (default null = any)
 jsonAssertions { path: string, op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than", value?: string }[], max 10
                http only: each path ($.a.b[0], $["odd key"]) is read from the JSON body (first 1 MB) and must hold (default [])
 headers        { [name: string]: string }  http, mcp, or the websocket handshake (default {})

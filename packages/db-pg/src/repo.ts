@@ -239,7 +239,7 @@ export function createRepo(db: DbExecutor): Repo {
         workspaces.push({
           ...base,
           projects: await q(sql`select id, name, created_at from project where organization_id = ${id}`),
-          monitors: await q(sql`select id, project_id, name, type, target, method, expected_status, interval_sec, timeout_ms, failure_threshold, keyword, keyword_mode, expected_location, headers, request_body, ws_message, tags, slow_threshold_ms, slow_alert_after, created_at from monitor where organization_id = ${id}`),
+          monitors: await q(sql`select id, project_id, name, type, target, method, expected_status, accepted_statuses, interval_sec, timeout_ms, failure_threshold, keyword, keyword_mode, expected_location, headers, request_body, ws_message, tags, slow_threshold_ms, slow_alert_after, created_at from monitor where organization_id = ${id}`),
           channels: await q(sql`select id, project_id, name, type, config, enabled, created_at from alert_channel where organization_id = ${id}`),
           incidents: await q(sql`select id, monitor_id, title, status, severity, auto, started_at, resolved_at from incident where organization_id = ${id}`),
           statusPages: await q(sql`select id, project_id, slug, title, theme, created_at from status_page where organization_id = ${id}`),
@@ -550,7 +550,7 @@ export function createRepo(db: DbExecutor): Repo {
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const measured = ["paused", "target", "method", "expectedStatus", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "headers", "wsMessage", "mcpConfig"];
+        const measured = ["paused", "target", "method", "expectedStatus", "acceptedStatuses", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "headers", "wsMessage", "mcpConfig"];
         const comparable = (key: string, value: unknown) => JSON.stringify(
           key === "regions" && Array.isArray(value) ? [...value].sort()
             : key === "mcpConfig" ? comparableMcpConfig(value as import("@openuptime/repo").McpConfig | null | undefined) : value,

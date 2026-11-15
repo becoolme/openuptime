@@ -46,4 +46,16 @@ describe.skipIf(!url)("redirect destination", () => {
       expect((await call("POST", "/monitors", http("Bad", { expectedStatus: 301, expectedLocation: bad }))).status, bad.slice(0, 30)).toBe(400);
     }
   });
+
+  it("stores a status list in its normal form, refuses a bad one and clears with an empty one", async () => {
+    const call = await signedIn();
+    const m = await call("POST", "/monitors", http("Listed", { acceptedStatuses: " 2XX, 401 , !204" }));
+    expect(m.status).toBe(201);
+    expect(m.body).toMatchObject({ acceptedStatuses: "2xx,401,!204", expectedStatus: 200 });
+    const bad = await call("PATCH", `/monitors/${m.body.id}`, { acceptedStatuses: "2xx,700" });
+    expect(bad.status).toBe(400);
+    expect(JSON.stringify(bad.body)).toMatch(/outside 100-599/);
+    expect((await call("PATCH", `/monitors/${m.body.id}`, { acceptedStatuses: "" })).body).toMatchObject({ acceptedStatuses: null });
+    expect((await call("POST", "/monitors", http("Plain list"))).body).toMatchObject({ acceptedStatuses: null });
+  });
 });
