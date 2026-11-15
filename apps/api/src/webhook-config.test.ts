@@ -20,7 +20,7 @@ describe("webhook settings", () => {
   });
 
   it("refuses headers OpenUptime sets, bad names, duplicates and control characters", () => {
-    for (const headers of [{ "Content-Type": "text/plain" }, { "webhook-signature": "v1,x" }, { Host: "x" }, { "bad name": "x" }, { "X-A": "1", "x-a": "2" }, { "X-A": "a\r\nb" }])
+    for (const headers of [{ "Content-Type": "text/plain" }, { "webhook-signature": "v1,x" }, { Host: "x" }, { "bad name": "x" }, { "X-A": "1", "x-a": "2" }, { "X-A": "a\r\nb" }, { "Content-Encoding": "gzip" }, { "Proxy-Authorization": "x" }, { Expect: "100-continue" }])
       expect(schema.safeParse({ url: "u", headers }).success).toBe(false);
     expect(schema.safeParse({ url: "u", headers: Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`X-${i}`, "v"])) }).success).toBe(false);
   });
@@ -37,6 +37,7 @@ describe("webhook settings", () => {
 
   it("checks templates when they are saved", () => {
     expect(templateProblem('{"t":"{{nope}}"}', "application/json")).toMatch(/Unknown placeholder \{\{nope\}\}/);
+    for (const typo of ["{{Event}}", "{{monitor_name}}", "{{incident.id2}}", "{{ }}"]) expect(templateProblem(`x ${typo}`, "text/plain")).toMatch(/Unknown placeholder/);
     expect(templateProblem('{"t":{{message}}}', "application/json")).toMatch(/valid JSON/);
     expect(templateProblem('{"t":"{{message}}","raw":{{payload}}}', "application/json")).toBeNull();
     expect(templateProblem("down: {{monitor.name}}", "text/plain")).toBeNull();
@@ -63,9 +64,17 @@ describe("webhook requests", () => {
     expect(renderTemplate("{{ monitor.name }} @ {{timestamp}}", "text/plain", { ...Object.fromEntries(["id", "event", "status", "message", "incident.id", "incident.title", "incident.url", "monitor.target", "project.name", "payload"].map((k) => [k, ""])), "monitor.name": 'A "b"', timestamp: "T" } as never)).toBe('A "b" @ T');
   });
 
+  it("encodes values for form and XML bodies", () => {
+    const named = { ...alert, monitor: { ...alert.monitor, name: "a&admin=1 <b>" } };
+    const form = webhookRequest({ url: "u", template: "name={{monitor.name}}&s={{status}}", contentType: "application/x-www-form-urlencoded" }, named, "r");
+    expect(Object.fromEntries(new URLSearchParams(form.body))).toEqual({ name: "a&admin=1 <b>", s: "down" });
+    const xml = webhookRequest({ url: "u", template: "<a n=\"{{monitor.name}}\"/>", contentType: "application/xml" }, named, "r");
+    expect(xml.body).toBe('<a n="a&amp;admin=1 &lt;b&gt;"/>');
+  });
+
   it("filters by event and keeps only safe stored headers", () => {
     expect(webhookWants({}, "incident.resolved")).toBe(true);
     expect(webhookWants({ events: ["incident.opened"] }, "incident.resolved")).toBe(false);
-    expect(webhookExtraHeaders({ headers: { "X-Key": "k", "Content-Type": "x", n: 1 } })).toEqual({ "X-Key": "k" });
+    expect(webhookExtraHeaders({ headers: { "X-Key": "k", "Content-Type": "x", "proxy-x": "p", n: 1 } })).toEqual({ "X-Key": "k" });
   });
 });

@@ -442,7 +442,7 @@ export const zh: Record<string, string> = {
   Recovered: "恢复",
   Escalated: "升级",
   "Request options": "请求选项",
-  "Header values are hidden from members who are not owners or admins.": "请求头的值只对所有者和管理员可见。",
+  "Header values are hidden from members who are not owners or admins. Put tokens here, not in the body template.": "请求头的值只对所有者和管理员可见。令牌请放在这里，不要写进请求体模板。",
   "Body template (optional)": "请求体模板（可选）",
   "Leave empty to send the standard JSON payload. Placeholders: {{event}}, {{status}}, {{message}}, {{monitor.name}}, {{monitor.target}}, {{incident.title}}, {{incident.url}}, {{project.name}}, {{id}}, {{timestamp}} and {{payload}} for the whole standard payload.": "留空则发送标准 JSON。可用占位符：{{event}}、{{status}}、{{message}}、{{monitor.name}}、{{monitor.target}}、{{incident.title}}、{{incident.url}}、{{project.name}}、{{id}}、{{timestamp}}，以及代表整个标准 JSON 的 {{payload}}。",
   "Content type": "内容类型",

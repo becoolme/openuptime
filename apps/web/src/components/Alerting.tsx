@@ -313,7 +313,7 @@ export default function Alerting() {
                       </div>
                     ))}
                     {hook.headers.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setHook({ ...hook, headers: [...hook.headers, { k: "", v: "" }] })}>{t("Add header")}</button></div>}
-                    <small className="faint">{t("Header values are hidden from members who are not owners or admins.")}</small>
+                    <small className="faint">{t("Header values are hidden from members who are not owners or admins. Put tokens here, not in the body template.")}</small>
                   </div>
                   <label className="fld">{t("Body template (optional)")}
                     <textarea className="in mono" rows={6} maxLength={8000} value={hook.template} onChange={(e) => setHook({ ...hook, template: e.target.value })} placeholder={'{"text": "{{message}}", "link": "{{incident.url}}"}'} />
