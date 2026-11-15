@@ -33,6 +33,12 @@ describe("http keyword checks", () => {
     expect((await check({ keyword: "hello", keywordMode: "absent" })).ok).toBe(false);
     expect((await check({ keyword: "goodbye", keywordMode: "absent" })).ok).toBe(true);
   });
+  it("supports pattern modes", async () => {
+    expect((await check({ keyword: "h[aeiou]llo", keywordMode: "matches" })).ok).toBe(true);
+    expect(await check({ keyword: "^goodbye", keywordMode: "matches" })).toMatchObject({ ok: false, error: "No match for /^goodbye/ in response" });
+    expect((await check({ keyword: "h.llo", keywordMode: "not_matches" })).ok).toBe(false);
+    expect((await check({ keyword: "(?i)GOODBYE", keywordMode: "not_matches" })).ok).toBe(true);
+  });
   it("sends custom headers", async () => {
     const r = await check({ path: "/echo", keyword: "secret-1", headers: { "x-token": "secret-1" } });
     expect(r.ok).toBe(true);

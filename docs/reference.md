@@ -71,7 +71,7 @@ Clients authorize with OAuth 2.1 (dynamic client registration + PKCE; discovery 
 
 ## Monitoring features
 
-- **HTTP** checks: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS; optional request bodies up to 16 KiB UTF-8 for methods other than GET/HEAD; expected status (one code, or a list of codes, ranges and classes such as `200-299,401`, with `!` to exclude), optional keyword (must contain / must not contain), custom request headers (use for bearer/basic auth).
+- **HTTP** checks: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS; optional request bodies up to 16 KiB UTF-8 for methods other than GET/HEAD; expected status (one code, or a list of codes, ranges and classes such as `200-299,401`, with `!` to exclude), optional keyword (must contain / must not contain, as plain text or as an RE2 regular expression), custom request headers (use for bearer/basic auth).
 - **TCP**, **DNS**, **Heartbeat** (with a grace period before a missed ping counts as a failure).
 - **PostgreSQL**, **MySQL / MariaDB**, **Redis** reachability probes (handshake / `PING`; no credentials are sent).
 - **Response-time alerts**: per-monitor "slow" threshold (default 1500 ms) marks a monitor degraded; optionally open a minor incident after N consecutive slow checks.

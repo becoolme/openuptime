@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "keyword-patterns", date: "2026-11-15", edition: "community",
+    title: { en: "Match keywords with regular expressions", zh: "关键词支持正则表达式" },
+    summary: { en: "HTTP and WebSocket monitors can check the response against a regular expression, not only a fixed piece of text.", zh: "HTTP 和 WebSocket 监控除了查找固定文本，还可以用正则表达式检查响应内容。" },
+    points: [
+      { en: "Choose “must match pattern” or “must not match pattern” next to the keyword and enter an expression such as \"version\":\\s*\"2\\.", zh: "在关键词旁选择“须匹配正则”或“不得匹配正则”，再填写表达式，例如 \"version\":\\s*\"2\\.。" },
+      { en: "Patterns use RE2 syntax; start one with (?i) to ignore case.", zh: "表达式使用 RE2 语法，以 (?i) 开头可忽略大小写。" },
+      { en: "Matching takes time in proportion to the response, whatever the pattern, so a pattern cannot hold up checks; backreferences and lookarounds are refused when the monitor is saved.", zh: "匹配耗时只与响应长度成正比，与表达式写法无关，因此表达式不会拖慢检测；包含反向引用或环视的表达式在保存时会被拒绝。" },
+      { en: "In the API, set keywordMode to matches or not_matches.", zh: "通过 API 设置时，将 keywordMode 设为 matches 或 not_matches。" },
+    ],
+    upgrade: { en: "Regional probes need updating before a monitor with a keyword pattern can run from them; until then that region reports that an upgrade is required.", zh: "自建的区域探针需要更新后才能执行使用正则关键词的监控；在此之前，该区域会提示需要升级探针。" },
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "status-lists", date: "2026-11-15", edition: "community",
     title: { en: "Accept a list of HTTP statuses", zh: "HTTP 状态码支持列表和范围" },
     summary: { en: "An HTTP monitor can count several statuses as healthy, written as codes, ranges and classes, with exclusions.", zh: "HTTP 监控可以把多个状态码视为正常，写法支持单个状态码、范围和类别，也可以排除特定状态码。" },

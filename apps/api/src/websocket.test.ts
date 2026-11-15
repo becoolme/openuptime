@@ -227,6 +227,11 @@ describe("websocket checks", () => {
       expect(await check("/echo", { wsMessage: "status: fine", keyword: "error", keywordMode: "absent" })).toMatchObject({ ok: true });
     });
 
+    it("supports pattern modes", async () => {
+      expect(await check("/echo", { wsMessage: "status: healthy", keyword: "status:\\s+\\w+", keywordMode: "matches" })).toMatchObject({ ok: true });
+      expect(await check("/echo", { wsMessage: "status: error", keyword: "(?i)ERROR|fail", keywordMode: "not_matches" })).toMatchObject({ ok: false, error: "Unexpected match for /(?i)ERROR|fail/ in the reply" });
+    });
+
     it("waits for the first message when nothing is sent but a keyword is set", async () => {
       expect(await check("/greeting", { keyword: '"status":"ready"' })).toMatchObject({ ok: true });
       expect(await check("/greeting", { keyword: "maintenance" })).toMatchObject({ ok: false, error: 'Keyword "maintenance" not found in the first message' });

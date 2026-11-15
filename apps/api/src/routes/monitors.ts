@@ -13,6 +13,7 @@ import { isRegionConfigured, runInRegion, usesOnlyPrivateProbes } from "../probe
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
+import { KEYWORD_MODES, keywordProblem, MAX_KEYWORD_LENGTH } from "../keyword";
 
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { jsonAssertionsSchema } from "../json-assert";
@@ -59,8 +60,8 @@ const fields = {
   recoveryThreshold: z.number().int().min(1).max(10).describe("Consecutive successful runs (or heartbeat pings) required to recover from down. Default 1; a multi-region vote counts once. Does not delay latency-only recovery."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
   regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket and MCP. A supplied list replaces the existing one."),
-  keyword: z.string().max(500).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test; null disables keyword matching."),
-  keywordMode: z.enum(["contains", "absent"]).describe("Whether the HTTP response body (or the WebSocket message) must contain keyword or must not contain it."),
+  keyword: z.string().max(MAX_KEYWORD_LENGTH).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test: plain text, or an RE2 regular expression with keywordMode matches or not_matches. Null disables keyword matching."),
+  keywordMode: z.enum(KEYWORD_MODES).describe("contains or absent: the HTTP response body (or the WebSocket message) must or must not contain keyword as plain text. matches or not_matches: keyword is an RE2 regular expression that must or must not match somewhere in it; (?i) at the start ignores case. Backreferences and lookarounds are not supported."),
   // an absolute http(s) URL or a path; blank means "any destination"
   expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
   jsonAssertions: jsonAssertionsSchema.describe("HTTP only: up to 10 checks on the JSON response body, all of which must hold. path is like $.data.status or $.items[0].id; op is equals, not_equals, contains, exists, not_exists, greater_than or less_than; value is compared as text, number, boolean or null to match the JSON value. A supplied list replaces the existing one."),
@@ -169,7 +170,7 @@ export const monitorPatchSchema = patchBody;
 
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
-const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v);
+const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
 
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
@@ -518,6 +519,13 @@ export const monitors = new Hono<AppEnv>()
       if (v.mcpConfig?.oauth?.mode === "refresh_token" && !v.mcpConfig.oauth.refreshToken && !(saved?.mode === "refresh_token" && saved.refreshToken)) return c.json({ error: "Refresh-token mode requires a refresh token" }, 400);
     }
 
+    if (v.keyword !== undefined || v.keywordMode !== undefined) {
+      const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+      if (!current) return c.json({ error: "Not found" }, 404);
+      const keyword = v.keyword === undefined ? current.keyword : v.keyword;
+      const invalid = keyword ? keywordProblem(keyword, v.keywordMode ?? current.keywordMode) : null;
+      if (invalid) return c.json({ error: invalid }, 400);
+    }
     if (v.dnsRecordType !== undefined || v.dnsExpectedValue !== undefined || v.dnsMatchMode !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);

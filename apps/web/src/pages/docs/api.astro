@@ -19,7 +19,8 @@ failureThreshold integer 1-10  consecutive failures before an incident opens (de
 recoveryThreshold integer 1-10 successful runs or heartbeat pings before recovering from down (default 1)
 regions        string[], ids from GET /regions                 (default ["auto"]; http, tcp, websocket and mcp monitors only)
 keyword        string | null, max 500                        (default null)
-keywordMode    "contains" | "absent"                         (default "contains")
+keywordMode    "contains" | "absent" | "matches" | "not_matches"  (default "contains")
+               matches/not_matches read keyword as an RE2 regular expression; (?i) ignores case
 expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus (or acceptedStatuses that accept one): the redirect is not followed; Location must equal this URL or path (default null = any)
 jsonAssertions { path: string, op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than", value?: string }[], max 10
                http only: each path ($.a.b[0], $["odd key"]) is read from the JSON body (first 1 MB) and must hold (default [])

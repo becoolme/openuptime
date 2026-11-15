@@ -1,6 +1,8 @@
 import { resolveRoute } from "./routes";
 import { go } from "./locale-path";
 
+/** contains/absent: plain text; matches/not_matches: an RE2 regular expression */
+export type KeywordMode = "contains" | "absent" | "matches" | "not_matches";
 export type McpAssertion = { path: string; operator: "equals" | "contains" | "exists"; value?: unknown };
 export type McpOAuth = { mode: "client_credentials" | "refresh_token"; issuer: string; clientId: string; clientSecret?: string; refreshToken?: string; scopes?: string[]; resource?: string; tokenAuthMethod?: "client_secret_basic" | "client_secret_post" };
 export type McpConfig = { requiredTools: string[]; schemaCheck: boolean; transport?: "auto" | "streamable-http" | "sse"; listPrompts?: boolean; listResources?: boolean; driftPolicy?: "down" | "degraded" | "record"; oauth?: McpOAuth | null; toolCall: { enabled: boolean; name: string; arguments: Record<string, unknown>; assertions: McpAssertion[] } | null };
@@ -24,7 +26,7 @@ export type Monitor = {
   lastCheckedAt: string | null; heartbeatToken: string | null;
   uptime24h?: number | null; avgLatency24h?: number | null; spark?: (number | null)[];
   dnsRecordType?: "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS"; dnsExpectedValue?: string | null; dnsMatchMode?: "exact" | "contains";
-  keyword?: string | null; keywordMode?: "contains" | "absent"; expectedLocation?: string | null; jsonAssertions?: JsonAssertion[]; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
+  keyword?: string | null; keywordMode?: KeywordMode; expectedLocation?: string | null; jsonAssertions?: JsonAssertion[]; wsMessage?: string | null; graceSec?: number; channelIds?: string[]; headers?: Record<string, string>;
   /** the project the monitor belongs to (the lists of the "All projects" view mix several) */
   projectId?: string | null;
   tags?: string[]; slowThresholdMs?: number; slowAlertAfter?: number;
