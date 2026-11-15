@@ -54,6 +54,15 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     expect((await call("POST", "/channels", { type: "webhook", name: "Bad secret", config: { url: "https://example.com/hook", secret: "hunter2" } })).status).toBe(400);
     const ownSecret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
     expect((await call("POST", "/channels", { type: "webhook", name: "Own secret", config: { url: "https://example.com/hook", secret: ownSecret } })).body.config.secret).toBe(ownSecret);
+    const custom = await call("POST", "/channels", { type: "webhook", name: "Custom", config: { url: "https://example.com/hook", method: "PUT", headers: { Authorization: "Bearer k" }, events: ["incident.opened"], template: '{"text":"{{message}}"}' } });
+    expect(custom.status).toBe(201);
+    expect(custom.body.config).toMatchObject({ method: "PUT", headers: { Authorization: "Bearer k" }, events: ["incident.opened"], template: '{"text":"{{message}}"}' });
+    // a placeholder sent back for a header keeps its value
+    const kept = await call("PATCH", `/channels/${custom.body.id}`, { config: { ...custom.body.config, headers: { Authorization: "••••••••", "X-Env": "prod" } } });
+    expect(kept.body.config.headers).toEqual({ Authorization: "Bearer k", "X-Env": "prod" });
+    for (const config of [{ headers: { "Content-Type": "text/plain" } }, { template: '{"text":{{message}}}' }, { template: "{{secret}}", contentType: "text/plain" }, { events: [] }, { method: "DELETE" }])
+      expect((await call("POST", "/channels", { type: "webhook", name: "Invalid", config: { url: "https://example.com/hook", ...config } })).status).toBe(400);
+    expect((await call("DELETE", `/channels/${custom.body.id}`)).status).toBe(204);
     const slack = await call("POST", "/channels", { type: "slack", name: "Slack", config: { url: "https://hooks.slack.com/services/x" } });
     expect((await call("POST", `/channels/${slack.body.id}/rotate-secret`)).status).toBe(400);
     expect((await call("DELETE", `/channels/${slack.body.id}`)).status).toBe(204);

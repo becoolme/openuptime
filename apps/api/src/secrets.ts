@@ -17,14 +17,19 @@ const maskUrl = (u: string) => {
 };
 const maskOne = (key: string, v: unknown) => (typeof v !== "string" || !v ? v : key === "url" ? maskUrl(v) : MASK);
 
+/** A webhook's custom headers usually carry an API key, so every value is masked. */
+const isHeaders = (k: string, v: unknown): v is Record<string, string> => k === "headers" && !!v && typeof v === "object" && !Array.isArray(v);
+
 export function maskConfig(config: Record<string, unknown> | null | undefined) {
-  return Object.fromEntries(Object.entries(config ?? {}).map(([k, v]) => [k, SECRET_KEYS.has(k) ? maskOne(k, v) : v]));
+  return Object.fromEntries(Object.entries(config ?? {}).map(([k, v]) => [k, isHeaders(k, v) ? maskHeaders(v) : SECRET_KEYS.has(k) ? maskOne(k, v) : v]));
 }
 
 /** `incoming` with every value that is still a placeholder replaced by what is stored. */
 export function restoreConfig(incoming: Record<string, unknown>, current: Record<string, unknown> | null | undefined) {
   const cur = current ?? {};
-  return Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, SECRET_KEYS.has(k) && typeof v === "string" && v === maskOne(k, cur[k]) ? cur[k] : v]));
+  return Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k,
+    isHeaders(k, v) ? restoreHeaders(v, isHeaders(k, cur[k]) ? cur[k] : null)
+      : SECRET_KEYS.has(k) && typeof v === "string" && v === maskOne(k, cur[k]) ? cur[k] : v]));
 }
 
 export const maskHeaders = (headers: Record<string, string> | null | undefined) => Object.fromEntries(Object.keys(headers ?? {}).map((k) => [k, MASK]));
