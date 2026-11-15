@@ -27,6 +27,16 @@ describe("channel settings", () => {
     // the placeholder only stands for the stored value of the same key
     expect(restoreConfig({ url: `https://other.example/${MASK}` }, stored).url).toBe(`https://other.example/${MASK}`);
   });
+
+  it("hides a webhook's custom header values and restores them by name", () => {
+    const hook = { url: "https://example.com/hook", method: "PUT", headers: { Authorization: "Bearer abc", "X-Team": "ops" } };
+    const m = maskConfig(hook);
+    expect(m.headers).toEqual({ Authorization: MASK, "X-Team": MASK });
+    expect(m.method).toBe("PUT");
+    expect(sameJson(restoreConfig(m, hook), hook)).toBe(true);
+    const edited = restoreConfig({ ...m, headers: { Authorization: MASK, "X-Env": "prod" } }, hook);
+    expect(edited.headers).toEqual({ Authorization: "Bearer abc", "X-Env": "prod" });
+  });
 });
 
 describe("monitor headers", () => {

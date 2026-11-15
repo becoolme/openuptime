@@ -86,6 +86,29 @@ describe("webhook channel", () => {
     await retryDeliveries({ claimRetries: async () => due, finishDelivery: async () => {} } as never);
     expect(fetchMock.mock.calls.map((c) => new Headers(c[1].headers).get("webhook-id"))).toEqual(["row-7", "row-7"]);
   });
+
+  it("uses the channel's method, headers and template, and signs the rendered body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = { url: "https://hooks.example.test/w", secret, method: "PUT", headers: { Authorization: "Bearer k" }, template: "{{event}}: {{message}}", contentType: "text/plain" };
+    await deliver({ type: "webhook", config }, { ...ev, deliveryId: "d-1" }, "API is down");
+    const [, init] = fetchMock.mock.calls[0];
+    const h = new Headers(init.headers);
+    expect(init.method).toBe("PUT");
+    expect(init.body).toBe("incident.opened: API is down");
+    expect(h.get("authorization")).toBe("Bearer k");
+    expect(h.get("content-type")).toBe("text/plain");
+    expect(h.get("webhook-signature")).toBe(await signWebhook(secret, "d-1", Number(h.get("webhook-timestamp")), init.body));
+  });
+
+  it("skips alerts the channel did not choose, but still sends a test", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = { url: "https://hooks.example.test/w", events: ["incident.resolved"] };
+    await expect(deliver({ type: "webhook", config }, ev, "down")).rejects.toThrow(/skipped: the channel does not take incident.opened alerts/);
+    await deliver({ type: "webhook", config }, { ...ev, test: true }, "test");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("lark channel", () => {

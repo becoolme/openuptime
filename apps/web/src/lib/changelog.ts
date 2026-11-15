@@ -29,6 +29,23 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "webhook-options",
+    date: "2026-11-15",
+    edition: "community",
+    title: { en: "Shape webhook requests", zh: "自定义 Webhook 请求" },
+    summary: {
+      en: "A webhook channel can now match what the receiving service expects instead of needing a translator in between.",
+      zh: "Webhook 渠道现在可以直接按接收方要求的格式发送，不必再在中间加一层转换。",
+    },
+    points: [
+      { en: "Choose POST, PUT or PATCH and add up to 10 headers, such as an API key; header values are hidden from members who are not owners or admins.", zh: "可选 POST、PUT 或 PATCH，并添加最多 10 个请求头（如 API 密钥）；请求头的值只对所有者和管理员可见。" },
+      { en: "Pick which alerts the channel gets: down, recovered, escalated, or any mix of them.", zh: "可以选择渠道接收哪些告警：故障、恢复、升级，或任意组合。" },
+      { en: "Write your own body in JSON, form, XML or plain text with placeholders such as {{monitor.name}} and {{incident.url}}; values are escaped for the format, and a misspelled placeholder or a template that would not produce valid JSON is refused when you save it.", zh: "可以用 JSON、表单、XML 或纯文本，配合 {{monitor.name}}、{{incident.url}} 等占位符自定义请求体；填入的值会按格式转义，拼错的占位符或生成的内容不是合法 JSON 的模板在保存时就会被拒绝。" },
+      { en: "The standard payload now carries the message id in its body as well, the same value as the webhook-id header.", zh: "标准 JSON 中也加入了消息 id，与 webhook-id 请求头的值相同。" },
+    ],
+    link: { href: "/docs/api#webhook-options", label: { en: "Read the webhook options", zh: "查看 Webhook 选项" } },
+  },
+  {
     id: "signed-webhooks", date: "2026-11-15", edition: "community",
     title: { en: "Signed webhook alerts", zh: "Webhook 告警支持签名" },
     summary: { en: "Webhook channels now sign every request, so your receiver can check that an alert really came from OpenUptime.", zh: "Webhook 渠道现在会为每个请求签名，接收端可以确认告警确实来自 OpenUptime。" },

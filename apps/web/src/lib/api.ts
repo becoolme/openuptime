@@ -68,7 +68,7 @@ export type Incident = {
   deliveries?: AlertDelivery[];
 };
 
-export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy" | "bark" | "apprise"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string; topic?: string; token?: string; priority?: string; deviceKey?: string; tag?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
+export type Channel = { id: string; type: "slack" | "webhook" | "email" | "telegram" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy" | "bark" | "apprise"; name: string; config: { url?: string; secret?: string; to?: string; chatId?: string; botToken?: string; routingKey?: string; topic?: string; token?: string; priority?: string; deviceKey?: string; tag?: string; method?: string; headers?: Record<string, string>; events?: string[]; template?: string; contentType?: string }; enabled: boolean; autoEnable?: boolean; projectId?: string | null };
 export type WorkspaceSettings = { alertLogRetentionDays: number; checkRetentionDays: number; monthlyReport: boolean };
 export type StatusPage = { id: string; projectId?: string | null; slug: string; title: string; theme: "light" | "dark" | "auto"; showLatency: boolean; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; mcpEnabled?: boolean; maintenanceReminderHours?: number; customCss?: string | null; branding?: { allowed: boolean; upgradeUrl?: string }; monitorIds?: string[]; components?: { monitorId: string; groupName: string | null }[] };
 
@@ -245,9 +245,9 @@ export const api = {
   settings: () => req<WorkspaceSettings>("/settings"),
   updateSettings: (b: Partial<WorkspaceSettings>) =>
     req<WorkspaceSettings>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
-  createChannel: (b: { type: Channel["type"]; name: string; config: Record<string, string>; autoEnable?: boolean }) =>
+  createChannel: (b: { type: Channel["type"]; name: string; config: Record<string, unknown>; autoEnable?: boolean }) =>
     req<Channel>("/channels", { method: "POST", body: JSON.stringify(b) }),
-  updateChannel: (id: string, b: { name?: string; enabled?: boolean; autoEnable?: boolean; config?: Record<string, string> }) => req<Channel>(`/channels/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  updateChannel: (id: string, b: { name?: string; enabled?: boolean; autoEnable?: boolean; config?: Record<string, unknown> }) => req<Channel>(`/channels/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   rotateChannelSecret: (id: string) => req<Channel>(`/channels/${id}/rotate-secret`, { method: "POST" }),
   testChannel: (id: string) => req<{ ok: boolean }>(`/channels/${id}/test`, { method: "POST" }),
   deleteChannel: (id: string) => req<void>(`/channels/${id}`, { method: "DELETE" }),

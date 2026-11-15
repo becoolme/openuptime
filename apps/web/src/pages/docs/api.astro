@@ -79,8 +79,8 @@ const groups: Group[] = [
   },
   {
     id: "channels", en: "Channels", zh: "告警渠道",
-    noteEn: "config depends on type: email { to }, slack { url }, discord { url }, teams { url }, ntfy { url, topic, token?, priority? (1–5 as a string) }, bark { deviceKey, url? }, apprise { url, tag?, token? }, lark { url, secret? }, webhook { url, secret? } (a whsec_ signing secret, generated when left out; see Webhook signatures), telegram { botToken, chatId }, pagerduty { routingKey }. Channel configs contain secrets and are returned as stored. A channel with autoEnable is added to the channelIds of every monitor created afterwards (in its project, or in any project for a workspace-wide channel), on top of any ids given; a monitor whose channelIds is empty alerts every enabled channel.",
-    noteZh: "config 取决于 type：email { to }、slack { url }、discord { url }、teams { url }、ntfy { url, topic, token?, priority?（字符串 1–5） }、bark { deviceKey, url? }、apprise { url, tag?, token? }、lark { url, secret? }、webhook { url, secret? }（whsec_ 签名密钥，不填则自动生成，见“Webhook 签名”）、telegram { botToken, chatId }、pagerduty { routingKey }。渠道配置含敏感信息，按存储内容原样返回。",
+    noteEn: "config depends on type: email { to }, slack { url }, discord { url }, teams { url }, ntfy { url, topic, token?, priority? (1–5 as a string) }, bark { deviceKey, url? }, apprise { url, tag?, token? }, lark { url, secret? }, webhook { url, secret?, method?, headers?, events?, template?, contentType? } (a whsec_ signing secret is generated when left out; see Webhook signatures and Webhook options), telegram { botToken, chatId }, pagerduty { routingKey }. Channel configs contain secrets and are returned as stored. A channel with autoEnable is added to the channelIds of every monitor created afterwards (in its project, or in any project for a workspace-wide channel), on top of any ids given; a monitor whose channelIds is empty alerts every enabled channel.",
+    noteZh: "config 取决于 type：email { to }、slack { url }、discord { url }、teams { url }、ntfy { url, topic, token?, priority?（字符串 1–5） }、bark { deviceKey, url? }、apprise { url, tag?, token? }、lark { url, secret? }、webhook { url, secret?, method?, headers?, events?, template?, contentType? }（whsec_ 签名密钥不填则自动生成，见“Webhook 签名”和“Webhook 选项”）、telegram { botToken, chatId }、pagerduty { routingKey }。渠道配置含敏感信息，按存储内容原样返回。",
     eps: [
       { m: "GET", p: "/channels", en: "List the alert channels available in the project: workspace-wide ones (projectId null) and the project's own.", zh: "列出当前项目可用的告警渠道：工作区级渠道（projectId 为 null）和项目自己的渠道。", res: `[{ id, type, name, config, enabled, autoEnable, createdAt, projectId }]` },
       { m: "POST", p: "/channels", en: "Create a channel. Returns 201.", zh: "创建渠道。返回 201。", req: `type     "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "discord" | "teams" | "ntfy" | "bark" | "apprise"\nname     string, 1-80\nconfig   object   (default {})\nenabled  boolean  (default true)\nautoEnable  boolean  (default false)  new monitors start out alerting this channel\nscope    "workspace" | "project"  (default "workspace"; a project-limited key always creates a project channel)` },
@@ -229,6 +229,18 @@ webhook-signature:  v1,&lt;base64 HMAC-SHA256&gt;</code></pre>
 <pre><code is:raw>import { Webhook } from "standardwebhooks";
 const payload = new Webhook(secret).verify(rawBody, headers); // throws when the signature or timestamp is wrong</code></pre>
     <p>A secret is generated when a webhook channel is created, unless you supply one (<code>whsec_</code> followed by 24 to 64 base64-encoded bytes). Owners and admins see it on the channel and can replace it with <code>POST /channels/:id/rotate-secret</code>. Webhook channels created before signing existed send no <code>webhook-signature</code> header until they get a secret this way.</p>
+    <h2 id="webhook-options">Webhook options</h2>
+    <p>Without options a webhook sends the standard JSON payload as a <code>POST</code>. The payload has <code>id</code> (the same as <code>webhook-id</code>), <code>kind</code>, <code>incident</code>, <code>monitor</code> and, when they apply, <code>count</code>, <code>project</code>, <code>slow</code>, <code>schemaDrift</code> and <code>reopened</code>. These settings change the request:</p>
+<pre><code is:raw>method       "POST" | "PUT" | "PATCH"   (default "POST")
+headers      { "Name": "value" }, up to 10; values are masked for members.
+             Host, Content-Type, Content-Length, Content-Encoding, connection and Proxy-*
+             headers and the webhook-* headers cannot be set.
+events       a non-empty subset of "incident.opened", "incident.resolved", "incident.escalated"
+             (default: all of them); other alerts are logged as skipped. Channel tests always go out.
+template     your own body, up to 8000 characters, with {{placeholders}}
+contentType  the body's media type when a template is set (default "application/json")</code></pre>
+    <p>Placeholders: <code is:raw>{{id}}</code>, <code is:raw>{{event}}</code>, <code is:raw>{{status}}</code> (<code>down</code>, <code>degraded</code> or <code>up</code>), <code is:raw>{{timestamp}}</code> (ISO 8601), <code is:raw>{{message}}</code> (the alert text chat channels get), <code is:raw>{{incident.id}}</code>, <code is:raw>{{incident.title}}</code>, <code is:raw>{{incident.url}}</code>, <code is:raw>{{monitor.name}}</code>, <code is:raw>{{monitor.target}}</code>, <code is:raw>{{project.name}}</code> and <code is:raw>{{payload}}</code>, the whole standard payload as JSON. Values are escaped for the content type: with JSON every value except <code is:raw>{{payload}}</code> is escaped for use inside a JSON string, so put it in quotes; with <code>application/x-www-form-urlencoded</code> every value is percent-encoded; with an XML type the XML special characters become entities; any other type, such as <code>text/plain</code>, gets the values as they are. Every member can read the template, so put tokens in a header, whose value is masked, rather than in the body. A template is checked when it is saved: an unknown placeholder, or a JSON template that does not parse once filled in, is refused with <code>400</code>. The signature covers the body as sent.</p>
+<pre><code is:raw>{ "text": "{{message}}", "link": "{{incident.url}}", "raw": {{payload}} }</code></pre>
     <h2 id="examples">Examples</h2>
     <h3>Create a monitor</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
@@ -298,6 +310,18 @@ webhook-signature:  v1,&lt;base64 HMAC-SHA256&gt;</code></pre>
 <pre><code is:raw>import { Webhook } from "standardwebhooks";
 const payload = new Webhook(secret).verify(rawBody, headers); // 签名或时间戳不对时抛出异常</code></pre>
     <p>创建 Webhook 渠道时会自动生成密钥，也可以自行提供（<code>whsec_</code> 加 24 到 64 字节的 base64 编码）。所有者和管理员可以在渠道上查看密钥，并通过 <code>POST /channels/:id/rotate-secret</code> 更换。签名功能上线前创建的 Webhook 渠道不会带 <code>webhook-signature</code> 请求头，直到以这种方式获得密钥。</p>
+    <h2 id="webhook-options-zh">Webhook 选项</h2>
+    <p>不做任何设置时，Webhook 以 <code>POST</code> 发送标准 JSON。其中包含 <code>id</code>（与 <code>webhook-id</code> 相同）、<code>kind</code>、<code>incident</code>、<code>monitor</code>，以及视情况出现的 <code>count</code>、<code>project</code>、<code>slow</code>、<code>schemaDrift</code> 和 <code>reopened</code>。以下设置可以改变请求：</p>
+<pre><code is:raw>method       "POST" | "PUT" | "PATCH"（默认 "POST"）
+headers      { "名称": "值" }，最多 10 个；对普通成员隐藏值。
+             Host、Content-Type、Content-Length、Content-Encoding、连接相关和 Proxy-*
+             请求头以及 webhook-* 请求头不能自定义。
+events       "incident.opened"、"incident.resolved"、"incident.escalated" 的非空子集
+             （默认全部）；其余告警记为已跳过。渠道测试总会发出。
+template     自定义请求体，最多 8000 个字符，可用 {{占位符}}
+contentType  使用模板时请求体的媒体类型（默认 "application/json"）</code></pre>
+    <p>占位符：<code is:raw>{{id}}</code>、<code is:raw>{{event}}</code>、<code is:raw>{{status}}</code>（<code>down</code>、<code>degraded</code> 或 <code>up</code>）、<code is:raw>{{timestamp}}</code>（ISO 8601）、<code is:raw>{{message}}</code>（与聊天渠道相同的告警文字）、<code is:raw>{{incident.id}}</code>、<code is:raw>{{incident.title}}</code>、<code is:raw>{{incident.url}}</code>、<code is:raw>{{monitor.name}}</code>、<code is:raw>{{monitor.target}}</code>、<code is:raw>{{project.name}}</code>，以及代表整个标准 JSON 的 <code is:raw>{{payload}}</code>。值会按内容类型转义：JSON 中除 <code is:raw>{{payload}}</code> 外的值都按 JSON 字符串内容转义，所以要放在引号里；<code>application/x-www-form-urlencoded</code> 中的值会做百分号编码；XML 类型中的特殊字符会转成实体；其他类型（如 <code>text/plain</code>）原样填入。所有成员都能看到模板，令牌请放在请求头里（值会隐藏），不要写进请求体。模板在保存时校验：未知占位符，或填入数值后无法解析的 JSON 模板，会返回 <code>400</code>。签名针对实际发出的请求体计算。</p>
+<pre><code is:raw>{ "text": "{{message}}", "link": "{{incident.url}}", "raw": {{payload}} }</code></pre>
     <h2 id="examples-zh">示例</h2>
     <h3>创建监控项</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \

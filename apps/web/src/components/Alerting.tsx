@@ -15,7 +15,7 @@ const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "email", label: "Email", desc: "Send alerts to an address or on-call alias." },
   { id: "telegram", label: "Telegram", desc: "Message a chat or group through your bot." },
   { id: "pagerduty", label: "PagerDuty", desc: "Trigger and resolve incidents on a service." },
-  { id: "webhook", label: "Webhook", desc: "POST a signed JSON payload to any URL." },
+  { id: "webhook", label: "Webhook", desc: "Send a signed request to any URL, with the standard JSON payload or your own template." },
   { id: "push", label: "Mobile app (push)", desc: "Notify the OpenUptime app on your team's phones." },
 ];
 const svg = (d: React.ReactNode) => (
@@ -37,6 +37,8 @@ const ICONS: Record<Channel["type"], React.ReactNode> = {
   webhook: svg(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" /></>),
 };
 const REPEATS = [5, 10, 15, 30, 60];
+/** The alerts a webhook can take; none chosen means all of them. */
+const HOOK_EVENTS = [{ id: "incident.opened", label: "Down" }, { id: "incident.resolved", label: "Recovered" }, { id: "incident.escalated", label: "Escalated" }];
 const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c.type === "bark" ? (c.config.url ?? "api.day.app").replace(/^https?:\/\//, "") : c.type === "ntfy" ? `${(c.config.url ?? "").replace(/^https?:\/\//, "").split("/")[0]}/${c.config.topic ?? ""}` : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
 
 export default function Alerting() {
@@ -50,6 +52,8 @@ export default function Alerting() {
   const [testing, setTesting] = useState("");
   const [note, setNote] = useState("");
   const [secretNote, setSecretNote] = useState("");
+  const hookBlank = { method: "POST", headers: [] as { k: string; v: string }[], events: [] as string[], template: "", contentType: "" };
+  const [hook, setHook] = useState(hookBlank);
   const [log, setLog] = useState<AlertDelivery[] | null>(null);
   const [days, setDays] = useState(30);
   const [push, setPush] = useState(false);
@@ -69,11 +73,12 @@ export default function Alerting() {
   useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", deviceKey: "", tag: "", auto: false };
-  const openAdd = () => { setErr(""); setSecretNote(""); setEditId(""); setF(blank); setAdding(true); };
+  const openAdd = () => { setErr(""); setSecretNote(""); setEditId(""); setF(blank); setHook(hookBlank); setAdding(true); };
   const openEdit = (c: Channel) => {
     setErr("");
     setSecretNote("");
     setEditId(c.id);
+    setHook({ method: c.config.method ?? "POST", headers: Object.entries(c.config.headers ?? {}).map(([k, v]) => ({ k, v })), events: c.config.events ?? [], template: c.config.template ?? "", contentType: c.config.contentType ?? "" });
     setF({ ...blank, type: c.type, name: c.name, url: c.config.url ?? "", to: c.config.to ?? "", botToken: c.config.botToken ?? "", chatId: c.config.chatId ?? "", routingKey: c.config.routingKey ?? "", secret: c.config.secret ?? "", topic: c.config.topic ?? "", token: c.config.token ?? "", priority: c.config.priority ?? "3", deviceKey: c.config.deviceKey ?? "", tag: c.config.tag ?? "", auto: !!c.autoEnable });
     setAdding(true);
   };
@@ -81,7 +86,7 @@ export default function Alerting() {
     e.preventDefault();
     setErr("");
     await run(async () => { try {
-      const config: Record<string, string> =
+      const config: Record<string, unknown> =
         f.type === "email" ? { to: f.to }
         : f.type === "telegram" ? { botToken: f.botToken, chatId: f.chatId }
         : f.type === "pagerduty" ? { routingKey: f.routingKey }
@@ -89,9 +94,15 @@ export default function Alerting() {
         : f.type === "apprise" ? { url: f.url, tag: f.tag, token: f.token }
         : f.type === "ntfy" ? { url: f.url || "https://ntfy.sh", topic: f.topic, token: f.token, priority: f.priority }
         : f.type === "push" ? {}
-        : f.type === "lark" || f.type === "webhook"
+        : f.type === "webhook" ? {
           // an existing webhook's secret changes only through rotation, so a stale form cannot undo a rotation made elsewhere
-          ? { url: f.url, ...(f.secret && !(f.type === "webhook" && editId) ? { secret: f.secret } : {}) }
+          url: f.url, ...(f.secret && !editId ? { secret: f.secret } : {}),
+          ...(hook.method !== "POST" ? { method: hook.method } : {}),
+          ...(hook.headers.some((h) => h.k.trim()) ? { headers: Object.fromEntries(hook.headers.filter((h) => h.k.trim()).map((h) => [h.k.trim(), h.v])) } : {}),
+          ...(hook.events.length && hook.events.length < HOOK_EVENTS.length ? { events: hook.events } : {}),
+          ...(hook.template.trim() ? { template: hook.template, ...(hook.contentType.trim() ? { contentType: hook.contentType.trim() } : {}) } : {}),
+        }
+        : f.type === "lark" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
         : { url: f.url };
       if (editId) await api.updateChannel(editId, { name: f.name, config, autoEnable: f.auto });
       else {
@@ -276,6 +287,42 @@ export default function Alerting() {
                 {secretNote && <small className="ok-note">{secretNote}</small>}
               </div>
             ) : <p className="muted" style={{ margin: 0 }}>{t("A signing secret is created with the channel, so your receiver can verify each request.")}</p>)}
+            {f.type === "webhook" && <>
+              <div className="fld">{t("Send these alerts")}
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 4 }}>
+                  {HOOK_EVENTS.map((x) => {
+                    const on = !hook.events.length || hook.events.includes(x.id);
+                    return <label key={x.id} style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: 400 }}><input type="checkbox" checked={on} onChange={() => {
+                      const cur = hook.events.length ? hook.events : HOOK_EVENTS.map((e) => e.id);
+                      const next = on ? cur.filter((e) => e !== x.id) : [...cur, x.id];
+                      if (next.length) setHook({ ...hook, events: next.length === HOOK_EVENTS.length ? [] : next });
+                    }} />{t(x.label)}</label>;
+                  })}
+                </div>
+              </div>
+              <details>
+                <summary>{t("Request options")}</summary>
+                <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+                  <label className="fld">{t("Method")}<select className="in" value={hook.method} onChange={(e) => setHook({ ...hook, method: e.target.value })}>{["POST", "PUT", "PATCH"].map((m) => <option key={m} value={m}>{m}</option>)}</select></label>
+                  <div className="fld">{t("Request headers")}
+                    {hook.headers.map((r, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                        <input className="in mono" style={{ flex: 1, minWidth: 0 }} value={r.k} placeholder="Authorization" aria-label={t("Header name")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, k: e.target.value } : h)) })} />
+                        <input className="in mono" style={{ flex: 2, minWidth: 0 }} value={r.v} placeholder="Bearer …" aria-label={t("Header value")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, v: e.target.value } : h)) })} />
+                        <button type="button" className="btn" onClick={() => setHook({ ...hook, headers: hook.headers.filter((_, j) => j !== i) })}>{t("Remove")}</button>
+                      </div>
+                    ))}
+                    {hook.headers.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setHook({ ...hook, headers: [...hook.headers, { k: "", v: "" }] })}>{t("Add header")}</button></div>}
+                    <small className="faint">{t("Header values are hidden from members who are not owners or admins. Put tokens here, not in the body template.")}</small>
+                  </div>
+                  <label className="fld">{t("Body template (optional)")}
+                    <textarea className="in mono" rows={6} maxLength={8000} value={hook.template} onChange={(e) => setHook({ ...hook, template: e.target.value })} placeholder={'{"text": "{{message}}", "link": "{{incident.url}}"}'} />
+                    <small className="faint">{t("Leave empty to send the standard JSON payload. Placeholders: {{event}}, {{status}}, {{message}}, {{monitor.name}}, {{monitor.target}}, {{incident.title}}, {{incident.url}}, {{project.name}}, {{id}}, {{timestamp}} and {{payload}} for the whole standard payload.")}</small>
+                  </label>
+                  {hook.template.trim() && <label className="fld">{t("Content type")}<input className="in mono" value={hook.contentType} placeholder="application/json" onChange={(e) => setHook({ ...hook, contentType: e.target.value })} /></label>}
+                </div>
+              </details>
+            </>}
             {f.type === "lark" && (
               <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>
             )}

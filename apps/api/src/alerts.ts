@@ -4,6 +4,7 @@ import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 import { guardedFetch, readCapped } from "./netguard";
+import { webhookExtraHeaders, webhookRequest, webhookWants, type WebhookAlert } from "./webhook-config";
 import { webhookHeaders } from "./webhook-signing";
 import { ttlCache } from "@openuptime/kit/ttlcache";
 
@@ -97,11 +98,15 @@ async function post(url: string, body: unknown, init?: RequestInit) {
   if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
 }
 
-/** The generic webhook: a JSON POST with Standard Webhooks headers, signed when the channel has a secret. */
-async function postWebhook(url: string, payload: unknown, id: string, secret?: string) {
-  const body = JSON.stringify(payload);
-  const headers = { "content-type": "application/json", ...(await webhookHeaders(id, body, secret)) };
-  await post(url, payload, { method: "POST", headers, body, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+/**
+ * The generic webhook: the standard JSON payload, or the channel's own template, with its method and headers. Standard
+ * Webhooks headers come last so a channel cannot replace them, and the body is signed when the channel has a secret.
+ */
+async function postWebhook(config: Record<string, unknown>, alert: WebhookAlert, id: string) {
+  const { method, contentType, body } = webhookRequest(config, alert, id);
+  const secret = typeof config.secret === "string" && config.secret ? config.secret : undefined;
+  const headers = { ...webhookExtraHeaders(config), "content-type": contentType, ...(await webhookHeaders(id, body, secret)) };
+  await post(config.url as string, body, { method, headers, body, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
 }
 
 /**
@@ -530,11 +535,15 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       need(cfg.url, "webhook URL");
       await postLark(cfg.url!, linked(text), cfg.secret || undefined);
       break;
-    case "webhook":
+    case "webhook": {
       need(cfg.url, "webhook URL");
+      if (!ev.test && !webhookWants(c.config as Record<string, unknown>, ev.kind)) throw new Skipped(`skipped: the channel does not take ${ev.kind} alerts`);
+      const payload = { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) };
+      const alert: WebhookAlert = { kind: ev.kind, status: !opened ? "up" : warning ? "degraded" : "down", message: text, incident: ev.incident, monitor: ev.monitor, project: ev.project, url: link, payload };
       // a delivery that was not queued (a channel test, or a log that could not be written) gets an id of its own
-      await postWebhook(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) }, ev.deliveryId ?? crypto.randomUUID(), cfg.secret || undefined);
+      await postWebhook(c.config as Record<string, unknown>, alert, ev.deliveryId ?? crypto.randomUUID());
       break;
+    }
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
       // Telegram refuses a message over 4096 characters
