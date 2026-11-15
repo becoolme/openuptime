@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendPush } from "./apns";
 import { configureEmail, sendEmail } from "./email";
+import { signWebhook } from "./webhook-signing";
 import { clearProjectNames, deliver, dispatchAlert, retryDeliveries, sendEscalations, sendReminders, withProject } from "./alerts";
 
 // these tests stub the global fetch and use made-up host names; the pinned connection would bypass the stub and go to the real network
@@ -51,6 +52,39 @@ describe("incident link in chat alerts", () => {
     expect(card.endsWith("/app/incidents/i1")).toBe(true);
     expect(new TextEncoder().encode(ntfy.message).length).toBeLessThanOrEqual(4096);
     expect(ntfy.message.endsWith(`…\n${link}`)).toBe(true);
+  });
+});
+
+describe("webhook channel", () => {
+  const secret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
+  it("signs the exact body it sends, and sends an id and timestamp without a secret too", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await deliver({ type: "webhook", config: { url: "https://hooks.example.test/w", secret } }, { ...ev, deliveryId: "d-42" }, "down");
+    await deliver({ type: "webhook", config: { url: "https://hooks.example.test/w" } }, ev, "down");
+    const [signed, plain] = fetchMock.mock.calls.map((c) => ({ body: c[1].body as string, h: new Headers(c[1].headers) }));
+    expect(signed.h.get("webhook-id")).toBe("d-42");
+    expect(signed.h.get("content-type")).toBe("application/json");
+    const ts = Number(signed.h.get("webhook-timestamp"));
+    expect(Math.abs(ts - Date.now() / 1000)).toBeLessThan(5);
+    expect(signed.h.get("webhook-signature")).toBe(await signWebhook(secret, "d-42", ts, signed.body));
+    expect(JSON.parse(signed.body)).toMatchObject({ kind: "incident.opened", incident: { id: "i1" } });
+    expect(plain.h.get("webhook-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(plain.h.get("webhook-signature")).toBeNull();
+  });
+
+  it("keeps the message id when a failed delivery is retried", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const due = [{
+      delivery: { id: "row-7", kind: "incident.opened", attempts: 1, organizationId: "o" },
+      incident: { id: "i1", title: "API is down", startedAt: new Date(), resolvedAt: null, acknowledgedAt: null, auto: true, severity: "major", reminderCount: 0, escalationLevel: 0 },
+      monitor: { id: "m1", projectId: null, name: "API", target: "https://x" },
+      channel: { id: "c1", organizationId: "o", type: "webhook", name: "hook", config: { url: "https://hooks.example.test/w", secret }, enabled: true },
+    }];
+    await retryDeliveries({ claimRetries: async () => due, finishDelivery: async () => {} } as never);
+    await retryDeliveries({ claimRetries: async () => due, finishDelivery: async () => {} } as never);
+    expect(fetchMock.mock.calls.map((c) => new Headers(c[1].headers).get("webhook-id"))).toEqual(["row-7", "row-7"]);
   });
 });
 

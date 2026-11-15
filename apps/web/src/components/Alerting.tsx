@@ -15,7 +15,7 @@ const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "email", label: "Email", desc: "Send alerts to an address or on-call alias." },
   { id: "telegram", label: "Telegram", desc: "Message a chat or group through your bot." },
   { id: "pagerduty", label: "PagerDuty", desc: "Trigger and resolve incidents on a service." },
-  { id: "webhook", label: "Webhook", desc: "POST a JSON payload to any URL." },
+  { id: "webhook", label: "Webhook", desc: "POST a signed JSON payload to any URL." },
   { id: "push", label: "Mobile app (push)", desc: "Notify the OpenUptime app on your team's phones." },
 ];
 const svg = (d: React.ReactNode) => (
@@ -49,6 +49,7 @@ export default function Alerting() {
   const [editId, setEditId] = useState("");
   const [testing, setTesting] = useState("");
   const [note, setNote] = useState("");
+  const [secretNote, setSecretNote] = useState("");
   const [log, setLog] = useState<AlertDelivery[] | null>(null);
   const [days, setDays] = useState(30);
   const [push, setPush] = useState(false);
@@ -68,9 +69,10 @@ export default function Alerting() {
   useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", deviceKey: "", tag: "", auto: false };
-  const openAdd = () => { setErr(""); setEditId(""); setF(blank); setAdding(true); };
+  const openAdd = () => { setErr(""); setSecretNote(""); setEditId(""); setF(blank); setAdding(true); };
   const openEdit = (c: Channel) => {
     setErr("");
+    setSecretNote("");
     setEditId(c.id);
     setF({ ...blank, type: c.type, name: c.name, url: c.config.url ?? "", to: c.config.to ?? "", botToken: c.config.botToken ?? "", chatId: c.config.chatId ?? "", routingKey: c.config.routingKey ?? "", secret: c.config.secret ?? "", topic: c.config.topic ?? "", token: c.config.token ?? "", priority: c.config.priority ?? "3", deviceKey: c.config.deviceKey ?? "", tag: c.config.tag ?? "", auto: !!c.autoEnable });
     setAdding(true);
@@ -87,10 +89,19 @@ export default function Alerting() {
         : f.type === "apprise" ? { url: f.url, tag: f.tag, token: f.token }
         : f.type === "ntfy" ? { url: f.url || "https://ntfy.sh", topic: f.topic, token: f.token, priority: f.priority }
         : f.type === "push" ? {}
-        : f.type === "lark" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
+        : f.type === "lark" || f.type === "webhook" ? { url: f.url, ...(f.secret ? { secret: f.secret } : {}) }
         : { url: f.url };
       if (editId) await api.updateChannel(editId, { name: f.name, config, autoEnable: f.auto });
-      else await api.createChannel({ type: f.type, name: f.name, config, autoEnable: f.auto });
+      else {
+        const created = await api.createChannel({ type: f.type, name: f.name, config, autoEnable: f.auto });
+        // the receiver needs the generated secret to verify requests, so it is shown before the dialog closes
+        if (created.type === "webhook" && created.config.secret) {
+          await load();
+          openEdit(created);
+          setSecretNote(t("Channel added. Copy the signing secret to your receiver to verify requests."));
+          return;
+        }
+      }
       setF(blank);
       await load();
       setAdding(false);
@@ -249,6 +260,20 @@ export default function Alerting() {
               <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
               <label className="fld">{t("Notification priority")}<select className="in" value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>{["1", "2", "3", "4", "5"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
             </>}
+            {f.type === "webhook" && (editId ? (
+              <div className="fld">{t("Signing secret")}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input className="in mono" readOnly value={f.secret || t("Not set: requests are not signed")} onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
+                  {f.secret && f.secret.startsWith("whsec_") && <button type="button" className="btn sm" onClick={() => navigator.clipboard?.writeText(f.secret).then(() => setSecretNote(t("Copied")))}>{t("Copy")}</button>}
+                  <button type="button" className="btn sm" onClick={async () => {
+                    if (f.secret && !confirm(t("Requests signed with the current secret will stop verifying. Rotate it?"))) return;
+                    try { const ch = await api.rotateChannelSecret(editId); setF({ ...f, secret: ch.config.secret ?? "" }); setSecretNote(t("New secret created. Update your receiver.")); await load(); } catch (e) { setErr((e as Error).message); }
+                  }}>{f.secret ? t("Rotate") : t("Generate")}</button>
+                </div>
+                <small className="faint">{t("Each request carries webhook-id, webhook-timestamp and webhook-signature headers in the Standard Webhooks format.")}</small>
+                {secretNote && <small className="ok-note">{secretNote}</small>}
+              </div>
+            ) : <p className="muted" style={{ margin: 0 }}>{t("A signing secret is created with the channel, so your receiver can verify each request.")}</p>)}
             {f.type === "lark" && (
               <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>
             )}

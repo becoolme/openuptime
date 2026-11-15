@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "signed-webhooks", date: "2026-11-15", edition: "community",
+    title: { en: "Signed webhook alerts", zh: "Webhook 告警支持签名" },
+    summary: { en: "Webhook channels now sign every request, so your receiver can check that an alert really came from OpenUptime.", zh: "Webhook 渠道现在会为每个请求签名，接收端可以确认告警确实来自 OpenUptime。" },
+    points: [
+      { en: "Each request carries webhook-id, webhook-timestamp and webhook-signature headers in the Standard Webhooks format, so existing libraries can verify it.", zh: "每个请求都带有 Standard Webhooks 格式的 webhook-id、webhook-timestamp 和 webhook-signature 请求头，可直接用现成的库校验。" },
+      { en: "A retried delivery keeps its webhook-id, so a receiver can drop duplicates.", zh: "重试的投递沿用同一个 webhook-id，接收端可以据此去重。" },
+      { en: "A signing secret is created with each new webhook channel; owners and admins can copy or rotate it from the channel's settings.", zh: "新建 Webhook 渠道时会自动生成签名密钥，所有者和管理员可以在渠道设置中复制或轮换。" },
+      { en: "Webhook channels created earlier stay unsigned until you generate a secret for them.", zh: "此前创建的 Webhook 渠道在生成密钥之前仍不带签名。" },
+    ],
+    link: { href: "/docs/api#webhook-signatures", label: { en: "Read how to verify signatures", zh: "了解如何校验签名" } },
+  },
+  {
     id: "status-page-iframe", date: "2026-11-13", edition: "community",
     title: { en: "Embed a status page in an iframe", zh: "用 iframe 嵌入状态页" },
     summary: { en: "Add ?embed=1 to a status page address to get a compact layout you can place inside your own site.", zh: "在状态页地址后加上 ?embed=1，即可得到适合放进自己网站的精简布局。" },
