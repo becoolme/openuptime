@@ -5,6 +5,7 @@ import { readCapped } from "./netguard";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
+import { isPatternMode, KEYWORD_REGEX_CAPABILITY } from "./keyword";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -134,6 +135,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) needs.push([HTTP_REQUEST_CAPABILITY, "Probe upgrade required for HTTP request bodies and methods"]);
     if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
     if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
+    if (input.keyword && isPatternMode(input.keywordMode)) needs.push([KEYWORD_REGEX_CAPABILITY, "Probe upgrade required for keyword patterns"]);
     const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
     if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });

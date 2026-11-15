@@ -2,6 +2,7 @@ import { mcpConfigSchema, mcpToolsSchema } from "../../api/src/mcp-config";
 import { HTTP_METHODS, HTTP_REQUEST_CAPABILITY, requestBodyProblem } from "../../api/src/http-request";
 import { runCheck, type CheckInput } from "../../api/src/checker";
 import { JSON_ASSERT_CAPABILITY, jsonAssertionsSchema } from "../../api/src/json-assert";
+import { KEYWORD_MODES, KEYWORD_REGEX_CAPABILITY, keywordProblem, MAX_KEYWORD_LENGTH } from "../../api/src/keyword";
 import { targetProblem } from "../../api/src/netguard";
 import { parseStatusSpec, STATUS_SPEC_CAPABILITY } from "../../api/src/status-spec";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, probeHeadersPlausible, verifyProbe, verifyProbeEnvelope } from "../../api/src/probe-protocol";
@@ -35,9 +36,11 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   const timeoutMs = o.timeoutMs ?? 10000;
   if (!Number.isInteger(timeoutMs) || (timeoutMs as number) < (o.type === "mcp" ? 1 : 1000) || (timeoutMs as number) > 30000) return { error: "timeoutMs is outside the permitted range" };
   const keyword = o.keyword ?? null;
-  if (keyword !== null && (typeof keyword !== "string" || keyword.length > 500)) return { error: "keyword must be a string" };
+  if (keyword !== null && (typeof keyword !== "string" || keyword.length > MAX_KEYWORD_LENGTH)) return { error: "keyword must be a string" };
   const keywordMode = o.keywordMode ?? "contains";
-  if (keywordMode !== "contains" && keywordMode !== "absent") return { error: "keywordMode must be contains or absent" };
+  if (typeof keywordMode !== "string" || !(KEYWORD_MODES as readonly string[]).includes(keywordMode)) return { error: `keywordMode must be ${KEYWORD_MODES.join(", ")}` };
+  const keywordInvalid = keyword ? keywordProblem(keyword as string, keywordMode) : null;
+  if (keywordInvalid) return { error: keywordInvalid };
   const expectedLocation = o.expectedLocation ?? null;
   if (expectedLocation !== null && (typeof expectedLocation !== "string" || expectedLocation.length > 2048)) return { error: "expectedLocation must be a string" };
   const headers = o.headers ?? {};
@@ -71,7 +74,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
  * function is deployed to.
  */
 export async function handleProbe(req: Request, o: { secret: string | undefined; region?: string }): Promise<Response> {
-  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY] });
+  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY, KEYWORD_REGEX_CAPABILITY] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
   const declared = req.headers.get("content-length");

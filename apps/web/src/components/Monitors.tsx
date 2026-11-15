@@ -5,7 +5,7 @@ import Select from "./Select";
 import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { ago, api, everyShort, type Channel, type Incident, type JsonAssertion, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type JsonAssertion, type KeywordMode, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
@@ -390,7 +390,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
     requestBody: monitor?.requestBody ?? "", domainExpiryWarnDays: monitor?.domainExpiryWarnDays ?? 30, method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, acceptedStatuses: monitor?.acceptedStatuses ?? "", expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
-    keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
+    keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as KeywordMode),
     dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
     recoveryThreshold: monitor?.recoveryThreshold ?? 1, timeoutMs: monitor?.timeoutMs ?? 10000,
     graceSec: monitor?.graceSec ?? 0, channelIds: monitor?.channelIds ?? ([] as string[]),
@@ -443,6 +443,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const choices = [...places, ...(monitor?.regions ?? []).filter((r) => !known.has(r)).map((id) => ({ id, name: id }))];
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
+  const isPattern = f.keywordMode === "matches" || f.keywordMode === "not_matches";
 
   const previewRegion = f.regions[0] ?? "auto";
   const previewRegionName = places.find((place) => place.id === previewRegion)?.name ?? (previewRegion === "auto" ? t("Auto") : previewRegion);
@@ -593,12 +594,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </label>
         )}
         {(f.type === "http" || f.type === "websocket") && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 10 }}>
-            <label className="fld">{t(f.type === "websocket" ? (f.wsMessage ? "Reply must contain (optional)" : "First message must contain (optional)") : "Response must contain (optional)")}
-              <input className="in mono" value={f.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder="OK" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 170px", gap: 10 }}>
+            <label className="fld">{isPattern ? t("Pattern (optional)") : t(f.type === "websocket" ? (f.wsMessage ? "Reply must contain (optional)" : "First message must contain (optional)") : "Response must contain (optional)")}
+              <input className="in mono" value={f.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder={isPattern ? "(?i)status:\\s*ok" : "OK"} spellCheck={false} />
+              {isPattern && <small className="faint">{t("RE2 syntax, matched anywhere in the text. Start with (?i) to ignore case. Backreferences and lookarounds are not supported.")}</small>}
             </label>
             <label className="fld">{t("Mode")}
-              <Select className="in" value={f.keywordMode as string} onChange={(v) => set("keywordMode", v as "contains" | "absent")} options={[{ value: "contains", label: t("must contain") }, { value: "absent", label: t("must not contain") }]} />
+              <Select className="in" value={f.keywordMode as string} onChange={(v) => set("keywordMode", v as KeywordMode)} options={[{ value: "contains", label: t("must contain") }, { value: "absent", label: t("must not contain") }, { value: "matches", label: t("must match pattern") }, { value: "not_matches", label: t("must not match pattern") }]} />
             </label>
           </div>
         )}

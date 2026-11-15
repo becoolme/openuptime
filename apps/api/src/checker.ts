@@ -10,6 +10,7 @@ import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
 import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
 import { statusAccepted, statusRule, statusRuleText } from "./status-spec";
+import { keywordOutcome } from "./keyword";
 import type { JsonAssertion } from "@openuptime/repo";
 
 export type CheckInput = {
@@ -151,9 +152,8 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
   const latencyMs = Date.now() - started;
   if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${statusRuleText(m)}, got ${res.status}${where}` };
   if (m.keyword) {
-    const found = body.includes(m.keyword);
-    const wantFound = m.keywordMode !== "absent";
-    if (found !== wantFound) return { ok: false, statusCode: res.status, latencyMs, error: wantFound ? `Keyword "${m.keyword}" not found in response` : `Unexpected keyword "${m.keyword}" found in response` };
+    const kw = keywordOutcome(m.keyword, m.keywordMode, body, "response");
+    if (!kw.ok) return { ok: false, statusCode: res.status, latencyMs, error: kw.error };
   }
   let failed = asserts.length ? jsonAssertionProblem(body, asserts) : null;
   // only the first MAX_BODY_BYTES are read: a longer document is cut off, not malformed

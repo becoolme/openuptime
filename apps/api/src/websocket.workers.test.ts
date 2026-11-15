@@ -126,6 +126,7 @@ describe("websocket checks on Workers", () => {
     expect(await check("/echo", { wsMessage: "status: healthy", keyword: "healthy" })).toMatchObject({ ok: true, statusCode: 101 });
     expect(await check("/echo", { wsMessage: "status: healthy", keyword: "sick" })).toMatchObject({ ok: false, error: 'Keyword "sick" not found in the reply' });
     expect(await check("/echo", { wsMessage: "status: error", keyword: "error", keywordMode: "absent" })).toMatchObject({ ok: false, error: 'Unexpected keyword "error" found in the reply' });
+    expect(await check("/echo", { wsMessage: "status: healthy", keyword: "status:\\s+heal", keywordMode: "matches" })).toMatchObject({ ok: true });
   });
 
   it("waits for the first message when nothing is sent", async () => {

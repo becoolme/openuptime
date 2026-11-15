@@ -214,6 +214,8 @@ export const zh: Record<string, string> = {
   "Publish a status page": "发布状态页", "Give customers a place to check.": "给客户一个自助查看的地方。",
   // checks, grace, routing, maintenance
   "Response must contain (optional)": "响应内容须包含（可选）", Mode: "模式", "must contain": "必须包含", "must not contain": "必须不含",
+  "must match pattern": "须匹配正则", "must not match pattern": "不得匹配正则", "Pattern (optional)": "正则表达式（可选）",
+  "RE2 syntax, matched anywhere in the text. Start with (?i) to ignore case. Backreferences and lookarounds are not supported.": "使用 RE2 语法，在全文任意位置匹配。以 (?i) 开头可忽略大小写。不支持反向引用和环视。",
   "Grace period": "宽限时间", None: "无", Alert: "告警渠道", "none selected = all channels": "不选 = 全部渠道",
   Maintenance: "维护窗口", "Checks keep running, but no incidents or alerts are created during a window.": "窗口内检查照常运行，但不会产生事件或告警。",
   Window: "窗口", Covers: "覆盖范围", State: "状态", "All monitors": "全部监控", "No maintenance windows.": "暂无维护窗口。",

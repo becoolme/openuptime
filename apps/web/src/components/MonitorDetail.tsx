@@ -210,7 +210,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               {probable && <div><span>{t("Regions")}</span><b className="mono">{configured.map(regionName).join(", ")}</b></div>}
               {m.type === "dns" && <><div><span>{t("DNS record type")}</span><b>{m.dnsRecordType ?? "A"}</b></div>{m.dnsExpectedValue && <div><span>{t("Expected DNS value (optional)")} · {t(m.dnsMatchMode === "contains" ? "Contains text" : "Exact value")}</span><b className="mono">{m.dnsExpectedValue}</b></div>}</>}
               {m.type === "websocket" && m.wsMessage && <div><span>{t("Message sent")}</span><b className="mono">{m.wsMessage}</b></div>}
-              {m.keyword && <div><span>{t("Keyword")}</span><b className="mono">{m.keywordMode === "absent" ? "≠ " : ""}{m.keyword}</b></div>}
+              {m.keyword && <div><span>{t("Keyword")}</span><b className="mono">{m.keywordMode === "absent" || m.keywordMode === "not_matches" ? "≠ " : ""}{m.keywordMode === "matches" || m.keywordMode === "not_matches" ? `/${m.keyword}/` : m.keyword}</b></div>}
               {m.type === "heartbeat" && <div><span>{t("Grace period")}</span><b className="mono">{every(m.graceSec ?? 0)}</b></div>}
             </div>
           </div>

@@ -94,7 +94,7 @@ export const monitor = pgTable(
     lastRunGeneration: integer("last_run_generation").notNull().default(0),
     paused: boolean("paused").notNull().default(false),
     heartbeatToken: text("heartbeat_token"),
-    /** http: response body must contain (or, with keywordMode "absent", must not contain) this text; websocket: the first message back */
+    /** http: response body must contain (or, with keywordMode "absent", must not contain) this text, or with "matches"/"not_matches" match this RE2 pattern; websocket: the first message back */
     keyword: text("keyword"),
     keywordMode: text("keyword_mode").notNull().default("contains"),
     /** http, with a redirect status expected: where the redirect must lead (absolute URL, or a path on the target's site) */

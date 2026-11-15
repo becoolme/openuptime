@@ -9,6 +9,7 @@
  */
 
 import type { CheckInput, CheckOutcome } from "./checker";
+import { keywordOutcome } from "./keyword";
 import { checkUserAgent, connectFailure, forgetResolved, guardAddresses, isWorkers } from "./netguard";
 
 /** How much of one message is kept when looking for a keyword. The rest of a larger message is not waited for. */
@@ -330,13 +331,8 @@ export async function websocketCheck(m: CheckInput, started: number): Promise<Ch
     const latencyMs = Date.now() - started;
     if ("closed" in reply) return { ok: false, statusCode: 101, latencyMs, error: `Connection closed before ${message ? "a reply" : "a message"} arrived${closedText(reply.closed)}` };
     if (!m.keyword) return { ok: true, statusCode: 101, latencyMs };
-    const found = reply.message.includes(m.keyword);
-    const wantFound = m.keywordMode !== "absent";
-    const ok = found === wantFound;
-    return {
-      ok, statusCode: 101, latencyMs,
-      error: ok ? undefined : wantFound ? `Keyword "${m.keyword}" not found in ${message ? "the reply" : "the first message"}` : `Unexpected keyword "${m.keyword}" found in ${message ? "the reply" : "the first message"}`,
-    };
+    const kw = keywordOutcome(m.keyword, m.keywordMode, reply.message, message ? "the reply" : "the first message");
+    return kw.ok ? { ok: true, statusCode: 101, latencyMs } : { ok: false, statusCode: 101, latencyMs, error: kw.error };
   };
   try {
     return await Promise.race([run(), timeout]);
