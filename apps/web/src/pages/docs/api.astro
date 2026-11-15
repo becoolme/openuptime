@@ -79,12 +79,13 @@ const groups: Group[] = [
   },
   {
     id: "channels", en: "Channels", zh: "告警渠道",
-    noteEn: "config depends on type: email { to }, slack { url }, discord { url }, teams { url }, ntfy { url, topic, token?, priority? (1–5 as a string) }, bark { deviceKey, url? }, apprise { url, tag?, token? }, lark { url, secret? }, webhook { url }, telegram { botToken, chatId }, pagerduty { routingKey }. Channel configs contain secrets and are returned as stored. A channel with autoEnable is added to the channelIds of every monitor created afterwards (in its project, or in any project for a workspace-wide channel), on top of any ids given; a monitor whose channelIds is empty alerts every enabled channel.",
-    noteZh: "config 取决于 type：email { to }、slack { url }、discord { url }、teams { url }、ntfy { url, topic, token?, priority?（字符串 1–5） }、bark { deviceKey, url? }、apprise { url, tag?, token? }、lark { url, secret? }、webhook { url }、telegram { botToken, chatId }、pagerduty { routingKey }。渠道配置含敏感信息，按存储内容原样返回。",
+    noteEn: "config depends on type: email { to }, slack { url }, discord { url }, teams { url }, ntfy { url, topic, token?, priority? (1–5 as a string) }, bark { deviceKey, url? }, apprise { url, tag?, token? }, lark { url, secret? }, webhook { url, secret? } (a whsec_ signing secret, generated when left out; see Webhook signatures), telegram { botToken, chatId }, pagerduty { routingKey }. Channel configs contain secrets and are returned as stored. A channel with autoEnable is added to the channelIds of every monitor created afterwards (in its project, or in any project for a workspace-wide channel), on top of any ids given; a monitor whose channelIds is empty alerts every enabled channel.",
+    noteZh: "config 取决于 type：email { to }、slack { url }、discord { url }、teams { url }、ntfy { url, topic, token?, priority?（字符串 1–5） }、bark { deviceKey, url? }、apprise { url, tag?, token? }、lark { url, secret? }、webhook { url, secret? }（whsec_ 签名密钥，不填则自动生成，见“Webhook 签名”）、telegram { botToken, chatId }、pagerduty { routingKey }。渠道配置含敏感信息，按存储内容原样返回。",
     eps: [
       { m: "GET", p: "/channels", en: "List the alert channels available in the project: workspace-wide ones (projectId null) and the project's own.", zh: "列出当前项目可用的告警渠道：工作区级渠道（projectId 为 null）和项目自己的渠道。", res: `[{ id, type, name, config, enabled, autoEnable, createdAt, projectId }]` },
       { m: "POST", p: "/channels", en: "Create a channel. Returns 201.", zh: "创建渠道。返回 201。", req: `type     "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "discord" | "teams" | "ntfy" | "bark" | "apprise"\nname     string, 1-80\nconfig   object   (default {})\nenabled  boolean  (default true)\nautoEnable  boolean  (default false)  new monitors start out alerting this channel\nscope    "workspace" | "project"  (default "workspace"; a project-limited key always creates a project channel)` },
       { m: "PATCH", p: "/channels/:id", en: "Update name, enabled, autoEnable or config.", zh: "更新名称、启用状态、autoEnable 或配置。", req: `name     string, 1-80\nenabled  boolean\nautoEnable  boolean\nconfig   object` },
+      { m: "POST", p: "/channels/:id/rotate-secret", en: "Owners and admins: give a webhook channel a new signing secret and return the channel. The old secret stops working at once.", zh: "所有者和管理员：为 Webhook 渠道生成新的签名密钥并返回该渠道。旧密钥立即失效。" },
       { m: "POST", p: "/channels/:id/test", en: "Send a test message. Returns { ok: true }, or 502 with the delivery error.", zh: "发送测试消息。成功返回 { ok: true }，失败返回 502 及错误信息。" },
       { m: "DELETE", p: "/channels/:id", en: "Delete a channel. Returns 204, or 409 (code \"channel_in_use\", with the monitors) while a monitor still lists it in channelIds.", zh: "删除渠道。返回 204；仍有监控在 channelIds 中选用它时返回 409（code 为 \"channel_in_use\"，并附监控列表）。" },
     ],
@@ -219,6 +220,15 @@ GET    /api/push/devices           200 [ { "id", "token", "platform", "environme
 DELETE /api/push/devices/:token    204</code></pre>
     <p>Registering is an upsert by token: a token that was registered by another person moves to the caller. When push is configured, registering also gives every workspace where the caller is owner or admin a <em>Mobile app</em> channel (type <code>push</code>, on for new monitors) if it has none. A <code>push</code> channel alerts every member of its workspace who has a registered device; creating one while push is not configured fails with <code>400</code> and <code>code: "push_not_configured"</code>. A key limited to some projects registers devices but does not create channels.</p>
     <p><code>critical</code> (boolean, default <code>false</code>) opts the device in to critical alerts. Down alerts then go out with interruption level <code>critical</code> and a critical sound, which can break through Do Not Disturb; without it they are <code>time-sensitive</code>, and recoveries are always <code>active</code>. Leaving <code>critical</code> out when registering again keeps the stored choice. Alerts for one incident share an APNs collapse id, so reminders replace the earlier banner, and notifications are grouped per monitor. A token APNs reports as invalid is removed automatically, and a device that has not registered for 180 days is dropped.</p>
+    <h2 id="webhook-signatures">Webhook signatures</h2>
+    <p>Webhook channels send each alert as a JSON <code>POST</code> with headers in the <a href="https://www.standardwebhooks.com">Standard Webhooks</a> format:</p>
+<pre><code is:raw>webhook-id:         stays the same when a failed delivery is retried; drop a message whose id you have seen
+webhook-timestamp:  Unix seconds when this attempt was sent
+webhook-signature:  v1,&lt;base64 HMAC-SHA256&gt;</code></pre>
+    <p>The signature is computed over <code is:raw>{webhook-id}.{webhook-timestamp}.{raw body}</code>, with the key being the base64-decoded part of the channel's secret after <code>whsec_</code>. Compare it in constant time against each space-separated <code>v1,</code> value, and refuse timestamps more than five minutes from your clock. Verify against the raw request body, before parsing it. The Standard Webhooks libraries verify these requests as they are.</p>
+<pre><code is:raw>import { Webhook } from "standardwebhooks";
+const payload = new Webhook(secret).verify(rawBody, headers); // throws when the signature or timestamp is wrong</code></pre>
+    <p>A secret is generated when a webhook channel is created, unless you supply one (<code>whsec_</code> followed by 24 to 64 base64-encoded bytes). Owners and admins see it on the channel and can replace it with <code>POST /channels/:id/rotate-secret</code>. Webhook channels created before signing existed send no <code>webhook-signature</code> header until they get a secret this way.</p>
     <h2 id="examples">Examples</h2>
     <h3>Create a monitor</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \
@@ -279,6 +289,15 @@ GET    /api/push/devices           200 [ { "id", "token", "platform", "environme
 DELETE /api/push/devices/:token    204</code></pre>
     <p>注册按令牌做 upsert：之前由其他人注册的令牌会转移给当前调用者。已配置推送时，注册还会为调用者担任所有者或管理员的每个工作区创建一个名为 <em>Mobile app</em> 的渠道（类型 <code>push</code>，对新监控默认开启），已有则不重复创建。<code>push</code> 渠道会通知其工作区中所有已注册设备的成员；未配置推送时创建会返回 <code>400</code> 与 <code>code: "push_not_configured"</code>。仅限部分项目的密钥可以注册设备，但不会创建渠道。</p>
     <p><code>critical</code>（布尔值，默认 <code>false</code>）表示该设备选择接收紧急提醒。开启后，宕机提醒会以 <code>critical</code> 中断级别和紧急提示音发送，可以突破勿扰模式；未开启时为 <code>time-sensitive</code>，恢复通知始终为 <code>active</code>。再次注册时省略 <code>critical</code> 会保留之前的设置。同一事件的提醒共用一个 APNs collapse id，因此提醒会替换设备上之前的横幅，通知按监控分组。APNs 判定无效的令牌会被自动移除，180 天未重新注册的设备也会被清理。</p>
+    <h2 id="webhook-signatures-zh">Webhook 签名</h2>
+    <p>Webhook 渠道以 JSON <code>POST</code> 发送每条告警，并带上 <a href="https://www.standardwebhooks.com">Standard Webhooks</a> 格式的请求头：</p>
+<pre><code is:raw>webhook-id:         同一次投递失败重试时保持不变；收到见过的 id 可直接丢弃
+webhook-timestamp:  本次尝试发出时的 Unix 秒数
+webhook-signature:  v1,&lt;base64 HMAC-SHA256&gt;</code></pre>
+    <p>签名内容为 <code is:raw>{webhook-id}.{webhook-timestamp}.{原始请求体}</code>，密钥是渠道密钥中 <code>whsec_</code> 之后部分经 base64 解码得到的字节。请用常量时间比较，逐个核对以空格分隔的 <code>v1,</code> 值，并拒绝与本地时钟相差超过五分钟的时间戳。校验要基于原始请求体，在解析 JSON 之前进行。Standard Webhooks 的各语言库可直接校验这些请求。</p>
+<pre><code is:raw>import { Webhook } from "standardwebhooks";
+const payload = new Webhook(secret).verify(rawBody, headers); // 签名或时间戳不对时抛出异常</code></pre>
+    <p>创建 Webhook 渠道时会自动生成密钥，也可以自行提供（<code>whsec_</code> 加 24 到 64 字节的 base64 编码）。所有者和管理员可以在渠道上查看密钥，并通过 <code>POST /channels/:id/rotate-secret</code> 更换。签名功能上线前创建的 Webhook 渠道不会带 <code>webhook-signature</code> 请求头，直到以这种方式获得密钥。</p>
     <h2 id="examples-zh">示例</h2>
     <h3>创建监控项</h3>
     <pre><code is:raw>curl -X POST https://openuptime.app/api/monitors \

@@ -7,6 +7,7 @@ import type { AppEnv } from "../env";
 import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
 import { maskConfig, restoreConfig, sameJson } from "../secrets";
+import { isWebhookSecret, newWebhookSecret } from "../webhook-signing";
 
 const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy", "bark", "apprise"] as const;
 type ChannelType = (typeof TYPES)[number];
@@ -36,7 +37,8 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
     tag: z.string().trim().max(100).regex(/^[A-Za-z0-9_, -]*$/, "Use letters, digits, spaces, commas, underscores or hyphens").transform((v) => v || undefined).optional(),
     token: z.string().trim().max(500).regex(/^[\x20-\x7E]*$/, "Use printable ASCII characters only").transform((v) => v || undefined).optional(),
   }).refine((v) => !v.token || v.url.toLowerCase().startsWith("https://"), { path: ["token"], message: "An access token is only sent to an https:// server" }),
-  webhook: z.object({ url }),
+  // requests are signed with this secret; one is generated when a channel is created without it
+  webhook: z.object({ url, secret: z.string().trim().refine(isWebhookSecret, "Use a whsec_ secret of 24 to 64 base64-encoded bytes").optional() }),
   lark: z.object({ url, secret: z.string().max(200).optional() }),
   telegram: z.object({ botToken: z.string().trim().min(1).max(200), chatId: z.string().trim().min(1).max(100) }),
   pagerduty: z.object({ routingKey: z.string().trim().min(1).max(200) }),
@@ -75,6 +77,7 @@ export const channels = new Hono<AppEnv>()
     if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
     const refused = await configProblem(cfg.data);
     if (refused) return c.json({ error: refused, code: "target_not_allowed" }, 400);
+    if (v.type === "webhook" && !cfg.data.secret) cfg.data.secret = newWebhookSecret();
     // a key limited to some projects cannot create what other projects would share
     const projectId = v.scope === "project" || c.get("projectScope") ? c.get("projectId") : null;
     const { scope: _scope, ...channel } = v;
@@ -89,6 +92,9 @@ export const channels = new Hono<AppEnv>()
       if (!current) return c.json({ error: "Not found" }, 404);
       // placeholders stand for the stored credential; settings that end up identical are not a change
       const next = restoreConfig(patch.config, current.config as Record<string, unknown>);
+      // leaving the secret out keeps it: signing stops only through rotation, never because a client forgot the field
+      const stored = current.config as Record<string, unknown>;
+      if (current.type === "webhook" && next.secret === undefined && stored.secret) next.secret = stored.secret;
       if (sameJson(next, current.config)) delete patch.config;
       else {
         // where alerts go (and the credentials used) is a manager's call; a member may still rename or toggle
@@ -102,6 +108,15 @@ export const channels = new Hono<AppEnv>()
     }
     const row = await repo.updateChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"), patch);
     return row ? c.json((await shown(c, [row]))[0]) : c.json({ error: "Not found" }, 404);
+  })
+  // replaces a webhook's signing secret (or gives an older webhook its first one); the old secret stops working at once
+  .post("/:id/rotate-secret", uuidParams, requireManager, async (c) => {
+    const repo = c.get("repo");
+    const current = await repo.getChannel(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
+    if (!current) return c.json({ error: "Not found" }, 404);
+    if (current.type !== "webhook") return c.json({ error: "Only webhook channels have a signing secret" }, 400);
+    const row = await repo.updateChannel(c.get("orgId"), current.id, c.get("projectScope"), { config: { ...(current.config as Record<string, unknown>), secret: newWebhookSecret() } });
+    return row ? c.json(row) : c.json({ error: "Not found" }, 404);
   })
   // sends a harmless test message so people can verify the destination before an outage
   .post("/:id/test", uuidParams, async (c) => {

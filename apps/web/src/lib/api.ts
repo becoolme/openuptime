@@ -248,6 +248,7 @@ export const api = {
   createChannel: (b: { type: Channel["type"]; name: string; config: Record<string, string>; autoEnable?: boolean }) =>
     req<Channel>("/channels", { method: "POST", body: JSON.stringify(b) }),
   updateChannel: (id: string, b: { name?: string; enabled?: boolean; autoEnable?: boolean; config?: Record<string, string> }) => req<Channel>(`/channels/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  rotateChannelSecret: (id: string) => req<Channel>(`/channels/${id}/rotate-secret`, { method: "POST" }),
   testChannel: (id: string) => req<{ ok: boolean }>(`/channels/${id}/test`, { method: "POST" }),
   deleteChannel: (id: string) => req<void>(`/channels/${id}`, { method: "DELETE" }),
   statusPages: () => req<StatusPage[]>("/status-pages"),

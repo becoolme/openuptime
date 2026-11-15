@@ -41,6 +41,23 @@ describe.skipIf(!url)("alert channels: auto-enable and in-use deletion", () => {
     expect((await call("POST", "/channels", { type: "teams", name: "Missing", config: {} })).status).toBe(400);
     expect((await call("POST", "/channels", { type: "teams", name: "Private", config: { url: "http://127.0.0.1/hook" } })).status).toBe(400);
     expect((await call("DELETE", `/channels/${teams.body.id}`)).status).toBe(204);
+    // a webhook gets a signing secret on creation; leaving it out of an edit keeps it, rotation replaces it
+    const hook = await call("POST", "/channels", { type: "webhook", name: "Hook", config: { url: "https://example.com/hook" } });
+    expect(hook.status).toBe(201);
+    expect(hook.body.config.secret).toMatch(/^whsec_/);
+    const moved = await call("PATCH", `/channels/${hook.body.id}`, { config: { url: "https://example.com/hook2" } });
+    expect(moved.body.config).toEqual({ url: "https://example.com/hook2", secret: hook.body.config.secret });
+    const rotated = await call("POST", `/channels/${hook.body.id}/rotate-secret`);
+    expect(rotated.status).toBe(200);
+    expect(rotated.body.config.secret).toMatch(/^whsec_/);
+    expect(rotated.body.config.secret).not.toBe(hook.body.config.secret);
+    expect((await call("POST", "/channels", { type: "webhook", name: "Bad secret", config: { url: "https://example.com/hook", secret: "hunter2" } })).status).toBe(400);
+    const ownSecret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
+    expect((await call("POST", "/channels", { type: "webhook", name: "Own secret", config: { url: "https://example.com/hook", secret: ownSecret } })).body.config.secret).toBe(ownSecret);
+    const slack = await call("POST", "/channels", { type: "slack", name: "Slack", config: { url: "https://hooks.slack.com/services/x" } });
+    expect((await call("POST", `/channels/${slack.body.id}/rotate-secret`)).status).toBe(400);
+    expect((await call("DELETE", `/channels/${slack.body.id}`)).status).toBe(204);
+    expect((await call("DELETE", `/channels/${hook.body.id}`)).status).toBe(204);
     const ntfy = await call("POST", "/channels", { type: "ntfy", name: "ntfy", config: { url: "https://ntfy.sh", topic: "ops", token: "test-token" } });
     expect(ntfy.status).toBe(201);
     expect(ntfy.body.config).toEqual({ url: "https://ntfy.sh", topic: "ops", token: "test-token", priority: "3" });

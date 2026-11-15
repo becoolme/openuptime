@@ -4,6 +4,7 @@ import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
 import { guardedFetch, readCapped } from "./netguard";
+import { webhookHeaders } from "./webhook-signing";
 import { ttlCache } from "@openuptime/kit/ttlcache";
 
 type Event = {
@@ -26,6 +27,8 @@ type Event = {
   project?: { id: string; name: string };
   /** The workspace has more than one project, so the project's name is shown in the alert. */
   multiProject?: true;
+  /** The delivery row (or durable task) being sent: a webhook's message id, kept the same on every retry of it. */
+  deliveryId?: string;
 };
 
 const PROJECT_TTL_MS = 30_000;
@@ -79,19 +82,26 @@ const hostOf = (url: string) => {
 };
 
 /** Sends through the SSRF guard; errors name the host, never the full URL. */
-async function send(url: string, body: unknown) {
+async function send(url: string, body: unknown, init: RequestInit = json(body)) {
   try {
-    return (await guardedFetch(url, json(body))).res;
+    return (await guardedFetch(url, init)).res;
   } catch (e) {
     const name = (e as Error).name;
     throw new Error(name === "BlockedTarget" ? (e as Error).message : name === "TimeoutError" ? `${hostOf(url)} timed out` : `Could not reach ${hostOf(url)}`);
   }
 }
 
-async function post(url: string, body: unknown) {
-  const res = await send(url, body);
+async function post(url: string, body: unknown, init?: RequestInit) {
+  const res = await send(url, body, init);
   await res.body?.cancel().catch(() => {}); // only the status matters; do not hold the connection open for a body
   if (!res.ok) throw new Error(`${hostOf(url)} responded HTTP ${res.status}`);
+}
+
+/** The generic webhook: a JSON POST with Standard Webhooks headers, signed when the channel has a secret. */
+async function postWebhook(url: string, payload: unknown, id: string, secret?: string) {
+  const body = JSON.stringify(payload);
+  const headers = { "content-type": "application/json", ...(await webhookHeaders(id, body, secret)) };
+  await post(url, payload, { method: "POST", headers, body, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
 }
 
 /**
@@ -252,7 +262,7 @@ async function execute(repo: Repo, d: Pick<AlertDelivery, "id" | "kind" | "attem
       }
       if ((await withinEmails(meter, channel.organizationId, [channel])).skipped) throw new Skipped(SKIPPED);
     }
-    await deliver(channel, ev, alertText(ev), lang, repo, pushed);
+    await deliver(channel, { ...ev, deliveryId: d.id }, alertText(ev), lang, repo, pushed);
     await repo.finishDelivery(d.id, { status: "sent", error: null, message: null });
     return true;
   } catch (e) {
@@ -522,7 +532,8 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       break;
     case "webhook":
       need(cfg.url, "webhook URL");
-      await post(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) });
+      // a delivery that was not queued (a channel test, or a log that could not be written) gets an id of its own
+      await postWebhook(cfg.url!, { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) }, ev.deliveryId ?? crypto.randomUUID(), cfg.secret || undefined);
       break;
     case "telegram":
       need(cfg.botToken && cfg.chatId, "bot token or chat id");
@@ -763,7 +774,7 @@ export async function deliverMcpAlertTask(repo: Repo, task: McpAlertTask, entitl
     if (channel.type === "email") await meter();
     const lang = await languageFor(repo, channel);
     if (!(await repo.renewMcpAlertLease(task.id, task.leaseToken))) throw new Error("MCP alert lease lost");
-    await deliver(channel, ev, alertText(ev), lang, repo, pushed);
+    await deliver(channel, { ...ev, deliveryId: task.id }, alertText(ev), lang, repo, pushed);
     return;
   }
   const subscribers = await repo.subscribersFor(task.organizationId, task.monitorId);
