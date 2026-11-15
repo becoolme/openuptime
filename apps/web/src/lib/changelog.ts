@@ -35,7 +35,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "Choose “Custom list or range” under Expected status and enter something like 200-299,401 or 2xx,3xx.", zh: "在“期望状态码”中选择“自定义列表或范围”，填写 200-299,401 或 2xx,3xx 这样的内容。" },
       { en: "Prefix ! to leave a status out, as in 200-499,!404; a list of exclusions alone, such as !5xx, accepts every other status.", zh: "在前面加 ! 可以排除某个状态码，例如 200-499,!404；只写排除项（如 !5xx）时，其余状态码都算正常。" },
-      { en: "When the list accepts a redirect status, the redirect is checked instead of followed, and its destination can still be required.", zh: "列表包含跳转状态码时，检测的是跳转本身而不是跟随它，仍然可以要求特定的跳转目的地。" },
+      { en: "When the list accepts a redirect status, the redirect itself is checked and its destination is not fetched; you can still require where it points.", zh: "列表包含跳转状态码时，检测的是跳转本身，不会再请求跳转后的页面；仍然可以要求跳转指向特定地址。" },
       { en: "The API takes the same list as acceptedStatuses, and imports from Uptime Kuma keep their accepted status codes.", zh: "API 用 acceptedStatuses 字段接收同样的列表，从 Uptime Kuma 导入时也会保留其接受的状态码。" },
     ],
     upgrade: { en: "Regional probes need updating before a monitor with a status list can run from them; until then that region reports that an upgrade is required.", zh: "自建的区域探针需要更新后才能执行带状态码列表的监控；在此之前，该区域会提示需要升级探针。" },
