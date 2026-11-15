@@ -9,6 +9,7 @@ import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
 import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
+import { statusAccepted, statusRule, statusRuleText } from "./status-spec";
 import type { JsonAssertion } from "@openuptime/repo";
 
 export type CheckInput = {
@@ -20,6 +21,8 @@ export type CheckInput = {
   method: string;
   requestBody?: string | null;
   expectedStatus: number;
+  /** http: statuses that count as healthy, such as "200-299,401" or "!5xx"; when set it replaces expectedStatus */
+  acceptedStatuses?: string | null;
   timeoutMs: number;
   keyword?: string | null;
   keywordMode?: string;
@@ -116,7 +119,9 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
   const headers = new Headers({ "user-agent": checkUserAgent(), accept: "*/*", ...m.headers });
   // The runtime owns framing: user-provided lengths can disagree with UTF-8 bytes.
   headers.delete("content-length");
-  const expectRedirect = REDIRECT_STATUSES.includes(m.expectedStatus);
+  const rule = statusRule(m);
+  // a list that accepts a redirect wants the redirect itself checked, not where it leads
+  const expectRedirect = REDIRECT_STATUSES.some((s) => statusAccepted(rule, s));
   const { res, url } = await guardedFetch(
     m.target,
     { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers },
@@ -124,8 +129,8 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
   );
   // when redirects were followed, say where we ended up: a 404 usually comes from the final hop, not the URL typed
   const where = url !== m.target ? ` at ${url}` : "";
-  const statusOk = res.status === m.expectedStatus || (m.expectedStatus === 200 && res.status >= 200 && res.status < 300);
-  if (statusOk && expectRedirect && m.expectedLocation) {
+  const statusOk = statusAccepted(rule, res.status);
+  if (statusOk && expectRedirect && m.expectedLocation && REDIRECT_STATUSES.includes(res.status)) {
     const got = resolveUrl(res.headers.get("location") ?? "", url);
     const want = resolveUrl(m.expectedLocation, m.target);
     if (got !== want) {
@@ -137,14 +142,14 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
   if ((!m.keyword && !asserts.length) || m.method === "HEAD") {
     await res.body?.cancel();
     const latencyMs = Date.now() - started;
-    if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
+    if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${statusRuleText(m)}, got ${res.status}${where}` };
     // a HEAD answer has no body: assertions on it could never be checked, so they fail instead of passing unseen
     if (asserts.length) return { ok: false, statusCode: res.status, latencyMs, error: "JSON assertions need a response body; use GET instead of HEAD" };
     return { ok: true, statusCode: res.status, latencyMs };
   }
   const body = await readCapped(res, MAX_BODY_BYTES);
   const latencyMs = Date.now() - started;
-  if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${m.expectedStatus}, got ${res.status}${where}` };
+  if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${statusRuleText(m)}, got ${res.status}${where}` };
   if (m.keyword) {
     const found = body.includes(m.keyword);
     const wantFound = m.keywordMode !== "absent";

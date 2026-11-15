@@ -242,7 +242,7 @@ export const zh: Record<string, string> = {
   "Header value": "头的值",
   "Add header": "添加请求头",
   "Too many attempts. Please try again later.": "尝试次数过多，请稍后再试。",
-  "Edit monitor": "编辑监控", "Expected status": "期望状态码", "Redirect must lead to (optional)": "跳转目的地（可选）", "The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.": "不会跟随跳转：只检查状态码和 Location。留空表示接受任意目的地。", "Redirects to": "跳转到", "Failures before incident": "连续失败几次后开事件",
+  "Edit monitor": "编辑监控", "Expected status": "期望状态码", "Redirect must lead to (optional)": "跳转目的地（可选）", "The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.": "不会跟随跳转：只检查状态码和 Location。留空表示接受任意目的地。", "Redirects to": "跳转到", "Custom list or range…": "自定义列表或范围…", "Healthy statuses": "视为正常的状态码", "Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.": "用逗号分隔状态码、范围和类别，例如 200-299,401 或 2xx,3xx。前面加 ! 表示排除：200-499,!404。只写排除项时，其余状态码都算正常：!5xx。", "Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.": "列表包含跳转状态码（301、302、303、307 或 308）时生效：此时不跟随跳转，而是检查 Location。留空表示接受任意目的地。", "Failures before incident": "连续失败几次后开事件",
   Subscribers: "订阅者", "No subscribers yet.": "还没有订阅者。", Confirmed: "已确认", Pending: "待确认",
   "Signing in…": "登录中…",
   "Creating account…": "正在创建账号…",

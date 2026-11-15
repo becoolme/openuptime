@@ -51,7 +51,7 @@ import Doc from "../../layouts/Doc.astro";
     <pre><code is:raw>scheduler ──signed POST──▶ probe (eu-central) ──▶ your target
           ──signed POST──▶ probe (us-east)    ──▶ your target
           ◀──── { ok, statusCode, latencyMs, error } ────</code></pre>
-    <p>The scheduler sends the check (type, target, method, expected status, keyword, timeout and headers) to each probe over HTTPS. The probe runs it and answers with the outcome. Probes are stateless: they store nothing and hold no database credentials.</p>
+    <p>The scheduler sends the check (type, target, method, expected statuses, keyword, timeout and headers) to each probe over HTTPS. The probe runs it and answers with the outcome. Probes are stateless: they store nothing and hold no database credentials.</p>
     <p>Requests are signed with <code>HMAC-SHA256</code> over <code>timestamp.body</code> using a shared secret (<code>PROBE_SECRET</code>), and a timestamp more than 60 seconds off is rejected, so a captured request cannot be replayed later. Without a valid signature a probe would be an open proxy, so it answers 401. A probe refuses private and internal targets by default. Only its operator can enable private-target access; MCP additionally requires an administrator-approved private region on the coordinator.</p>
     <h2 id="run">Running your own probes</h2>
     <p>On the hosted service the available regions are already set up. When you self-host, you run the probes yourself. A probe is the small app in <code>apps/probe</code>, and it runs anywhere you can run Node:</p>

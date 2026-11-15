@@ -385,9 +385,11 @@ const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp"];
 
 /** Create a monitor, or edit one when `monitor` is given (its type is fixed). */
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
+  // a list or range of statuses instead of one; the server checks the syntax
+  const [customStatus, setCustomStatus] = useState(!!monitor?.acceptedStatuses);
   const [f, setF] = useState({
     name: monitor?.name ?? "", type: monitor?.type ?? ("http" as Monitor["type"]), target: monitor?.target ?? "https://",
-    requestBody: monitor?.requestBody ?? "", domainExpiryWarnDays: monitor?.domainExpiryWarnDays ?? 30, method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
+    requestBody: monitor?.requestBody ?? "", domainExpiryWarnDays: monitor?.domainExpiryWarnDays ?? 30, method: monitor?.method ?? "GET", intervalSec: monitor?.intervalSec ?? 60, expectedStatus: monitor?.expectedStatus ?? 200, acceptedStatuses: monitor?.acceptedStatuses ?? "", expectedLocation: monitor?.expectedLocation ?? "", failureThreshold: monitor?.failureThreshold ?? 3,
     keyword: monitor?.keyword ?? "", wsMessage: monitor?.wsMessage ?? "", keywordMode: monitor?.keywordMode ?? ("contains" as "contains" | "absent"),
     dnsRecordType: monitor?.dnsRecordType ?? "A", dnsExpectedValue: monitor?.dnsExpectedValue ?? "", dnsMatchMode: monitor?.dnsMatchMode ?? "exact",
     recoveryThreshold: monitor?.recoveryThreshold ?? 1, timeoutMs: monitor?.timeoutMs ?? 10000,
@@ -476,7 +478,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, expectedLocation: f.type === "http" && REDIRECTS.includes(f.expectedStatus) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [] };
+      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, acceptedStatuses: f.type === "http" && customStatus && f.acceptedStatuses.trim() ? f.acceptedStatuses.trim() : null, expectedLocation: f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [] };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         if (monitor.mcpConfigRedacted) { delete (patch as Partial<typeof patch>).target; delete (patch as Partial<typeof patch>).headers; }
@@ -541,7 +543,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             )}
             {f.type === "http" && (
               <label className="fld">{t("Expected status")}
-                <Select className="in mono" value={f.expectedStatus} onChange={(v) => set("expectedStatus", v)} options={statusOptions(f.expectedStatus)} />
+                <Select className="in mono" value={customStatus ? 0 : f.expectedStatus} onChange={(v) => { setCustomStatus(v === 0); if (v !== 0) set("expectedStatus", v); }} options={[...statusOptions(f.expectedStatus), { value: 0, label: t("Custom list or range…") }]} />
               </label>
             )}
             <label className="fld">{t("Failures before incident")}
@@ -560,10 +562,16 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <Select className="in" value={f.recoveryThreshold} onChange={(v) => set("recoveryThreshold", v)} options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
           <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.")}</span>
         </label>
-        {f.type === "http" && REDIRECTS.includes(f.expectedStatus) && (
+        {f.type === "http" && customStatus && (
+          <label className="fld">{t("Healthy statuses")}
+            <input className="in mono" value={f.acceptedStatuses} onChange={(e) => set("acceptedStatuses", e.target.value)} maxLength={200} placeholder="200-299,401" required />
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.")}</span>
+          </label>
+        )}
+        {f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && (
           <label className="fld">{t("Redirect must lead to (optional)")}
             <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{customStatus ? t("Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.") : t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
           </label>
         )}
         {f.type === "dns" && <>

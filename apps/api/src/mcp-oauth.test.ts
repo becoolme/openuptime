@@ -12,7 +12,7 @@ function savedMonitor(): Monitor {
   return { id: crypto.randomUUID(), organizationId: "fixture", projectId: null, name: "OAuth",
     intervalSec: 60, failureThreshold: 3, regions: ["auto"], status: "up", consecutiveFailures: 0, lastCheckedAt: null, nextCheckAt: new Date(), paused: false,
     heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, jsonAssertions: [], headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
-    slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, timeoutMs: 1000,
+    slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, acceptedStatuses: null, timeoutMs: 1000,
     mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { ...auth, mode: "refresh_token", refreshToken: "old-token" } } };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -73,7 +73,7 @@ describe("MCP unattended OAuth", () => {
     const input: Monitor = { id: crypto.randomUUID(), organizationId: "fixture", projectId: null, name: "OAuth",
       intervalSec: 60, failureThreshold: 3, regions: ["auto"], status: "up", consecutiveFailures: 0, lastCheckedAt: null, nextCheckAt: new Date(), paused: false,
       heartbeatToken: null, keyword: null, keywordMode: "contains", expectedLocation: null, jsonAssertions: [], headers: {}, wsMessage: null, graceSec: 0, channelIds: [], tags: [],
-      slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, timeoutMs: 1000, mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { ...auth, mode: "refresh_token", refreshToken: "old-token" } } };
+      slowThresholdMs: 1500, slowAlertAfter: 0, consecutiveSlow: 0, dependsOnMonitorId: null, minRegionsFailing: 0, createdAt: new Date(), type: "mcp", target, method: "GET", expectedStatus: 200, acceptedStatuses: null, timeoutMs: 1000, mcpConfig: { requiredTools: [], schemaCheck: false, toolCall: null, oauth: { ...auth, mode: "refresh_token", refreshToken: "old-token" } } };
     const current = { ...input, mcpConfig: { ...input.mcpConfig!, oauth: { ...input.mcpConfig!.oauth!, refreshToken: "current-token" } } };
     const rotate = vi.fn(async () => true);
     const tx = { rotateMcpRefreshToken: rotate } as unknown as Repo;

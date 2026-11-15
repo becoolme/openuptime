@@ -208,3 +208,38 @@ describe("redirect checks", () => {
     expect((await check("/new", { expectedStatus: 200, expectedLocation: "/nowhere" })).ok).toBe(true);
   });
 });
+
+describe("status lists", () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/old") { res.writeHead(301, { location: "/new" }); return res.end(); }
+    res.statusCode = req.url === "/new" ? 200 : Number(req.url!.slice(1)) || 404;
+    res.end("body");
+  });
+  let base = "";
+  beforeAll(async () => {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(() => void server.close());
+
+  const check = (path: string, acceptedStatuses: string, over: Partial<CheckInput> = {}) =>
+    runCheck({ type: "http", target: base + path, method: "GET", expectedStatus: 200, acceptedStatuses, timeoutMs: 3000, ...over });
+
+  it("passes on any listed status and names the list when it fails", async () => {
+    expect((await check("/401", "200-299,401")).ok).toBe(true);
+    const r = await check("/403", "200-299,401");
+    expect(r).toMatchObject({ ok: false, statusCode: 403, error: "Expected 200-299,401, got 403" });
+  });
+  it("applies exclusions", async () => {
+    expect((await check("/404", "!5xx")).ok).toBe(true);
+    expect((await check("/503", "!5xx")).ok).toBe(false);
+    expect((await check("/404", "200-499,!404")).ok).toBe(false);
+  });
+  it("follows redirects unless the list accepts one", async () => {
+    expect(await check("/old", "2xx")).toMatchObject({ ok: true, statusCode: 200 });
+    expect(await check("/old", "2xx,301")).toMatchObject({ ok: true, statusCode: 301 });
+    expect((await check("/old", "2xx,3xx", { expectedLocation: "/elsewhere" })).error).toMatch(/expected .*\/elsewhere/);
+    // a 2xx answer is not a redirect, so there is no destination to compare
+    expect((await check("/new", "2xx,3xx", { expectedLocation: "/elsewhere" })).ok).toBe(true);
+  });
+});

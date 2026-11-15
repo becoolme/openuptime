@@ -3,6 +3,7 @@ import { HTTP_METHODS, HTTP_REQUEST_CAPABILITY, requestBodyProblem } from "../..
 import { runCheck, type CheckInput } from "../../api/src/checker";
 import { JSON_ASSERT_CAPABILITY, jsonAssertionsSchema } from "../../api/src/json-assert";
 import { targetProblem } from "../../api/src/netguard";
+import { parseStatusSpec, STATUS_SPEC_CAPABILITY } from "../../api/src/status-spec";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, probeHeadersPlausible, verifyProbe, verifyProbeEnvelope } from "../../api/src/probe-protocol";
 
 /** Any request whose length is not vouched for by a valid envelope signature: every non-MCP check fits. */
@@ -29,6 +30,8 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   if (problem) return { error: problem };
   const expectedStatus = o.expectedStatus ?? 200;
   if (!Number.isInteger(expectedStatus) || (expectedStatus as number) < 100 || (expectedStatus as number) > 599) return { error: "expectedStatus is out of range" };
+  const acceptedStatuses = o.acceptedStatuses ?? null;
+  if (acceptedStatuses !== null && (typeof acceptedStatuses !== "string" || "error" in parseStatusSpec(acceptedStatuses))) return { error: "acceptedStatuses is not a valid status list" };
   const timeoutMs = o.timeoutMs ?? 10000;
   if (!Number.isInteger(timeoutMs) || (timeoutMs as number) < (o.type === "mcp" ? 1 : 1000) || (timeoutMs as number) > 30000) return { error: "timeoutMs is outside the permitted range" };
   const keyword = o.keyword ?? null;
@@ -53,7 +56,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   if (mcpConfig?.success && mcpConfig.data?.oauth) return { error: "Resolve MCP OAuth before dispatching to a probe" };
   return {
     input: {
-      type: o.type, target: o.target, method, expectedStatus: expectedStatus as number, timeoutMs: timeoutMs as number,
+      type: o.type, target: o.target, method, expectedStatus: expectedStatus as number, acceptedStatuses: acceptedStatuses as string | null, timeoutMs: timeoutMs as number,
       keyword: keyword as string | null, keywordMode, expectedLocation: expectedLocation as string | null, headers: Object.fromEntries(entries) as Record<string, string>,
       wsMessage: wsMessage as string | null, requestBody, jsonAssertions: jsonAssertions.data,
       ...(mcpConfig?.success ? { mcpConfig: mcpConfig.data } : {}),
@@ -68,7 +71,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
  * function is deployed to.
  */
 export async function handleProbe(req: Request, o: { secret: string | undefined; region?: string }): Promise<Response> {
-  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY] });
+  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
   const declared = req.headers.get("content-length");

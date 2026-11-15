@@ -69,6 +69,8 @@ export const monitor = pgTable(
     mcpObservation: jsonb("mcp_observation").$type<McpObservation>(),
     mcpGeneration: integer("mcp_generation").notNull().default(0),
     expectedStatus: integer("expected_status").notNull().default(200),
+    /** http: statuses that count as healthy, such as "200-299,401" or "!5xx"; when set it replaces expected_status */
+    acceptedStatuses: text("accepted_statuses"),
     intervalSec: integer("interval_sec").notNull().default(60),
     timeoutMs: integer("timeout_ms").notNull().default(10000),
     /** consecutive failures before an incident is opened */

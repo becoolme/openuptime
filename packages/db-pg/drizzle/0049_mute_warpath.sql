@@ -1,0 +1,1 @@
+ALTER TABLE "monitor" ADD COLUMN "accepted_statuses" text;
