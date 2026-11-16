@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "import-uptimerobot-uptime-kuma", date: "2026-11-16", edition: "community",
+    title: { en: "Import from UptimeRobot and Uptime Kuma", zh: "从 UptimeRobot 和 Uptime Kuma 导入" },
+    summary: { en: "Import an UptimeRobot getMonitors answer or an Uptime Kuma 1.x backup file as it is, and see before importing which monitors need setting up by hand.", zh: "直接导入 UptimeRobot getMonitors 的返回结果或 Uptime Kuma 1.x 备份文件，并在导入前看到哪些监控需要手动设置。" },
+    points: [
+      { en: "HTTP, keyword, port and heartbeat monitors carry over from both tools, plus DNS, push and simple JSON query monitors from Uptime Kuma.", zh: "两个工具的 HTTP、关键词、端口和心跳监控都能导入，Uptime Kuma 的 DNS、推送和简单 JSON 查询监控也可以。" },
+      { en: "The preview names the file format and gives each skipped monitor a reason, such as ICMP ping, Docker or database monitors.", zh: "预览会显示识别出的文件格式，并为每个被跳过的监控说明原因，例如 ICMP Ping、Docker 或数据库监控。" },
+      { en: "Each monitor keeps its original id, so importing the same file again skips what is already here.", zh: "每个监控都保留原工具中的 ID，再次导入同一个文件时会跳过已经存在的监控。" },
+      { en: "Settings that do not carry over, such as alert contacts, notifications, proxies and ignored certificate errors, are listed per monitor instead of being dropped silently.", zh: "无法导入的设置，例如告警联系人、通知、代理和忽略证书错误，会逐个监控列出，而不是悄悄丢弃。" },
+    ],
+    link: { href: "/docs/api", label: { en: "Read the import API reference", zh: "阅读导入接口说明" } },
+  },
+  {
     id: "keyword-patterns", date: "2026-11-15", edition: "community",
     title: { en: "Match keywords with regular expressions", zh: "关键词支持正则表达式" },
     summary: { en: "HTTP and WebSocket monitors can check the response against a regular expression, not only a fixed piece of text.", zh: "HTTP 和 WebSocket 监控除了查找固定文本，还可以用正则表达式检查响应内容。" },

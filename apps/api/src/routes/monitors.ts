@@ -14,6 +14,7 @@ import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 import { KEYWORD_MODES, keywordProblem, MAX_KEYWORD_LENGTH } from "../keyword";
+import { IMPORT_FORMATS, convertRecord, detectFormat, monitorsOf, type ImportFormat } from "../import-formats";
 
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { jsonAssertionsSchema } from "../json-assert";
@@ -125,7 +126,8 @@ const bulkBody = z.object({
 const IMPORT_MAX = 500;
 const sourceSchema = z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9._:-]+$/);
 export const monitorImportSchema = z.object({
-  source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to json. Per-row source takes precedence."),
+  source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to the format (json, uptimerobot or uptime-kuma). Per-row source takes precedence."),
+  format: z.enum(IMPORT_FORMATS).optional().describe("Shape of the records: json (OpenUptime fields), uptimerobot (monitors from the UptimeRobot v2 getMonitors answer) or uptime-kuma (monitorList of an Uptime Kuma 1.x backup). Detected from the records when omitted. Source monitor ids are kept as sourceId; settings without an equivalent are reported per row."),
   destination: z.object({ organizationId: z.string(), projectId: z.string().uuid() }).optional().describe("Optional on preview. For import_monitors, pass the destination returned by the preview: the import is then refused if the active workspace or project changed. Without it the monitors go to the active project."),
   monitors: z.array(z.record(z.string(), z.unknown())).min(1).max(IMPORT_MAX).describe("Monitor records. Give each a stable sourceId (or id). Source IDs ignore surrounding whitespace. Missing ids use a hash of type, name and target. Repeated identities are skipped, never overwritten."),
 });
@@ -287,9 +289,12 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     const expected = envelope.destination as { organizationId?: unknown; projectId?: unknown } | null;
     if (expected?.organizationId !== c.get("orgId") || expected?.projectId !== c.get("projectId")) return c.json({ error: "The import destination changed; preview again", code: "import_destination_changed" }, 409);
   }
-  const list = Array.isArray(raw) ? raw : envelope.monitors;
+  const list = monitorsOf(raw);
   if (!Array.isArray(list) || list.length < 1 || list.length > IMPORT_MAX) return c.json({ error: `Import between 1 and ${IMPORT_MAX} monitors` }, 400);
-  const defaultSource = sourceSchema.safeParse(envelope.source ?? "json");
+  const askedFormat = z.enum(IMPORT_FORMATS).optional().safeParse(envelope.format);
+  if (!askedFormat.success) return c.json({ error: `format must be one of ${IMPORT_FORMATS.join(", ")}` }, 400);
+  const format: ImportFormat = askedFormat.data ?? detectFormat(envelope, list);
+  const defaultSource = sourceSchema.safeParse(envelope.source ?? format);
   if (!defaultSource.success) return c.json({ error: "Invalid source namespace" }, 400);
   type Row = { index: number; name: string | null; source?: string; sourceId?: string; status: string; monitorId?: string | null; error?: string; warnings: string[]; type?: string; intervalSec?: number; regions?: string[] };
   const report: Row[] = [];
@@ -297,10 +302,19 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
   const plan = await c.get("entitlements").plan(c.get("orgId"));
   const aliases = new Set(["source", "sourceId", "id", "friendly_name", "friendlyName", "url", "hostname", "host", "port", "interval", "keyword_value", "expectedKeyword", "accepted_statuscodes"]);
   const lookups = new Map<string, Promise<string | null>>();
-  for (const [index, item] of list.entries()) {
+  for (const [index, original] of list.entries()) {
+    // another tool's record becomes ours first; what did not carry over is reported on the row
+    const converted = format === "json" ? { name: null, warnings: [] as string[], error: undefined } : convertRecord(format, original);
+    const item: unknown = format === "json" ? original : converted.record;
     const r = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
-    const row: Row = { index, name: typeof r.name === "string" ? r.name : null, status: "skipped", warnings: [] };
+    const row: Row = { index, name: converted.name ?? (typeof r.name === "string" ? r.name : null), status: "skipped", warnings: [...converted.warnings] };
     report.push(row);
+    if (converted.error) {
+      // still name the source record, so a refused row can be found in the original file
+      const id = original && typeof original === "object" ? (original as Record<string, unknown>).id : undefined;
+      if (typeof id === "string" || typeof id === "number") Object.assign(row, { source: defaultSource.data, sourceId: String(id).trim() });
+      row.error = converted.error; continue;
+    }
     // Like masked headers: never import OAuth credentials, and never turn an OAuth monitor into an unauthenticated one.
     const importedOAuth = r.mcpConfig && typeof r.mcpConfig === "object" ? (r.mcpConfig as Record<string, unknown>).oauth : null;
     if (importedOAuth !== undefined && importedOAuth !== null) { row.error = "MCP OAuth credentials are not imported; remove mcpConfig.oauth, import, then enter the OAuth settings on the monitor"; continue; }
@@ -367,7 +381,7 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
   const ready = report.filter((r) => r.status === "ready").length;
   const skipped = report.filter((r) => r.status === "skipped").map(({ index, name, error }) => ({ index, name, error }));
   const project = (await repo.listProjects(c.get("orgId"), c.get("projectScope"))).find((p) => p.id === c.get("projectId"));
-  const result = { destination: { organizationId: c.get("orgId"), projectId: c.get("projectId"), projectName: project?.name ?? null }, preview, created, duplicates, ready, skipped, report, canImport: !batch.limit && candidates.length > 0, autoChannelCount: auto.length, capacity: batch.limit };
+  const result = { format, destination: { organizationId: c.get("orgId"), projectId: c.get("projectId"), projectName: project?.name ?? null }, preview, created, duplicates, ready, skipped, report, canImport: !batch.limit && candidates.length > 0, autoChannelCount: auto.length, capacity: batch.limit };
   // same fields as the single-create 402 (error text, numeric limit, active, plan); the batch detail is under `capacity`
   if (batch.limit && !preview) return c.json({ ...result, error: `The ${plan?.name} plan allows ${batch.limit.max} active monitors`, code: "monitor_limit", limit: batch.limit.max, active: batch.limit.active, plan: plan?.id, upgradeUrl: plan?.upgradeUrl }, 402);
   return c.json(result, preview || (!created && duplicates) ? 200 : created ? 201 : 400);

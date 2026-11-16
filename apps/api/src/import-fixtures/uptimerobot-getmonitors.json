@@ -1,0 +1,13 @@
+{
+  "stat": "ok",
+  "pagination": { "offset": 0, "limit": 50, "total": 7 },
+  "monitors": [
+    { "id": 777000001, "friendly_name": "Website", "url": "https://www.example.com", "type": 1, "sub_type": "", "keyword_type": null, "keyword_case_type": null, "keyword_value": "", "http_username": "", "http_password": "", "port": "", "interval": 300, "timeout": 30, "status": 2, "create_datetime": 1700000000 },
+    { "id": 777000002, "friendly_name": "Checkout page", "url": "https://shop.example.com/checkout", "type": 2, "keyword_type": 2, "keyword_case_type": 1, "keyword_value": "Pay now", "http_method": 2, "interval": 60, "status": 2, "alert_contacts": [{ "id": "1000001", "threshold": 0, "recurrence": 0 }] },
+    { "id": 777000003, "friendly_name": "Error banner", "url": "https://www.example.com/status", "type": 2, "keyword_type": 1, "keyword_case_type": 0, "keyword_value": "Service unavailable", "interval": 300, "status": 0 },
+    { "id": 777000004, "friendly_name": "Admin API", "url": "https://api.example.com/admin/health", "type": 1, "http_username": "monitor", "http_password": "redacted-test-password", "http_auth_type": 1, "custom_http_headers": { "X-Env": "production" }, "custom_http_statuses": "204:1_500:0", "interval": 120, "status": 2 },
+    { "id": 777000005, "friendly_name": "Mail server", "url": "mail.example.com", "type": 4, "sub_type": 4, "port": "", "interval": 300, "status": 2 },
+    { "id": 777000006, "friendly_name": "Nightly backup", "url": "", "type": 5, "interval": 86400, "status": 2 },
+    { "id": 777000007, "friendly_name": "Router", "url": "203.0.113.10", "type": 3, "interval": 300, "status": 2 }
+  ]
+}
