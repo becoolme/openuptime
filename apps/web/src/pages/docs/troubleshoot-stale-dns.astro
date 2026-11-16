@@ -1,0 +1,85 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+const digTtl = `$ dig www.example.com A @1.1.1.1 +noall +answer
+www.example.com.   2917   IN   A   198.51.100.20     # the old address, cached for 2917 more seconds
+
+$ dig www.example.com A @ns1.example-dns.net +noall +answer
+www.example.com.   3600   IN   A   203.0.113.10      # the authoritative answer: the new address`;
+const findNs = `dig example.com NS +short
+# ns1.example-dns.net.
+# ns2.example-dns.net.`;
+const compare = `for r in 1.1.1.1 8.8.8.8 9.9.9.9 208.67.222.222; do
+  printf "%-16s " "$r"; dig +short www.example.com A @$r | tr '\\n' ' '; echo
+done`;
+const monitor = `curl -X POST https://openuptime.app/api/monitors \\
+  -H "x-api-key: ou_..." -H "Content-Type: application/json" \\
+  -d '{ "name": "www A record", "type": "dns", "target": "www.example.com",
+        "dnsRecordType": "A", "dnsExpectedValue": "203.0.113.10",
+        "intervalSec": 300 }'`;
+---
+<Doc title="DNS changes that have not arrived yet" titleZh="DNS 变更还没生效" description="You changed a DNS record and some users still reach the old address. Read TTLs, compare resolvers against the authoritative answer, plan the next change, and get alerted when a record is wrong." descriptionZh="你改了 DNS 记录，部分用户仍然访问到旧地址。读懂 TTL，把各解析服务器和权威结果对比，规划下一次变更，并在记录出错时收到告警。" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>DNS changes that have not arrived yet</h1>
+    <p class="lede">DNS does not "propagate"; resolvers keep the answer they already have until its TTL runs out. Some users see the new address, some the old one, and nothing is broken on your side. Here is how to see who has what, and how to make the next change faster.</p>
+
+    <h2 id="ttl">1. Read the TTL</h2>
+    <p>Ask a public resolver and your authoritative name server for the same record. The resolver's TTL counts down: it is how many seconds it will keep serving what it has. The authoritative answer is what everyone gets once that runs out:</p>
+    <pre><code set:text={digTtl} /></pre>
+    <p>If you do not know your authoritative servers, ask for the NS records of the domain:</p>
+    <pre><code set:text={findNs} /></pre>
+    <p>If the authoritative answer is still the old address, the change was not saved, was made at the wrong DNS host, or is waiting behind a CNAME you did not change.</p>
+
+    <h2 id="compare">2. Compare several resolvers</h2>
+    <pre><code set:text={compare} /></pre>
+    <p>Resolvers that disagree are caching. Each one switches when its own TTL runs out; you cannot flush public resolvers for your users. Your own machine, browser and office network have caches too, so test from a resolver directly, as above, rather than by reloading the page.</p>
+
+    <h2 id="negative">3. A record that did not exist before</h2>
+    <p>If you looked a name up before creating it, resolvers cached the "does not exist" answer. That negative answer is kept for the time set in the zone's SOA record (its last value, the negative TTL), which can be an hour or more. Look up SOA for the domain to see it.</p>
+
+    <h2 id="plan">4. Plan the next change</h2>
+    <ol>
+      <li>A day before, lower the record's TTL to 300 seconds or less. Wait at least one old TTL so every cache has picked up the short one.</li>
+      <li>Change the record. Most users now move within five minutes.</li>
+      <li>Keep the old address serving until the old TTL has passed twice; some resolvers and clients keep answers longer than they should.</li>
+      <li>Raise the TTL again once the new address is stable.</li>
+    </ol>
+
+    <h2 id="watch">Watch the record itself</h2>
+    <p>A DNS monitor looks a record up on every run and fails when the name stops resolving or, with <strong>Expected DNS value (optional)</strong> set, when the answer is not the value you expect. It catches a record changed by mistake, an expired domain or a host whose DNS went away, before users report it. OpenUptime asks Cloudflare's public resolver, so what it sees is what a typical visitor's resolver sees, cache included.</p>
+    <pre><code set:text={monitor} /></pre>
+    <p>When some users also cannot reach the site, see <a href="/docs/troubleshoot-regional-outage">Down in one region only</a>.</p>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>DNS 变更还没生效</h1>
+    <p class="lede">DNS 并不会“传播”，而是解析服务器会一直使用已有的答案，直到它的 TTL 到期。部分用户看到新地址，部分看到旧地址，而你这边什么都没坏。下面介绍如何看清谁拿到了什么，以及如何让下一次变更更快生效。</p>
+
+    <h2 id="ttl-zh">1. 读懂 TTL</h2>
+    <p>分别向公共解析服务器和你的权威域名服务器查询同一条记录。解析服务器返回的 TTL 会倒数，表示它还会继续返回当前答案多少秒。到期之后，所有人拿到的都是权威服务器的答案：</p>
+    <pre><code set:text={digTtl} /></pre>
+    <p>如果不知道你的权威服务器是哪些，查询域名的 NS 记录：</p>
+    <pre><code set:text={findNs} /></pre>
+    <p>如果权威服务器返回的仍是旧地址，说明改动没有保存、改在了错误的 DNS 服务商，或者前面还有一条你没改的 CNAME。</p>
+
+    <h2 id="compare-zh">2. 对比多个解析服务器</h2>
+    <pre><code set:text={compare} /></pre>
+    <p>结果不一致的解析服务器是在用缓存。它们各自在自己的 TTL 到期后切换，你无法替用户清空公共解析服务器的缓存。你自己的电脑、浏览器和办公网络也有缓存，所以请像上面那样直接向解析服务器查询，而不是刷新页面。</p>
+
+    <h2 id="negative-zh">3. 之前不存在的记录</h2>
+    <p>如果在创建记录之前就查询过这个名字，解析服务器会缓存“不存在”的答案。这个否定答案保留的时间由区域 SOA 记录的最后一个值（否定缓存 TTL）决定，可能长达一小时甚至更久。查询域名的 SOA 记录即可看到。</p>
+
+    <h2 id="plan-zh">4. 规划下一次变更</h2>
+    <ol>
+      <li>提前一天把记录的 TTL 降到 300 秒或更低。至少等待一个旧 TTL 的时长，让所有缓存都拿到短 TTL。</li>
+      <li>修改记录。大多数用户会在五分钟内切换过去。</li>
+      <li>旧地址继续提供服务，直到旧 TTL 过去两次；有些解析服务器和客户端会把答案保留得比应有的更久。</li>
+      <li>新地址稳定后，再把 TTL 调回去。</li>
+    </ol>
+
+    <h2 id="watch-zh">直接监控记录本身</h2>
+    <p>DNS 监控每次运行都会查询记录，在名字无法解析时判定失败；设置了<strong>期望 DNS 值（可选）</strong>后，答案不是期望值时也会失败。它能在用户报告之前发现被误改的记录、过期的域名或 DNS 服务消失的主机。OpenUptime 使用 Cloudflare 的公共解析服务器，所以它看到的就是普通访客的解析服务器所看到的，包括缓存。</p>
+    <pre><code set:text={monitor} /></pre>
+    <p>如果部分用户同时也打不开网站，见<a href="/docs/troubleshoot-regional-outage">只在某个地区故障</a>。</p>
+  </div>
+</Doc>

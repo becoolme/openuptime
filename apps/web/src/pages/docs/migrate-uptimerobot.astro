@@ -1,0 +1,144 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+// A redacted getMonitors record and what the importer makes of it; the same pair is checked by the API's import tests
+const source = `{
+  "stat": "ok",
+  "monitors": [
+    {
+      "id": 777000003,
+      "friendly_name": "Error banner",
+      "url": "https://www.example.com/status",
+      "type": 2,
+      "keyword_type": 1,
+      "keyword_case_type": 0,
+      "keyword_value": "Service unavailable",
+      "interval": 300,
+      "status": 0
+    }
+  ]
+}`;
+const result = `{
+  "name": "Error banner",
+  "sourceId": 777000003,
+  "type": "http",
+  "target": "https://www.example.com/status",
+  "method": "GET",
+  "keyword": "Service unavailable",
+  "keywordMode": "absent",
+  "intervalSec": 300
+}
+warning: UptimeRobot matched the keyword ignoring case; OpenUptime matches it exactly, so check the spelling
+warning: Paused in UptimeRobot; it starts checking here once imported`;
+const exportCmd = `curl -s -X POST https://api.uptimerobot.com/v2/getMonitors \\
+  -d "api_key=$UPTIMEROBOT_READ_ONLY_KEY" \\
+  -d "format=json" -d "custom_http_headers=1" \\
+  -d "custom_http_statuses=1" -d "alert_contacts=1" \\
+  -d "limit=50" -d "offset=0" > uptimerobot-0.json`;
+const importCmd = `# preview: nothing is created
+curl -s -X POST https://openuptime.app/api/monitors/import/preview \\
+  -H "x-api-key: $OPENUPTIME_KEY" -H "Content-Type: application/json" \\
+  --data @uptimerobot-0.json
+
+# import, after reading the report
+curl -s -X POST https://openuptime.app/api/monitors/import \\
+  -H "x-api-key: $OPENUPTIME_KEY" -H "Content-Type: application/json" \\
+  --data @uptimerobot-0.json`;
+---
+<Doc title="Migrate from UptimeRobot" titleZh="从 UptimeRobot 迁移" description="Move UptimeRobot monitors to OpenUptime: export them with the v2 API, preview the import, rebuild alerts and run both side by side before you switch." descriptionZh="把 UptimeRobot 监控迁到 OpenUptime：用 v2 API 导出、预览导入、重建告警，并在切换前让两边并行运行。" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>Migrate from UptimeRobot</h1>
+    <p class="lede">Export your monitors with UptimeRobot's API, import the file as it is, and run both tools side by side until the alerts match. Nothing is created until you confirm the preview, and importing the same file twice creates nothing new.</p>
+
+    <h2 id="what-moves">What moves and what does not</h2>
+    <table class="vars">
+      <thead><tr><th>UptimeRobot</th><th>In OpenUptime</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP(s) (type 1)</td><td>HTTP monitor with the same URL, method, headers and timeout. Custom statuses become an accepted-status list on top of 2xx, for example <code>2xx,401,!204</code>.</td></tr>
+        <tr><td>Keyword (type 2)</td><td>HTTP monitor with a keyword. "Alert when the keyword exists" becomes "healthy when it is absent". Matching is case-sensitive here, so the preview warns when UptimeRobot ignored case.</td></tr>
+        <tr><td>Port (type 4)</td><td>TCP monitor. The predefined ports (HTTP, HTTPS, FTP, SMTP, POP3, IMAP) become 80, 443, 21, 25, 110 and 143; a custom port is kept.</td></tr>
+        <tr><td>Heartbeat (type 5)</td><td>Heartbeat monitor with a new ping URL. Point your job at it; the old URL keeps reporting to UptimeRobot.</td></tr>
+        <tr><td>Ping (type 3)</td><td>Skipped. OpenUptime has no ICMP check; add a TCP check on a port the host answers on.</td></tr>
+        <tr><td>Basic auth</td><td>Kept as an <code>Authorization</code> header. Digest auth is skipped with a reason.</td></tr>
+        <tr><td>Interval</td><td>Kept in seconds. An interval shorter than your plan allows is raised, and the row says so.</td></tr>
+        <tr><td>Alert contacts, maintenance windows</td><td>Not imported. The new monitors use the project's auto-enabled channels; the preview lists every monitor that had contacts or windows.</td></tr>
+        <tr><td>Status pages, history, incidents</td><td>Not imported. Create the status page again and pick the imported monitors.</td></tr>
+      </tbody>
+    </table>
+    <p>A monitor that was paused in UptimeRobot is imported active, and the preview marks it. Pause it after the import if you want it to stay quiet.</p>
+
+    <h2 id="export">1. Export from UptimeRobot</h2>
+    <p>Create a <strong>read-only API key</strong> under Integrations &amp; API in UptimeRobot, then save the answer of <code>getMonitors</code>. The v2 API returns at most 50 monitors per call: repeat with <code>offset=50</code>, <code>offset=100</code> and so on, saving each answer to its own file.</p>
+    <pre><code set:text={exportCmd} /></pre>
+    <p>Keep these files private. If any monitor uses basic auth or secret headers, the file holds those credentials.</p>
+
+    <h2 id="preview">2. Preview the import</h2>
+    <p>Open <strong>Monitors</strong>, press <strong>Import</strong> and choose the file. The dialog shows <em>File format: UptimeRobot (getMonitors API answer)</em> and the source namespace <code>uptimerobot</code>. Press <strong>Preview import</strong>: each monitor is listed as ready or skipped, with what did not carry over. Nothing is created yet.</p>
+    <p>The same works over the API, with the whole answer as the body. Add <code>"format": "uptimerobot"</code> if you trimmed the file so it can no longer be recognised.</p>
+    <pre><code set:text={importCmd} /></pre>
+    <p>Here is one monitor from the redacted sample file the importer is tested with, and what the preview reports for it. UptimeRobot's keyword type 1 alerts when the text <em>exists</em>, so the monitor is healthy while it is absent:</p>
+    <pre><code set:text={source} /></pre>
+    <pre><code set:text={result} /></pre>
+
+    <h2 id="import">3. Import</h2>
+    <p>Press <strong>Import ready monitors</strong>. Skipped rows stay skipped; fix them by hand or leave them. Every imported monitor keeps its UptimeRobot id as <code>uptimerobot/777000003</code>, so importing the same file again, or a later export with a few new monitors, only adds what is new and never overwrites a monitor you have since edited.</p>
+
+    <h2 id="alerts">4. Rebuild alerts and status pages</h2>
+    <ol>
+      <li>Add your channels under <strong>Alerting</strong> (email, Slack, Telegram, PagerDuty, webhooks and others) and turn on <em>on for new monitors</em> for the ones every imported monitor should use. Do this before the import: a monitor takes the auto-enabled channels when it is created.</li>
+      <li>Open each heartbeat monitor and copy its ping URL into the cron job or script that pinged UptimeRobot.</li>
+      <li>Create a status page and pick the imported monitors.</li>
+    </ol>
+
+    <h2 id="switch">5. Run both, then switch</h2>
+    <p>Leave UptimeRobot running for a few days. Compare the incidents each tool opens: a monitor that fails only here usually points at a case-sensitive keyword or a certificate error UptimeRobot was told to ignore, and the preview listed each of those. When both agree, switch UptimeRobot's alerts off and move your status page link.</p>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>从 UptimeRobot 迁移</h1>
+    <p class="lede">用 UptimeRobot 的 API 导出监控，把文件原样导入，再让两个工具并行运行，直到告警一致。确认预览之前不会创建任何东西，同一个文件导入两次也不会重复创建。</p>
+
+    <h2 id="what-moves-zh">哪些能迁过来，哪些不能</h2>
+    <table class="vars">
+      <thead><tr><th>UptimeRobot</th><th>在 OpenUptime 中</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP(s)（类型 1）</td><td>HTTP 监控，URL、请求方法、请求头和超时保持不变。自定义状态码会在 2xx 的基础上变成可接受状态列表，例如 <code>2xx,401,!204</code>。</td></tr>
+        <tr><td>关键词（类型 2）</td><td>带关键词的 HTTP 监控。“关键词出现时告警”会变成“关键词不出现才算正常”。这里区分大小写，所以 UptimeRobot 忽略大小写时，预览会给出提醒。</td></tr>
+        <tr><td>端口（类型 4）</td><td>TCP 监控。预设端口（HTTP、HTTPS、FTP、SMTP、POP3、IMAP）对应 80、443、21、25、110、143；自定义端口保持不变。</td></tr>
+        <tr><td>心跳（类型 5）</td><td>心跳监控，使用新的 ping 地址。请把任务改为请求新地址；旧地址仍然上报给 UptimeRobot。</td></tr>
+        <tr><td>Ping（类型 3）</td><td>跳过。OpenUptime 没有 ICMP 检测，可以改为检测主机会响应的某个 TCP 端口。</td></tr>
+        <tr><td>Basic 认证</td><td>保留为 <code>Authorization</code> 请求头。Digest 认证会被跳过并说明原因。</td></tr>
+        <tr><td>检测间隔</td><td>按秒保留。短于套餐允许值的间隔会被调高，并在该行注明。</td></tr>
+        <tr><td>告警联系人、维护窗口</td><td>不导入。新监控使用项目中自动启用的渠道；预览会列出每个设置过联系人或维护窗口的监控。</td></tr>
+        <tr><td>状态页、历史、事件</td><td>不导入。请重新创建状态页，并选择导入后的监控。</td></tr>
+      </tbody>
+    </table>
+    <p>在 UptimeRobot 中已暂停的监控导入后是启用状态，预览会标出来。如果希望它继续保持安静，导入后再暂停即可。</p>
+
+    <h2 id="export-zh">1. 从 UptimeRobot 导出</h2>
+    <p>在 UptimeRobot 的 Integrations &amp; API 中创建一个<strong>只读 API Key</strong>，然后保存 <code>getMonitors</code> 的返回结果。v2 API 每次最多返回 50 个监控：依次用 <code>offset=50</code>、<code>offset=100</code> 等再请求，每次的结果各存一个文件。</p>
+    <pre><code set:text={exportCmd} /></pre>
+    <p>请妥善保管这些文件。如果有监控使用了 Basic 认证或带密钥的请求头，文件里就包含这些凭据。</p>
+
+    <h2 id="preview-zh">2. 预览导入</h2>
+    <p>打开<strong>监控</strong>页，点击<strong>导入</strong>并选择文件。对话框会显示<em>文件格式：UptimeRobot（getMonitors API 返回结果）</em>，来源命名空间为 <code>uptimerobot</code>。点击<strong>预览导入</strong>：每个监控都会标为就绪或跳过，并列出没能迁过来的设置。此时还不会创建任何监控。</p>
+    <p>也可以通过 API 完成，把整个返回结果作为请求体。如果文件被裁剪到无法识别，请加上 <code>"format": "uptimerobot"</code>。</p>
+    <pre><code set:text={importCmd} /></pre>
+    <p>下面是导入器测试所用的脱敏样例文件中的一个监控，以及预览对它的报告。UptimeRobot 的关键词类型 1 表示文本<em>出现</em>时告警，所以文本不出现时监控才算正常：</p>
+    <pre><code set:text={source} /></pre>
+    <pre><code set:text={result} /></pre>
+
+    <h2 id="import-zh">3. 导入</h2>
+    <p>点击<strong>导入待创建项</strong>。被跳过的条目仍然跳过，可以手动补建，也可以不管。每个导入的监控都会以 <code>uptimerobot/777000003</code> 的形式保留 UptimeRobot 的 ID，所以再次导入同一个文件，或导入之后新增了几个监控的导出文件，都只会添加新的条目，不会覆盖你之后修改过的监控。</p>
+
+    <h2 id="alerts-zh">4. 重建告警和状态页</h2>
+    <ol>
+      <li>在<strong>告警</strong>页添加渠道（邮件、Slack、Telegram、PagerDuty、Webhook 等），并为所有导入监控都要用的渠道打开“新监控自动开启”。请在导入之前完成：监控在创建时才会带上自动开启的渠道。</li>
+      <li>打开每个心跳监控，把它的 ping 地址填到原先请求 UptimeRobot 的定时任务或脚本里。</li>
+      <li>创建状态页，选择导入后的监控。</li>
+    </ol>
+
+    <h2 id="switch-zh">5. 并行运行，然后切换</h2>
+    <p>让 UptimeRobot 继续运行几天，对比两边各自创建的事件。只在这里失败的监控，通常是关键词大小写不一致或 UptimeRobot 被设置为忽略证书错误，而这些预览中都已列出。两边结果一致后，关闭 UptimeRobot 的告警，并更新状态页链接。</p>
+  </div>
+</Doc>

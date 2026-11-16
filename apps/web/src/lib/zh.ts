@@ -777,7 +777,7 @@ export const zh: Record<string, string> = {
   "Uptime Kuma keyword monitor has no keyword": "这个 Uptime Kuma 关键词监控没有关键词",
   "This JSON query cannot be converted; add a JSON check on the monitor by hand": "这条 JSON 查询无法转换，请在监控上手动添加 JSON 检查",
   "Uptime Kuma ignored certificate errors; OpenUptime reports them as failures": "Uptime Kuma 忽略了证书错误；OpenUptime 会把它们记为失败",
-  "Certificate expiry alerts are separate here; add a certificate monitor for this host": "这里的证书到期提醒是单独的监控；请为这个主机添加证书监控",
+  "Certificate expiry alerts are not imported": "证书到期提醒不会导入",
   "The proxy is not imported; the check connects directly": "代理设置不会导入；检测会直接连接",
   "Uptime Kuma port monitor has no host or port": "这个 Uptime Kuma 端口监控缺少主机或端口",
   "The DNS resolver is not imported; OpenUptime asks Cloudflare's public resolver": "DNS 解析服务器不会导入；OpenUptime 使用 Cloudflare 的公共解析服务",

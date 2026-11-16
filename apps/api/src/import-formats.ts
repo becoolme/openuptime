@@ -194,7 +194,7 @@ function fromKuma(m: Rec): Converted {
       out.jsonAssertions = [{ path: `$.${path}`, op: "equals", value: str(m.expectedValue) }];
     }
     if (m.ignoreTls === true || m.ignoreTls === 1) warnings.push("Uptime Kuma ignored certificate errors; OpenUptime reports them as failures");
-    if (m.expiryNotification === true || m.expiryNotification === 1) warnings.push("Certificate expiry alerts are separate here; add a certificate monitor for this host");
+    if (m.expiryNotification === true || m.expiryNotification === 1) warnings.push("Certificate expiry alerts are not imported");
     if (num(m.proxyId)) warnings.push("The proxy is not imported; the check connects directly");
   } else if (kind === "port") {
     const host = str(m.hostname), port = num(m.port);

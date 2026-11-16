@@ -75,7 +75,7 @@ describe("Uptime Kuma 1.x backup", () => {
   });
 
   it("reports what did not carry over", () => {
-    expect(byName("Homepage").warnings).toEqual(["Certificate expiry alerts are separate here; add a certificate monitor for this host", "Notifications are not imported; this project's auto-enabled channels apply"]);
+    expect(byName("Homepage").warnings).toEqual(["Certificate expiry alerts are not imported", "Notifications are not imported; this project's auto-enabled channels apply"]);
     expect(byName("Postgres port").warnings).toContain("Paused in Uptime Kuma; it starts checking here once imported");
     expect(byName("MX records").warnings.join(" ")).toMatch(/resolver/);
   });
