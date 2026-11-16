@@ -29,6 +29,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "icmp-ping-monitors", date: "2026-11-16", edition: "community",
+    title: { en: "ICMP ping monitors", zh: "ICMP Ping 监控" },
+    summary: { en: "A self-hosted install can now check that a host answers ping, from its own server or from your probes.", zh: "自托管部署现在可以检测主机是否响应 ping，可以从自己的服务器发起，也可以从你的探针发起。" },
+    points: [
+      { en: "A ping monitor sends one ICMP echo request to a hostname or IP address per run and records the round trip as its latency.", zh: "Ping 监控每次检测向主机名或 IP 地址发送一次 ICMP 回显请求，并把往返时间记为延迟。" },
+      { en: "The published Docker image can send ping as it is; the ping type appears in the form only where the server can send it.", zh: "发布的 Docker 镜像可以直接发送 ping；只有服务器能发送 ping 时，表单中才会出现这个类型。" },
+      { en: "A checker that cannot send ping records nothing instead of opening an incident, and a probe that cannot shows its region as unreachable.", zh: "无法发送 ping 的检测方不会记录结果，也不会因此创建事件；无法发送 ping 的探针会把所在区域显示为无法连接。" },
+      { en: "Ping monitors imported from UptimeRobot and Uptime Kuma now become ping monitors instead of being skipped.", zh: "从 UptimeRobot 和 Uptime Kuma 导入的 Ping 监控现在会转换为 ping 监控，不再被跳过。" },
+    ],
+    cloud: { en: "Not available on the hosted service, which cannot send ICMP; check a TCP port instead.", zh: "托管服务无法发送 ICMP，因此不提供此功能；请改为检测 TCP 端口。" },
+    upgrade: { en: "Update your own probes before checking a ping monitor from them: an older probe refuses the check and its region shows as unreachable.", zh: "从自建探针检测 ping 监控前，请先更新探针：旧版探针会拒绝这类检测，对应区域会显示为无法连接。" },
+    link: { href: "/docs/ping", label: { en: "Read the ping monitor docs", zh: "阅读 Ping 监控文档" } },
+  },
+  {
     id: "multi-step-api-checks", date: "2026-11-16", edition: "community",
     title: { en: "Multi-step API checks", zh: "多步骤 API 检测" },
     summary: { en: "An HTTP monitor can run up to 5 more requests in order, passing a token or an id from one answer to the next request.", zh: "HTTP 监控可以再按顺序发出最多 5 个请求，把上一个响应中的令牌或 ID 传给下一个请求。" },
@@ -52,6 +66,29 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "This stays inside the workspace: status pages and webhook alerts do not include it.", zh: "这些内容只留在工作区内，状态页和 Webhook 告警都不会包含。" },
     ],
     upgrade: { en: "Update self-hosted regional probes to this version to get the details from each region; older probes still report their result and error.", zh: "自托管的地区探针需要更新到这个版本才能提供各地区的详细信息；旧版探针仍会上报结果和错误。" },
+  },
+  {
+    id: "migration-troubleshooting-guides", date: "2026-11-16", edition: "community",
+    title: { en: "Migration and troubleshooting guides", zh: "迁移与排障指南" },
+    summary: { en: "Step-by-step guides for moving from UptimeRobot or Uptime Kuma, and for three problems that a status code alone does not explain.", zh: "新增从 UptimeRobot 或 Uptime Kuma 迁移的分步指南，以及三个仅看状态码无法解释的问题的排查指南。" },
+    points: [
+      { en: "The migration guides show how to export from each tool, what every monitor type becomes, and how to run both side by side before switching.", zh: "迁移指南介绍如何从各工具导出、每种监控类型会变成什么，以及切换前如何让两边并行运行。" },
+      { en: "Troubleshooting guides cover a site that is down in one region only, a page that answers 200 but is broken, and DNS changes that have not reached every resolver yet.", zh: "排障指南涵盖只在某个地区故障、返回 200 但页面已坏，以及 DNS 变更尚未传到所有解析服务器这三种情况。" },
+      { en: "The UptimeRobot and Uptime Kuma comparison pages now describe the direct import and link to the guides.", zh: "UptimeRobot 和 Uptime Kuma 对比页已改为介绍直接导入，并链接到对应的迁移指南。" },
+    ],
+    link: { href: "/docs/migrate-uptime-kuma", label: { en: "Read the Uptime Kuma migration guide", zh: "阅读 Uptime Kuma 迁移指南" } },
+  },
+  {
+    id: "import-uptimerobot-uptime-kuma", date: "2026-11-16", edition: "community",
+    title: { en: "Import from UptimeRobot and Uptime Kuma", zh: "从 UptimeRobot 和 Uptime Kuma 导入" },
+    summary: { en: "Import an UptimeRobot getMonitors answer or an Uptime Kuma 1.x backup file as it is, and see before importing which monitors need setting up by hand.", zh: "直接导入 UptimeRobot getMonitors 的返回结果或 Uptime Kuma 1.x 备份文件，并在导入前看到哪些监控需要手动设置。" },
+    points: [
+      { en: "HTTP, keyword, port and heartbeat monitors carry over from both tools, plus DNS, push and simple JSON query monitors from Uptime Kuma.", zh: "两个工具的 HTTP、关键词、端口和心跳监控都能导入，Uptime Kuma 的 DNS、推送和简单 JSON 查询监控也可以。" },
+      { en: "The preview names the file format and gives each skipped monitor a reason, such as ICMP ping, Docker or database monitors.", zh: "预览会显示识别出的文件格式，并为每个被跳过的监控说明原因，例如 ICMP Ping、Docker 或数据库监控。" },
+      { en: "Each monitor keeps its original id, so importing the same file again skips what is already here.", zh: "每个监控都保留原工具中的 ID，再次导入同一个文件时会跳过已经存在的监控。" },
+      { en: "Settings that do not carry over, such as alert contacts, notifications, proxies and ignored certificate errors, are listed per monitor instead of being dropped silently.", zh: "无法导入的设置，例如告警联系人、通知、代理和忽略证书错误，会逐个监控列出，而不是悄悄丢弃。" },
+    ],
+    link: { href: "/docs/migrate-uptimerobot", label: { en: "Read the UptimeRobot migration guide", zh: "阅读 UptimeRobot 迁移指南" } },
   },
   {
     id: "keyword-patterns", date: "2026-11-15", edition: "community",

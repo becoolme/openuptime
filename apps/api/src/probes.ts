@@ -8,6 +8,7 @@ import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
 import { isPatternMode, KEYWORD_REGEX_CAPABILITY } from "./keyword";
 import { API_FLOW_CAPABILITY } from "./api-flow";
+import { ICMP_PING_CAPABILITY } from "./ping";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -117,7 +118,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
 
   if (region === AUTO) {
     const outcome = await runCheck(input, repo);
-    return outcome.inconclusive ? { region, unreachable: "This location is offline" } : { region, outcome };
+    return outcome.inconclusive ? { region, unreachable: input.type === "ping" && outcome.error ? outcome.error : "This location is offline" } : { region, outcome };
   }
   const probe = regions.get(region);
   if (!probe) return { region, unreachable: "Region is not configured on this deployment" };
@@ -145,6 +146,8 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
     if (input.keyword && isPatternMode(input.keywordMode)) needs.push([KEYWORD_REGEX_CAPABILITY, "Probe upgrade required for keyword patterns"]);
     if (input.type === "http" && input.apiFlow?.steps.length) needs.push([API_FLOW_CAPABILITY, "Probe upgrade required for multi-step API checks"]);
+    // a probe offers ping only where it can send ICMP: an old probe and one without permission are told apart by nobody
+    if (input.type === "ping") needs.push([ICMP_PING_CAPABILITY, "This probe cannot run ping checks"]);
     const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
     if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });

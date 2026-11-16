@@ -15,7 +15,7 @@ const ui = {
     glance: "At a glance", topic: "Topic", gaps: "What OpenUptime does not do", gapsIntro: "Check this list before you switch. It is short, and it is complete as of this page.",
     known: `What ${tool.name} is known for that OpenUptime does not do`, who: "Who each is best for", pick: `Pick ${tool.name} if`, pickUs: "Pick OpenUptime if",
     migrate: `Moving from ${tool.name}`, faq: "Questions", ctaT: "Try OpenUptime", ctaP: "Start on the hosted service, or run it yourself. The source is on GitHub under the MIT license.",
-    start: "Start monitoring", self: "Self-host guide", more: "More", all: "All comparisons", mcp: "MCP server", api: "API reference", regions: "Multi-region checks", embed: "Embed status",
+    start: "Start monitoring", self: "Self-host guide", more: "More", all: "All comparisons", mcp: "MCP server", api: "API reference", regions: "Multi-region checks", embed: "Embed status", guide: `Read the step-by-step guide to moving from ${tool.name}`,
     h1: `OpenUptime as a ${tool.name} alternative`, aboutT: `About ${tool.name}`,
     note: "Information about other products is general and may be out of date. Check their own sites for current features and pricing.",
   },
@@ -23,7 +23,7 @@ const ui = {
     glance: "对比一览", topic: "项目", gaps: "OpenUptime 没有的功能", gapsIntro: "切换之前请先看这份清单。它不长，截至本页是完整的。",
     known: `${tool.name} 擅长而 OpenUptime 没有的功能`, who: "各自适合谁", pick: `适合选择 ${tool.name} 的情况`, pickUs: "适合选择 OpenUptime 的情况",
     migrate: `从 ${tool.name} 迁移`, faq: "常见问题", ctaT: "试用 OpenUptime", ctaP: "可以直接使用托管服务，也可以自己运行。源码在 GitHub，采用 MIT 许可证。",
-    start: "开始监控", self: "自托管指南", more: "更多", all: "全部对比", mcp: "MCP 服务", api: "API 参考", regions: "多区域检测", embed: "嵌入状态",
+    start: "开始监控", self: "自托管指南", more: "更多", all: "全部对比", mcp: "MCP 服务", api: "API 参考", regions: "多区域检测", embed: "嵌入状态", guide: `阅读从 ${tool.name} 迁移的分步指南`,
     h1: `${tool.name} 的替代方案：OpenUptime`, aboutT: `关于 ${tool.name}`,
     note: "关于其他产品的信息只是概括，可能已经过时。当前功能和价格请以其官网为准。",
   },
@@ -53,6 +53,7 @@ const ui = {
       </div>
       <h2 id={`migrate${k === "zh" ? "-zh" : ""}`}>{ui[k].migrate}</h2>
       <ol>{tool.migrate.map((g) => (<li>{g[k]}</li>))}</ol>
+      {tool.guide && <p><a href={tool.guide}>{ui[k].guide}</a></p>}
       <h2 id={`faq${k === "zh" ? "-zh" : ""}`}>{ui[k].faq}</h2>
       <div class="faq">
         {tool.faq.map((f) => (<details><summary>{f.q[k]}</summary><p>{f.a[k]}</p></details>))}

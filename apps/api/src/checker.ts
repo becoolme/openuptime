@@ -9,6 +9,7 @@ import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
 import { apiFlowCheck } from "./api-flow";
+import { pingCheck, pingHost } from "./ping";
 import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
 import { statusAccepted, statusRule, statusRuleText } from "./status-spec";
 import { keywordOutcome } from "./keyword";
@@ -17,7 +18,7 @@ import { bodyExcerpt, classifyError, DIAG_READ_BYTES, keptHeaders, safeHops, sec
 import type { FetchHop } from "@openuptime/kit/netguard";
 
 export type CheckInput = {
-  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana";
+  type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana" | "ping";
   target: string;
   mcpConfig?: McpConfig | null;
   mcpBaseline?: McpToolSchema[] | null;
@@ -85,6 +86,7 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
       case "mysql": return await mysqlCheck(m, started);
       case "redis": return await redisCheck(m, started);
       case "websocket": return await websocketCheck(m, started);
+      case "ping": return await pingCheck(m, started);
       default: return { ok: true };
     }
   } catch (e) {
@@ -100,6 +102,7 @@ function dialedHost(m: CheckInput): string | null {
   try {
     if (m.type === "http" || m.type === "websocket" || m.type === "mcp" || m.type === "evm" || m.type === "solana") return new URL(m.target).hostname;
     if (m.type === "dns" || m.type === "heartbeat") return null;
+    if (m.type === "ping") return pingHost(m.target);
     return hostPort(m.target, 1)?.hostname ?? null;
   } catch {
     return null;

@@ -1,0 +1,107 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+const curlTiming = `curl -s -o /dev/null https://www.example.com/ \\
+  -w "dns %{time_namelookup}s  connect %{time_connect}s  tls %{time_appconnect}s  first byte %{time_starttransfer}s  total %{time_total}s  status %{http_code}  ip %{remote_ip}\\n"`;
+const curlResolve = `# ask a specific edge or origin address, bypassing your own DNS answer
+curl -s -o /dev/null -w "%{http_code} %{remote_ip}\\n" \\
+  --resolve www.example.com:443:203.0.113.10 https://www.example.com/`;
+const digCompare = `dig +short www.example.com @1.1.1.1
+dig +short www.example.com @8.8.8.8
+dig +short www.example.com @9.9.9.9`;
+const testOnce = `curl -X POST https://openuptime.app/api/monitors/<id>/check \\
+  -H "x-api-key: ou_..." -H "Content-Type: application/json" \\
+  -d '{"region":"eu-central"}'
+
+{ "ok": false, "region": "eu-central",
+  "result": { "ok": false, "latencyMs": 10000, "error": "Request timed out" } }`;
+---
+<Doc title="Down in one region only" titleZh="只在某个地区故障" description="Your site works for you but not for users elsewhere. Find whether it is DNS, routing, a CDN edge or a firewall, with commands you can run, then watch it from several regions." descriptionZh="网站在你这边正常，别的地区的用户却打不开。用可直接运行的命令判断是 DNS、路由、CDN 节点还是防火墙的问题，再从多个区域持续检测。" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>Down in one region only</h1>
+    <p class="lede">A customer in another country says your site is down, and it loads fine for you. Both can be true. This guide narrows the cause down in four steps, then sets up a check that sees what that customer sees.</p>
+
+    <h2 id="causes">Common causes</h2>
+    <table class="vars">
+      <thead><tr><th>Cause</th><th>What it looks like</th></tr></thead>
+      <tbody>
+        <tr><td>A DNS change that has not reached every resolver</td><td>Some users get the old address and time out or see the old site. See <a href="/docs/troubleshoot-stale-dns">DNS changes that have not arrived yet</a>.</td></tr>
+        <tr><td>A CDN or load balancer edge in trouble</td><td>Same name, same answer, but the edge near the user fails: 5xx, resets, or slow first bytes.</td></tr>
+        <tr><td>A route problem between a network and your host</td><td>Connections from one provider or country hang at connect; everyone else is fine.</td></tr>
+        <tr><td>A firewall, WAF or geo rule</td><td>One region gets 403, a challenge page or a reset, often after a rule change.</td></tr>
+        <tr><td>IPv6 broken while IPv4 works</td><td>Users on networks that prefer IPv6 fail; the AAAA record points at something that does not answer.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="timing">1. See where the request stops</h2>
+    <p>Ask the affected user, or a machine in that region, to run this and send you the line it prints:</p>
+    <pre><code set:text={curlTiming} /></pre>
+    <ul>
+      <li>A large <code>dns</code> time or a different <code>ip</code> from yours points at DNS.</li>
+      <li><code>connect</code> that never finishes points at routing or a firewall that drops packets.</li>
+      <li>A <code>tls</code> time with an error points at the certificate the edge in that region serves.</li>
+      <li>A fast connect and a slow or failing <code>first byte</code> points at the edge or the origin behind it.</li>
+    </ul>
+
+    <h2 id="dns">2. Compare DNS answers</h2>
+    <p>Different public resolvers can hold different answers while a change is spreading. If they disagree, the problem is DNS, not your server:</p>
+    <pre><code set:text={digCompare} /></pre>
+
+    <h2 id="address">3. Test one address directly</h2>
+    <p>Send the request to the address the user got, without changing any DNS. If that address fails and yours works, the edge or server behind it is the problem; tell your CDN or host which address and region:</p>
+    <pre><code set:text={curlResolve} /></pre>
+    <p>Run it once with <code>-4</code> and once with <code>-6</code> to rule out a broken IPv6 path.</p>
+
+    <h2 id="rules">4. Check recent rule changes</h2>
+    <p>If the region gets a 403 or a challenge page, look at firewall, WAF, bot and country rules changed around the time the reports started. A rate limit keyed on a shared office or mobile carrier address can block a whole city.</p>
+
+    <h2 id="watch">Watch it from several regions</h2>
+    <p>One checker in one place cannot tell "my site is down" from "the route to my checker is down". A <a href="/docs/regions">multi-region monitor</a> checks the same URL from several regions and opens an incident only when most of them fail, or when as many fail as you set under <strong>Go down when</strong>. The incident names the regions that failed and why, so the next report from a customer already has its answer.</p>
+    <p>To reproduce a report straight away, use <strong>Test once from</strong> on the monitor page, or the API. Nothing is recorded and the monitor's status does not change:</p>
+    <pre><code set:text={testOnce} /></pre>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>只在某个地区故障</h1>
+    <p class="lede">另一个国家的客户说你的网站打不开，而你这边一切正常。这两件事可能同时成立。本文用四步缩小原因范围，再设置一个能看到客户所见情况的检测。</p>
+
+    <h2 id="causes-zh">常见原因</h2>
+    <table class="vars">
+      <thead><tr><th>原因</th><th>表现</th></tr></thead>
+      <tbody>
+        <tr><td>DNS 变更还没传到所有解析服务器</td><td>部分用户拿到旧地址，超时或看到旧站点。见 <a href="/docs/troubleshoot-stale-dns">DNS 变更还没生效</a>。</td></tr>
+        <tr><td>CDN 或负载均衡的某个节点出问题</td><td>域名和解析结果都一样，但用户附近的节点失败：5xx、连接被重置或首字节很慢。</td></tr>
+        <tr><td>某个网络到你主机之间的路由问题</td><td>来自某个运营商或国家的连接卡在建立连接阶段，其他人都正常。</td></tr>
+        <tr><td>防火墙、WAF 或地区规则</td><td>某个地区收到 403、验证页或连接重置，常发生在规则修改之后。</td></tr>
+        <tr><td>IPv6 不通而 IPv4 正常</td><td>优先使用 IPv6 的网络上的用户失败；AAAA 记录指向一个不响应的地址。</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="timing-zh">1. 看请求停在哪一步</h2>
+    <p>请受影响的用户，或该地区的一台机器运行下面的命令，并把输出的那一行发给你：</p>
+    <pre><code set:text={curlTiming} /></pre>
+    <ul>
+      <li><code>dns</code> 耗时很长，或 <code>ip</code> 和你的不同，说明是 DNS 问题。</li>
+      <li><code>connect</code> 一直不结束，说明是路由问题，或防火墙丢弃了数据包。</li>
+      <li><code>tls</code> 阶段报错，说明该地区节点提供的证书有问题。</li>
+      <li>连接很快但 <code>first byte</code> 很慢或失败，说明是节点或其背后的源站有问题。</li>
+    </ul>
+
+    <h2 id="dns-zh">2. 对比 DNS 解析结果</h2>
+    <p>变更传播期间，不同的公共解析服务器可能给出不同的结果。如果它们不一致，问题在 DNS，而不是你的服务器：</p>
+    <pre><code set:text={digCompare} /></pre>
+
+    <h2 id="address-zh">3. 直接测试某个地址</h2>
+    <p>不改任何 DNS，直接把请求发到用户拿到的那个地址。如果这个地址失败而你的正常，问题在它背后的节点或服务器；把地址和地区告诉你的 CDN 或主机商：</p>
+    <pre><code set:text={curlResolve} /></pre>
+    <p>分别加 <code>-4</code> 和 <code>-6</code> 各运行一次，排除 IPv6 线路的问题。</p>
+
+    <h2 id="rules-zh">4. 检查最近的规则改动</h2>
+    <p>如果该地区收到 403 或验证页，请查看在报告出现前后修改过的防火墙、WAF、机器人和国家规则。按共享的办公网络或移动运营商地址限流，可能会挡住整个城市的用户。</p>
+
+    <h2 id="watch-zh">从多个区域持续检测</h2>
+    <p>只在一个地方检测，无法区分“我的网站挂了”和“到检测点的线路挂了”。<a href="/docs/regions">多区域监控</a>会从多个区域检测同一个 URL，只在多数区域失败，或失败区域数达到你在<strong>判定为故障的条件</strong>中设置的数量时才创建事件。事件会写明哪些区域失败以及原因，下一次客户报告时，你已经有了答案。</p>
+    <p>想立刻复现客户的报告，可以在监控页使用<strong>单次测试位置</strong>，或调用 API。这不会记录结果，也不会改变监控状态：</p>
+    <pre><code set:text={testOnce} /></pre>
+  </div>
+</Doc>

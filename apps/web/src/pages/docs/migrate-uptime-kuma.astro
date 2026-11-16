@@ -1,0 +1,168 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+// A redacted monitor from a Kuma 1.x backup and what the importer makes of it; the same pair is checked by the API's import tests
+const source = `{
+  "version": "1.23.16",
+  "monitorList": [
+    {
+      "id": 1,
+      "name": "Homepage",
+      "type": "http",
+      "url": "https://www.example.com",
+      "method": "GET",
+      "interval": 60,
+      "maxretries": 2,
+      "timeout": 48,
+      "active": true,
+      "accepted_statuscodes": ["200-299"],
+      "expiryNotification": true,
+      "notificationIDList": { "1": true },
+      "tags": [{ "name": "web", "value": "" }]
+    }
+  ]
+}`;
+const result = `{
+  "name": "Homepage",
+  "sourceId": 1,
+  "type": "http",
+  "target": "https://www.example.com",
+  "method": "GET",
+  "intervalSec": 60,
+  "failureThreshold": 3,
+  "timeoutMs": 30000,
+  "tags": ["web"]
+}
+warning: Certificate expiry alerts are not imported
+warning: Notifications are not imported; this project's auto-enabled channels apply`;
+const importCmd = `# preview: nothing is created
+curl -s -X POST https://openuptime.app/api/monitors/import/preview \\
+  -H "x-api-key: $OPENUPTIME_KEY" -H "Content-Type: application/json" \\
+  --data @Uptime_Kuma_Backup.json
+
+# import, after reading the report
+curl -s -X POST https://openuptime.app/api/monitors/import \\
+  -H "x-api-key: $OPENUPTIME_KEY" -H "Content-Type: application/json" \\
+  --data @Uptime_Kuma_Backup.json`;
+const handWritten = `{
+  "monitors": [
+    { "name": "Homepage", "type": "http", "target": "https://www.example.com",
+      "intervalSec": 60, "failureThreshold": 3, "sourceId": "kuma-1" },
+    { "name": "Postgres port", "type": "tcp", "target": "db.example.com:5432",
+      "intervalSec": 60, "sourceId": "kuma-4" }
+  ]
+}`;
+---
+<Doc title="Migrate from Uptime Kuma" titleZh="从 Uptime Kuma 迁移" description="Move Uptime Kuma monitors to OpenUptime: import a 1.x backup file, see what converts and what needs work by hand, rebuild notifications and status pages, then switch." descriptionZh="把 Uptime Kuma 监控迁到 OpenUptime：导入 1.x 备份文件，了解哪些能自动转换、哪些需要手动处理，重建通知和状态页，然后切换。" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>Migrate from Uptime Kuma</h1>
+    <p class="lede">Import the backup file of Uptime Kuma 1.x as it is. The preview tells you, monitor by monitor, what converted and what you have to finish by hand, and nothing is created until you confirm.</p>
+
+    <h2 id="which-file">Which file to use</h2>
+    <p>The importer reads the JSON backup of Uptime Kuma <strong>1.x</strong>, made under Settings → Backup → Export. Its monitors sit under <code>monitorList</code>. Kuma marked that backup as deprecated in 1.23 and removed it in 2.0, so on 2.x there is no file to export. In that case, write the monitors as OpenUptime JSON (see <a href="#kuma-2">On Uptime Kuma 2.x</a>) or recreate them in the dashboard.</p>
+    <p>The backup holds the credentials of every monitor that uses basic auth, secret headers or a database connection string. Keep it private and delete it once you are done.</p>
+
+    <h2 id="what-moves">What moves and what does not</h2>
+    <table class="vars">
+      <thead><tr><th>Uptime Kuma</th><th>In OpenUptime</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP(s)</td><td>HTTP monitor with the same URL, method, headers and body. The accepted status codes carry over as they are, for example <code>200-299,401</code>; the default <code>200-299</code> needs no list.</td></tr>
+        <tr><td>HTTP(s) - Keyword</td><td>HTTP monitor with the keyword. "Invert keyword" becomes "healthy when it is absent".</td></tr>
+        <tr><td>HTTP(s) - Json Query</td><td>HTTP monitor with a JSON assertion when the query is a plain path such as <code>data.status</code> or <code>items[0].id</code>. Other JSONata expressions are skipped with a reason.</td></tr>
+        <tr><td>TCP Port</td><td>TCP monitor on the same host and port.</td></tr>
+        <tr><td>DNS</td><td>DNS monitor for A, AAAA, CNAME, MX, TXT and NS records. The resolver you chose is not kept: OpenUptime asks Cloudflare's public resolver.</td></tr>
+        <tr><td>Push</td><td>Heartbeat monitor with a new ping URL. Point your job at it; the Kuma push URL keeps reporting to Kuma.</td></tr>
+        <tr><td>Retries, timeout, interval</td><td><code>maxretries</code> plus one becomes the failure threshold (up to 10). The timeout is kept up to 30 seconds. An interval shorter than your plan allows is raised, and the row says so.</td></tr>
+        <tr><td>Tags</td><td>Kept, as <code>name</code> or <code>name:value</code>.</td></tr>
+        <tr><td>Ping</td><td>Ping monitor, where your server can send ICMP (see <a href="/docs/ping">ping monitors</a>); otherwise skipped with a reason. The packet size is not imported. The hosted service cannot send ping.</td></tr>
+        <tr><td>Docker container, Group, real browser, database monitors</td><td>Skipped, each with a reason. Groups are not monitors: their members are imported on their own. Database monitors keep their password in the connection string, so create them by hand.</td></tr>
+        <tr><td>Upside down mode</td><td>Skipped. There is no equivalent, so create the monitor by hand.</td></tr>
+        <tr><td>Notifications, proxies, status pages, maintenance, history</td><td>Not imported. The new monitors use the project's auto-enabled channels; the preview marks every monitor that had notifications or a proxy.</td></tr>
+      </tbody>
+    </table>
+    <p>A monitor that was paused in Kuma is imported active, and the preview marks it. Kuma's "ignore TLS errors" is not kept either: certificate errors count as failures here, and the preview names each monitor that had it on.</p>
+
+    <h2 id="preview">1. Preview the import</h2>
+    <p>Open <strong>Monitors</strong>, press <strong>Import</strong> and choose the backup file. The dialog shows <em>File format: Uptime Kuma 1.x backup</em> and the source namespace <code>uptime-kuma</code>. Press <strong>Preview import</strong>: each monitor is listed as ready or skipped, with the reason or the settings that did not carry over. Nothing is created yet.</p>
+    <p>The same works over the API, with the whole backup as the body. Add <code>"format": "uptime-kuma"</code> if you trimmed the file so it can no longer be recognised.</p>
+    <pre><code set:text={importCmd} /></pre>
+    <p>Here is one monitor from the redacted sample backup the importer is tested with, and what the preview reports for it. Two retries become a failure threshold of three, and the 48-second timeout is cut to 30 seconds:</p>
+    <pre><code set:text={source} /></pre>
+    <pre><code set:text={result} /></pre>
+
+    <h2 id="import">2. Import</h2>
+    <p>Set up your channels first (see the next step), then press <strong>Import ready monitors</strong>. Every imported monitor keeps its Kuma id as <code>uptime-kuma/1</code>, so importing the same backup again, or a newer one with a few more monitors, only adds what is new and never overwrites a monitor you have since edited.</p>
+
+    <h2 id="alerts">3. Rebuild notifications and status pages</h2>
+    <ol>
+      <li>Add your channels under <strong>Alerting</strong> (email, Slack, Discord, Telegram, webhooks and others) and turn on <em>on for new monitors</em> for the ones every imported monitor should use. A monitor takes the auto-enabled channels when it is created, so do this before the import.</li>
+      <li>Open each heartbeat monitor and copy its ping URL into the job that called Kuma's push URL.</li>
+      <li>Recreate skipped monitors by hand: a TCP check on a port the host answers on instead of a ping that could not be imported, and a database monitor with a fresh connection string.</li>
+      <li>Create a status page and pick the imported monitors.</li>
+    </ol>
+
+    <h2 id="switch">4. Run both, then switch</h2>
+    <p>Leave Kuma running for a few days and compare the incidents each one opens. A monitor that fails only here usually had TLS errors ignored or relied on a custom resolver or proxy; the preview listed each of those. When both agree, turn off Kuma's notifications.</p>
+
+    <h2 id="kuma-2">On Uptime Kuma 2.x</h2>
+    <p>Kuma 2.x has no backup export. Write the monitors you want to keep as OpenUptime JSON and import that file the same way. Give each one a <code>sourceId</code>, so a second import of the same file creates nothing new:</p>
+    <pre><code set:text={handWritten} /></pre>
+    <p>The <a href="/docs/api#import">API reference</a> lists every field an import record accepts.</p>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>从 Uptime Kuma 迁移</h1>
+    <p class="lede">把 Uptime Kuma 1.x 的备份文件原样导入。预览会逐个告诉你哪些监控已转换、哪些需要手动补全，确认之前不会创建任何东西。</p>
+
+    <h2 id="which-file-zh">使用哪个文件</h2>
+    <p>导入器读取 Uptime Kuma <strong>1.x</strong> 的 JSON 备份，在“设置 → 备份 → 导出”中生成，监控位于 <code>monitorList</code> 下。Kuma 在 1.23 中把这项备份功能标为弃用，并在 2.0 中移除，所以 2.x 没有可导出的文件。这种情况下，请把监控写成 OpenUptime JSON（见<a href="#kuma-2-zh">Uptime Kuma 2.x 用户</a>），或在控制台中重新创建。</p>
+    <p>备份文件包含所有使用 Basic 认证、带密钥请求头或数据库连接串的监控凭据。请妥善保管，迁移完成后删除。</p>
+
+    <h2 id="what-moves-zh">哪些能迁过来，哪些不能</h2>
+    <table class="vars">
+      <thead><tr><th>Uptime Kuma</th><th>在 OpenUptime 中</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP(s)</td><td>HTTP 监控，URL、请求方法、请求头和请求体保持不变。可接受状态码原样保留，例如 <code>200-299,401</code>；默认的 <code>200-299</code> 不需要单独设置。</td></tr>
+        <tr><td>HTTP(s) - 关键词</td><td>带关键词的 HTTP 监控。“反转关键词”会变成“关键词不出现才算正常”。</td></tr>
+        <tr><td>HTTP(s) - Json 查询</td><td>查询是 <code>data.status</code>、<code>items[0].id</code> 这类简单路径时，变成带 JSON 断言的 HTTP 监控。其他 JSONata 表达式会被跳过并说明原因。</td></tr>
+        <tr><td>TCP 端口</td><td>TCP 监控，主机和端口不变。</td></tr>
+        <tr><td>DNS</td><td>DNS 监控，支持 A、AAAA、CNAME、MX、TXT、NS 记录。不保留你指定的解析服务器：OpenUptime 使用 Cloudflare 的公共解析服务器。</td></tr>
+        <tr><td>Push</td><td>心跳监控，使用新的 ping 地址。请把任务改为请求新地址；Kuma 的 push 地址仍然上报给 Kuma。</td></tr>
+        <tr><td>重试、超时、间隔</td><td><code>maxretries</code> 加一成为失败阈值（最多 10）。超时最多保留 30 秒。短于套餐允许值的间隔会被调高，并在该行注明。</td></tr>
+        <tr><td>标签</td><td>保留，格式为 <code>name</code> 或 <code>name:value</code>。</td></tr>
+        <tr><td>Ping</td><td>在能发送 ICMP 的服务器上转换为 ping 监控（见 <a href="/docs/ping">ping 监控</a>），否则跳过并说明原因。数据包大小不会导入。托管服务无法发送 ping。</td></tr>
+        <tr><td>Docker 容器、分组、真实浏览器、数据库监控</td><td>跳过，并逐个说明原因。分组本身不是监控，组内成员会单独导入。数据库监控的密码在连接串里，请手动创建。</td></tr>
+        <tr><td>反转模式（Upside down）</td><td>跳过。没有对应功能，请手动创建该监控。</td></tr>
+        <tr><td>通知、代理、状态页、维护、历史</td><td>不导入。新监控使用项目中自动开启的渠道；预览会标出每个配置过通知或代理的监控。</td></tr>
+      </tbody>
+    </table>
+    <p>在 Kuma 中已暂停的监控导入后是启用状态，预览会标出来。Kuma 的“忽略 TLS 错误”也不会保留：这里证书错误会算作失败，预览会列出每个开启了该选项的监控。</p>
+
+    <h2 id="preview-zh">1. 预览导入</h2>
+    <p>打开<strong>监控</strong>页，点击<strong>导入</strong>并选择备份文件。对话框会显示<em>文件格式：Uptime Kuma 1.x 备份</em>，来源命名空间为 <code>uptime-kuma</code>。点击<strong>预览导入</strong>：每个监控都会标为就绪或跳过，并附上原因或没能迁过来的设置。此时还不会创建任何监控。</p>
+    <p>也可以通过 API 完成，把整个备份作为请求体。如果文件被裁剪到无法识别，请加上 <code>"format": "uptime-kuma"</code>。</p>
+    <pre><code set:text={importCmd} /></pre>
+    <p>下面是导入器测试所用的脱敏样例备份中的一个监控，以及预览对它的报告。重试 2 次变成失败阈值 3，48 秒的超时被截到 30 秒：</p>
+    <pre><code set:text={source} /></pre>
+    <pre><code set:text={result} /></pre>
+
+    <h2 id="import-zh">2. 导入</h2>
+    <p>先配置好渠道（见下一步），再点击<strong>导入待创建项</strong>。每个导入的监控都会以 <code>uptime-kuma/1</code> 的形式保留 Kuma 的 ID，所以再次导入同一个备份，或导入多了几个监控的新备份，都只会添加新的条目，不会覆盖你之后修改过的监控。</p>
+
+    <h2 id="alerts-zh">3. 重建通知和状态页</h2>
+    <ol>
+      <li>在<strong>告警</strong>页添加渠道（邮件、Slack、Discord、Telegram、Webhook 等），并为所有导入监控都要用的渠道打开“新监控自动开启”。监控在创建时才会带上自动开启的渠道，所以请在导入前完成。</li>
+      <li>打开每个心跳监控，把它的 ping 地址填到原先调用 Kuma push 地址的任务里。</li>
+      <li>手动重建被跳过的监控：用主机会响应的 TCP 端口检测代替无法导入的 ping，用新的连接串创建数据库监控。</li>
+      <li>创建状态页，选择导入后的监控。</li>
+    </ol>
+
+    <h2 id="switch-zh">4. 并行运行，然后切换</h2>
+    <p>让 Kuma 继续运行几天，对比两边各自创建的事件。只在这里失败的监控，通常是原先忽略了 TLS 错误，或依赖自定义解析服务器或代理，而这些预览中都已列出。两边结果一致后，关闭 Kuma 的通知。</p>
+
+    <h2 id="kuma-2-zh">Uptime Kuma 2.x 用户</h2>
+    <p>Kuma 2.x 没有备份导出。请把要保留的监控写成 OpenUptime JSON，然后用同样的方式导入。给每个监控加上 <code>sourceId</code>，这样再次导入同一个文件不会重复创建：</p>
+    <pre><code set:text={handWritten} /></pre>
+    <p><a href="/docs/api#import">API 参考</a>列出了导入记录接受的所有字段。</p>
+  </div>
+</Doc>
