@@ -1,0 +1,13 @@
+{
+  "name": "openuptime-config-as-code-example",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "plan": "node sync.mjs plan",
+    "apply": "node sync.mjs apply",
+    "test": "node --test"
+  }
+}

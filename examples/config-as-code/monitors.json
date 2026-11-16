@@ -1,0 +1,32 @@
+{
+  "source": "config:production",
+  "monitors": [
+    {
+      "key": "website",
+      "name": "Website",
+      "type": "http",
+      "target": "https://example.com",
+      "intervalSec": 60,
+      "keyword": "Example Domain",
+      "tags": ["production"]
+    },
+    {
+      "key": "api-health",
+      "name": "API health",
+      "type": "http",
+      "target": "https://api.example.com/health",
+      "intervalSec": 60,
+      "headers": { "Authorization": "Bearer ${HEALTH_TOKEN}" },
+      "jsonAssertions": [{ "path": "status", "op": "equals", "value": "ok" }],
+      "tags": ["production", "api"]
+    },
+    {
+      "key": "nightly-backup",
+      "name": "Nightly backup",
+      "type": "heartbeat",
+      "intervalSec": 86400,
+      "graceSec": 3600,
+      "tags": ["production"]
+    }
+  ]
+}

@@ -116,6 +116,7 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
     });
     await sendMaintenanceReminders(repo, entitlements).catch((e) => console.error("maintenance reminders failed", e));
     await sendMonthlyReports(repo, new Date(), entitlements).catch((e) => console.error("monthly reports failed", e));
+    await step("edition five-minute work", async () => void (await entitlements.everyFiveMinutes?.()));
   }
   return total;
 }
