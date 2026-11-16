@@ -1,4 +1,4 @@
-import type { Monitor, Repo, McpCheckDiagnostics } from "@openuptime/repo";
+import type { IncidentDiagnostics, Monitor, RegionResult, Repo, McpCheckDiagnostics } from "@openuptime/repo";
 import { dispatchAlert, retryDeliveries, sendEscalations, sendMaintenanceReminders, sendReminders, sweepDeliveries, wasDelivered } from "./alerts";
 import type { CheckOutcome } from "./checker";
 import { enqueueMcpAlert, drainMcpAlerts } from "./mcp-outbox";
@@ -269,7 +269,7 @@ async function applyMeasured(repo: Repo, m: Monitor, measured: Measured, entitle
     ...next,
   });
 
-  if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements, notify);
+  if (opensOutage || lateOpen) await openIncident(repo, m, out.error ?? "Check failed", evaluation(m, regionNote, lateOpen), entitlements, notify, diagnosticsOf(results));
   if (recovering && !(await completeRecovery(repo, m, (slow || out.degraded) ? "degraded" : "up", finalSlow, entitlements, notify))) return;
   if (slowTrips) await openSlowIncident(repo, m, out.latencyMs!, entitlements, notify);
   if (slowClears) await resolveIncident(repo, m, true, entitlements, notify);
@@ -330,12 +330,21 @@ function evaluation(m: Monitor, regionNote: string | undefined, lateOpen: boolea
 /** An outage that resolved this recently is reopened by a new failure instead of becoming a second incident. */
 export const REOPEN_WINDOW_MS = 10 * 60_000;
 
-async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNote: string, entitlements: Entitlements, notify: typeof dispatchAlert = dispatchAlert) {
+/** What each region saw on the run that opened an incident, kept with it; null when the run has no region results. */
+export function diagnosticsOf(results: RegionResult[]): IncidentDiagnostics | null {
+  if (!results.length) return null;
+  return {
+    checkedAt: new Date().toISOString(),
+    regions: results.slice(0, 20).map((r) => ({ region: r.region, ok: r.ok, statusCode: r.statusCode ?? null, latencyMs: r.latencyMs ?? null, error: r.error ? r.error.slice(0, 500) : null, ...(r.diagnosis ? { diagnosis: r.diagnosis } : {}) })),
+  };
+}
+
+async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNote: string, entitlements: Entitlements, notify: typeof dispatchAlert = dispatchAlert, diagnostics: IncidentDiagnostics | null = null) {
   // an outage is not blocked by a latency incident: that one is superseded (resolved without a recovery alert)
   for (const slow of await repo.openIncidents(m.id, true)) await repo.resolveIncident(slow.id, "Superseded: the monitor is down.");
   if (await repo.hasOpenIncident(m.id, false)) return;
   // failing again right after a recovery is the same outage: reopen it (an incident a person resolved stays resolved)
-  const reopened = await repo.reopenIncident(m.id, new Date(Date.now() - REOPEN_WINDOW_MS), `Failing again. ${reason}`, `reopened: failed again within ${REOPEN_WINDOW_MS / 60_000} minutes of resolving; ${evaluationNote}`);
+  const reopened = await repo.reopenIncident(m.id, new Date(Date.now() - REOPEN_WINDOW_MS), `Failing again. ${reason}`, `reopened: failed again within ${REOPEN_WINDOW_MS / 60_000} minutes of resolving; ${evaluationNote}`, diagnostics);
   if (reopened) {
     // it starts over as unacknowledged: its reminders and escalation are scheduled again and people are told it is back,
     // unless the first alert was muted as flapping
@@ -357,7 +366,7 @@ async function openIncident(repo: Repo, m: Monitor, reason: string, evaluationNo
   // a monitor that flaps (down, up, down…) gets one down alert per window, not one per flip
   const recent = await repo.hadIncidentSince(m.id, new Date(Date.now() - FLAP_WINDOW_MS));
   const inc = await repo.openAutoIncident(
-    { organizationId: m.organizationId, monitorId: m.id, title: m.type === "domain" ? `${m.name}: ${m.domainExpiry?.state === "unknown" ? "domain expiry unknown" : m.domainExpiry?.state === "expired" ? "registration date passed" : "domain renewal needed"}` : `${m.name} is down`, auto: true, evaluationNote },
+    { organizationId: m.organizationId, monitorId: m.id, title: m.type === "domain" ? `${m.name}: ${m.domainExpiry?.state === "unknown" ? "domain expiry unknown" : m.domainExpiry?.state === "expired" ? "registration date passed" : "domain renewal needed"}` : `${m.name} is down`, auto: true, evaluationNote, diagnostics },
     { status: "investigating", body: `${consecutive(m)} consecutive failed checks. ${reason}` },
   );
   if (!inc) return; // a concurrent check opened it

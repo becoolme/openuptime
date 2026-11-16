@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DomainExpiry, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
+import type { DomainExpiry, IncidentDiagnostics, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
 export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]);
@@ -205,6 +205,8 @@ export const incident = pgTable(
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     /** short human-readable reason an automatic incident opened or was reopened ("3 of 3 regions failed") */
     evaluationNote: text("evaluation_note"),
+    /** What the failing check saw from each region when an automatic incident opened or reopened. Never public. */
+    diagnostics: jsonb("diagnostics").$type<IncidentDiagnostics>(),
     /** When the next repeat alert is due; null once acknowledged, resolved, capped or when repeats are off. */
     nextReminderAt: timestamp("next_reminder_at", { withTimezone: true }),
     reminderCount: integer("reminder_count").notNull().default(0),

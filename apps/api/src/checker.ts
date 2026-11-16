@@ -11,7 +11,9 @@ import { websocketCheck } from "./websocket";
 import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
 import { statusAccepted, statusRule, statusRuleText } from "./status-spec";
 import { keywordOutcome } from "./keyword";
-import type { JsonAssertion } from "@openuptime/repo";
+import type { CheckDiagnosis, JsonAssertion } from "@openuptime/repo";
+import { bodyExcerpt, classifyError, DIAG_READ_BYTES, keptHeaders, safeHops, secretsOf } from "./diagnosis";
+import type { FetchHop } from "@openuptime/kit/netguard";
 
 export type CheckInput = {
   type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana";
@@ -48,10 +50,15 @@ export type CheckOutcome = {
   error?: string;
   /** The check could not be carried out from here (the prober itself is offline): nothing to record about the target. */
   inconclusive?: boolean;
+  /** On a failure: what kind it was and what the check saw, with credentials removed. Kept with the incident it opens. */
+  diagnosis?: CheckDiagnosis;
 };
 
 /** How much of a response is read when looking for a keyword. A larger body is not downloaded further. */
 export const MAX_BODY_BYTES = 1_000_000;
+
+/** Where a thrown fetch error carries the hops that answered before it. */
+const HOPS = Symbol("hops");
 
 export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome> {
   const started = Date.now();
@@ -76,7 +83,9 @@ export async function runCheck(m: CheckInput, repo?: Repo): Promise<CheckOutcome
       default: return { ok: true };
     }
   } catch (e) {
-    const failed: CheckOutcome = { ok: false, latencyMs: Date.now() - started, error: describe(e) };
+    const latencyMs = Date.now() - started;
+    const redirects = (e as { [HOPS]?: CheckDiagnosis["redirects"] } | null)?.[HOPS];
+    const failed: CheckOutcome = { ok: false, latencyMs, error: describe(e), diagnosis: { kind: classifyError(e), timings: { totalMs: latencyMs }, ...(redirects ? { redirects } : {}) } };
     return (await proberFault(m, e)) ? { ...failed, inconclusive: true } : failed;
   }
 }
@@ -123,11 +132,33 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
   const rule = statusRule(m);
   // a list that accepts a redirect wants the redirect itself checked, not where it leads
   const expectRedirect = REDIRECT_STATUSES.some((s) => statusAccepted(rule, s));
-  const { res, url } = await guardedFetch(
-    m.target,
-    { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers },
-    { follow: !expectRedirect, protectBody: true },
-  );
+  const hops: FetchHop[] = [];
+  let res: Response;
+  let url: string;
+  try {
+    ({ res, url } = await guardedFetch(
+      m.target,
+      { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers },
+      { follow: !expectRedirect, protectBody: true, trace: hops },
+    ));
+  } catch (e) {
+    // the hops that did answer before a later one failed still tell where the request went
+    const secrets = secretsOf(m.target, m.headers);
+    throw Object.assign(e instanceof Error ? e : new Error(String(e)), { [HOPS]: safeHops(hops, secrets) });
+  }
+  const firstByteMs = Date.now() - started;
+  // what a failing check keeps: built only on failure, from values with the monitor's own credentials taken out
+  const fail = (kind: CheckDiagnosis["kind"], error: string, latencyMs: number, body?: string): CheckOutcome => {
+    const secrets = secretsOf(m.target, m.headers);
+    const diagnosis: CheckDiagnosis = { kind, timings: { firstByteMs, totalMs: latencyMs } };
+    const redirects = safeHops(hops, secrets);
+    if (redirects) diagnosis.redirects = redirects;
+    const kept = keptHeaders(res.headers, url, secrets);
+    if (kept) diagnosis.headers = kept;
+    const excerpt = body != null ? bodyExcerpt(body, secrets) : undefined;
+    if (excerpt) diagnosis.body = excerpt;
+    return { ok: false, statusCode: res.status, latencyMs, error, diagnosis };
+  };
   // when redirects were followed, say where we ended up: a 404 usually comes from the final hop, not the URL typed
   const where = url !== m.target ? ` at ${url}` : "";
   const statusOk = statusAccepted(rule, res.status);
@@ -136,29 +167,35 @@ async function httpCheck(m: CheckInput, started: number): Promise<CheckOutcome> 
     const want = resolveUrl(m.expectedLocation, m.target);
     if (got !== want) {
       await res.body?.cancel();
-      return { ok: false, statusCode: res.status, latencyMs: Date.now() - started, error: got ? `Redirects to ${got}, expected ${want ?? m.expectedLocation}` : `Expected a redirect to ${want ?? m.expectedLocation}, but there is no Location header` };
+      return fail("http", got ? `Redirects to ${got}, expected ${want ?? m.expectedLocation}` : `Expected a redirect to ${want ?? m.expectedLocation}, but there is no Location header`, Date.now() - started);
     }
   }
   const asserts = m.jsonAssertions ?? [];
   if ((!m.keyword && !asserts.length) || m.method === "HEAD") {
+    if (!statusOk) {
+      // the start of an error page usually names the cause; nothing more than that is downloaded
+      const body = m.method === "HEAD" ? undefined : await readCapped(res, DIAG_READ_BYTES).catch(() => undefined);
+      if (body === undefined) await res.body?.cancel().catch(() => {});
+      return fail("http", `Expected ${statusRuleText(m)}, got ${res.status}${where}`, Date.now() - started, body);
+    }
     await res.body?.cancel();
     const latencyMs = Date.now() - started;
-    if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${statusRuleText(m)}, got ${res.status}${where}` };
     // a HEAD answer has no body: assertions on it could never be checked, so they fail instead of passing unseen
-    if (asserts.length) return { ok: false, statusCode: res.status, latencyMs, error: "JSON assertions need a response body; use GET instead of HEAD" };
+    if (asserts.length) return fail("assertion", "JSON assertions need a response body; use GET instead of HEAD", latencyMs);
     return { ok: true, statusCode: res.status, latencyMs };
   }
   const body = await readCapped(res, MAX_BODY_BYTES);
   const latencyMs = Date.now() - started;
-  if (!statusOk) return { ok: false, statusCode: res.status, latencyMs, error: `Expected ${statusRuleText(m)}, got ${res.status}${where}` };
+  if (!statusOk) return fail("http", `Expected ${statusRuleText(m)}, got ${res.status}${where}`, latencyMs, body);
   if (m.keyword) {
     const kw = keywordOutcome(m.keyword, m.keywordMode, body, "response");
-    if (!kw.ok) return { ok: false, statusCode: res.status, latencyMs, error: kw.error };
+    if (!kw.ok) return fail("assertion", kw.error, latencyMs, body);
   }
   let failed = asserts.length ? jsonAssertionProblem(body, asserts) : null;
   // only the first MAX_BODY_BYTES are read: a longer document is cut off, not malformed
   if (failed === NOT_JSON && new TextEncoder().encode(body).byteLength >= MAX_BODY_BYTES) failed = `Response is larger than ${MAX_BODY_BYTES / 1_000_000} MB, too large to check as JSON`;
-  return { ok: !failed, statusCode: res.status, latencyMs, error: failed ?? undefined };
+  if (failed) return fail("assertion", failed, latencyMs, body);
+  return { ok: true, statusCode: res.status, latencyMs };
 }
 
 /** Cloudflare's socket API. The import fails anywhere else (Node, tests), whatever the runtime words the error as. */

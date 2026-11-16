@@ -29,4 +29,12 @@ describe("public incident bodies", () => {
     // published but still open: still private
     expect(toPublic({ ...inc, postmortemPublishedAt: new Date() })).not.toHaveProperty("postmortem");
   });
+
+  it("never shows what a failing check saw", () => {
+    const inc = { id: "i", number: 1, title: "API down", status: "investigating" as const, severity: "major", startedAt: new Date(), resolvedAt: null, updates: [],
+      diagnostics: { checkedAt: new Date().toISOString(), regions: [{ region: "eu", ok: false, statusCode: 503, latencyMs: 40, error: "HTTP 503", diagnosis: { kind: "http" as const, body: "internal stack trace" } }] } };
+    const out = toPublic(inc as never);
+    expect(out).not.toHaveProperty("diagnostics");
+    expect(JSON.stringify(out)).not.toContain("internal stack trace");
+  });
 });

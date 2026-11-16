@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureProbes } from "./probes";
 import { resetSelfCheck } from "@openuptime/kit/selfcheck";
 import { unmetered, type Entitlements } from "./entitlements";
-import { MESSAGE_SIZE, checkOne, resolveIncident, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
+import { MESSAGE_SIZE, checkOne, diagnosticsOf, resolveIncident, nextAfter, processCheckMessage, runDueChecks, slotOf, type CheckMessage } from "./scheduler";
 
 describe("runDueChecks", () => {
   it("packs due monitors into queue messages, each monitor exactly once", async () => {
@@ -270,6 +270,25 @@ describe("checkOne", () => {
     await checkOne(repo, hb());
     expect(incidents.filter((i) => !i.resolved)).toHaveLength(1);
     expect(states.at(-1)).toMatchObject({ status: "down" });
+  });
+
+  it("keeps what each region saw with the incident it opens", async () => {
+    const { repo } = fakeRepo();
+    const opened = vi.fn(repo.openAutoIncident);
+    repo.openAutoIncident = opened;
+    await checkOne(repo, hb());
+    const diagnostics = opened.mock.calls[0][0].diagnostics!;
+    expect(diagnostics.regions).toEqual([expect.objectContaining({ region: "auto", ok: false, error: expect.any(String) })]);
+    expect(Date.parse(diagnostics.checkedAt)).not.toBeNaN();
+  });
+
+  it("builds diagnostics only from region results, capped in size", () => {
+    expect(diagnosticsOf([])).toBeNull();
+    const many = Array.from({ length: 30 }, (_, i) => ({ region: `r${i}`, ok: false, error: "x".repeat(900), diagnosis: { kind: "http" as const } }));
+    const d = diagnosticsOf(many)!;
+    expect(d.regions).toHaveLength(20);
+    expect(d.regions[0].error).toHaveLength(500);
+    expect(d.regions[0].diagnosis).toEqual({ kind: "http" });
   });
 
   it("keeps a regular monitor's lease-assigned due time", async () => {

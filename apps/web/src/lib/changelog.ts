@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "incident-diagnostics", date: "2026-11-16", edition: "community",
+    title: { en: "See what a failing check saw", zh: "查看失败检测看到的内容" },
+    summary: { en: "An automatic incident now keeps what each region saw on the check that opened it, so the cause is often clear without reproducing the failure.", zh: "自动创建的事件现在会保存触发它的那次检测在各个地区看到的内容，很多时候不用复现故障就能看出原因。" },
+    points: [
+      { en: "The incident page names the kind of failure: name lookup, connection, TLS, timeout, an unexpected HTTP response or a content check that did not hold.", zh: "事件页面会标明失败类型：域名解析、连接、TLS、超时、HTTP 响应不符合预期，或内容校验未通过。" },
+      { en: "It lists every region's result, the redirect chain, the time to first byte and in total, and a short list of response headers such as server, content type and CDN cache.", zh: "页面列出每个地区的结果、重定向链、首字节时间和总耗时，以及服务器、内容类型、CDN 缓存等少量响应头。" },
+      { en: "When the response was wrong, the start of its body is kept as plain text, with the monitor's own credentials, cookies and values that look like secrets removed.", zh: "响应不对时会以纯文本保存正文开头，并移除监控自身的凭据、Cookie 以及看起来像密钥的值。" },
+      { en: "This stays inside the workspace: status pages and webhook alerts do not include it.", zh: "这些内容只留在工作区内，状态页和 Webhook 告警都不会包含。" },
+    ],
+    upgrade: { en: "Update self-hosted regional probes to this version to get the details from each region; older probes still report their result and error.", zh: "自托管的地区探针需要更新到这个版本才能提供各地区的详细信息；旧版探针仍会上报结果和错误。" },
+  },
+  {
     id: "keyword-patterns", date: "2026-11-15", edition: "community",
     title: { en: "Match keywords with regular expressions", zh: "关键词支持正则表达式" },
     summary: { en: "HTTP and WebSocket monitors can check the response against a regular expression, not only a fixed piece of text.", zh: "HTTP 和 WebSocket 监控除了查找固定文本，还可以用正则表达式检查响应内容。" },

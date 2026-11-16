@@ -249,5 +249,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0049_mute_warpath",
     "when": 1794720919524,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"accepted_statuses\" text;"
+  },
+  {
+    "tag": "0050_flashy_falcon",
+    "when": 1794868069975,
+    "sql": "ALTER TABLE \"incident\" ADD COLUMN \"diagnostics\" jsonb;"
   }
 ];
