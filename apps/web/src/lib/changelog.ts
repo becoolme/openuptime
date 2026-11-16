@@ -29,6 +29,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "browser-check-example", date: "2026-11-16", edition: "community",
+    title: { en: "Example browser sign-in check", zh: "浏览器登录检测示例" },
+    summary: { en: "The repository now has a Playwright example that signs in to a site on a schedule in GitHub Actions and reports to a heartbeat monitor.", zh: "代码仓库新增一个 Playwright 示例：在 GitHub Actions 中定时登录网站，并向心跳监控上报结果。" },
+    points: [
+      { en: "It catches a sign-in that no longer works while every request still answers 200: a failed run sends no ping, so the heartbeat monitor opens an incident.", zh: "它能发现所有请求仍返回 200、但已经无法登录的情况：失败的运行不会发送心跳，心跳监控因此创建事件。" },
+      { en: "The job summary names the step that failed, and a screenshot is kept; typed passwords, input values and the configured secrets are removed from the output.", zh: "任务摘要会写明失败的步骤，并保留截图；输入的密码、输入框的值和配置的密钥都会从输出中移除。" },
+      { en: "The example's notes cover the GitHub Actions minutes a 15-minute schedule uses and what a built-in browser monitor would still need.", zh: "示例说明中估算了每 15 分钟运行一次所需的 GitHub Actions 分钟数，以及内置浏览器监控还需要解决的问题。" },
+    ],
+  },
+  {
     id: "keyword-patterns", date: "2026-11-15", edition: "community",
     title: { en: "Match keywords with regular expressions", zh: "关键词支持正则表达式" },
     summary: { en: "HTTP and WebSocket monitors can check the response against a regular expression, not only a fixed piece of text.", zh: "HTTP 和 WebSocket 监控除了查找固定文本，还可以用正则表达式检查响应内容。" },

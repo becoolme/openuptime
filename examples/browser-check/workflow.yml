@@ -1,0 +1,53 @@
+# Copy to .github/workflows/browser-check.yml in the repository that holds this folder.
+# Secrets: BASE_URL, LOGIN_EMAIL, LOGIN_PASSWORD, OPENUPTIME_HEARTBEAT_URL. Optional variable: EXPECT_TEXT.
+name: Browser check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# never two runs at once: a slow run is cancelled rather than piling up
+concurrency:
+  group: browser-check
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sign-in:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: examples/browser-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Run the check
+        run: npx playwright test
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          EXPECT_TEXT: ${{ vars.EXPECT_TEXT }}
+          OPENUPTIME_HEARTBEAT_URL: ${{ secrets.OPENUPTIME_HEARTBEAT_URL }}
+      # only a passing run pings: no ping within the heartbeat period opens an incident in OpenUptime
+      - name: Report to OpenUptime
+        if: success()
+        run: curl -fsS -m 10 --retry 3 -X POST "$OPENUPTIME_HEARTBEAT_URL" > /dev/null
+        env:
+          OPENUPTIME_HEARTBEAT_URL: ${{ secrets.OPENUPTIME_HEARTBEAT_URL }}
+      - name: Keep the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-failure
+          # screenshots only: the other files Playwright writes there can contain typed values
+          path: examples/browser-check/test-results/**/*.png
+          retention-days: 7
