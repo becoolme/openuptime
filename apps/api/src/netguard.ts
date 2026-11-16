@@ -2,6 +2,7 @@ import { BlockedTarget, allowPrivateTargets, guardHost, hostPort, isWorkers, pri
 import { useOutboundProxy } from "@openuptime/kit/pinnedfetch";
 import { configureSelfCheck } from "@openuptime/kit/selfcheck";
 import { domainName } from "./domain-name";
+import { pingHost } from "./ping";
 /**
  * The outbound-request guard as OpenUptime configures it. The guard itself lives in the kit; what is specific to
  * monitors stays here: the deployment's settings, the User-Agent checks send and which monitor targets are refused.
@@ -36,6 +37,8 @@ export async function targetProblem(type: string, target: string): Promise<strin
     if ((type === "http" || type === "mcp" || type === "evm" || type === "solana") && u.protocol !== "http:" && u.protocol !== "https:") return "Only http:// and https:// URLs can be monitored.";
     if (type === "websocket" && u.protocol !== "ws:" && u.protocol !== "wss:") return "Only ws:// and wss:// URLs can be monitored.";
     host = u.hostname;
+  } else if (type === "ping") {
+    host = pingHost(target) ?? undefined;
   } else {
     host = hostPort(target, 1)?.hostname;
   }

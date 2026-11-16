@@ -1,0 +1,100 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+const healthy = `$ curl -s https://api.example.com/status
+{ "data": { "status": "ok", "queue": { "depth": 12 } }, "version": "2026.11.2" }`;
+const broken = `$ curl -s -w "\\nstatus %{http_code}\\n" https://api.example.com/status
+{ "data": { "status": "degraded", "queue": { "depth": 48210 } },
+  "error": "database read-only" }
+status 200`;
+const jq = `curl -s https://api.example.com/status | jq -e '.data.status == "ok"'
+# exit code 0 when healthy, 1 when not: usable in any script or CI step`;
+const monitor = `curl -X POST https://openuptime.app/api/monitors \\
+  -H "x-api-key: ou_..." -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Status API",
+    "type": "http",
+    "target": "https://api.example.com/status",
+    "intervalSec": 60,
+    "jsonAssertions": [
+      { "path": "$.data.status", "op": "equals", "value": "ok" },
+      { "path": "$.data.queue.depth", "op": "less_than", "value": "1000" },
+      { "path": "$.error", "op": "not_exists" }
+    ]
+  }'`;
+---
+<Doc title="200 OK, but the page is broken" titleZh="返回 200，页面却坏了" description="An endpoint answers 200 while it shows an error, stale data or an empty list. Spot it with curl and jq, then check the body on every run with keyword and JSON assertions." descriptionZh="接口返回 200，内容却是错误、过期数据或空列表。用 curl 和 jq 发现问题，再用关键词和 JSON 断言在每次检测时检查响应体。" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>200 OK, but the page is broken</h1>
+    <p class="lede">A status code says the server answered, not that the answer is right. Error pages served with 200, cached fallbacks, empty lists and "degraded" flags all pass a check that only looks at the status. This guide shows how to catch them.</p>
+
+    <h2 id="cases">Where it happens</h2>
+    <ul>
+      <li><strong>Error pages with 200.</strong> A framework or CDN renders "Something went wrong" or a maintenance page and keeps the 200.</li>
+      <li><strong>Fallback content.</strong> A cache or service worker serves an old copy when the origin fails.</li>
+      <li><strong>Partial outages.</strong> An API answers, but a field says <code>"degraded"</code>, a list is empty, or a dependency is marked down.</li>
+      <li><strong>Login walls.</strong> An expired session or a changed auth rule returns the sign-in page with 200 instead of the content.</li>
+    </ul>
+
+    <h2 id="reproduce">Reproduce it</h2>
+    <p>Compare a healthy answer with a broken one. Both return 200:</p>
+    <pre><code set:text={healthy} /></pre>
+    <pre><code set:text={broken} /></pre>
+    <p>Decide which value tells you the service works, then test exactly that. With <code>jq</code>, the exit code is the verdict:</p>
+    <pre><code set:text={jq} /></pre>
+
+    <h2 id="html">For HTML pages: a keyword</h2>
+    <p>On an HTTP monitor, fill <strong>Response must contain (optional)</strong> with text that only a working page has, such as a product name in the page body or the label of a button. Choose <em>must not contain</em> instead to fail when an error text appears, such as "Service unavailable". The match is case-sensitive.</p>
+    <p>Pick text that is produced by the part you want to check. The site name in the header is also on the error page, so it proves nothing.</p>
+
+    <h2 id="json">For JSON APIs: assertions</h2>
+    <p>Under <strong>JSON assertions (optional)</strong>, add up to 10 rules. Each reads a value with a path such as <code>$.data.items[0].status</code> and compares it with <code>equals</code>, <code>not_equals</code>, <code>contains</code>, <code>exists</code>, <code>not_exists</code>, <code>greater_than</code> or <code>less_than</code>. Numbers, true, false and null compare as typed. Every rule must hold for the check to pass. The same monitor over the API:</p>
+    <pre><code set:text={monitor} /></pre>
+    <p>When a rule fails, the check reports the first one that did not hold, for example <code>Expected JSON $.data.status to equal "ok", got "degraded"</code>, so the incident tells you what broke before you open a log. Values are written as text, as in <code>"1000"</code>, and compared by type.</p>
+
+    <h2 id="tips">Make the check meaningful</h2>
+    <ul>
+      <li>Check an endpoint that touches the things that break: a status route that reads from the database tells you more than a static <code>/ping</code>.</li>
+      <li>Keep the expected status strict. Leave it at 2xx, or set the one code you expect, so a redirect to a login page does not pass.</li>
+      <li>If the endpoint needs a token, add it as a request header on the monitor; use a read-only token made for monitoring.</li>
+    </ul>
+    <p>See <a href="/monitoring/api-monitoring">API monitoring</a> for what else an HTTP monitor can check.</p>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>返回 200，页面却坏了</h1>
+    <p class="lede">状态码只说明服务器回应了，不说明回应是对的。用 200 返回的错误页、缓存的兜底内容、空列表和“degraded”标记，都能通过只看状态码的检测。本文介绍如何发现它们。</p>
+
+    <h2 id="cases-zh">常见场景</h2>
+    <ul>
+      <li><strong>带 200 的错误页。</strong>框架或 CDN 渲染出“出错了”或维护页面，状态码仍是 200。</li>
+      <li><strong>兜底内容。</strong>源站失败时，缓存或 Service Worker 返回旧的副本。</li>
+      <li><strong>部分故障。</strong>API 有响应，但某个字段是 <code>"degraded"</code>、列表为空，或某个依赖被标记为不可用。</li>
+      <li><strong>登录拦截。</strong>会话过期或认证规则变化后，返回的是 200 的登录页而不是正文。</li>
+    </ul>
+
+    <h2 id="reproduce-zh">复现问题</h2>
+    <p>对比正常和异常的两个响应，它们都返回 200：</p>
+    <pre><code set:text={healthy} /></pre>
+    <pre><code set:text={broken} /></pre>
+    <p>先确定哪个值能说明服务正常，然后只检查这个值。用 <code>jq</code> 时，退出码就是结论：</p>
+    <pre><code set:text={jq} /></pre>
+
+    <h2 id="html-zh">HTML 页面：关键词</h2>
+    <p>在 HTTP 监控的<strong>响应内容须包含（可选）</strong>中，填入只有正常页面才有的文本，例如正文里的产品名或某个按钮的文字。也可以选择<em>必须不含</em>，在出现错误文本（如“Service unavailable”）时判定失败。匹配区分大小写。</p>
+    <p>选的文本要由你想检查的那部分生成。页头里的网站名在错误页上也有，起不到作用。</p>
+
+    <h2 id="json-zh">JSON API：断言</h2>
+    <p>在 <strong>JSON 断言（可选）</strong>中最多添加 10 条规则。每条用 <code>$.data.items[0].status</code> 这样的路径读取一个值，再用 <code>equals</code>、<code>not_equals</code>、<code>contains</code>、<code>exists</code>、<code>not_exists</code>、<code>greater_than</code> 或 <code>less_than</code> 比较。数字、true、false 和 null 按类型比较。所有规则都成立，检测才算通过。通过 API 创建同样的监控：</p>
+    <pre><code set:text={monitor} /></pre>
+    <p>规则失败时，检测会报告第一条不成立的规则，例如 <code>Expected JSON $.data.status to equal "ok", got "degraded"</code>，你在打开日志之前就能从事件里看出哪里坏了。期望值以文本形式填写，如 <code>"1000"</code>，比较时按类型进行。</p>
+
+    <h2 id="tips-zh">让检测有意义</h2>
+    <ul>
+      <li>检测会涉及易出问题环节的端点：读取数据库的状态接口比静态的 <code>/ping</code> 更能说明问题。</li>
+      <li>期望状态码保持严格。保持 2xx，或设置你期望的那一个状态码，避免跳转到登录页也能通过。</li>
+      <li>如果端点需要令牌，在监控中添加请求头；请使用专为监控创建的只读令牌。</li>
+    </ul>
+    <p>更多 HTTP 监控能检查的内容，见 <a href="/monitoring/api-monitoring">API 监控</a>。</p>
+  </div>
+</Doc>

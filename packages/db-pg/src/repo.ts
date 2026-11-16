@@ -550,7 +550,7 @@ export function createRepo(db: DbExecutor): Repo {
           delete effective.status;
           delete effective.nextCheckAt;
         }
-        const measured = ["paused", "target", "method", "expectedStatus", "acceptedStatuses", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "headers", "wsMessage", "mcpConfig"];
+        const measured = ["paused", "target", "method", "expectedStatus", "acceptedStatuses", "intervalSec", "timeoutMs", "graceSec", "slowThresholdMs", "regions", "minRegionsFailing", "keyword", "keywordMode", "expectedLocation", "jsonAssertions", "apiFlow", "headers", "wsMessage", "mcpConfig"];
         const comparable = (key: string, value: unknown) => JSON.stringify(
           key === "regions" && Array.isArray(value) ? [...value].sort()
             : key === "mcpConfig" ? comparableMcpConfig(value as import("@openuptime/repo").McpConfig | null | undefined) : value,
@@ -1102,7 +1102,7 @@ export function createRepo(db: DbExecutor): Repo {
           const { projectId, number } = await allocateNumber(tx, inc);
           const [row] = await tx
             .insert(schema.incident)
-            .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, projectId, number, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote })
+            .values({ organizationId: inc.organizationId, monitorId: inc.monitorId ?? null, projectId, number, title: inc.title, severity: inc.severity, auto: true, assigneeId: inc.assigneeId, evaluationNote: inc.evaluationNote, diagnostics: inc.diagnostics ?? null })
             .onConflictDoNothing()
             .returning();
           // losing the race to another open incident rolls the transaction back, so the number is not burned
@@ -1163,7 +1163,7 @@ export function createRepo(db: DbExecutor): Repo {
         .limit(1);
       return !!r;
     },
-    async reopenIncident(monitorId, since, body, evaluationNote) {
+    async reopenIncident(monitorId, since, body, evaluationNote, diagnostics) {
       try {
         return await db.transaction(async (tx) => {
           // a person's resolution stands: only an incident the checks resolved themselves is reopened
@@ -1179,7 +1179,7 @@ export function createRepo(db: DbExecutor): Repo {
           // the follow-up clocks start over, as for a new incident
           const [row] = await tx
             .update(schema.incident)
-            .set({ status: "investigating", resolvedAt: null, evaluationNote, acknowledgedAt: null, postmortemPublishedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null })
+            .set({ status: "investigating", resolvedAt: null, evaluationNote, ...(diagnostics !== undefined ? { diagnostics } : {}), acknowledgedAt: null, postmortemPublishedAt: null, reminderCount: 0, escalationLevel: 0, nextReminderAt: null, nextEscalationAt: null })
             .where(and(eq(schema.incident.id, last.id), sql`${schema.incident.resolvedAt} is not null`))
             .returning();
           if (!row) return null;

@@ -22,7 +22,7 @@ async function signed(body: unknown, o: { secret?: string; ts?: number } = {}) {
 describe("probe handler", () => {
   it("answers a health GET without credentials", async () => {
     const res = await handleProbe(new Request("http://probe/"), { secret, region: "fra1" });
-    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: ["http-request-body-v1", "mcp-monitor-v2", "json-assert-v1", "status-spec-v1", "keyword-regex-v1"] });
+    expect(await res.json()).toMatchObject({ ok: true, region: "fra1", capabilities: expect.arrayContaining(["http-request-body-v1", "mcp-monitor-v2", "json-assert-v1", "status-spec-v1", "keyword-regex-v1", "api-flow-v1"]) });
   });
 
   it("is not an open proxy: unsigned, wrongly signed and stale requests are refused", async () => {

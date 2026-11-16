@@ -11,13 +11,16 @@ import { MASK, maskHeaders, restoreHeaders, sameJson } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
 import { isRegionConfigured, runInRegion, usesOnlyPrivateProbes } from "../probes";
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
+import { PING_TARGET_PROBLEM, pingAvailable, pingHost } from "../ping";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 import { KEYWORD_MODES, keywordProblem, MAX_KEYWORD_LENGTH } from "../keyword";
+import { IMPORT_FORMATS, convertRecord, detectFormat, monitorsOf, type ImportFormat } from "../import-formats";
 
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { jsonAssertionsSchema } from "../json-assert";
 import { MAX_STATUS_SPEC_LENGTH, parseStatusSpec } from "../status-spec";
+import { apiFlowSchema, fillBlank, flowHasMask, flowHasSecrets, maskFlow, restoreFlow } from "../api-flow";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
@@ -41,8 +44,8 @@ function mcpProblem(v: {type: string; target: string; mcpConfig?: McpConfig | nu
 
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
-  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana", "ping"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, ping sends one ICMP echo request (only where the checker can send ICMP), and other types check a service."),
+  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Ping: hostname or IP address. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
   mcpConfig: mcpConfigSchema.nullable().describe("MCP: requiredTools, optional schemaCheck baseline, and toolCall. Tool calls require explicit enabled=true and may incur charges or modify data. Assertions use JSON Pointer paths into the result. Manager-only configuration."),
   domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
   method: z.enum(HTTP_METHODS).describe("HTTP request method; ignored for other monitor types."),
@@ -59,12 +62,13 @@ const fields = {
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   recoveryThreshold: z.number().int().min(1).max(10).describe("Consecutive successful runs (or heartbeat pings) required to recover from down. Default 1; a multi-region vote counts once. Does not delay latency-only recovery."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
-  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket and MCP. A supplied list replaces the existing one."),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket, MCP and ping. A supplied list replaces the existing one."),
   keyword: z.string().max(MAX_KEYWORD_LENGTH).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test: plain text, or an RE2 regular expression with keywordMode matches or not_matches. Null disables keyword matching."),
   keywordMode: z.enum(KEYWORD_MODES).describe("contains or absent: the HTTP response body (or the WebSocket message) must or must not contain keyword as plain text. matches or not_matches: keyword is an RE2 regular expression that must or must not match somewhere in it; (?i) at the start ignores case. Backreferences and lookarounds are not supported."),
   // an absolute http(s) URL or a path; blank means "any destination"
   expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
   jsonAssertions: jsonAssertionsSchema.describe("HTTP only: up to 10 checks on the JSON response body, all of which must hold. path is like $.data.status or $.items[0].id; op is equals, not_equals, contains, exists, not_exists, greater_than or less_than; value is compared as text, number, boolean or null to match the JSON value. A supplied list replaces the existing one."),
+  apiFlow: apiFlowSchema.nullable().describe("HTTP only: a multi-step API check. The monitor's own request runs first, then up to 5 steps in order; the check fails at the first request that fails. extract reads values ({ name, from: json with a $.path, or header with a header name }) from an answer; a later step uses them as {{name}} in its URL path or query, header values and body, never in the host. Each step has name, method, url, headers, body, expectedStatus, jsonAssertions and extract. The monitor's timeout covers all requests together. Read values are treated as secrets and removed from errors. Step header values and bodies are masked for members who are not owners or admins; masked values keep the stored ones of the step at the same position. Null removes the steps."),
   headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP (or WebSocket handshake) request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
   // sent as one text message after the handshake; blank means "handshake only"
   wsMessage: z.string().max(2000).transform((v) => v || null).nullable().describe("WebSocket only: text message sent once the connection is open; a message must then come back within the timeout. Not a secret: put credentials in headers. Null or empty string checks the handshake only."),
@@ -102,6 +106,7 @@ const body = z.object({
   keywordMode: fields.keywordMode.default("contains"),
   expectedLocation: fields.expectedLocation.default(null),
   jsonAssertions: fields.jsonAssertions.default([]),
+  apiFlow: fields.apiFlow.default(null),
   headers: fields.headers.default({}),
   wsMessage: fields.wsMessage.default(null),
   dnsRecordType: fields.dnsRecordType.default("A"),
@@ -125,7 +130,8 @@ const bulkBody = z.object({
 const IMPORT_MAX = 500;
 const sourceSchema = z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9._:-]+$/);
 export const monitorImportSchema = z.object({
-  source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to json. Per-row source takes precedence."),
+  source: sourceSchema.optional().describe("Stable source namespace, such as uptime-kuma:production. Reuse it on retries; defaults to the format (json, uptimerobot or uptime-kuma). Per-row source takes precedence."),
+  format: z.enum(IMPORT_FORMATS).optional().describe("Shape of the records: json (OpenUptime fields), uptimerobot (monitors from the UptimeRobot v2 getMonitors answer) or uptime-kuma (monitorList of an Uptime Kuma 1.x backup). Detected from the records when omitted. Source monitor ids are kept as sourceId; settings without an equivalent are reported per row."),
   destination: z.object({ organizationId: z.string(), projectId: z.string().uuid() }).optional().describe("Optional on preview. For import_monitors, pass the destination returned by the preview: the import is then refused if the active workspace or project changed. Without it the monitors go to the active project."),
   monitors: z.array(z.record(z.string(), z.unknown())).min(1).max(IMPORT_MAX).describe("Monitor records. Give each a stable sourceId (or id). Source IDs ignore surrounding whitespace. Missing ids use a hash of type, name and target. Repeated identities are skipped, never overwritten."),
 });
@@ -168,9 +174,25 @@ const patchBody = z.object(fields).partial().omit({ type: true }).extend({
 export const monitorCreateSchema = body;
 export const monitorPatchSchema = patchBody;
 
+const PING_UNAVAILABLE = "This server cannot send ping (ICMP), so a ping monitor cannot run here. Choose a probe region that can, or check a TCP port instead.";
+
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
-const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
+const pingProblem = (v: { type: string; target: string }) => v.type === "ping" && !pingHost(v.target) ? PING_TARGET_PROBLEM : null;
+const flowProblem = (v: { type: string; apiFlow?: unknown }) => v.apiFlow && v.type !== "http" ? "API steps are available for HTTP monitors only" : null;
+const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body"
+  : flowHasMask(v.apiFlow) ? "Masked step headers or bodies cannot be imported or created; supply the original values"
+  : pingProblem(v) ?? flowProblem(v) ?? rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
+
+/** Every step URL is held to the same target rules as the monitor's own; placeholders cannot reach the host. */
+async function flowTargetProblem(type: string, flow: { steps: { url: string }[] } | null | undefined, regions: string[]) {
+  if (!flow || usesOnlyPrivateProbes(type, regions)) return null;
+  for (const [i, s] of flow.steps.entries()) {
+    const error = await targetProblem("http", fillBlank(s.url));
+    if (error) return `Step ${i + 1}: ${error}`;
+  }
+  return null;
+}
 
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
@@ -213,6 +235,7 @@ async function overPlan(c: Context<AppEnv>, o: { add?: number; intervalSec?: num
  */
 async function regionProblem(c: Context<AppEnv>, type: string, regions: string[]) {
   const wanted = [...new Set(regions)];
+  if (type === "ping" && wanted.every((r) => r === AUTO) && !(await pingAvailable())) return c.json({ error: PING_UNAVAILABLE, code: "ping_unavailable" }, 400);
   if (wanted.every((r) => r === AUTO)) return null;
   if (!(PROBE_TYPES as readonly string[]).includes(type)) {
     return c.json({ error: `Regions other than auto are available for ${PROBE_TYPES.join(" and ")} monitors only`, code: "regions_not_supported" }, 400);
@@ -270,8 +293,8 @@ function withoutOAuthSecrets(config: McpConfig | null | undefined, o: { clientSe
   return { ...config, oauth: { ...oauth, ...(o.clientSecret || clientSecret === undefined ? {} : { clientSecret }) } };
 }
 /** Request headers and bodies (often tokens) are shown to owners and admins only. */
-const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
-  (await isManager(c)) ? rows.map((m) => m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig) } : m) : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
+const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null; apiFlow?: import("@openuptime/repo").ApiFlow | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
+  (await isManager(c)) ? rows.map((m) => m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig) } : m) : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}), ...(m.apiFlow ? { apiFlow: maskFlow(m.apiFlow) } : {}) }));
 
 /** Source fields that look like credentials: a record carrying one is refused rather than imported without its authentication. */
 const CREDENTIAL_KEY = /auth|user|pass|secret|token|cred|bearer|oauth/i;
@@ -287,9 +310,12 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     const expected = envelope.destination as { organizationId?: unknown; projectId?: unknown } | null;
     if (expected?.organizationId !== c.get("orgId") || expected?.projectId !== c.get("projectId")) return c.json({ error: "The import destination changed; preview again", code: "import_destination_changed" }, 409);
   }
-  const list = Array.isArray(raw) ? raw : envelope.monitors;
+  const list = monitorsOf(raw);
   if (!Array.isArray(list) || list.length < 1 || list.length > IMPORT_MAX) return c.json({ error: `Import between 1 and ${IMPORT_MAX} monitors` }, 400);
-  const defaultSource = sourceSchema.safeParse(envelope.source ?? "json");
+  const askedFormat = z.enum(IMPORT_FORMATS).optional().safeParse(envelope.format);
+  if (!askedFormat.success) return c.json({ error: `format must be one of ${IMPORT_FORMATS.join(", ")}` }, 400);
+  const format: ImportFormat = askedFormat.data ?? detectFormat(envelope, list);
+  const defaultSource = sourceSchema.safeParse(envelope.source ?? format);
   if (!defaultSource.success) return c.json({ error: "Invalid source namespace" }, 400);
   type Row = { index: number; name: string | null; source?: string; sourceId?: string; status: string; monitorId?: string | null; error?: string; warnings: string[]; type?: string; intervalSec?: number; regions?: string[] };
   const report: Row[] = [];
@@ -297,10 +323,19 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
   const plan = await c.get("entitlements").plan(c.get("orgId"));
   const aliases = new Set(["source", "sourceId", "id", "friendly_name", "friendlyName", "url", "hostname", "host", "port", "interval", "keyword_value", "expectedKeyword", "accepted_statuscodes"]);
   const lookups = new Map<string, Promise<string | null>>();
-  for (const [index, item] of list.entries()) {
+  for (const [index, original] of list.entries()) {
+    // another tool's record becomes ours first; what did not carry over is reported on the row
+    const converted = format === "json" ? { name: null, warnings: [] as string[], error: undefined } : convertRecord(format, original);
+    const item: unknown = format === "json" ? original : converted.record;
     const r = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
-    const row: Row = { index, name: typeof r.name === "string" ? r.name : null, status: "skipped", warnings: [] };
+    const row: Row = { index, name: converted.name ?? (typeof r.name === "string" ? r.name : null), status: "skipped", warnings: [...converted.warnings] };
     report.push(row);
+    if (converted.error) {
+      // still name the source record, so a refused row can be found in the original file
+      const id = original && typeof original === "object" ? (original as Record<string, unknown>).id : undefined;
+      if (typeof id === "string" || typeof id === "number") Object.assign(row, { source: defaultSource.data, sourceId: String(id).trim() });
+      row.error = converted.error; continue;
+    }
     // Like masked headers: never import OAuth credentials, and never turn an OAuth monitor into an unauthenticated one.
     const importedOAuth = r.mcpConfig && typeof r.mcpConfig === "object" ? (r.mcpConfig as Record<string, unknown>).oauth : null;
     if (importedOAuth !== undefined && importedOAuth !== null) { row.error = "MCP OAuth credentials are not imported; remove mcpConfig.oauth, import, then enter the OAuth settings on the monitor"; continue; }
@@ -327,6 +362,8 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     if (!lookups.has(lookupKey)) lookups.set(lookupKey, usesOnlyPrivateProbes(v.type, v.regions) ? Promise.resolve(null) : targetProblem(v.type, v.target));
     const problem = await lookups.get(lookupKey)!;
     if (problem) { row.error = `target: ${problem}`; continue; }
+    const badStep = await flowTargetProblem(v.type, v.apiFlow, v.regions);
+    if (badStep) { row.error = `apiFlow: ${badStep}`; continue; }
     let sourceId: string;
     const identity = r.sourceId ?? r.id;
     if (identity !== undefined) {
@@ -342,6 +379,7 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     const regions = usable.length ? usable : [AUTO];
     if (JSON.stringify(v.regions) !== JSON.stringify(regions)) row.warnings.push("Regions adjusted to this deployment and plan");
     v.regions = regions;
+    if (v.type === "ping" && regions.every((r) => r === AUTO) && !(await pingAvailable())) { Object.assign(row, { source: source.data, sourceId, error: PING_UNAVAILABLE }); continue; }
     if (v.type === "domain") {
       const bounded = Math.min(86400, Math.max(v.intervalSec, 3600));
       if (bounded !== v.intervalSec) { v.intervalSec = bounded; row.warnings.push("Interval adjusted to the 1 hour to 1 day range for domain checks"); }
@@ -367,7 +405,7 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
   const ready = report.filter((r) => r.status === "ready").length;
   const skipped = report.filter((r) => r.status === "skipped").map(({ index, name, error }) => ({ index, name, error }));
   const project = (await repo.listProjects(c.get("orgId"), c.get("projectScope"))).find((p) => p.id === c.get("projectId"));
-  const result = { destination: { organizationId: c.get("orgId"), projectId: c.get("projectId"), projectName: project?.name ?? null }, preview, created, duplicates, ready, skipped, report, canImport: !batch.limit && candidates.length > 0, autoChannelCount: auto.length, capacity: batch.limit };
+  const result = { format, destination: { organizationId: c.get("orgId"), projectId: c.get("projectId"), projectName: project?.name ?? null }, preview, created, duplicates, ready, skipped, report, canImport: !batch.limit && candidates.length > 0, autoChannelCount: auto.length, capacity: batch.limit };
   // same fields as the single-create 402 (error text, numeric limit, active, plan); the batch detail is under `capacity`
   if (batch.limit && !preview) return c.json({ ...result, error: `The ${plan?.name} plan allows ${batch.limit.max} active monitors`, code: "monitor_limit", limit: batch.limit.max, active: batch.limit.active, plan: plan?.id, upgradeUrl: plan?.upgradeUrl }, 402);
   return c.json(result, preview || (!created && duplicates) ? 200 : created ? 201 : 400);
@@ -384,6 +422,8 @@ export const monitors = new Hono<AppEnv>()
     if (v.type === "domain") v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
     const blocked = await refuseTarget(c, v.type, v.target, v.regions);
     if (blocked) return blocked;
+    const badStep = await flowTargetProblem(v.type, v.apiFlow, v.regions);
+    if (badStep) return c.json({ error: badStep, code: "target_not_allowed" }, 400);
     const badRegion = await regionProblem(c, v.type, v.regions);
     if (badRegion) return badRegion;
     const badParent = await dependencyProblem(c, c.get("projectId"), null, v.dependsOnMonitorId);
@@ -532,28 +572,39 @@ export const monitors = new Hono<AppEnv>()
       if (current.type !== "dns") Object.assign(v, DNS_DEFAULTS);
     }
     // Retaining stored headers or a body also retains their access rights: only managers may change the request around them.
-    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined || v.requestBody !== undefined) {
+    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined || v.requestBody !== undefined || v.apiFlow !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
       if (v.headers) v.headers = restoreHeaders(v.headers, current.headers);
       if (v.requestBody === MASK) v.requestBody = current.requestBody ?? null;
-      const invalid = requestBodyProblem({ ...current, ...v });
+      if (v.apiFlow !== undefined) v.apiFlow = restoreFlow(v.apiFlow, current.apiFlow);
+      const invalid = flowProblem({ type: current.type, apiFlow: v.apiFlow }) ?? requestBodyProblem({ ...current, ...v });
       if (invalid) return c.json({ error: invalid }, 400);
       const nextHeaders = v.headers ?? current.headers;
+      const nextFlow = v.apiFlow === undefined ? current.apiFlow ?? null : v.apiFlow;
+      // what the first request reads can be handed to the steps: changing them while credentials stay is the same risk
       const retainsStored = Object.entries(current.headers).some(([key, value]) => nextHeaders[key] === value)
-        || Boolean(current.requestBody && (v.requestBody === undefined || v.requestBody === current.requestBody));
+        || Boolean(current.requestBody && (v.requestBody === undefined || v.requestBody === current.requestBody))
+        || flowHasSecrets(current.apiFlow);
       const changesRequest = (v.target !== undefined && v.target !== current.target)
         || (v.method !== undefined && v.method !== current.method)
         || (v.wsMessage !== undefined && v.wsMessage !== current.wsMessage)
         || (v.requestBody !== undefined && v.requestBody !== (current.requestBody ?? null))
-        || !sameJson(nextHeaders, current.headers);
+        || !sameJson(nextHeaders, current.headers)
+        || !sameJson(nextFlow, current.apiFlow ?? null);
       if (retainsStored && changesRequest && !(await isManager(c))) {
         return c.json({ error: "Only workspace owners and admins can change request settings while keeping stored headers or request body", code: "protected_request_headers" }, 403);
+      }
+      if (v.apiFlow !== undefined && !sameJson(nextFlow, current.apiFlow ?? null)) {
+        const badStep = await flowTargetProblem(current.type, nextFlow, v.regions ?? current.regions);
+        if (badStep) return c.json({ error: badStep, code: "target_not_allowed" }, 400);
       }
     }
     if (v.target !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
+      const malformed = pingProblem({ type: current.type, target: v.target });
+      if (malformed) return c.json({ error: malformed }, 400);
       const blocked = await refuseTarget(c, current.type, v.target, v.regions ?? current.regions);
       if (blocked) return blocked;
     }

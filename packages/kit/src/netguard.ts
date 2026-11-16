@@ -318,7 +318,10 @@ export class RedirectCookies {
  * an internal one). Returns the final response and URL; throws BlockedTarget for a refused hop. With `follow: false` the
  * first response is returned as it is, redirect or not, so the caller can judge the redirect itself.
  */
-export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, protectBody = false, publicOnly = false }: { follow?: boolean; protectBody?: boolean; publicOnly?: boolean } = {}): Promise<{ res: Response; url: string }> {
+/** One response on the way to the final one: where it came from, its status, where it pointed and how long it took. */
+export type FetchHop = { url: string; status: number; location: string | null; ms: number };
+
+export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, protectBody = false, publicOnly = false, trace }: { follow?: boolean; protectBody?: boolean; publicOnly?: boolean; /** filled with one entry per response received, the final one included */ trace?: FetchHop[] } = {}): Promise<{ res: Response; url: string }> {
   let current = url;
   let method = init.method ?? "GET";
   let body = init.body;
@@ -332,6 +335,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     const cookie = hop ? cookies.header(u, headers.get("cookie")) : null;
     if (cookie) sent.set("cookie", cookie);
     const req = { ...init, method, body, headers: sent, redirect: "manual" as const };
+    const started = Date.now();
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next
     let res: Response;
     try {
@@ -349,6 +353,7 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
       res = await pinnedFetch(current, req, fresh);
     }
     const location = res.headers.get("location");
+    trace?.push({ url: current, status: res.status, location, ms: Date.now() - started });
     if (!follow || res.status < 300 || res.status >= 400 || !location || [304].includes(res.status)) return { res, url: current };
     await res.body?.cancel();
     if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects");

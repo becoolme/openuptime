@@ -351,6 +351,27 @@
       "when": 1794720919524,
       "tag": "0049_mute_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794868069975,
+      "tag": "0050_flashy_falcon",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794868209222,
+      "tag": "0051_spooky_invisible_woman",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794868497312,
+      "tag": "0052_mature_maverick",
+      "breakpoints": true
     }
   ]
 }

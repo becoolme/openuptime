@@ -3,8 +3,10 @@ import { HTTP_METHODS, HTTP_REQUEST_CAPABILITY, requestBodyProblem } from "../..
 import { runCheck, type CheckInput } from "../../api/src/checker";
 import { JSON_ASSERT_CAPABILITY, jsonAssertionsSchema } from "../../api/src/json-assert";
 import { KEYWORD_MODES, KEYWORD_REGEX_CAPABILITY, keywordProblem, MAX_KEYWORD_LENGTH } from "../../api/src/keyword";
+import { API_FLOW_CAPABILITY, apiFlowSchema } from "../../api/src/api-flow";
 import { targetProblem } from "../../api/src/netguard";
 import { parseStatusSpec, STATUS_SPEC_CAPABILITY } from "../../api/src/status-spec";
+import { ICMP_PING_CAPABILITY, pingAvailable } from "../../api/src/ping";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, probeHeadersPlausible, verifyProbe, verifyProbeEnvelope } from "../../api/src/probe-protocol";
 
 /** Any request whose length is not vouched for by a valid envelope signature: every non-MCP check fits. */
@@ -21,7 +23,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 export function parseCheck(raw: unknown): { input: CheckInput } | { error: string } {
   const o = raw as Record<string, unknown> | null;
   if (!o || typeof o !== "object" || Array.isArray(o)) return { error: "Expected a JSON object" };
-  if (o.type !== "http" && o.type !== "tcp" && o.type !== "websocket" && o.type !== "mcp") return { error: "type must be http, tcp, websocket or mcp" };
+  if (o.type !== "http" && o.type !== "tcp" && o.type !== "websocket" && o.type !== "mcp" && o.type !== "ping") return { error: "type must be http, tcp, websocket, mcp or ping" };
   if (typeof o.target !== "string" || !o.target || o.target.length > 2048) return { error: "target is required" };
   const method = o.method ?? "GET";
   if (typeof method !== "string" || !(HTTP_METHODS as readonly string[]).includes(method)) return { error: "Unsupported HTTP method" };
@@ -51,6 +53,8 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
   if (wsMessage !== null && (typeof wsMessage !== "string" || wsMessage.length > 2000)) return { error: "wsMessage must be a string" };
   const jsonAssertions = jsonAssertionsSchema.safeParse(o.jsonAssertions ?? []);
   if (!jsonAssertions.success) return { error: "jsonAssertions are not acceptable" };
+  const apiFlow = o.type === "http" && o.apiFlow != null ? apiFlowSchema.safeParse(o.apiFlow) : null;
+  if (apiFlow && !apiFlow.success) return { error: "apiFlow is not acceptable" };
   const mcpConfig = o.type === "mcp" ? mcpConfigSchema.nullable().safeParse(o.mcpConfig ?? null) : null;
   const mcpBaseline = o.type === "mcp" ? mcpToolsSchema.nullable().safeParse(o.mcpBaseline ?? null) : null;
   if (mcpConfig && !mcpConfig.success) return { error: "Invalid MCP configuration" };
@@ -62,6 +66,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
       type: o.type, target: o.target, method, expectedStatus: expectedStatus as number, acceptedStatuses: acceptedStatuses as string | null, timeoutMs: timeoutMs as number,
       keyword: keyword as string | null, keywordMode, expectedLocation: expectedLocation as string | null, headers: Object.fromEntries(entries) as Record<string, string>,
       wsMessage: wsMessage as string | null, requestBody, jsonAssertions: jsonAssertions.data,
+      ...(apiFlow?.success ? { apiFlow: apiFlow.data } : {}),
       ...(mcpConfig?.success ? { mcpConfig: mcpConfig.data } : {}),
       ...(mcpBaseline?.success ? { mcpBaseline: mcpBaseline.data } : {}),
     },
@@ -74,7 +79,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
  * function is deployed to.
  */
 export async function handleProbe(req: Request, o: { secret: string | undefined; region?: string }): Promise<Response> {
-  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY, KEYWORD_REGEX_CAPABILITY] });
+  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY, KEYWORD_REGEX_CAPABILITY, API_FLOW_CAPABILITY, ...(await pingAvailable() ? [ICMP_PING_CAPABILITY] : [])] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
   const declared = req.headers.get("content-length");

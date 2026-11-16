@@ -62,6 +62,12 @@ describe("combine", () => {
   it("is null when no region answered", () => {
     expect(combine([{ region: "a", unreachable: "x" }])).toBeNull();
   });
+  it("keeps each failing region's diagnosis on its own line, and none on a passing one", () => {
+    const diagnosis = { kind: "dns" as const, timings: { totalMs: 5 } };
+    const r = combine([{ region: "a", outcome: { ok: false, error: "ENOTFOUND", diagnosis } }, { region: "b", outcome: { ok: true, statusCode: 200, diagnosis } }, run("c", false)])!;
+    expect(r.results.map((x) => x.diagnosis)).toEqual([diagnosis, undefined, undefined]);
+    expect(r.results[1]).not.toHaveProperty("diagnosis");
+  });
   it("fails the run only when a strict majority of answering regions failed", () => {
     expect(combine([run("a", true), run("b", true), run("c", false, 50, "boom")])!.out.ok).toBe(true);
     const down = combine([run("a", false, 50, "boom"), run("b", false), run("c", true)])!;

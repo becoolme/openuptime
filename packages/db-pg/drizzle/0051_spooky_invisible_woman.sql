@@ -1,0 +1,1 @@
+ALTER TABLE "monitor" ADD COLUMN "api_flow" jsonb;

@@ -5,14 +5,31 @@ import Select from "./Select";
 import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { ago, api, everyShort, type Channel, type Incident, type JsonAssertion, type KeywordMode, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
+import { ago, api, everyShort, type Channel, type Incident, type ApiFlow, type JsonAssertion, type KeywordMode, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
 
-const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP", evm: "EVM", solana: "SOLANA" };
+const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP", evm: "EVM", solana: "SOLANA", ping: "PING" };
+
+/** Monitor types in the order the picker lists them: id, label, one-line description. */
+const TYPES: readonly (readonly [Monitor["type"], string, string])[] = [
+  ["http", "HTTP(S)", "Status code and keyword checks on a URL."],
+  ["evm", "EVM", "Check EVM node sync status."],
+  ["solana", "Solana", "Check Solana node health."],
+  ["mcp", "MCP", "Initialize an MCP server and discover its tools."],
+  ["websocket", "WebSocket", "Handshake, with an optional message and reply check."],
+  ["tcp", "TCP port", "Open a connection to host:port."],
+  ["ping", "Ping (ICMP)", "Send an ICMP echo request to a host."],
+  ["dns", "DNS", "Resolve a hostname."],
+  ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."],
+  ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."],
+  ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."],
+  ["redis", "Redis", "Sends PING and expects PONG."],
+  ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."],
+];
 
 export function Spark({ data, status }: { data: (number | null)[]; status: string }) {
   const pts = data.filter((v): v is number => v != null);
@@ -379,9 +396,13 @@ const statusOptions = (current: number) =>
 
 const JSON_OPS: [JsonAssertion["op"], string][] = [["equals", "equals"], ["not_equals", "does not equal"], ["contains", "contains"], ["exists", "exists"], ["not_exists", "does not exist"], ["greater_than", "greater than"], ["less_than", "less than"]];
 const VALUELESS: JsonAssertion["op"][] = ["exists", "not_exists"];
+const API_FLOW_EXAMPLE = JSON.stringify({
+  extract: [{ name: "token", from: "json", path: "$.access_token" }],
+  steps: [{ name: "List orders", method: "GET", url: "https://api.example.com/v1/orders?limit=1", headers: { Authorization: "Bearer {{token}}" }, expectedStatus: 200, jsonAssertions: [{ path: "$.data", op: "exists", value: "" }] }],
+}, null, 2);
 
 /** Types whose checks can run from a probe region (the API's PROBE_TYPES). */
-const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp"];
+const PROBED: readonly Monitor["type"][] = ["http", "tcp", "websocket", "mcp", "ping"];
 
 /** Create a monitor, or edit one when `monitor` is given (its type is fixed). */
 export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; onClose: () => void; onSaved: () => void }) {
@@ -412,6 +433,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const setHdr = (i: number, p: Partial<{ k: string; v: string }>) => setHdrs((h) => h.map((r, j) => (j === i ? { ...r, ...p } : r)));
   const [asserts, setAsserts] = useState<JsonAssertion[]>(monitor?.jsonAssertions ?? []);
   const setAssert = (i: number, p: Partial<JsonAssertion>) => setAsserts((a) => a.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const [initialFlow] = useState(() => (monitor?.apiFlow ? JSON.stringify(monitor.apiFlow, null, 2) : ""));
+  const [flowText, setFlowText] = useState(initialFlow);
   const [channels, setChannels] = useState<Channel[]>([]);
   useEffect(() => {
     api.channels().then((list) => {
@@ -431,11 +454,14 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       if (!monitor && min > 60) setF((x) => ({ ...x, intervalSec: Math.max(x.intervalSec, min) }));
     }).catch(() => {});
   }, []);
+  // ping only where this deployment can send ICMP, or for a ping monitor being edited
+  const [canPing, setCanPing] = useState(false);
+  const types = TYPES.filter(([id]) => id !== "ping" || canPing || monitor?.type === "ping");
   // where checks can run from on this deployment; with only `auto` the whole section stays out of the form
   const [places, setPlaces] = useState<{ id: string; name: string }[]>([]);
   const [maxRegions, setMaxRegions] = useState(1);
   useEffect(() => {
-    api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor ?? Infinity); }).catch(() => {});
+    api.regions().then((r) => { setPlaces(r.regions); setMaxRegions(r.maxPerMonitor ?? Infinity); setCanPing(Boolean(r.ping)); }).catch(() => {});
   }, []);
   const [regionsOpen, setRegionsOpen] = useState(false);
   const known = new Set(places.map((p) => p.id));
@@ -469,6 +495,10 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   async function submit(e: React.SyntheticEvent) {
     e.preventDefault();
     if (bodyTooLarge) { setErr(t("Request body exceeds 16 KiB.")); return; }
+    let apiFlow: ApiFlow | null = null;
+    if (f.type === "http" && flowText.trim()) {
+      try { apiFlow = JSON.parse(flowText); } catch { setErr(t("API steps are not valid JSON.")); return; }
+    }
     setBusy(true);
     setErr("");
     setUpgrade(undefined);
@@ -479,7 +509,9 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
       const mcpConfig = f.type === "mcp" && !monitor?.mcpConfigRedacted ? mcpConfigForSave(mcp, monitor ? initialMcp : undefined) : undefined;
       // only http, tcp and websocket checks can run from a region; leaving the field out keeps the stored value
       const probed = PROBED.includes(f.type) && places.length > 1;
-      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, acceptedStatuses: f.type === "http" && customStatus && f.acceptedStatuses.trim() ? f.acceptedStatuses.trim() : null, expectedLocation: f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [] };
+      const payload = { ...rest, ...(mcpConfig === undefined ? {} : { mcpConfig }), ...(f.type === "mcp" ? { timeoutMs } : {}), requestBody: f.type === "http" && !["GET", "HEAD"].includes(f.method) && f.requestBody ? f.requestBody : null, ...(f.type === "dns" ? { dnsRecordType, dnsExpectedValue, dnsMatchMode } : {}), ...(probed ? { regions } : {}), tags, headers, keyword: (f.type === "http" || f.type === "websocket") && f.keyword ? f.keyword : null, wsMessage: f.type === "websocket" && f.wsMessage ? f.wsMessage : null, acceptedStatuses: f.type === "http" && customStatus && f.acceptedStatuses.trim() ? f.acceptedStatuses.trim() : null, expectedLocation: f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && f.expectedLocation.trim() ? f.expectedLocation.trim() : null, jsonAssertions: f.type === "http" ? asserts.filter((a) => a.path.trim()).map((a) => ({ ...a, path: a.path.trim(), value: VALUELESS.includes(a.op) ? "" : a.value })) : [],
+        // left out when untouched, so the stored steps (and their hidden values) stay as they are
+        ...(flowText !== initialFlow || (f.type !== "http" && monitor?.apiFlow) ? { apiFlow } : {}) };
       if (monitor) {
         const { type: _t, ...patch } = payload;
         if (monitor.mcpConfigRedacted) { delete (patch as Partial<typeof patch>).target; delete (patch as Partial<typeof patch>).headers; }
@@ -505,7 +537,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
-            {([["http", "HTTP(S)", "Status code and keyword checks on a URL."], ["evm", "EVM", "Check EVM node sync status."], ["solana", "Solana", "Check Solana node health."], ["mcp", "MCP", "Initialize an MCP server and discover its tools."], ["websocket", "WebSocket", "Handshake, with an optional message and reply check."], ["tcp", "TCP port", "Open a connection to host:port."], ["dns", "DNS", "Resolve a hostname."], ["domain", "Domain expiry", "Check the registry expiration date of an explicit registered domain."], ["postgres", "PostgreSQL", "Checks that a PostgreSQL server answers."], ["mysql", "MySQL / MariaDB", "Checks that the server sends its handshake."], ["redis", "Redis", "Sends PING and expects PONG."], ["heartbeat", "Heartbeat (cron)", "Your job pings us on schedule."]] as const).map(([id, label, desc]) => (
+            {types.map(([id, label, desc]) => (
               <button type="button" key={id} disabled={!!monitor && monitor.type !== id} className={`type-c ${f.type === id ? "on" : ""}`} onClick={() => { set("type", id); if (id === "domain") { set("intervalSec", 86400); set("failureThreshold", 1); } if (!monitor && (f.target === "https://" || f.target === "wss://" || f.target === "")) set("target", (id === "http" || id === "mcp" || id === "evm" || id === "solana") ? "https://" : id === "websocket" ? "wss://" : ""); }}>
                 <b>{t(label)}</b><small>{t(desc)}</small>
               </button>
@@ -517,8 +549,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <span className="muted">{t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")}</span>
         </label>}
         {f.type !== "heartbeat" && (
-          <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" || f.type === "evm" || f.type === "solana" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : "Hostname")}
-            <input className="in mono" required disabled={monitor?.mcpConfigRedacted} value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket", mcp: "https://example.com/mcp" } as Record<string, string>)[f.type] ?? ""} />
+          <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" || f.type === "evm" || f.type === "solana" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : f.type === "ping" ? "Hostname or IP address" : "Hostname")}
+            <input className="in mono" required disabled={monitor?.mcpConfigRedacted} value={f.target} onChange={(e) => set("target", e.target.value)} placeholder={({ postgres: "db.example.com:5432", mysql: "db.example.com:3306", redis: "cache.example.com:6379", tcp: "example.com:443", websocket: "wss://example.com/socket", mcp: "https://example.com/mcp", ping: "example.com" } as Record<string, string>)[f.type] ?? ""} />
           </label>
         )}
         {f.type === "mcp" && (monitor?.mcpConfigRedacted ? <p className="muted">{t("Only owners and admins can view or edit MCP connection and tool settings.")}</p> : <McpConnectionFields value={mcp} onChange={setMcp} savedRefreshToken={initialMcp.oauthMode === "refresh_token"} />)}
@@ -618,6 +650,14 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             {asserts.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setAsserts((x) => [...x, { path: "", op: "equals", value: "" }])}>{t("Add assertion")}</button></div>}
             <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.")}</span>
           </div>
+        )}
+        {f.type === "http" && (
+          <details className="fld" open={Boolean(flowText.trim())}>
+            <summary style={{ cursor: "pointer" }}>{t("API steps (optional)")}</summary>
+            <textarea className="in mono" rows={flowText.trim() ? 12 : 4} spellCheck={false} value={flowText} onChange={(e) => setFlowText(e.target.value)} placeholder={API_FLOW_EXAMPLE} aria-label={t("API steps as JSON")} style={{ marginTop: 6, fontSize: 12.5 }} />
+            {!flowText.trim() && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setFlowText(API_FLOW_EXAMPLE)}>{t("Start from an example")}</button></div>}
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("After the request above, up to 5 more requests run in order. extract reads a value from an answer (a $.path in JSON, or a header); later steps use it as {{name}} in the path, query, headers or body. The check fails at the first step that fails, and the timeout covers all steps.")} <a href="/docs/api-steps">{t("How API steps work")}</a></span>
+          </details>
         )}
         {(f.type === "http" || f.type === "websocket" || f.type === "evm" || f.type === "solana" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (
           <div className="fld">

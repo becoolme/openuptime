@@ -2,10 +2,13 @@ import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { mcpToolsEqual } from "./mcp-monitor-schema";
 import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
+import { sanitizeDiagnosis, sanitizeSteps } from "./diagnosis";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
 import { isPatternMode, KEYWORD_REGEX_CAPABILITY } from "./keyword";
+import { API_FLOW_CAPABILITY } from "./api-flow";
+import { ICMP_PING_CAPABILITY } from "./ping";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -78,9 +81,14 @@ export const isRegionConfigured = (id: string) => id === AUTO || regions.has(id)
 export type RegionRun = { region: string; outcome: CheckOutcome } | { region: string; unreachable: string };
 
 const outcomeOf = (v: unknown): CheckOutcome | null => {
-  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown } | null;
+  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown; diagnosis?: unknown; steps?: unknown } | null;
   if (!o || typeof o.ok !== "boolean") return null;
+  // a probe's diagnosis is checked and cut to size like everything else it sends; older probes send none
+  const diagnosis = o.ok ? undefined : sanitizeDiagnosis(o.diagnosis);
+  const steps = sanitizeSteps(o.steps);
   return {
+    ...(diagnosis ? { diagnosis } : {}),
+    ...(steps ? { steps } : {}),
     ok: o.ok,
     ...(typeof o.degraded === "boolean" ? { degraded: o.degraded } : {}),
     ...(o.mcp && mcpObservationSchema.safeParse(o.mcp).success ? { mcp: mcpObservationSchema.parse(o.mcp) } : {}),
@@ -110,7 +118,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
 
   if (region === AUTO) {
     const outcome = await runCheck(input, repo);
-    return outcome.inconclusive ? { region, unreachable: "This location is offline" } : { region, outcome };
+    return outcome.inconclusive ? { region, unreachable: input.type === "ping" && outcome.error ? outcome.error : "This location is offline" } : { region, outcome };
   }
   const probe = regions.get(region);
   if (!probe) return { region, unreachable: "Region is not configured on this deployment" };
@@ -120,6 +128,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
     ...(input.type === "http" && input.jsonAssertions?.length ? { jsonAssertions: input.jsonAssertions } : {}),
     ...(input.type === "http" && input.acceptedStatuses ? { acceptedStatuses: input.acceptedStatuses } : {}),
+    ...(input.type === "http" && input.apiFlow?.steps.length ? { apiFlow: input.apiFlow } : {}),
     ...(input.type === "mcp" ? { mcpConfig: input.mcpConfig ?? null, mcpBaseline: input.mcpBaseline ?? null } : {}),
   });
   try {
@@ -136,6 +145,9 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
     if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
     if (input.keyword && isPatternMode(input.keywordMode)) needs.push([KEYWORD_REGEX_CAPABILITY, "Probe upgrade required for keyword patterns"]);
+    if (input.type === "http" && input.apiFlow?.steps.length) needs.push([API_FLOW_CAPABILITY, "Probe upgrade required for multi-step API checks"]);
+    // a probe offers ping only where it can send ICMP: an old probe and one without permission are told apart by nobody
+    if (input.type === "ping") needs.push([ICMP_PING_CAPABILITY, "This probe cannot run ping checks"]);
     const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
     if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
@@ -174,6 +186,9 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
   }
 }
 
+/** One region's line of a run; a failure keeps its diagnosis, for the incident it may open. */
+const regionResult = (a: CheckOutcome & { region: string }): RegionResult => ({ region: a.region, ok: a.ok, statusCode: a.statusCode, latencyMs: a.latencyMs, error: a.error, ...(!a.ok && a.diagnosis ? { diagnosis: a.diagnosis } : {}) });
+
 /** One run of a monitor: what each answering region saw, and the single outcome the state machine works with. */
 export type Measured = { out: CheckOutcome; results: RegionResult[]; note?: string };
 
@@ -190,7 +205,7 @@ const inconclusive = (out: CheckOutcome): Measured => ({ out, results: [] });
 export function combine(runs: RegionRun[], minFailing = 0): Measured | null {
   const answered = runs.flatMap((r) => ("outcome" in r ? [{ region: r.region, ...r.outcome }] : []));
   if (!answered.length) return null;
-  const results: RegionResult[] = answered.map((a) => ({ region: a.region, ok: a.ok, statusCode: a.statusCode, latencyMs: a.latencyMs, error: a.error }));
+  const results: RegionResult[] = answered.map(regionResult);
   if (answered.length === 1) {
     const { region: _, ...out } = answered[0];
     return { out, results };
@@ -231,7 +246,7 @@ export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   if (regions.length === 1 && regions[0] === AUTO) {
     const out = await runCheck(m, repo);
     if (out.inconclusive) return inconclusive(out);
-    return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
+    return { out, results: [regionResult({ region: AUTO, ...out })] };
   }
   const runs = await Promise.all(regions.map((r) => runInRegion(r, m, repo)));
   const lost = runs.flatMap((r) => ("unreachable" in r ? [`${r.region}: ${r.unreachable}`] : []));
@@ -245,7 +260,7 @@ export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   if (m.type === "mcp") return inconclusive({ ok: false, inconclusive: true, error: "No MCP probe could execute this check" });
   const out = await runCheck(m, repo);
   if (out.inconclusive) return inconclusive(out);
-  return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
+  return { out, results: [regionResult({ region: AUTO, ...out })] };
 }
 
 

@@ -2,28 +2,45 @@ import { useState } from "react";
 import { t } from "../lib/i18n";
 
 export type ImportReport = {
-  preview: boolean; created: number; duplicates: number; ready: number; canImport: boolean; autoChannelCount: number;
+  format?: ImportFormat; preview: boolean; created: number; duplicates: number; ready: number; canImport: boolean; autoChannelCount: number;
   destination: { organizationId: string; projectId: string; projectName: string | null };
   capacity: { active: number; max: number; requested: number } | null;
   report: { index: number; name: string | null; source?: string; sourceId?: string; status: string; error?: string; warnings: string[]; existing?: { name: string; target: string } }[];
 };
 
+type ImportFormat = "json" | "uptimerobot" | "uptime-kuma";
+const FORMAT_LABEL: Record<ImportFormat, string> = { json: "OpenUptime or generic JSON", uptimerobot: "UptimeRobot (getMonitors API answer)", "uptime-kuma": "Uptime Kuma 1.x backup" };
+
+/**
+ * The monitors of a file and the tool that wrote it. Only the monitor list is sent: a Kuma backup also holds its
+ * notification settings, which carry webhook URLs and tokens we do not import.
+ */
+export function readImportFile(raw: string): { monitors: unknown; format: ImportFormat; source: string } {
+  const parsed = JSON.parse(raw);
+  const list = Array.isArray(parsed) ? parsed : parsed?.monitors ?? parsed?.monitorList;
+  const rows: Record<string, unknown>[] = Array.isArray(list) ? list.filter((m) => m && typeof m === "object") : [];
+  const format: ImportFormat = Array.isArray(parsed?.monitorList) && !Array.isArray(parsed?.monitors) ? "uptime-kuma"
+    : rows.some((m) => typeof m.type === "number" && "friendly_name" in m) ? "uptimerobot"
+    : rows.some((m) => "accepted_statuscodes" in m || "maxretries" in m || "notificationIDList" in m) ? "uptime-kuma" : "json";
+  return { monitors: list, format, source: typeof parsed?.source === "string" ? parsed.source : format };
+}
+
 /** Keep the parsed file in memory; the preview response never contains supplied credentials. */
 const message = (value: string) => value.startsWith("Unsupported fields: ") ? `${t("Unsupported fields")}: ${value.slice(20)}` : t(value);
 
 export default function MonitorImport({ raw, onClose, onImported }: { raw: string; onClose: () => void; onImported: () => void }) {
-  const [source, setSource] = useState(() => { try { return JSON.parse(raw).source ?? "json"; } catch { return "json"; } });
+  const file = (() => { try { return readImportFile(raw); } catch { return null; } })();
+  const [source, setSource] = useState(file?.source ?? "json");
   const [report, setReport] = useState<ImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function run(preview: boolean) {
     setBusy(true); setError("");
     try {
-      const parsed = JSON.parse(raw);
-      const monitors = Array.isArray(parsed) ? parsed : parsed.monitors;
+      const { monitors, format } = readImportFile(raw);
       const res = await fetch(`/api/monitors/import${preview ? "/preview" : ""}`, {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source, monitors, ...(!preview && report ? { destination: report.destination } : {}) }),
+        body: JSON.stringify({ source, format, monitors, ...(!preview && report ? { destination: report.destination } : {}) }),
       });
       // a proxy or the body limit can answer with plain text (413): show that, not a JSON parse error
       const result = await res.json().catch(() => null);
@@ -40,6 +57,7 @@ export default function MonitorImport({ raw, onClose, onImported }: { raw: strin
   return <div className="modal" role="dialog" aria-modal="true" aria-label={t("Import preview")}>
     <div className="card mform" style={{ maxWidth: 820 }}>
       <div className="mhead"><h2>{t("Import preview")}</h2><button className="icon-btn mclose" disabled={busy} aria-label={t("Close")} onClick={onClose}>×</button></div>
+      {file && <p className="muted" style={{ margin: 0 }}>{t("File format")}: <strong>{t(FORMAT_LABEL[file.format])}</strong>{file.format !== "json" && <> · {t("Settings without an equivalent are listed per monitor. Alert contacts and notifications are not imported.")}</>}</p>}
       <label className="fld">{t("Source namespace")}
         <input className="in mono" maxLength={80} value={source} disabled={busy || Boolean(report && !report.preview)} onChange={(e) => { setSource(e.target.value); setReport(null); }} />
       </label>
@@ -55,7 +73,7 @@ export default function MonitorImport({ raw, onClose, onImported }: { raw: strin
         <p className="muted">{t("Destination auto-enabled channels")}: {report.autoChannelCount}</p>
         {report.capacity && <p className="err">{t("Import exceeds the active monitor limit")}: {report.capacity.active} + {report.capacity.requested} &gt; {report.capacity.max}</p>}
         <div style={{ maxHeight: "45vh", overflow: "auto" }}><table style={{ width: "100%" }}><thead><tr><th>{t("Monitor")}</th><th>{t("Status")}</th><th>{t("Details")}</th></tr></thead><tbody>
-          {report.report.map((r) => <tr key={r.index}><td>#{r.index + 1} {r.name}<div className="muted mono" style={{ fontSize: 11, overflowWrap: "anywhere" }}>{r.source}/{r.sourceId}</div></td><td>{t(({ ready: "Ready", created: "Imported", duplicate: "Duplicates", skipped: "skipped" } as Record<string, string>)[r.status] ?? r.status)}</td><td>{r.error ? message(r.error) : null}{r.existing && <div className="muted">{t("Already imported as")}: {r.existing.name} ({r.existing.target})</div>}<ul>{r.warnings.map((w) => <li key={w}>{message(w)}</li>)}</ul></td></tr>)}
+          {report.report.map((r) => <tr key={r.index}><td>#{r.index + 1} {r.name}{r.sourceId && <div className="muted mono" style={{ fontSize: 11, overflowWrap: "anywhere" }}>{r.source}/{r.sourceId}</div>}</td><td>{t(({ ready: "Ready", created: "Imported", duplicate: "Duplicates", skipped: "skipped" } as Record<string, string>)[r.status] ?? r.status)}</td><td>{r.error ? message(r.error) : null}{r.existing && <div className="muted">{t("Already imported as")}: {r.existing.name} ({r.existing.target})</div>}<ul>{r.warnings.map((w) => <li key={w}>{message(w)}</li>)}</ul></td></tr>)}
         </tbody></table></div>
       </>}
     </div>

@@ -249,5 +249,20 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0049_mute_warpath",
     "when": 1794720919524,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"accepted_statuses\" text;"
+  },
+  {
+    "tag": "0050_flashy_falcon",
+    "when": 1794868069975,
+    "sql": "ALTER TABLE \"incident\" ADD COLUMN \"diagnostics\" jsonb;"
+  },
+  {
+    "tag": "0051_spooky_invisible_woman",
+    "when": 1794868209222,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"api_flow\" jsonb;"
+  },
+  {
+    "tag": "0052_mature_maverick",
+    "when": 1794868497312,
+    "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'ping';"
   }
 ];
