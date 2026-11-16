@@ -2,11 +2,12 @@ import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { mcpToolsEqual } from "./mcp-monitor-schema";
 import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
-import { sanitizeDiagnosis } from "./diagnosis";
+import { sanitizeDiagnosis, sanitizeSteps } from "./diagnosis";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
 import { isPatternMode, KEYWORD_REGEX_CAPABILITY } from "./keyword";
+import { API_FLOW_CAPABILITY } from "./api-flow";
 import type { Monitor, RegionResult, Repo } from "@openuptime/repo";
 import { runCheck, type CheckInput, type CheckOutcome } from "./checker";
 import { ENVELOPE_HEADER, MCP_MONITOR_CAPABILITY, SIGNATURE_HEADER, TIMESTAMP_HEADER, signProbe, signProbeEnvelope } from "./probe-protocol";
@@ -79,12 +80,14 @@ export const isRegionConfigured = (id: string) => id === AUTO || regions.has(id)
 export type RegionRun = { region: string; outcome: CheckOutcome } | { region: string; unreachable: string };
 
 const outcomeOf = (v: unknown): CheckOutcome | null => {
-  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown; diagnosis?: unknown } | null;
+  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown; diagnosis?: unknown; steps?: unknown } | null;
   if (!o || typeof o.ok !== "boolean") return null;
   // a probe's diagnosis is checked and cut to size like everything else it sends; older probes send none
   const diagnosis = o.ok ? undefined : sanitizeDiagnosis(o.diagnosis);
+  const steps = sanitizeSteps(o.steps);
   return {
     ...(diagnosis ? { diagnosis } : {}),
+    ...(steps ? { steps } : {}),
     ok: o.ok,
     ...(typeof o.degraded === "boolean" ? { degraded: o.degraded } : {}),
     ...(o.mcp && mcpObservationSchema.safeParse(o.mcp).success ? { mcp: mcpObservationSchema.parse(o.mcp) } : {}),
@@ -124,6 +127,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     wsMessage: input.wsMessage ?? null, requestBody: input.requestBody ?? null,
     ...(input.type === "http" && input.jsonAssertions?.length ? { jsonAssertions: input.jsonAssertions } : {}),
     ...(input.type === "http" && input.acceptedStatuses ? { acceptedStatuses: input.acceptedStatuses } : {}),
+    ...(input.type === "http" && input.apiFlow?.steps.length ? { apiFlow: input.apiFlow } : {}),
     ...(input.type === "mcp" ? { mcpConfig: input.mcpConfig ?? null, mcpBaseline: input.mcpBaseline ?? null } : {}),
   });
   try {
@@ -140,6 +144,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
     if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
     if (input.keyword && isPatternMode(input.keywordMode)) needs.push([KEYWORD_REGEX_CAPABILITY, "Probe upgrade required for keyword patterns"]);
+    if (input.type === "http" && input.apiFlow?.steps.length) needs.push([API_FLOW_CAPABILITY, "Probe upgrade required for multi-step API checks"]);
     const unknown = needs.filter(([cap]) => (capable.get(`${probe.url} ${cap}`) ?? 0) <= Date.now());
     if (unknown.length) {
       const health = await fetch(probe.url, { redirect: "manual", signal: AbortSignal.timeout(5000) });

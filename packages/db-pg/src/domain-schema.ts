@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DomainExpiry, IncidentDiagnostics, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
+import type { ApiFlow, DomainExpiry, IncidentDiagnostics, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
 export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]);
@@ -101,6 +101,8 @@ export const monitor = pgTable(
     expectedLocation: text("expected_location"),
     /** http: assertions on the JSON response body, all of which must hold */
     jsonAssertions: jsonb("json_assertions").$type<JsonAssertion[]>().notNull().default([]),
+    /** http: further requests made after the first one, using values read from earlier answers */
+    apiFlow: jsonb("api_flow").$type<ApiFlow>(),
     /** http: extra request headers (also used for bearer / basic auth) */
     headers: jsonb("headers").$type<Record<string, string>>().notNull().default({}),
     /** websocket: text sent once the connection is open; a reply must then come back */

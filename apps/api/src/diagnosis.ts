@@ -181,5 +181,24 @@ export function sanitizeDiagnosis(v: unknown): CheckDiagnosis | undefined {
   }
   const body = str(d.body, BODY_CHARS * 2);
   if (body) out.body = bodyExcerpt(body);
+  const steps = sanitizeSteps(d.steps);
+  if (steps) out.steps = steps;
   return out;
+}
+
+/** The per-request lines of a multi-step check from somewhere else, cut to the expected shape. */
+export function sanitizeSteps(v: unknown): CheckDiagnosis["steps"] {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.slice(0, 6).flatMap((x) => {
+    if (!x || typeof x !== "object") return [];
+    const s = x as Record<string, unknown>;
+    if (typeof s.name !== "string" || typeof s.ok !== "boolean") return [];
+    const ms = typeof s.ms === "number" && Number.isFinite(s.ms) && s.ms >= 0 ? Math.round(s.ms) : 0;
+    return [{
+      name: s.name.slice(0, 60), ok: s.ok, ms,
+      ...(typeof s.statusCode === "number" && Number.isInteger(s.statusCode) ? { statusCode: s.statusCode } : {}),
+      ...(typeof s.error === "string" ? { error: redactText(s.error.slice(0, 300)) } : {}),
+    }];
+  });
+  return out.length ? out : undefined;
 }

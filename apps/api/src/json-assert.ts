@@ -61,6 +61,14 @@ function lookup(doc: unknown, steps: Step[]): unknown {
   return cur;
 }
 
+/** The value at a path of a JSON document; `found` is false when the path leads nowhere. */
+export function jsonValueAt(doc: unknown, path: string): { found: boolean; value?: unknown } {
+  const steps = parsePath(path);
+  if (typeof steps === "string") return { found: false };
+  const v = lookup(doc, steps);
+  return v === MISSING ? { found: false } : { found: true, value: v };
+}
+
 /** Whether a JSON value equals the text the user typed: `200` matches 200, `true` matches true, `null` matches null. */
 function same(actual: unknown, want: string): boolean {
   if (typeof actual === "string") return actual === want;

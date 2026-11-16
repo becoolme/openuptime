@@ -18,6 +18,7 @@ import { KEYWORD_MODES, keywordProblem, MAX_KEYWORD_LENGTH } from "../keyword";
 import { mcpConfigPatchSchema, mcpConfigSchema } from "../mcp-config";
 import { jsonAssertionsSchema } from "../json-assert";
 import { MAX_STATUS_SPEC_LENGTH, parseStatusSpec } from "../status-spec";
+import { apiFlowSchema, fillBlank, flowHasMask, flowHasSecrets, maskFlow, restoreFlow } from "../api-flow";
 import { mcpCheck } from "../mcp-monitor";
 import { prepareMcpOAuth, addOAuthTiming, mcpRefreshPreviewChanged } from "../mcp-oauth";
 
@@ -65,6 +66,7 @@ const fields = {
   // an absolute http(s) URL or a path; blank means "any destination"
   expectedLocation: z.string().trim().max(2048).refine((v) => v === "" || v.startsWith("/") || /^https?:\/\/\S+$/i.test(v), "Use a full http(s) URL or a path starting with /").transform((v) => v || null).nullable().describe("For an expected HTTP redirect (3xx), require this Location URL or path; null or empty string accepts any destination."),
   jsonAssertions: jsonAssertionsSchema.describe("HTTP only: up to 10 checks on the JSON response body, all of which must hold. path is like $.data.status or $.items[0].id; op is equals, not_equals, contains, exists, not_exists, greater_than or less_than; value is compared as text, number, boolean or null to match the JSON value. A supplied list replaces the existing one."),
+  apiFlow: apiFlowSchema.nullable().describe("HTTP only: a multi-step API check. The monitor's own request runs first, then up to 5 steps in order; the check fails at the first request that fails. extract reads values ({ name, from: json with a $.path, or header with a header name }) from an answer; a later step uses them as {{name}} in its URL path or query, header values and body, never in the host. Each step has name, method, url, headers, body, expectedStatus, jsonAssertions and extract. The monitor's timeout covers all requests together. Read values are treated as secrets and removed from errors. Step header values and bodies are masked for members who are not owners or admins; masked values keep the stored ones of the step at the same position. Null removes the steps."),
   headers: z.record(z.string().max(100), z.string().max(2000)).describe("HTTP (or WebSocket handshake) request headers; replaces the header map. An empty object removes all custom headers. Existing masked values preserve stored secrets."),
   // sent as one text message after the handshake; blank means "handshake only"
   wsMessage: z.string().max(2000).transform((v) => v || null).nullable().describe("WebSocket only: text message sent once the connection is open; a message must then come back within the timeout. Not a secret: put credentials in headers. Null or empty string checks the handshake only."),
@@ -102,6 +104,7 @@ const body = z.object({
   keywordMode: fields.keywordMode.default("contains"),
   expectedLocation: fields.expectedLocation.default(null),
   jsonAssertions: fields.jsonAssertions.default([]),
+  apiFlow: fields.apiFlow.default(null),
   headers: fields.headers.default({}),
   wsMessage: fields.wsMessage.default(null),
   dnsRecordType: fields.dnsRecordType.default("A"),
@@ -170,7 +173,20 @@ export const monitorPatchSchema = patchBody;
 
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
-const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body" : rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
+const flowProblem = (v: { type: string; apiFlow?: unknown }) => v.apiFlow && v.type !== "http" ? "API steps are available for HTTP monitors only" : null;
+const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body"
+  : flowHasMask(v.apiFlow) ? "Masked step headers or bodies cannot be imported or created; supply the original values"
+  : flowProblem(v) ?? rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
+
+/** Every step URL is held to the same target rules as the monitor's own; placeholders cannot reach the host. */
+async function flowTargetProblem(type: string, flow: { steps: { url: string }[] } | null | undefined, regions: string[]) {
+  if (!flow || usesOnlyPrivateProbes(type, regions)) return null;
+  for (const [i, s] of flow.steps.entries()) {
+    const error = await targetProblem("http", fillBlank(s.url));
+    if (error) return `Step ${i + 1}: ${error}`;
+  }
+  return null;
+}
 
 const newMonitor = (v: z.infer<typeof body>) => ({
   ...v,
@@ -270,8 +286,8 @@ function withoutOAuthSecrets(config: McpConfig | null | undefined, o: { clientSe
   return { ...config, oauth: { ...oauth, ...(o.clientSecret || clientSecret === undefined ? {} : { clientSecret }) } };
 }
 /** Request headers and bodies (often tokens) are shown to owners and admins only. */
-const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
-  (await isManager(c)) ? rows.map((m) => m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig) } : m) : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}) }));
+const shown = async <T extends { headers?: Record<string, string> | null; requestBody?: string | null; type?: string; mcpConfig?: McpConfig | null; apiFlow?: import("@openuptime/repo").ApiFlow | null }>(c: Context<AppEnv>, rows: T[]): Promise<T[]> =>
+  (await isManager(c)) ? rows.map((m) => m.mcpConfig?.oauth ? { ...m, mcpConfig: withoutOAuthSecrets(m.mcpConfig) } : m) : rows.map((m) => ({ ...m, ...(m.type === "mcp" ? { mcpConfig: null, mcpBaseline: null, mcpObservation: null, mcpConfigRedacted: true } : {}), ...(m.headers ? { headers: maskHeaders(m.headers) } : {}), ...(m.requestBody ? { requestBody: MASK } : {}), ...(m.apiFlow ? { apiFlow: maskFlow(m.apiFlow) } : {}) }));
 
 /** Source fields that look like credentials: a record carrying one is refused rather than imported without its authentication. */
 const CREDENTIAL_KEY = /auth|user|pass|secret|token|cred|bearer|oauth/i;
@@ -327,6 +343,8 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     if (!lookups.has(lookupKey)) lookups.set(lookupKey, usesOnlyPrivateProbes(v.type, v.regions) ? Promise.resolve(null) : targetProblem(v.type, v.target));
     const problem = await lookups.get(lookupKey)!;
     if (problem) { row.error = `target: ${problem}`; continue; }
+    const badStep = await flowTargetProblem(v.type, v.apiFlow, v.regions);
+    if (badStep) { row.error = `apiFlow: ${badStep}`; continue; }
     let sourceId: string;
     const identity = r.sourceId ?? r.id;
     if (identity !== undefined) {
@@ -384,6 +402,8 @@ export const monitors = new Hono<AppEnv>()
     if (v.type === "domain") v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
     const blocked = await refuseTarget(c, v.type, v.target, v.regions);
     if (blocked) return blocked;
+    const badStep = await flowTargetProblem(v.type, v.apiFlow, v.regions);
+    if (badStep) return c.json({ error: badStep, code: "target_not_allowed" }, 400);
     const badRegion = await regionProblem(c, v.type, v.regions);
     if (badRegion) return badRegion;
     const badParent = await dependencyProblem(c, c.get("projectId"), null, v.dependsOnMonitorId);
@@ -532,23 +552,32 @@ export const monitors = new Hono<AppEnv>()
       if (current.type !== "dns") Object.assign(v, DNS_DEFAULTS);
     }
     // Retaining stored headers or a body also retains their access rights: only managers may change the request around them.
-    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined || v.requestBody !== undefined) {
+    if (v.headers !== undefined || v.target !== undefined || v.method !== undefined || v.wsMessage !== undefined || v.requestBody !== undefined || v.apiFlow !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
       if (v.headers) v.headers = restoreHeaders(v.headers, current.headers);
       if (v.requestBody === MASK) v.requestBody = current.requestBody ?? null;
-      const invalid = requestBodyProblem({ ...current, ...v });
+      if (v.apiFlow !== undefined) v.apiFlow = restoreFlow(v.apiFlow, current.apiFlow);
+      const invalid = flowProblem({ type: current.type, apiFlow: v.apiFlow }) ?? requestBodyProblem({ ...current, ...v });
       if (invalid) return c.json({ error: invalid }, 400);
       const nextHeaders = v.headers ?? current.headers;
+      const nextFlow = v.apiFlow === undefined ? current.apiFlow ?? null : v.apiFlow;
+      // what the first request reads can be handed to the steps: changing them while credentials stay is the same risk
       const retainsStored = Object.entries(current.headers).some(([key, value]) => nextHeaders[key] === value)
-        || Boolean(current.requestBody && (v.requestBody === undefined || v.requestBody === current.requestBody));
+        || Boolean(current.requestBody && (v.requestBody === undefined || v.requestBody === current.requestBody))
+        || flowHasSecrets(current.apiFlow);
       const changesRequest = (v.target !== undefined && v.target !== current.target)
         || (v.method !== undefined && v.method !== current.method)
         || (v.wsMessage !== undefined && v.wsMessage !== current.wsMessage)
         || (v.requestBody !== undefined && v.requestBody !== (current.requestBody ?? null))
-        || !sameJson(nextHeaders, current.headers);
+        || !sameJson(nextHeaders, current.headers)
+        || !sameJson(nextFlow, current.apiFlow ?? null);
       if (retainsStored && changesRequest && !(await isManager(c))) {
         return c.json({ error: "Only workspace owners and admins can change request settings while keeping stored headers or request body", code: "protected_request_headers" }, 403);
+      }
+      if (v.apiFlow !== undefined && !sameJson(nextFlow, current.apiFlow ?? null)) {
+        const badStep = await flowTargetProblem(current.type, nextFlow, v.regions ?? current.regions);
+        if (badStep) return c.json({ error: badStep, code: "target_not_allowed" }, 400);
       }
     }
     if (v.target !== undefined) {
