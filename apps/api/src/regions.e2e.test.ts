@@ -69,7 +69,7 @@ describe.skipIf(!url)("regions", () => {
     const r = await call("GET", "/regions");
     expect(r.status).toBe(200);
     expect(r.body.regions.map((x: { id: string }) => x.id)).toEqual(["auto", "us-east", "eu-central", "ap-southeast"]);
-    expect(r.body).toMatchObject({ types: ["http", "tcp", "websocket", "mcp"], maxPerMonitor: 2 });
+    expect(r.body).toMatchObject({ types: ["http", "tcp", "websocket", "mcp", "ping"], maxPerMonitor: 2 });
   });
 
   it("keeps private MCP endpoints confined to configured private probes on create, preview and region-only edits", async () => {

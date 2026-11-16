@@ -259,5 +259,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0051_spooky_invisible_woman",
     "when": 1794868209222,
     "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"api_flow\" jsonb;"
+  },
+  {
+    "tag": "0052_mature_maverick",
+    "when": 1794868497312,
+    "sql": "ALTER TYPE \"public\".\"monitor_type\" ADD VALUE 'ping';"
   }
 ];

@@ -29,6 +29,20 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "icmp-ping-monitors", date: "2026-11-16", edition: "community",
+    title: { en: "ICMP ping monitors", zh: "ICMP Ping 监控" },
+    summary: { en: "A self-hosted install can now check that a host answers ping, from its own server or from your probes.", zh: "自托管部署现在可以检测主机是否响应 ping，可以从自己的服务器发起，也可以从你的探针发起。" },
+    points: [
+      { en: "A ping monitor sends one ICMP echo request to a hostname or IP address per run and records the round trip as its latency.", zh: "Ping 监控每次检测向主机名或 IP 地址发送一次 ICMP 回显请求，并把往返时间记为延迟。" },
+      { en: "The published Docker image can send ping as it is; the ping type appears in the form only where the server can send it.", zh: "发布的 Docker 镜像可以直接发送 ping；只有服务器能发送 ping 时，表单中才会出现这个类型。" },
+      { en: "A checker that cannot send ping records nothing instead of opening an incident, and a probe that cannot shows its region as unreachable.", zh: "无法发送 ping 的检测方不会记录结果，也不会因此创建事件；无法发送 ping 的探针会把所在区域显示为无法连接。" },
+      { en: "Ping monitors imported from UptimeRobot and Uptime Kuma now become ping monitors instead of being skipped.", zh: "从 UptimeRobot 和 Uptime Kuma 导入的 Ping 监控现在会转换为 ping 监控，不再被跳过。" },
+    ],
+    cloud: { en: "Not available on the hosted service, which cannot send ICMP; check a TCP port instead.", zh: "托管服务无法发送 ICMP，因此不提供此功能；请改为检测 TCP 端口。" },
+    upgrade: { en: "Update your own probes before checking a ping monitor from them: an older probe refuses the check and its region shows as unreachable.", zh: "从自建探针检测 ping 监控前，请先更新探针：旧版探针会拒绝这类检测，对应区域会显示为无法连接。" },
+    link: { href: "/docs/ping", label: { en: "Read the ping monitor docs", zh: "阅读 Ping 监控文档" } },
+  },
+  {
     id: "multi-step-api-checks", date: "2026-11-16", edition: "community",
     title: { en: "Multi-step API checks", zh: "多步骤 API 检测" },
     summary: { en: "An HTTP monitor can run up to 5 more requests in order, passing a token or an id from one answer to the next request.", zh: "HTTP 监控可以再按顺序发出最多 5 个请求，把上一个响应中的令牌或 ID 传给下一个请求。" },

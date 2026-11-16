@@ -18,7 +18,7 @@ export type ApiStep = { name: string; method: string; url: string; headers: Reco
 export type ApiFlow = { extract: ApiExtract[]; steps: ApiStep[] };
 export type ApiStepResult = { name: string; ok: boolean; statusCode?: number; ms: number; error?: string };
 export type Monitor = {
-  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana"; target: string; method: string; requestBody?: string | null;
+  id: string; name: string; type: "http" | "tcp" | "dns" | "heartbeat" | "postgres" | "mysql" | "redis" | "websocket" | "domain" | "mcp" | "evm" | "solana" | "ping"; target: string; method: string; requestBody?: string | null;
   mcpConfig?: McpConfig | null;
   mcpConfigRedacted?: boolean;
   mcpBaseline?: McpToolSchema[] | null;
@@ -51,7 +51,7 @@ export type RegionStat = {
   region: string; checks24h: number; uptime24h: number | null; avgLatency24h: number | null;
   last: { ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string } | null;
 };
-export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number | null };
+export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number | null; ping?: boolean };
 export type SpotCheck = { ok: true; region?: string; result?: { ok: boolean; statusCode?: number; latencyMs?: number; error?: string } };
 export type DiagnosisKind = "dns" | "connect" | "tls" | "timeout" | "http" | "assertion" | "blocked" | "other";
 export type CheckDiagnosis = {

@@ -10,6 +10,7 @@
  */
 
 import { parseStatusSpec } from "./status-spec";
+import { pingHost } from "./ping";
 
 export const IMPORT_FORMATS = ["json", "uptimerobot", "uptime-kuma"] as const;
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
@@ -115,7 +116,9 @@ function fromUptimeRobot(m: Rec): Converted {
     if (interval !== null) out.intervalSec = clamp(interval, 60, 86400);
     warnings.push("Send pings to the new heartbeat URL shown after import; the UptimeRobot URL keeps going to UptimeRobot");
   } else if (type === 3) {
-    return fail("ICMP ping monitors are not imported; add a TCP check on a port the host answers on");
+    const host = pingHost(str(m.url).replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, ""));
+    if (!host) return fail("UptimeRobot ping monitor has no hostname or IP address");
+    Object.assign(out, { type: "ping", target: host });
   } else {
     return fail(`UptimeRobot monitor type ${str(m.type) || "unknown"} is not supported`);
   }
@@ -130,7 +133,6 @@ function fromUptimeRobot(m: Rec): Converted {
 
 const KUMA_DNS = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"];
 const KUMA_UNSUPPORTED: Record<string, string> = {
-  ping: "ICMP ping monitors are not imported; add a TCP check on a port the host answers on",
   docker: "Docker container monitors need access to the Docker host; they are not imported",
   group: "Groups are not monitors; their members are imported on their own",
   "real-browser": "Browser monitors are not imported",
@@ -200,6 +202,11 @@ function fromKuma(m: Rec): Converted {
     const host = str(m.hostname), port = num(m.port);
     if (!host || !port) return fail("Uptime Kuma port monitor has no host or port");
     Object.assign(out, { type: "tcp", target: host.includes(":") ? `[${host}]:${port}` : `${host}:${port}` });
+  } else if (kind === "ping") {
+    const host = pingHost(str(m.hostname));
+    if (!host) return fail("Uptime Kuma ping monitor has no hostname or IP address");
+    Object.assign(out, { type: "ping", target: host });
+    if (num(m.packetSize) && num(m.packetSize) !== 56) warnings.push("The packet size is not imported; one standard echo request is sent");
   } else if (kind === "dns") {
     const record = str(m.dns_resolve_type).toUpperCase() || "A";
     if (!KUMA_DNS.includes(record)) return fail(`DNS record type ${record} is not supported`);

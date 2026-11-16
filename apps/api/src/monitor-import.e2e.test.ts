@@ -3,11 +3,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { unmetered } from "./entitlements";
 import { MASK } from "./secrets";
+import { setPingRunner } from "./ping";
 import robotFile from "./import-fixtures/uptimerobot-getmonitors.json";
 import kumaFile from "./import-fixtures/uptime-kuma-backup.json";
 
 // the samples name example.com hosts; point them at an address that needs no DNS lookup
-const offline = <T>(file: T): T => JSON.parse(JSON.stringify(file).replace(/(https?:\/\/)[a-z.]*example\.com/g, "$11.1.1.1").replace(/"(mail|db)\.example\.com"/g, '"1.1.1.1"'));
+const offline = <T>(file: T): T => JSON.parse(JSON.stringify(file).replace(/(https?:\/\/)[a-z.]*example\.com/g, "$11.1.1.1").replace(/"(mail|db)\.example\.com"/g, '"1.1.1.1"').replace(/"203\.0\.113\.\d+"/g, '"1.1.1.1"'));
+/** Stands in for the system ping: `false` is a machine that may not send ICMP, `true` one whose pings are answered. */
+const pings = (can: boolean) => setPingRunner(async () => can
+  ? { code: 0, stdout: "PING 1.1.1.1 (1.1.1.1): 56 data bytes\n64 bytes from 1.1.1.1: seq=0 ttl=57 time=4.2 ms\n\n1 packets transmitted, 1 packets received, 0% packet loss\n", stderr: "", killed: false, missing: false }
+  : { code: 2, stdout: "", stderr: "ping: socket: Operation not permitted\n", killed: false, missing: false });
 
 const url = process.env.TEST_DATABASE_URL;
 const origin = "http://localhost:8787";
@@ -18,7 +23,7 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
   const app = createApp(openDatabase);
   const limited = createApp(openDatabase, { edition: { entitlements: () => ({ ...unmetered, plan: async () => ({ id: "one", name: "One", maxActiveMonitors: 1, minIntervalSec: 300, maxRegions: 1, upgradeUrl: "/upgrade" }) }) } });
   beforeAll(async () => { await db!.migrate(); });
-  afterAll(async () => { await db?.close(1); });
+  afterAll(async () => { setPingRunner(null); await db?.close(1); });
   async function account(use = app) {
     const signup = await use.fetch(new Request(origin + "/api/auth/sign-up/email", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ email: `import-${crypto.randomUUID()}@example.com`, password: "correct horse battery", name: "Import" }) }), env as never);
     expect(signup.status).toBe(200);
@@ -157,6 +162,7 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
 
   it("imports an Uptime Kuma backup as it is, keeps ids, explains skipped rows and dedupes a second run", async () => {
     const call = await account();
+    pings(false);
     const file = offline(kumaFile);
     const preview = await call("POST", "/monitors/import/preview", file);
     expect(preview.status).toBe(200);
@@ -164,7 +170,7 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     expect(preview.body.report.map((r: any) => [r.name, r.status])).toEqual([["Homepage", "ready"], ["Login page", "ready"], ["Status JSON", "ready"], ["Postgres port", "ready"], ["MX records", "ready"], ["Cron job", "ready"], ["Gateway", "skipped"], ["Containers", "skipped"], ["Production", "skipped"], ["Maintenance flag", "skipped"]]);
     expect(preview.body.report[6]).toMatchObject({ source: "uptime-kuma", sourceId: "7" });
     expect(preview.body.report[0]).toMatchObject({ source: "uptime-kuma", sourceId: "1" });
-    expect(preview.body.report[6].error).toMatch(/ICMP ping/);
+    expect(preview.body.report[6].error).toMatch(/cannot send ping/);
     // nothing about the source tool's fields is called unsupported, and no secret is echoed
     expect(preview.body.report.flatMap((r: any) => r.warnings).join(" ")).not.toMatch(/Unsupported fields/);
     expect(JSON.stringify(preview.body)).not.toContain("redacted-test-password");
@@ -177,14 +183,24 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     expect((await call("POST", "/monitors/import", { monitors: file.monitorList })).body).toMatchObject({ format: "uptime-kuma", created: 0, duplicates: 6 });
   });
 
+  it("imports a ping monitor where this server can send ping", async () => {
+    const call = await account();
+    pings(true);
+    const file = offline(robotFile);
+    const done = await call("POST", "/monitors/import", { ...file, monitors: [file.monitors[6]] });
+    expect(done.body).toMatchObject({ created: 1 });
+    expect((await call("GET", "/monitors")).body[0]).toMatchObject({ name: "Router", type: "ping", target: "1.1.1.1", importSourceId: "777000007" });
+  });
+
   it("imports an UptimeRobot getMonitors answer with the plan's interval and keyword semantics", async () => {
     const call = await account(limited);
+    pings(false);
     const file = offline(robotFile);
     const one = { ...file, monitors: [file.monitors[2], file.monitors[6]] };
     const preview = await call("POST", "/monitors/import/preview", one);
     expect(preview.body).toMatchObject({ format: "uptimerobot", ready: 1 });
     expect(preview.body.report[0]).toMatchObject({ source: "uptimerobot", sourceId: "777000003", intervalSec: 300 });
-    expect(preview.body.report[1]).toMatchObject({ status: "skipped", error: expect.stringMatching(/ICMP ping/) });
+    expect(preview.body.report[1]).toMatchObject({ status: "skipped", error: expect.stringMatching(/cannot send ping/) });
     expect((await call("POST", "/monitors/import", one)).body.created).toBe(1);
     expect((await call("GET", "/monitors")).body[0]).toMatchObject({ keyword: "Service unavailable", keywordMode: "absent" });
     expect((await call("POST", "/monitors/import/preview", { ...one, format: "nope" })).status).toBe(400);

@@ -54,7 +54,7 @@ export default function MonitorDetail({ id }: { id: string }) {
     ...configured.map((r) => m.regionStats.find((s) => s.region === r) ?? { region: r, checks24h: 0, uptime24h: null, avgLatency24h: null, last: null }),
     ...m.regionStats.filter((s) => !configured.includes(s.region)),
   ].filter((s, i, all) => all.findIndex((x) => x.region === s.region) === i);
-  const probable = m.type === "http" || m.type === "tcp" || m.type === "websocket" || m.type === "mcp";
+  const probable = m.type === "http" || m.type === "tcp" || m.type === "websocket" || m.type === "mcp" || m.type === "ping";
   const places = Object.keys(names);
   const showRegion = m.results.some((r) => r.region && r.region !== "auto");
   // the newest 30 rows, whole runs only where they fit; `lead` marks the first row of a run, which carries the time

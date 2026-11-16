@@ -1,5 +1,6 @@
 import type { OpenDatabase } from "@openuptime/repo";
 import { isLang } from "./mail-i18n";
+import { pingAvailable } from "./ping";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -259,7 +260,8 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   // where checks can run from on this deployment, and how many of those one monitor may use under the workspace's plan (null: no limit)
   authed.get("/regions", async (c) => {
     const plan = await c.get("entitlements").plan(c.get("orgId"));
-    return c.json({ regions: availableRegions(), types: PROBE_TYPES, maxPerMonitor: plan?.maxRegions ?? null });
+    // ping: whether this deployment itself can send ICMP, so the form offers ping monitors only where they can run
+    return c.json({ regions: availableRegions(), types: PROBE_TYPES, maxPerMonitor: plan?.maxRegions ?? null, ping: await pingAvailable() });
   });
   // sidebar badges: one round trip, four counts
   authed.get("/counts", async (c) => {

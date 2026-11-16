@@ -11,6 +11,7 @@ import { MASK, maskHeaders, restoreHeaders, sameJson } from "../secrets";
 import { checkOne, nextAfter } from "../scheduler";
 import { isRegionConfigured, runInRegion, usesOnlyPrivateProbes } from "../probes";
 import { AUTO, PROBE_TYPES, REGION_ID } from "../regions";
+import { PING_TARGET_PROBLEM, pingAvailable, pingHost } from "../ping";
 
 import { HTTP_METHODS, MAX_REQUEST_BODY_BYTES, requestBodyProblem } from "../http-request";
 import { KEYWORD_MODES, keywordProblem, MAX_KEYWORD_LENGTH } from "../keyword";
@@ -43,8 +44,8 @@ function mcpProblem(v: {type: string; target: string; mcpConfig?: McpConfig | nu
 
 const fields = {
   name: z.string().min(1).max(120).describe("Display name shown in the dashboard, alerts and status-page components."),
-  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, and other types check a service."),
-  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
+  type: z.enum(["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana", "ping"]).describe("Check protocol; immutable after creation. HTTP checks a URL, WebSocket checks the handshake (and optionally a reply), heartbeat waits for incoming pings, ping sends one ICMP echo request (only where the checker can send ICMP), and other types check a service."),
+  target: z.string().max(2048).describe("HTTP: absolute http(s) URL. WebSocket: ws:// or wss:// URL. TCP: host:port. DNS: hostname. Ping: hostname or IP address. Domain: explicit registered domain, without scheme or path; not a subdomain. Database/Redis: connection URL for that protocol. Heartbeat: leave empty. Public targets only by default."),
   mcpConfig: mcpConfigSchema.nullable().describe("MCP: requiredTools, optional schemaCheck baseline, and toolCall. Tool calls require explicit enabled=true and may incur charges or modify data. Assertions use JSON Pointer paths into the result. Manager-only configuration."),
   domainExpiryWarnDays: z.number().int().min(1).max(365).describe("Domain registration only: fail when expiration is this many days away; unknown dates also fail explicitly."),
   method: z.enum(HTTP_METHODS).describe("HTTP request method; ignored for other monitor types."),
@@ -61,7 +62,7 @@ const fields = {
   failureThreshold: z.number().int().min(1).max(10).describe("Consecutive failed checks required before opening an incident."),
   recoveryThreshold: z.number().int().min(1).max(10).describe("Consecutive successful runs (or heartbeat pings) required to recover from down. Default 1; a multi-region vote counts once. Does not delay latency-only recovery."),
   // no count limit of its own: a region must be configured on the deployment, and only a plan can cap how many one monitor uses
-  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket and MCP. A supplied list replaces the existing one."),
+  regions: z.array(z.string().regex(REGION_ID)).min(1).transform((r) => [...new Set(r)]).describe("Region ids from list_regions. auto uses this deployment; explicit regions work for HTTP, TCP, WebSocket, MCP and ping. A supplied list replaces the existing one."),
   keyword: z.string().max(MAX_KEYWORD_LENGTH).nullable().describe("HTTP response-body text, or for WebSocket the first message received, to test: plain text, or an RE2 regular expression with keywordMode matches or not_matches. Null disables keyword matching."),
   keywordMode: z.enum(KEYWORD_MODES).describe("contains or absent: the HTTP response body (or the WebSocket message) must or must not contain keyword as plain text. matches or not_matches: keyword is an RE2 regular expression that must or must not match somewhere in it; (?i) at the start ignores case. Backreferences and lookarounds are not supported."),
   // an absolute http(s) URL or a path; blank means "any destination"
@@ -173,12 +174,15 @@ const patchBody = z.object(fields).partial().omit({ type: true }).extend({
 export const monitorCreateSchema = body;
 export const monitorPatchSchema = patchBody;
 
+const PING_UNAVAILABLE = "This server cannot send ping (ICMP), so a ping monitor cannot run here. Choose a probe region that can, or check a TCP port instead.";
+
 const DNS_DEFAULTS = { dnsRecordType: "A", dnsExpectedValue: null, dnsMatchMode: "exact" } as const;
 
+const pingProblem = (v: { type: string; target: string }) => v.type === "ping" && !pingHost(v.target) ? PING_TARGET_PROBLEM : null;
 const flowProblem = (v: { type: string; apiFlow?: unknown }) => v.apiFlow && v.type !== "http" ? "API steps are available for HTTP monitors only" : null;
 const creationProblem = (v: z.infer<typeof body>) => v.requestBody === MASK ? "A masked request body cannot be imported or created; supply the original body"
   : flowHasMask(v.apiFlow) ? "Masked step headers or bodies cannot be imported or created; supply the original values"
-  : flowProblem(v) ?? rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
+  : pingProblem(v) ?? flowProblem(v) ?? rpcProblem(v) ?? mcpProblem(v) ?? requestBodyProblem(v) ?? (v.keyword ? keywordProblem(v.keyword, v.keywordMode) : null);
 
 /** Every step URL is held to the same target rules as the monitor's own; placeholders cannot reach the host. */
 async function flowTargetProblem(type: string, flow: { steps: { url: string }[] } | null | undefined, regions: string[]) {
@@ -231,6 +235,7 @@ async function overPlan(c: Context<AppEnv>, o: { add?: number; intervalSec?: num
  */
 async function regionProblem(c: Context<AppEnv>, type: string, regions: string[]) {
   const wanted = [...new Set(regions)];
+  if (type === "ping" && wanted.every((r) => r === AUTO) && !(await pingAvailable())) return c.json({ error: PING_UNAVAILABLE, code: "ping_unavailable" }, 400);
   if (wanted.every((r) => r === AUTO)) return null;
   if (!(PROBE_TYPES as readonly string[]).includes(type)) {
     return c.json({ error: `Regions other than auto are available for ${PROBE_TYPES.join(" and ")} monitors only`, code: "regions_not_supported" }, 400);
@@ -374,6 +379,7 @@ async function importMonitors(c: Context<AppEnv>, preview: boolean) {
     const regions = usable.length ? usable : [AUTO];
     if (JSON.stringify(v.regions) !== JSON.stringify(regions)) row.warnings.push("Regions adjusted to this deployment and plan");
     v.regions = regions;
+    if (v.type === "ping" && regions.every((r) => r === AUTO) && !(await pingAvailable())) { Object.assign(row, { source: source.data, sourceId, error: PING_UNAVAILABLE }); continue; }
     if (v.type === "domain") {
       const bounded = Math.min(86400, Math.max(v.intervalSec, 3600));
       if (bounded !== v.intervalSec) { v.intervalSec = bounded; row.warnings.push("Interval adjusted to the 1 hour to 1 day range for domain checks"); }
@@ -597,6 +603,8 @@ export const monitors = new Hono<AppEnv>()
     if (v.target !== undefined) {
       const current = await repo.getMonitor(c.get("orgId"), c.req.param("id"), c.get("projectScope"));
       if (!current) return c.json({ error: "Not found" }, 404);
+      const malformed = pingProblem({ type: current.type, target: v.target });
+      if (malformed) return c.json({ error: malformed }, 400);
       const blocked = await refuseTarget(c, current.type, v.target, v.regions ?? current.regions);
       if (blocked) return blocked;
     }

@@ -365,6 +365,13 @@
       "when": 1794868209222,
       "tag": "0051_spooky_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794868497312,
+      "tag": "0052_mature_maverick",
+      "breakpoints": true
     }
   ]
 }

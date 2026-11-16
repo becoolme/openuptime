@@ -50,11 +50,11 @@ export const OU = {
   ),
   selfHost: l("Yes, the same code as the hosted service, no feature limits", "支持，与托管服务是同一份代码，没有功能限制"),
   types: l(
-    "HTTP and HTTPS (expected status, keyword must or must not appear, custom headers), TCP, DNS, WebSocket, heartbeat, PostgreSQL, MySQL / MariaDB and Redis reachability, MCP servers (tool discovery, optional tool calls and schema changes) and domain registration expiry",
-    "HTTP / HTTPS（预期状态码、关键字必须出现或不得出现、自定义请求头）、TCP、DNS、WebSocket、心跳、PostgreSQL、MySQL / MariaDB 与 Redis 连通性、MCP 服务（工具发现、可选工具调用与 schema 变化）以及域名注册到期",
+    "HTTP and HTTPS (expected status, keyword must or must not appear, custom headers), TCP, DNS, WebSocket, ICMP ping (self-hosted only), heartbeat, PostgreSQL, MySQL / MariaDB and Redis reachability, MCP servers (tool discovery, optional tool calls and schema changes) and domain registration expiry",
+    "HTTP / HTTPS（预期状态码、关键字必须出现或不得出现、自定义请求头）、TCP、DNS、WebSocket、ICMP ping（仅自托管）、心跳、PostgreSQL、MySQL / MariaDB 与 Redis 连通性、MCP 服务（工具发现、可选工具调用与 schema 变化）以及域名注册到期",
   ),
   regions: l(
-    "HTTP, TCP, WebSocket and MCP monitors can be checked from several regions; a run fails when most answering regions fail. Self-hosters run their own probes",
+    "HTTP, TCP, WebSocket, MCP and ping monitors can be checked from several regions; a run fails when most answering regions fail. Self-hosters run their own probes",
     "HTTP、TCP、WebSocket 与 MCP 监控可从多个区域检测，多数应答区域失败才判定失败。自托管时由你自己运行探针",
   ),
   status: l(
@@ -75,8 +75,8 @@ export const OU = {
 /** What OpenUptime cannot do today. Every item was checked: there is no code path for it. */
 export const OU_GAPS: L[] = [
   l("No TLS certificate expiry monitoring.", "不监控 TLS 证书到期。"),
-  l("No ICMP ping monitor; use a TCP or HTTP check instead.", "没有 ICMP ping 监控；可改用 TCP 或 HTTP 检测。"),
-  l("No browser-based or multi-step transaction checks, and no real user monitoring.", "没有基于浏览器或多步骤的事务检测，也没有真实用户监控。"),
+  l("ICMP ping monitors need a checker that is allowed to send ICMP; where it is not, use a TCP or HTTP check.", "ICMP ping 监控需要检测端能够发送 ICMP；不能发送时，可改用 TCP 或 HTTP 检测。"),
+  l("No browser-based transaction checks, and no real user monitoring.", "没有基于浏览器的事务检测，也没有真实用户监控。"),
   l("No SMS or phone-call alerts and no on-call rotation schedules. Escalation works by channel and by minutes unacknowledged.", "没有短信或电话告警，也没有值班排班表。升级按告警渠道和未确认的分钟数进行。"),
   l("Database monitors check that the server answers; they send no credentials and run no queries.", "数据库监控只检查服务端是否应答，不发送凭据，也不执行查询。"),
 ];
@@ -118,8 +118,8 @@ const faqImport = (name: string, direct = false): Faq => ({
 const faqGaps = (name: string): Faq => ({
   q: l(`What does ${name} do that OpenUptime does not?`, `${name} 有哪些 OpenUptime 没有的功能？`),
   a: l(
-    "OpenUptime has no TLS certificate expiry monitoring, no ICMP ping monitor, no browser or multi-step checks, and no SMS, phone-call or on-call schedule features. If you rely on one of those, check whether the other tool covers it before you switch.",
-    "OpenUptime 没有 TLS 证书到期监控、ICMP ping 监控、浏览器或多步骤检测，也没有短信、电话告警或值班排班功能。如果你依赖其中之一，切换前请先确认。",
+    "OpenUptime has no TLS certificate expiry monitoring, no browser checks, and no SMS, phone-call or on-call schedule features, and its ICMP ping monitors work only where the checker can send ICMP. If you rely on one of those, check whether the other tool covers it before you switch.",
+    "OpenUptime 没有 TLS 证书到期监控、浏览器检测，也没有短信、电话告警或值班排班功能；ICMP ping 监控只能在检测端可以发送 ICMP 时使用。如果你依赖其中之一，切换前请先确认。",
   ),
 });
 const faqPricing = (name: string): Faq => ({
@@ -373,12 +373,12 @@ export const TOOLS: Tool[] = [
       { topic: l("Teams and automation", "团队与自动化"), ou: l(`${OU.team.en}; ${OU.automation.en}`, `${OU.team.zh}；${OU.automation.zh}`), them: l("Check its docs for user management and API coverage", "用户管理与 API 覆盖范围请查看其文档") },
     ],
     theyHave: [
-      l("More monitor types, among them ping and TLS certificate expiry, which OpenUptime lacks.", "更多监控类型，包括 ping 和 TLS 证书到期，这些 OpenUptime 都没有。"),
+      l("More monitor types, among them TLS certificate expiry, which OpenUptime lacks.", "更多监控类型，包括 OpenUptime 没有的 TLS 证书到期监控。"),
       l("A large community and a long history as a self-hosted tool.", "庞大的社区和作为自托管工具的长期积累。"),
     ],
     bestThem: [
       l("You want a single self-hosted instance with the broadest set of monitor types and notification options.", "你想要一个自托管实例，监控类型和通知方式越全越好。"),
-      l("You need ping or certificate expiry monitoring.", "你需要 ping 或证书到期监控。"),
+      l("You need certificate expiry monitoring.", "你需要证书到期监控。"),
     ],
     bestUs: [
       l("You want the same monitor checked from several places, using probes you run in the regions you care about.", "你想让同一个监控项从多个地点检测，探针由你部署在关心的区域。"),
@@ -387,9 +387,9 @@ export const TOOLS: Tool[] = [
       l("You want to drive monitoring from scripts or an AI agent.", "你想通过脚本或 AI Agent 驱动监控。"),
     ],
     migrate: [
-      l("Export a backup from Uptime Kuma 1.x (Settings, Backup, Export). OpenUptime reads that file as it is: HTTP, keyword, JSON query, port, DNS and push monitors are converted. Kuma 2.x has no backup export, so write those monitors as a JSON list instead.", "在 Uptime Kuma 1.x 中导出备份（设置 → 备份 → 导出）。OpenUptime 可以原样读取这个文件：HTTP、关键词、JSON 查询、端口、DNS 和 Push 监控会被转换。Kuma 2.x 没有备份导出，请把这些监控整理成 JSON 列表。"),
+      l("Export a backup from Uptime Kuma 1.x (Settings, Backup, Export). OpenUptime reads that file as it is: HTTP, keyword, JSON query, port, DNS, ping and push monitors are converted. Kuma 2.x has no backup export, so write those monitors as a JSON list instead.", "在 Uptime Kuma 1.x 中导出备份（设置 → 备份 → 导出）。OpenUptime 可以原样读取这个文件：HTTP、关键词、JSON 查询、端口、DNS、Ping 和 Push 监控会被转换。Kuma 2.x 没有备份导出，请把这些监控整理成 JSON 列表。"),
       importStep,
-      l("Ping, certificate expiry, Docker, group, database and upside-down monitors are skipped with a reason; replace ping with a TCP or HTTP check where that makes sense.", "Ping、证书到期、Docker、分组、数据库和反转模式的监控会连同原因被跳过；合适时可用 TCP 或 HTTP 检测代替 ping。"),
+      l("Ping monitors import as ping monitors where your checker can send ICMP; elsewhere, replace them with a TCP or HTTP check. Certificate expiry, Docker, group, database and upside-down monitors are skipped with a reason.", "检测端能发送 ICMP 时，Ping 监控会导入为 ping 监控；否则请用 TCP 或 HTTP 检测代替。证书到期、Docker、分组、数据库和反转模式的监控会连同原因被跳过。"),
       l("Monitors that point at private addresses are refused unless you set ALLOW_PRIVATE_TARGETS=true on your instance. Read the self-host docs before turning that on.", "指向内网地址的监控项会被拒绝，除非你在自己的实例上设置 ALLOW_PRIVATE_TARGETS=true。开启前请先阅读自托管文档。"),
       channelsStep,
     ],
@@ -397,8 +397,8 @@ export const TOOLS: Tool[] = [
       {
         q: l("Is OpenUptime a drop-in replacement for Uptime Kuma?", "OpenUptime 能直接替换 Uptime Kuma 吗？"),
         a: l(
-          "For HTTP, TCP, DNS, heartbeat and database reachability checks, largely yes. It has no ping or certificate expiry monitor. The backup file of Kuma 1.x imports as it is, with a report of what needs work by hand.",
-          "对于 HTTP、TCP、DNS、心跳和数据库连通性检测，基本可以。它没有 ping 和证书到期监控。Kuma 1.x 的备份文件可以原样导入，并附上需要手动处理的内容清单。",
+          "For HTTP, TCP, DNS, ping, heartbeat and database reachability checks, largely yes; ping needs a checker that can send ICMP. It has no certificate expiry monitor. The backup file of Kuma 1.x imports as it is, with a report of what needs work by hand.",
+          "对于 HTTP、TCP、DNS、ping、心跳和数据库连通性检测，基本可以；ping 需要检测端能够发送 ICMP。它没有证书到期监控。Kuma 1.x 的备份文件可以原样导入，并附上需要手动处理的内容清单。",
         ),
       },
       faqImport("Uptime Kuma", true),
@@ -475,8 +475,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("Customers in more than one part of the world", "客户分布在多个地区"),
         body: l(
-          "For HTTP, TCP, WebSocket and MCP monitors, pick several regions. The run fails when most of the regions that answered fail, so one bad route does not open an incident, and a probe that is down is left out of the vote. Each region counts as one check. Where the probes are depends on the deployment; see the multi-region docs.",
-          "为 HTTP、TCP、WebSocket 和 MCP 监控选择多个区域。多数应答区域失败时本次检测才判定失败，因此某一条线路出问题不会创建事件，而自身故障的探针不参与投票。每个区域算一次检测。探针的位置取决于部署方式，详见多区域文档。",
+          "For HTTP, TCP, WebSocket, MCP and ping monitors, pick several regions. The run fails when most of the regions that answered fail, so one bad route does not open an incident, and a probe that is down is left out of the vote. Each region counts as one check. Where the probes are depends on the deployment; see the multi-region docs.",
+          "为 HTTP、TCP、WebSocket、MCP 和 ping 监控选择多个区域。多数应答区域失败时本次检测才判定失败，因此某一条线路出问题不会创建事件，而自身故障的探针不参与投票。每个区域算一次检测。探针的位置取决于部署方式，详见多区域文档。",
         ),
         uses: [l("multi-region", "多区域").en],
       },
@@ -716,8 +716,8 @@ export const SEGMENTS: Segment[] = [
       {
         title: l("Pages for outages, not for one bad route", "为故障告警，而不是为一条糟糕的线路告警"),
         body: l(
-          "Check HTTP, TCP, WebSocket and MCP monitors from several regions. The run fails when most answering regions fail, or when the number you set fail. A probe that cannot be reached is left out of the vote instead of counted as a failure, and if no probe answers the check falls back to the default location. The incident names the regions that failed.",
-          "让 HTTP、TCP、WebSocket 和 MCP 监控从多个区域检测。多数应答区域失败，或达到你设定的失败数量，本次检测才判定失败。无法连接的探针不参与投票，也不算作失败；如果没有任何探针应答，检测会回退到默认位置。事件中会写明哪些区域失败。",
+          "Check HTTP, TCP, WebSocket, MCP and ping monitors from several regions. The run fails when most answering regions fail, or when the number you set fail. A probe that cannot be reached is left out of the vote instead of counted as a failure, and if no probe answers the check falls back to the default location. The incident names the regions that failed.",
+          "让 HTTP、TCP、WebSocket、MCP 和 ping 监控从多个区域检测。多数应答区域失败，或达到你设定的失败数量，本次检测才判定失败。无法连接的探针不参与投票，也不算作失败；如果没有任何探针应答，检测会回退到默认位置。事件中会写明哪些区域失败。",
         ),
         uses: [l("multi-region", "多区域").en, "probes"],
       },
@@ -765,8 +765,8 @@ export const SEGMENTS: Segment[] = [
     limits: [
       l("No on-call rotation schedules or phone-call paging; escalation is by channel and minutes unacknowledged.", "没有值班排班表和电话告警；升级按渠道和未确认的分钟数进行。"),
       l("Database monitors check reachability only.", "数据库监控只检查连通性。"),
-      l("No TLS certificate expiry or ICMP ping monitors.", "没有 TLS 证书到期和 ICMP ping 监控。"),
-      l("Multi-region covers HTTP, TCP, WebSocket and MCP monitors only.", "多区域检测仅适用于 HTTP、TCP、WebSocket 和 MCP 监控。"),
+      l("No TLS certificate expiry monitors, and ICMP ping only where the checker can send ICMP.", "没有 TLS 证书到期监控；ICMP ping 监控只能在检测端可以发送 ICMP 时使用。"),
+      l("Multi-region covers HTTP, TCP, WebSocket, MCP and ping monitors only.", "多区域检测仅适用于 HTTP、TCP、WebSocket、MCP 和 ping 监控。"),
     ],
     faq: [
       {

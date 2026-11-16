@@ -74,7 +74,8 @@ const handWritten = `{
         <tr><td>Push</td><td>Heartbeat monitor with a new ping URL. Point your job at it; the Kuma push URL keeps reporting to Kuma.</td></tr>
         <tr><td>Retries, timeout, interval</td><td><code>maxretries</code> plus one becomes the failure threshold (up to 10). The timeout is kept up to 30 seconds. An interval shorter than your plan allows is raised, and the row says so.</td></tr>
         <tr><td>Tags</td><td>Kept, as <code>name</code> or <code>name:value</code>.</td></tr>
-        <tr><td>Ping, Docker container, Group, real browser, database monitors</td><td>Skipped, each with a reason. Groups are not monitors: their members are imported on their own. Database monitors keep their password in the connection string, so create them by hand.</td></tr>
+        <tr><td>Ping</td><td>Ping monitor, where your server can send ICMP (see <a href="/docs/ping">ping monitors</a>); otherwise skipped with a reason. The packet size is not imported. The hosted service cannot send ping.</td></tr>
+        <tr><td>Docker container, Group, real browser, database monitors</td><td>Skipped, each with a reason. Groups are not monitors: their members are imported on their own. Database monitors keep their password in the connection string, so create them by hand.</td></tr>
         <tr><td>Upside down mode</td><td>Skipped. There is no equivalent, so create the monitor by hand.</td></tr>
         <tr><td>Notifications, proxies, status pages, maintenance, history</td><td>Not imported. The new monitors use the project's auto-enabled channels; the preview marks every monitor that had notifications or a proxy.</td></tr>
       </tbody>
@@ -96,7 +97,7 @@ const handWritten = `{
     <ol>
       <li>Add your channels under <strong>Alerting</strong> (email, Slack, Discord, Telegram, webhooks and others) and turn on <em>on for new monitors</em> for the ones every imported monitor should use. A monitor takes the auto-enabled channels when it is created, so do this before the import.</li>
       <li>Open each heartbeat monitor and copy its ping URL into the job that called Kuma's push URL.</li>
-      <li>Recreate skipped monitors by hand: a TCP check on a port the host answers on instead of ping, and a database monitor with a fresh connection string.</li>
+      <li>Recreate skipped monitors by hand: a TCP check on a port the host answers on instead of a ping that could not be imported, and a database monitor with a fresh connection string.</li>
       <li>Create a status page and pick the imported monitors.</li>
     </ol>
 
@@ -129,7 +130,8 @@ const handWritten = `{
         <tr><td>Push</td><td>心跳监控，使用新的 ping 地址。请把任务改为请求新地址；Kuma 的 push 地址仍然上报给 Kuma。</td></tr>
         <tr><td>重试、超时、间隔</td><td><code>maxretries</code> 加一成为失败阈值（最多 10）。超时最多保留 30 秒。短于套餐允许值的间隔会被调高，并在该行注明。</td></tr>
         <tr><td>标签</td><td>保留，格式为 <code>name</code> 或 <code>name:value</code>。</td></tr>
-        <tr><td>Ping、Docker 容器、分组、真实浏览器、数据库监控</td><td>跳过，并逐个说明原因。分组本身不是监控，组内成员会单独导入。数据库监控的密码在连接串里，请手动创建。</td></tr>
+        <tr><td>Ping</td><td>在能发送 ICMP 的服务器上转换为 ping 监控（见 <a href="/docs/ping">ping 监控</a>），否则跳过并说明原因。数据包大小不会导入。托管服务无法发送 ping。</td></tr>
+        <tr><td>Docker 容器、分组、真实浏览器、数据库监控</td><td>跳过，并逐个说明原因。分组本身不是监控，组内成员会单独导入。数据库监控的密码在连接串里，请手动创建。</td></tr>
         <tr><td>反转模式（Upside down）</td><td>跳过。没有对应功能，请手动创建该监控。</td></tr>
         <tr><td>通知、代理、状态页、维护、历史</td><td>不导入。新监控使用项目中自动开启的渠道；预览会标出每个配置过通知或代理的监控。</td></tr>
       </tbody>
@@ -151,7 +153,7 @@ const handWritten = `{
     <ol>
       <li>在<strong>告警</strong>页添加渠道（邮件、Slack、Discord、Telegram、Webhook 等），并为所有导入监控都要用的渠道打开“新监控自动开启”。监控在创建时才会带上自动开启的渠道，所以请在导入前完成。</li>
       <li>打开每个心跳监控，把它的 ping 地址填到原先调用 Kuma push 地址的任务里。</li>
-      <li>手动重建被跳过的监控：用主机会响应的 TCP 端口检测代替 ping，用新的连接串创建数据库监控。</li>
+      <li>手动重建被跳过的监控：用主机会响应的 TCP 端口检测代替无法导入的 ping，用新的连接串创建数据库监控。</li>
       <li>创建状态页，选择导入后的监控。</li>
     </ol>
 

@@ -1,0 +1,51 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc titleZh="Ping（ICMP）监控" descriptionZh="向主机发送 ICMP 回显请求，确认它在网络上可达。仅适用于自托管部署和自建探针。" description="Send an ICMP echo request to a host to confirm that it is reachable. On self-hosted installs and your own probes only." title="Ping (ICMP) monitors" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>Ping (ICMP) monitors</h1>
+    <p class="lede">A ping monitor sends one ICMP echo request to a hostname or an IP address on each run. It passes when a reply comes back within the monitor's timeout, and the latency it records is the round trip ping reports.</p>
+    <h2 id="where">Where ping runs</h2>
+    <ul>
+      <li><strong>Self-hosted in Docker or on Node:</strong> ping works out of the box in the published Docker image. On a server of your own, the system <code>ping</code> command must be installed and allowed to send ICMP (see below).</li>
+      <li><strong>Your own probes:</strong> a probe in Docker or on Node that can send ICMP offers ping checks, so a ping monitor can be checked from several <a href="/docs/regions">regions</a>. A probe that cannot reports its region as unreachable for that monitor; the other regions still vote.</li>
+      <li><strong>The hosted service and Cloudflare Workers:</strong> not available. Workers cannot send ICMP, so the ping type is not offered there. Check a TCP port the host answers on instead.</li>
+    </ul>
+    <p>The monitor form shows the ping type only when the server can send ping. The API refuses a ping monitor checked from <code>auto</code> on a server that cannot, with the code <code>ping_unavailable</code>.</p>
+    <h2 id="target">Target</h2>
+    <p>Enter a hostname (<code>example.com</code>) or an IP address (<code>192.0.2.10</code>, <code>2001:db8::10</code>), without a scheme, port or path. A hostname is resolved on each run, and each address it resolves to is tried in turn within the timeout. Private addresses are refused unless your instance sets <code>ALLOW_PRIVATE_TARGETS=true</code>, as for every other monitor type.</p>
+    <h2 id="results">What counts as down</h2>
+    <ul>
+      <li>No reply within the timeout fails the check, and the incident says which address did not answer.</li>
+      <li>When the checker itself cannot send ping (the command is missing, or the process is not allowed to send ICMP), nothing is recorded: that says nothing about the target, so it never opens an incident. The run's error says why.</li>
+      <li>Many hosts and firewalls drop ICMP while serving traffic normally. If a host never answers ping, monitor its HTTP or TCP port instead.</li>
+    </ul>
+    <h2 id="permissions">Permissions on your own server</h2>
+    <p>On Linux, a process may send ping when its group is inside <code>net.ipv4.ping_group_range</code> or when the <code>ping</code> binary carries the <code>cap_net_raw</code> capability; most distributions set one of the two. If the form does not offer ping, run <code>ping -c 1 127.0.0.1</code> as the user that runs OpenUptime and fix what it reports, then restart the server. Whether ping works is checked the first time it is needed and remembered until the server restarts.</p>
+    <h2 id="import">Importing</h2>
+    <p>Ping monitors from <a href="/docs/migrate-uptimerobot">UptimeRobot</a> and <a href="/docs/migrate-uptime-kuma">Uptime Kuma</a> become ping monitors when the server can send ping, and are skipped with a reason otherwise. A Kuma packet size is not imported; one standard echo request is sent.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>Ping（ICMP）监控</h1>
+    <p class="lede">Ping 监控每次检测向一个主机名或 IP 地址发送一次 ICMP 回显请求。只要在监控的超时时间内收到回复就算通过，记录的延迟就是 ping 报告的往返时间。</p>
+    <h2 id="where-zh">在哪里可以使用</h2>
+    <ul>
+      <li><strong>用 Docker 或 Node 自托管：</strong>发布的 Docker 镜像可以直接使用 ping。在你自己的服务器上，需要安装系统的 <code>ping</code> 命令，并允许它发送 ICMP（见下文）。</li>
+      <li><strong>自建探针：</strong>能发送 ICMP 的 Docker 或 Node 探针会提供 ping 检测，因此 ping 监控也可以从多个<a href="/docs/regions">区域</a>检测。不能发送的探针会把该区域报告为无法连接，其他区域照常参与投票。</li>
+      <li><strong>托管服务与 Cloudflare Workers：</strong>不可用。Workers 无法发送 ICMP，因此不提供 ping 类型，请改为检测主机会响应的 TCP 端口。</li>
+    </ul>
+    <p>只有服务器能发送 ping 时，监控表单才会显示 ping 类型。在无法发送的服务器上，从 <code>auto</code> 检测的 ping 监控会被 API 拒绝，错误码为 <code>ping_unavailable</code>。</p>
+    <h2 id="target-zh">检测目标</h2>
+    <p>填写主机名（<code>example.com</code>）或 IP 地址（<code>192.0.2.10</code>、<code>2001:db8::10</code>），不要带协议、端口或路径。主机名每次检测时都会重新解析，并在超时时间内依次尝试解析出的每个地址。与其他监控类型一样，除非你的实例设置了 <code>ALLOW_PRIVATE_TARGETS=true</code>，否则内网地址会被拒绝。</p>
+    <h2 id="results-zh">什么算作故障</h2>
+    <ul>
+      <li>超时时间内没有收到回复，检测失败，事件中会写明哪个地址没有响应。</li>
+      <li>如果检测方自己无法发送 ping（没有安装命令，或进程不允许发送 ICMP），这次检测不会被记录：这与目标无关，因此不会创建事件。检测的错误信息会说明原因。</li>
+      <li>很多主机和防火墙会丢弃 ICMP，但正常提供服务。如果某台主机从不响应 ping，请改为监控它的 HTTP 或 TCP 端口。</li>
+    </ul>
+    <h2 id="permissions-zh">在自己服务器上的权限</h2>
+    <p>在 Linux 上，进程所在的组位于 <code>net.ipv4.ping_group_range</code> 范围内，或者 <code>ping</code> 命令带有 <code>cap_net_raw</code> 能力时，才能发送 ping；大多数发行版会默认满足其中之一。如果表单中没有 ping 类型，请用运行 OpenUptime 的用户执行 <code>ping -c 1 127.0.0.1</code>，按提示修复后重启服务。服务会在第一次需要时检查 ping 是否可用，并在重启前一直沿用这个结果。</p>
+    <h2 id="import-zh">导入</h2>
+    <p>来自 <a href="/docs/migrate-uptimerobot">UptimeRobot</a> 和 <a href="/docs/migrate-uptime-kuma">Uptime Kuma</a> 的 Ping 监控，在服务器能发送 ping 时会转换为 ping 监控，否则会被跳过并说明原因。Kuma 的数据包大小不会导入，每次只发送一次标准回显请求。</p>
+  </div>
+</Doc>

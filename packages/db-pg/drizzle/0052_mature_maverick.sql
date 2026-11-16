@@ -1,0 +1,1 @@
+ALTER TYPE "public"."monitor_type" ADD VALUE 'ping';
