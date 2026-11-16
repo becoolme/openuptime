@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitors-from-git", date: "2026-11-16", edition: "community",
+    title: { en: "Manage monitors from Git", zh: "用 Git 管理监控项" },
+    summary: { en: "A new example keeps a project's monitors in a JSON file in your repository and applies it from CI over the REST API.", zh: "新增一个示例：把项目的监控项保存在仓库里的 JSON 文件中，并在 CI 中通过 REST API 应用。" },
+    points: [
+      { en: "The plan lists what would be created, updated or deleted, and changes nothing; pull requests get it in the job summary.", zh: "plan 列出将要新建、修改或删除的监控项，不做任何改动；拉取请求会在任务摘要里看到它。" },
+      { en: "Applying the same file twice gives the same result: the second run reports no changes.", zh: "同一个文件应用两次结果相同，第二次运行显示没有变更。" },
+      { en: "Tokens are written as placeholders and filled in from the CI's secrets, so they never sit in the repository.", zh: "令牌以占位符写在文件里，由 CI 的密钥填入，不会出现在仓库中。" },
+      { en: "Only monitors the file created are changed; deleting one that left the file needs an explicit flag, and monitors made in the app are never touched.", zh: "只会改动由该文件创建的监控项；删除已从文件移除的监控项需要显式参数，在应用里创建的监控项不会被改动。" },
+    ],
+    link: { href: "/docs/api#config-as-code", label: { en: "Read about managing monitors from Git", zh: "了解如何用 Git 管理监控项" } },
+  },
+  {
     id: "browser-check-example", date: "2026-11-16", edition: "community",
     title: { en: "Example browser sign-in check", zh: "浏览器登录检测示例" },
     summary: { en: "The repository now has a Playwright example that signs in to a site on a schedule in GitHub Actions and reports to a heartbeat monitor.", zh: "代码仓库新增一个 Playwright 示例：在 GitHub Actions 中定时登录网站，并向心跳监控上报结果。" },

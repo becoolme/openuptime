@@ -1,0 +1,52 @@
+# Copy to .github/workflows/monitors.yml in the repository that holds this folder.
+# Secrets: OPENUPTIME_API_KEY (an owner or admin key), plus any ${NAME} the config uses (HEALTH_TOKEN in the sample).
+# Variables (optional): OPENUPTIME_URL for a self-hosted install, OPENUPTIME_PROJECT_ID to pick the project.
+name: Monitors
+
+on:
+  pull_request:
+    paths: ["examples/config-as-code/**"]
+  push:
+    branches: [main]
+    paths: ["examples/config-as-code/**"]
+  workflow_dispatch:
+
+# one sync at a time, and an apply is never cancelled halfway
+concurrency:
+  group: openuptime-monitors
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: examples/config-as-code
+    env:
+      OPENUPTIME_URL: ${{ vars.OPENUPTIME_URL || 'https://openuptime.app' }}
+      OPENUPTIME_PROJECT_ID: ${{ vars.OPENUPTIME_PROJECT_ID }}
+      OPENUPTIME_API_KEY: ${{ secrets.OPENUPTIME_API_KEY }}
+      HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test
+      # pull requests get the plan in the job summary; nothing is changed
+      - name: Plan
+        if: github.event_name == 'pull_request'
+        run: |
+          code=0
+          node sync.mjs plan > plan.txt 2>&1 || code=$?
+          cat plan.txt
+          { echo '### OpenUptime monitors'; echo '```'; cat plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+      # add --prune once you want monitors removed from the file to be deleted
+      - name: Apply
+        if: github.event_name != 'pull_request'
+        run: node sync.mjs apply

@@ -259,6 +259,8 @@ contentType  the body's media type when a template is set (default "application/
     <p>Create a monitor with <code>"type":"heartbeat"</code> and call its URL from your job. No API key is needed; the token is the secret. Use <code>GET</code> or <code>POST</code>.</p>
     <pre><code>curl https://openuptime.app/api/heartbeat/&lt;heartbeatToken&gt;</code></pre>
     <p>Returns <code is:raw>{"ok":true}</code>, or <code>404</code> for an unknown token. A ping resolves an open incident for that monitor.</p>
+    <h3 id="config-as-code">Manage monitors from Git</h3>
+    <p>The <a href="https://github.com/becoolme/openuptime/tree/main/examples/config-as-code">config-as-code example</a> keeps a project's monitors in a JSON file in your repository. <code>node sync.mjs plan</code> shows what would be created, updated or deleted; <code>node sync.mjs apply</code> makes those changes, and running it again changes nothing. It uses only the endpoints on this page: new monitors go through the import, with the file's <code>source</code> and each monitor's <code>key</code> as their identity, and changes through <code>PATCH</code>. Monitors created in the app are never touched, and deleting requires <code>--prune</code>. Values such as tokens are written as <code is:raw>${NAME}</code> and come from the CI's secrets. Use an owner or admin API key so header values can be compared.</p>
   </div>
   <div lang="zh-CN">
     <h1>API 参考</h1>
@@ -340,6 +342,8 @@ contentType  使用模板时请求体的媒体类型（默认 "application/json"
     <p>创建 <code>"type":"heartbeat"</code> 的监控项，并在你的任务中请求其地址。无需 API 密钥，令牌本身即是凭证。可使用 <code>GET</code> 或 <code>POST</code>。</p>
     <pre><code>curl https://openuptime.app/api/heartbeat/&lt;heartbeatToken&gt;</code></pre>
     <p>成功返回 <code is:raw>{"ok":true}</code>，令牌无效返回 <code>404</code>。收到心跳会关闭该监控项未结束的事件。</p>
+    <h3 id="config-as-code-zh">用 Git 管理监控项</h3>
+    <p><a href="https://github.com/becoolme/openuptime/tree/main/examples/config-as-code">配置即代码示例</a>把一个项目的监控项保存在仓库里的 JSON 文件中。<code>node sync.mjs plan</code> 列出将要新建、修改或删除的监控项；<code>node sync.mjs apply</code> 执行这些变更，再次运行不会有任何改动。它只用到本页列出的接口：新监控项通过导入创建，以文件的 <code>source</code> 和每项的 <code>key</code> 作为标识，修改通过 <code>PATCH</code> 完成。在应用里创建的监控项不会被改动，删除需要加上 <code>--prune</code>。令牌等值写成 <code is:raw>${NAME}</code>，由 CI 的密钥注入。请使用所有者或管理员的 API 密钥，否则无法比较请求头的值。</p>
   </div>
 
   <div class="toc">
