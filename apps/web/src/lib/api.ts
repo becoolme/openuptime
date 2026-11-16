@@ -49,6 +49,18 @@ export type RegionStat = {
 };
 export type RegionList = { regions: { id: string; name: string }[]; types: string[]; maxPerMonitor: number | null };
 export type SpotCheck = { ok: true; region?: string; result?: { ok: boolean; statusCode?: number; latencyMs?: number; error?: string } };
+export type DiagnosisKind = "dns" | "connect" | "tls" | "timeout" | "http" | "assertion" | "blocked" | "other";
+export type CheckDiagnosis = {
+  kind: DiagnosisKind;
+  timings?: { firstByteMs?: number; totalMs: number };
+  redirects?: { url: string; status: number; location: string | null; ms: number }[];
+  headers?: Record<string, string>;
+  body?: string;
+};
+export type IncidentDiagnostics = {
+  checkedAt: string;
+  regions: { region: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; diagnosis?: CheckDiagnosis }[];
+};
 export type Incident = {
   id: string; title: string; status: "investigating" | "identified" | "monitoring" | "resolved";
   /** sequential inside the project, shown as INC-<number> */
@@ -63,6 +75,8 @@ export type Incident = {
   auto?: boolean;
   /** why an automatic incident opened, e.g. "3 consecutive failed checks; 3 of 3 regions failed" */
   evaluationNote?: string | null;
+  /** what each region saw on the check that opened (or last reopened) the incident; private to the workspace */
+  diagnostics?: IncidentDiagnostics | null;
   monitorId?: string | null;
   monitor?: { id: string; name: string; status: string; target: string; type: string } | null;
   assignee?: { name: string; email: string } | null;

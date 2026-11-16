@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useBusy } from "../lib/use-busy";
 import { ago, api, type Incident } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
+import IncidentDiagnosis from "./IncidentDiagnosis";
 
 const KIND: Record<string, string> = { "incident.opened": "Down alert", "incident.resolved": "Recovery alert", "incident.reminder": "Reminder", "incident.escalated": "Escalation", "incident.muted": "Down alert muted" };
 
@@ -86,6 +87,8 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div className="ev"><b>{t("Incident opened")}</b><time>{utc(inc.startedAt)}</time><p>{inc.auto ? t("Consecutive failed checks confirmed.") : t("Declared manually.")}</p>{inc.evaluationNote && <p className="faint">{t("Why")}: {inc.evaluationNote}</p>}</div>
             </div>
           </div>
+
+          {inc.diagnostics && <IncidentDiagnosis d={inc.diagnostics} />}
 
           <form className="card cc" onSubmit={(e) => {
             e.preventDefault();

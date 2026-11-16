@@ -202,6 +202,12 @@ const FIRST_RETRY_DELAY_SEC = 60;
 /** A row that stays in `sending` this long belongs to a worker that died. */
 export const STUCK_SEC = 300;
 
+/** The incident as a webhook sends it: what a failing check saw stays in the app, it is not sent out. */
+const withoutDiagnostics = <T extends object>(incident: T): Omit<T, "diagnostics"> => {
+  const { diagnostics: _, ...rest } = incident as T & { diagnostics?: unknown };
+  return rest;
+};
+
 const eventOf = (kind: string, incident: DeliveryRetry["incident"], monitor: DeliveryRetry["monitor"], count?: number, reopened = false): Event => ({
   kind: kind === "incident.resolved" || kind === "incident.reminder" || kind === "incident.escalated" ? kind : "incident.opened",
   count,
@@ -538,8 +544,8 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
     case "webhook": {
       need(cfg.url, "webhook URL");
       if (!ev.test && !webhookWants(c.config as Record<string, unknown>, ev.kind)) throw new Skipped(`skipped: the channel does not take ${ev.kind} alerts`);
-      const payload = { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: ev.incident, monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) };
-      const alert: WebhookAlert = { kind: ev.kind, status: !opened ? "up" : warning ? "degraded" : "down", message: text, incident: ev.incident, monitor: ev.monitor, project: ev.project, url: link, payload };
+      const payload = { kind: ev.kind, ...(ev.count ? { count: ev.count } : {}), incident: withoutDiagnostics(ev.incident), monitor: { name: ev.monitor.name, target: ev.monitor.target }, ...(ev.project ? { project: ev.project } : {}), ...(ev.slow ? { slow: true } : {}), ...(ev.schemaDrift ? { schemaDrift: true } : {}), ...(ev.reopened ? { reopened: true } : {}) };
+      const alert: WebhookAlert = { kind: ev.kind, status: !opened ? "up" : warning ? "degraded" : "down", message: text, incident: withoutDiagnostics(ev.incident), monitor: ev.monitor, project: ev.project, url: link, payload };
       // a delivery that was not queued (a channel test, or a log that could not be written) gets an id of its own
       await postWebhook(c.config as Record<string, unknown>, alert, ev.deliveryId ?? crypto.randomUUID());
       break;

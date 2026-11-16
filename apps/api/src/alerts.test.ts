@@ -31,6 +31,16 @@ describe("incident link in chat alerts", () => {
     expect(JSON.stringify(bodies[2])).not.toContain("/app/incidents/");
   });
 
+  it("does not send what the failing check saw to a webhook", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const withDiag = { ...ev, incident: { ...ev.incident, evaluationNote: "3 consecutive failed checks", diagnostics: { checkedAt: "2026-11-16T00:00:00.000Z", regions: [{ region: "auto", ok: false, diagnosis: { kind: "http", body: "internal detail" } }] } } };
+    await deliver({ type: "webhook", config: { url: "https://hooks.example.test/b" } }, withDiag as never, "🔴 API is down");
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sent.incident).toEqual({ id: "i1", title: "Down", evaluationNote: "3 consecutive failed checks" });
+    expect(JSON.stringify(sent)).not.toContain("internal detail");
+  });
+
   it("keeps the link whole when a long message is cut to fit the channel", async () => {
     configureEmail({ WEB_ORIGIN: "https://app.example.test/" } as never);
     const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));

@@ -351,6 +351,13 @@
       "when": 1794720919524,
       "tag": "0049_mute_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794868069975,
+      "tag": "0050_flashy_falcon",
+      "breakpoints": true
     }
   ]
 }

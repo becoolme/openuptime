@@ -2,6 +2,7 @@ import { prepareMcpOAuth, addOAuthTiming } from "./mcp-oauth";
 import { mcpToolsEqual } from "./mcp-monitor-schema";
 import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
+import { sanitizeDiagnosis } from "./diagnosis";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
 import { JSON_ASSERT_CAPABILITY } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
@@ -78,9 +79,12 @@ export const isRegionConfigured = (id: string) => id === AUTO || regions.has(id)
 export type RegionRun = { region: string; outcome: CheckOutcome } | { region: string; unreachable: string };
 
 const outcomeOf = (v: unknown): CheckOutcome | null => {
-  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown } | null;
+  const o = v as { ok?: unknown; statusCode?: unknown; latencyMs?: unknown; error?: unknown; mcp?: unknown; degraded?: unknown; diagnosis?: unknown } | null;
   if (!o || typeof o.ok !== "boolean") return null;
+  // a probe's diagnosis is checked and cut to size like everything else it sends; older probes send none
+  const diagnosis = o.ok ? undefined : sanitizeDiagnosis(o.diagnosis);
   return {
+    ...(diagnosis ? { diagnosis } : {}),
     ok: o.ok,
     ...(typeof o.degraded === "boolean" ? { degraded: o.degraded } : {}),
     ...(o.mcp && mcpObservationSchema.safeParse(o.mcp).success ? { mcp: mcpObservationSchema.parse(o.mcp) } : {}),
@@ -174,6 +178,9 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
   }
 }
 
+/** One region's line of a run; a failure keeps its diagnosis, for the incident it may open. */
+const regionResult = (a: CheckOutcome & { region: string }): RegionResult => ({ region: a.region, ok: a.ok, statusCode: a.statusCode, latencyMs: a.latencyMs, error: a.error, ...(!a.ok && a.diagnosis ? { diagnosis: a.diagnosis } : {}) });
+
 /** One run of a monitor: what each answering region saw, and the single outcome the state machine works with. */
 export type Measured = { out: CheckOutcome; results: RegionResult[]; note?: string };
 
@@ -190,7 +197,7 @@ const inconclusive = (out: CheckOutcome): Measured => ({ out, results: [] });
 export function combine(runs: RegionRun[], minFailing = 0): Measured | null {
   const answered = runs.flatMap((r) => ("outcome" in r ? [{ region: r.region, ...r.outcome }] : []));
   if (!answered.length) return null;
-  const results: RegionResult[] = answered.map((a) => ({ region: a.region, ok: a.ok, statusCode: a.statusCode, latencyMs: a.latencyMs, error: a.error }));
+  const results: RegionResult[] = answered.map(regionResult);
   if (answered.length === 1) {
     const { region: _, ...out } = answered[0];
     return { out, results };
@@ -231,7 +238,7 @@ export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   if (regions.length === 1 && regions[0] === AUTO) {
     const out = await runCheck(m, repo);
     if (out.inconclusive) return inconclusive(out);
-    return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
+    return { out, results: [regionResult({ region: AUTO, ...out })] };
   }
   const runs = await Promise.all(regions.map((r) => runInRegion(r, m, repo)));
   const lost = runs.flatMap((r) => ("unreachable" in r ? [`${r.region}: ${r.unreachable}`] : []));
@@ -245,7 +252,7 @@ export async function measure(m: Monitor, repo?: Repo): Promise<Measured> {
   if (m.type === "mcp") return inconclusive({ ok: false, inconclusive: true, error: "No MCP probe could execute this check" });
   const out = await runCheck(m, repo);
   if (out.inconclusive) return inconclusive(out);
-  return { out, results: [{ region: AUTO, ok: out.ok, statusCode: out.statusCode, latencyMs: out.latencyMs, error: out.error }] };
+  return { out, results: [regionResult({ region: AUTO, ...out })] };
 }
 
 

@@ -198,8 +198,26 @@ export interface CheckResult {
 }
 /** `region` is where the check ran from (default `auto`: the scheduler's own location). */
 export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; region?: string; mcp?: McpCheckDiagnostics | null };
+/**
+ * What a failed check saw, kept with the incident it opened. Only values safe to show are kept: request credentials,
+ * cookies and anything that looks like a secret are removed before this is built.
+ */
+export type CheckDiagnosis = {
+  /** where it went wrong: name lookup, connection, TLS, timeout, an unexpected status, a failed content check */
+  kind: "dns" | "connect" | "tls" | "timeout" | "http" | "assertion" | "blocked" | "other";
+  /** milliseconds until the response headers arrived, and in all */
+  timings?: { firstByteMs?: number; totalMs: number };
+  /** every response on the way, the final one included */
+  redirects?: { url: string; status: number; location: string | null; ms: number }[];
+  /** a short allowlist of response headers (server, cache, CDN), never Set-Cookie */
+  headers?: Record<string, string>;
+  /** the start of the response body, as text, with likely secrets removed */
+  body?: string;
+};
 /** One region's result of a run that was checked from several. */
-export type RegionResult = { region: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null };
+export type RegionResult = { region: string; ok: boolean; statusCode?: number | null; latencyMs?: number | null; error?: string | null; diagnosis?: CheckDiagnosis };
+/** What each region saw when an incident opened or reopened. */
+export type IncidentDiagnostics = { checkedAt: string; regions: RegionResult[] };
 
 /** A monitor's last day from one region, for the regions it has been checked from. */
 export interface RegionStat {
@@ -236,6 +254,8 @@ export interface Incident {
   resolvedAt: Date | null;
   /** why an automatic incident opened or was reopened, in a few words */
   evaluationNote: string | null;
+  /** what the failing check saw from each region, for automatic incidents; never shown publicly */
+  diagnostics?: IncidentDiagnostics | null;
   nextReminderAt: Date | null;
   reminderCount: number;
   escalationLevel: number;
@@ -264,6 +284,7 @@ export type NewIncident = {
   auto?: boolean;
   assigneeId?: string | null;
   evaluationNote?: string | null;
+  diagnostics?: IncidentDiagnostics | null;
 };
 export type NewIncidentUpdate = { status: IncidentStatus; body: string; authorId?: string | null; visibility?: UpdateVisibility };
 export type IncidentWriteUp = { rootCause?: string | null; postmortem?: string | null; /** true publishes the write-up on the status page (once resolved), false takes it back */ publish?: boolean };
@@ -646,10 +667,10 @@ export interface Repo {
   hadIncidentSince(monitorId: string, since: Date): Promise<boolean>;
   /**
    * Reopens the monitor's automatic outage incident that was resolved at or after `since` (the latest one), appending
-   * `body` as an update and replacing its evaluation note; acknowledgement, reminders and escalation start over. Incidents a
+   * `body` as an update and replacing its evaluation note (and its diagnostics, when given); acknowledgement, reminders and escalation start over. Incidents a
    * person resolved are left alone. Null when there is none, or when another check reopened it first.
    */
-  reopenIncident(monitorId: string, since: Date, body: string, evaluationNote: string): Promise<Incident | null>;
+  reopenIncident(monitorId: string, since: Date, body: string, evaluationNote: string, diagnostics?: IncidentDiagnostics | null): Promise<Incident | null>;
   /** Did a person resolve one of the monitor's outage incidents during its current failing streak (since the last passing check)? */
   outageHandledByPerson(monitorId: string): Promise<boolean>;
   /** Unresolved incidents of the monitor: its outage ones, or with `slow` only the automatic latency ones. */
