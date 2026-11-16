@@ -31,6 +31,8 @@ export interface Entitlements {
   emailBalance(workspaceId: string): Promise<CreditBalance | null>;
   /** The plan the workspace is on, with its hard limits. null when this deployment has no plans. */
   plan(workspaceId: string): Promise<Plan | null>;
+  /** Runs every five minutes with the reminders and reports. An edition uses it for work of its own on that cadence. */
+  everyFiveMinutes?(): Promise<void>;
 }
 
 export type Plan = {
