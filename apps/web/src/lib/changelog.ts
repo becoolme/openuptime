@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "multi-step-api-checks", date: "2026-11-16", edition: "community",
+    title: { en: "Multi-step API checks", zh: "多步骤 API 检测" },
+    summary: { en: "An HTTP monitor can run up to 5 more requests in order, passing a token or an id from one answer to the next request.", zh: "HTTP 监控可以再按顺序发出最多 5 个请求，把上一个响应中的令牌或 ID 传给下一个请求。" },
+    points: [
+      { en: "Read a value from a JSON answer or a response header and use it as {{name}} in a later step's path, query, headers or body.", zh: "从 JSON 响应或响应头中读取一个值，在后续步骤的路径、查询参数、请求头或请求体中以 {{name}} 使用。" },
+      { en: "Each step has its own expected status and JSON assertions; the error and the incident name the step that failed and list every request with its time.", zh: "每个步骤都有自己的期望状态码和 JSON 断言；错误信息和事件会写明失败的步骤，并列出每个请求及其耗时。" },
+      { en: "Values read during a run are removed from errors, diagnoses and alerts, and a value can never change the host a request goes to.", zh: "检测中读到的值会从错误信息、诊断和告警中移除，而且这些值永远不能改变请求发往的主机。" },
+      { en: "The monitor's timeout covers the whole run, and a run counts as one check in each region.", zh: "监控的超时时间覆盖整次检测，一次检测在每个区域只算一次。" },
+    ],
+    upgrade: { en: "Update self-hosted regional probes before adding steps to a monitor checked from them; older probes refuse the check.", zh: "在为由自托管地区探针检测的监控添加步骤之前，先更新这些探针，旧版探针会拒绝这类检测。" },
+    link: { href: "/docs/api-steps", label: { en: "Read the multi-step API check docs", zh: "阅读多步骤 API 检测文档" } },
+  },
+  {
     id: "incident-diagnostics", date: "2026-11-16", edition: "community",
     title: { en: "See what a failing check saw", zh: "查看失败检测看到的内容" },
     summary: { en: "An automatic incident now keeps what each region saw on the check that opened it, so the cause is often clear without reproducing the failure.", zh: "自动创建的事件现在会保存触发它的那次检测在各个地区看到的内容，很多时候不用复现故障就能看出原因。" },

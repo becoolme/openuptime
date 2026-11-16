@@ -1,0 +1,79 @@
+---
+import Doc from "../../layouts/Doc.astro";
+const example = `{
+  "extract": [{ "name": "token", "from": "json", "path": "$.access_token" }],
+  "steps": [
+    {
+      "name": "List orders",
+      "method": "GET",
+      "url": "https://api.example.com/v1/orders?limit=1",
+      "headers": { "Authorization": "Bearer {{token}}" },
+      "expectedStatus": 200,
+      "jsonAssertions": [{ "path": "$.data", "op": "exists", "value": "" }],
+      "extract": [{ "name": "orderId", "path": "$.data[0].id" }]
+    },
+    {
+      "name": "Read one order",
+      "method": "GET",
+      "url": "https://api.example.com/v1/orders/{{orderId}}",
+      "headers": { "Authorization": "Bearer {{token}}" }
+    }
+  ]
+}`;
+---
+<Doc titleZh="多步骤 API 检测" descriptionZh="在一次检测中按顺序发出多个请求，把上一步返回的令牌或 ID 传给下一步。" description="Run several requests in order in one check, and pass a token or an id from one answer to the next request." title="Multi-step API checks" updated="2026-11-16" toc>
+  <div lang="en">
+    <h1>Multi-step API checks</h1>
+    <p class="lede">An HTTP monitor can run up to 5 more requests after its own, in order, as one check. A later request can use a value an earlier answer returned, such as a login token or the id of a new record. The check passes only when every request passes.</p>
+    <h2 id="how">How a run works</h2>
+    <ol>
+      <li>The monitor's own request runs first, with its method, headers, body, expected status, keyword and JSON assertions. In results it is called <em>Request 1</em>.</li>
+      <li>Each value listed under <code>extract</code> is read from that answer.</li>
+      <li>Each step then runs in order. Every <code>{"{{name}}"}</code> in its URL, headers and body is replaced by the value read earlier, and the step's own expected status and JSON assertions must hold. A step can read more values for the steps after it.</li>
+    </ol>
+    <p>The first request that fails ends the run. The error names it, for example <code>Step 2 (List orders): Expected 200, got 401</code>, and the incident shows each request with its status and time.</p>
+    <h2 id="define">Define the steps</h2>
+    <p>In the monitor form, open <strong>API steps</strong> under the HTTP settings and enter the steps as JSON. Through the <a href="/docs/api">API</a> or the <a href="/docs/mcp">MCP server</a>, send the same object as <code>apiFlow</code> when you create or update a monitor; <code>"apiFlow": null</code> removes the steps.</p>
+    <pre><code>{example}</code></pre>
+    <ul>
+      <li><code>extract</code> reads a value either from the JSON body (<code>"from": "json"</code>, the default, with a path such as <code>$.data.items[0].id</code>) or from a response header (<code>"from": "header"</code>, with the header name as the path). A name uses letters, digits and <code>_</code>, starts with a letter, and is read only once. Up to 10 per request.</li>
+      <li>A step has a <code>name</code>, a <code>url</code>, and optionally <code>method</code> (GET by default), <code>headers</code>, <code>body</code>, <code>expectedStatus</code> (200 by default), <code>jsonAssertions</code> (the same as the monitor's) and <code>extract</code>.</li>
+      <li>Every <code>{"{{name}}"}</code> a step uses must be read by an earlier request. Saving fails otherwise.</li>
+      <li>GET and HEAD steps cannot have a body. A body is up to 16 KiB.</li>
+    </ul>
+    <h2 id="rules">What a value cannot change</h2>
+    <p>A value read from an answer can go in a step's path, query, headers and body, but never in its host: where each request goes, and which headers it carries there, is fixed when the monitor is saved. Each step URL follows the same rules as the monitor's own address, so a private address is refused unless your installation allows private targets.</p>
+    <h2 id="secrets">Secrets</h2>
+    <p>Values read during a run are treated as secrets. They are removed from errors, the incident's diagnosis and alerts, together with the monitor's own header values. Step header values and bodies are masked for members who cannot manage monitors, like the monitor's own headers. Such a member can still save the form with the masked values left as they are, but cannot change a step's address or method while the steps hold hidden values.</p>
+    <h2 id="timeout">Timeout, regions and billing</h2>
+    <p>The monitor's timeout covers the whole run, not each request: if earlier requests use it up, the remaining steps do not run and the check fails as a timeout. The recorded latency is the time of the whole run. The monitor's interval, regions and alert settings apply to the run as a whole, and a run counts as one check in each region however many steps it has.</p>
+    <p>If you run your own <a href="/docs/regions">probes</a>, update them before adding steps to a monitor that is checked from them: an older probe refuses the check and its region shows as unreachable.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>多步骤 API 检测</h1>
+    <p class="lede">HTTP 监控可以在自身请求之后，再按顺序发出最多 5 个请求，合起来算作一次检测。后面的请求可以使用前面响应中返回的值，比如登录令牌或新建记录的 ID。只有所有请求都通过，检测才算通过。</p>
+    <h2 id="how-zh">一次检测怎样进行</h2>
+    <ol>
+      <li>先发出监控自身的请求，使用它的方法、请求头、请求体、期望状态码、关键词和 JSON 断言。结果中它叫作 <em>Request 1</em>。</li>
+      <li>从这次响应中读出 <code>extract</code> 列出的每个值。</li>
+      <li>然后依次执行每个步骤：URL、请求头和请求体中的 <code>{"{{name}}"}</code> 会被替换为之前读到的值，并且必须满足该步骤自己的期望状态码和 JSON 断言。步骤也可以为后续步骤读出新的值。</li>
+    </ol>
+    <p>第一个失败的请求会终止这次检测。错误信息会写明是哪一步，例如 <code>Step 2 (List orders): Expected 200, got 401</code>；事件中会列出每个请求的状态码和耗时。</p>
+    <h2 id="define-zh">定义步骤</h2>
+    <p>在监控表单的 HTTP 设置中展开 <strong>API 步骤</strong>，用 JSON 填写步骤。通过 <a href="/docs/api">API</a> 或 <a href="/docs/mcp">MCP 服务</a>创建或更新监控时，把同样的对象作为 <code>apiFlow</code> 发送即可；<code>"apiFlow": null</code> 会删除所有步骤。</p>
+    <pre><code>{example}</code></pre>
+    <ul>
+      <li><code>extract</code> 可以从 JSON 响应体读取（<code>"from": "json"</code>，默认值，路径形如 <code>$.data.items[0].id</code>），也可以从响应头读取（<code>"from": "header"</code>，路径填响应头名称）。名称由字母、数字和 <code>_</code> 组成，以字母开头，每个名称只能读取一次。每个请求最多 10 个。</li>
+      <li>每个步骤包含 <code>name</code>、<code>url</code>，以及可选的 <code>method</code>（默认 GET）、<code>headers</code>、<code>body</code>、<code>expectedStatus</code>（默认 200）、<code>jsonAssertions</code>（与监控自身的相同）和 <code>extract</code>。</li>
+      <li>步骤中用到的每个 <code>{"{{name}}"}</code> 都必须由前面的请求读取，否则无法保存。</li>
+      <li>GET 和 HEAD 步骤不能带请求体。请求体最大 16 KiB。</li>
+    </ul>
+    <h2 id="rules-zh">读到的值不能改变什么</h2>
+    <p>从响应中读到的值可以用在步骤的路径、查询参数、请求头和请求体中，但不能用在主机名中：每个请求发往哪里、带着哪些请求头，在保存监控时就已确定。每个步骤的 URL 都遵循与监控地址相同的规则，除非你的实例允许内网目标，否则内网地址会被拒绝。</p>
+    <h2 id="secrets-zh">敏感信息</h2>
+    <p>检测过程中读到的值都按敏感信息处理，会和监控自身的请求头值一起，从错误信息、事件诊断和告警中移除。对没有监控管理权限的成员，步骤的请求头值和请求体会被遮盖，与监控自身的请求头相同。这类成员可以在不改动遮盖值的情况下保存表单，但当步骤中有隐藏的值时，不能修改步骤的地址或方法。</p>
+    <h2 id="timeout-zh">超时、区域与计费</h2>
+    <p>监控的超时时间覆盖整次检测，而不是每个请求：如果前面的请求用完了时间，剩下的步骤不会执行，检测按超时判定失败。记录的延迟是整次检测的耗时。监控的检测间隔、区域和告警设置作用于整次检测；无论有多少步骤，一次检测在每个区域都只算一次。</p>
+    <p>如果你运行自己的<a href="/docs/regions">探针</a>，请先更新探针，再为由它们检测的监控添加步骤：旧版探针会拒绝这类检测，对应区域会显示为无法连通。</p>
+  </div>
+</Doc>

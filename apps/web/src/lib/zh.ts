@@ -763,4 +763,11 @@ export const zh: Record<string, string> = {
   "Response headers": "响应头",
   "Start of the response body": "响应正文开头",
   "Kept with the incident for your team only. Request credentials, cookies and values that look like secrets are removed.": "只保存在这个事件里，仅团队成员可见。请求中的凭据、Cookie 以及看起来像密钥的值都已移除。",
+  "Step": "步骤",
+  "API steps are not valid JSON.": "API 步骤不是有效的 JSON。",
+  "API steps (optional)": "API 步骤（可选）",
+  "API steps as JSON": "以 JSON 填写的 API 步骤",
+  "Start from an example": "从示例开始",
+  "After the request above, up to 5 more requests run in order. extract reads a value from an answer (a $.path in JSON, or a header); later steps use it as {{name}} in the path, query, headers or body. The check fails at the first step that fails, and the timeout covers all steps.": "在上面的请求之后，最多再按顺序发出 5 个请求。extract 从响应中读取一个值（JSON 中的 $.路径，或某个响应头），后续步骤可在路径、查询参数、请求头或请求体中以 {{name}} 使用它。任一步骤失败，检测即失败；超时时间覆盖所有步骤。",
+  "How API steps work": "了解 API 步骤",
 };

@@ -141,6 +141,8 @@ export interface Monitor {
   expectedLocation: string | null;
   /** http: every assertion must hold on the JSON response body */
   jsonAssertions: JsonAssertion[];
+  /** http: further requests made after this one, using values read from earlier answers; null = a single request */
+  apiFlow: ApiFlow | null;
   headers: Record<string, string>;
   /** websocket: text sent once the connection is open; null = only the handshake (and a greeting, with a keyword) */
   wsMessage: string | null;
@@ -164,7 +166,7 @@ export interface Monitor {
 export type MonitorInput = Pick<
   Monitor,
   | "name" | "type" | "target" | "method" | "mcpConfig" | "requestBody" | "domainExpiryWarnDays" | "expectedStatus" | "acceptedStatuses" | "intervalSec" | "timeoutMs" | "failureThreshold" | "recoveryThreshold" | "regions"
-  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "jsonAssertions" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
+  | "dnsRecordType" | "dnsExpectedValue" | "dnsMatchMode" | "keyword" | "keywordMode" | "expectedLocation" | "jsonAssertions" | "apiFlow" | "headers" | "wsMessage" | "graceSec" | "channelIds" | "tags" | "slowThresholdMs" | "slowAlertAfter"
   | "dependsOnMonitorId" | "minRegionsFailing"
 >;
 export type ImportMonitor = { source: string; sourceId: string; input: NewMonitor };
@@ -202,6 +204,18 @@ export type NewCheck = { monitorId: string; ok: boolean; statusCode?: number | n
  * What a failed check saw, kept with the incident it opened. Only values safe to show are kept: request credentials,
  * cookies and anything that looks like a secret are removed before this is built.
  */
+/** A value read from a step's answer, available to later steps as {{name}}. */
+export type ApiExtract = { name: string; from: "json" | "header"; path: string };
+/** One request of an API flow after the monitor's own. */
+export type ApiStep = {
+  name: string; method: string; url: string; headers: Record<string, string>; body: string | null;
+  expectedStatus: number; jsonAssertions: JsonAssertion[]; extract: ApiExtract[];
+};
+/** An HTTP monitor's own request reads `extract`, then `steps` run in order, each failing the check when it fails. */
+export type ApiFlow = { extract: ApiExtract[]; steps: ApiStep[] };
+/** How each request of an API flow went. */
+export type ApiStepResult = { name: string; ok: boolean; statusCode?: number; ms: number; error?: string };
+
 export type CheckDiagnosis = {
   /** where it went wrong: name lookup, connection, TLS, timeout, an unexpected status, a failed content check */
   kind: "dns" | "connect" | "tls" | "timeout" | "http" | "assertion" | "blocked" | "other";
@@ -211,6 +225,8 @@ export type CheckDiagnosis = {
   redirects?: { url: string; status: number; location: string | null; ms: number }[];
   /** a short allowlist of response headers (server, cache, CDN), never Set-Cookie */
   headers?: Record<string, string>;
+  /** an API flow: every request that ran, up to and including the one that failed */
+  steps?: ApiStepResult[];
   /** the start of the response body, as text, with likely secrets removed */
   body?: string;
 };

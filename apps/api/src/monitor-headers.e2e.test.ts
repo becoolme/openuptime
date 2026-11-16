@@ -69,6 +69,25 @@ describe.skipIf(!url)("monitor request permissions", () => {
       expect((await call(owner.cookie, "POST", "/monitors/import", [{ ...exported, source: undefined, sourceId: undefined }])).body).toMatchObject({ created: 1, skipped: [] });
       const imported = (await call(owner.cookie, "GET", "/monitors")).body.find((m: any) => m.id !== withBody.body.id && m.name === "Body renamed");
       expect(imported).toMatchObject({ method: "PATCH", requestBody: '{"ok":true}' });
+
+      // API steps: their header values and bodies are guarded like the monitor's own
+      const apiFlow = { extract: [{ name: "token", path: "$.token" }], steps: [{ name: "Items", method: "POST", url: "https://1.1.1.1/items", headers: { Authorization: "Bearer {{token}}", "X-Key": "step-fixture-key" }, body: '{"q":1}' }] };
+      const flowMon = await call(owner.cookie, "POST", "/monitors", { name: "Flow", type: "http", target: "https://1.1.1.1/login", apiFlow });
+      expect(flowMon.status).toBe(201);
+      const flowPath = `/monitors/${flowMon.body.id}`;
+      const seen = (await call(member.cookie, "GET", flowPath)).body.apiFlow;
+      expect(seen.steps[0]).toMatchObject({ headers: { Authorization: MASK, "X-Key": MASK }, body: MASK, url: "https://1.1.1.1/items" });
+      expect((await call(owner.cookie, "GET", flowPath)).body.apiFlow.steps[0].headers["X-Key"]).toBe("step-fixture-key");
+      // sending back what was shown changes nothing and is allowed; pointing a step elsewhere is not
+      expect((await call(member.cookie, "PATCH", flowPath, { name: "Flow renamed", apiFlow: seen })).status).toBe(200);
+      expect((await db.repo.getMonitor(orgId, flowMon.body.id, null))?.apiFlow?.steps[0].headers["X-Key"]).toBe("step-fixture-key");
+      expect(await call(member.cookie, "PATCH", flowPath, { apiFlow: { ...seen, steps: [{ ...seen.steps[0], url: "https://8.8.8.8/collect" }] } })).toMatchObject({ status: 403, body: { code: "protected_request_headers" } });
+      expect(await call(member.cookie, "PATCH", flowPath, { target: "https://8.8.8.8/login" })).toMatchObject({ status: 403 });
+      expect((await call(owner.cookie, "POST", "/monitors", { name: "Masked flow", type: "http", target: "https://1.1.1.1/", apiFlow: seen })).status).toBe(400);
+      expect((await call(owner.cookie, "POST", "/monitors", { name: "Private step", type: "http", target: "https://1.1.1.1/", apiFlow: { steps: [{ name: "x", url: "http://127.0.0.1/admin" }] } })).body).toMatchObject({ code: "target_not_allowed" });
+      expect((await call(owner.cookie, "POST", "/monitors", { name: "TCP flow", type: "tcp", target: "1.1.1.1:80", apiFlow: { steps: [{ name: "x", url: "https://1.1.1.1/" }] } })).status).toBe(400);
+      expect((await call(owner.cookie, "PATCH", flowPath, { apiFlow: null })).status).toBe(200);
+      expect((await db.repo.getMonitor(orgId, flowMon.body.id, null))?.apiFlow).toBeNull();
     } finally {
       await db.close(1);
     }

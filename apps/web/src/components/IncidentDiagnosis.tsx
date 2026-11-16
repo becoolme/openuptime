@@ -45,6 +45,20 @@ export default function IncidentDiagnosis({ d }: { d: IncidentDiagnostics }) {
               {d.regions.length > 1 && <span className="chip" style={{ marginLeft: 8 }}>{r.region}</span>}
             </p>
             {r.error && <p className="faint mono" style={{ margin: "4px 0 0", fontSize: 13, wordBreak: "break-word" }}>{r.error}</p>}
+            {g?.steps && g.steps.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div className="rr res th"><span>{t("Step")}</span><span>{t("Result")}</span><span>{t("Code")}</span><span>{t("Time")}</span><span>{t("Error")}</span></div>
+                {g.steps.map((s, k) => (
+                  <div className="rr res" key={k}>
+                    <span title={s.name}>{k + 1}. {s.name}</span>
+                    <span><span className={`pill ${s.ok ? "up" : "down"}`}>{t(s.ok ? "Passed" : "Failed")}</span></span>
+                    <span className="mono">{s.statusCode ?? "—"}</span>
+                    <span className="mono">{s.ms} ms</span>
+                    <span className="faint mono rr-err" title={s.error ?? ""}>{s.error ?? ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {g && (
               <div className="kv" style={{ marginTop: 10 }}>
                 {g.timings?.firstByteMs != null && <div><span>{t("First byte")}</span><b className="mono">{g.timings.firstByteMs} ms</b></div>}

@@ -254,5 +254,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0050_flashy_falcon",
     "when": 1794868069975,
     "sql": "ALTER TABLE \"incident\" ADD COLUMN \"diagnostics\" jsonb;"
+  },
+  {
+    "tag": "0051_spooky_invisible_woman",
+    "when": 1794868209222,
+    "sql": "ALTER TABLE \"monitor\" ADD COLUMN \"api_flow\" jsonb;"
   }
 ];
