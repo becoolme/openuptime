@@ -1,0 +1,18 @@
+{
+  "version": "1.23.16",
+  "notificationList": [{ "id": 1, "name": "Team chat", "active": 1, "isDefault": 1, "config": "{\"type\":\"webhook\",\"webhookURL\":\"https://hooks.example.com/redacted\"}" }],
+  "proxyList": [],
+  "monitorList": [
+    { "id": 1, "name": "Homepage", "type": "http", "url": "https://www.example.com", "method": "GET", "interval": 60, "retryInterval": 60, "maxretries": 2, "timeout": 48, "active": true, "accepted_statuscodes": ["200-299"], "headers": null, "body": null, "authMethod": null, "ignoreTls": false, "upsideDown": false, "expiryNotification": true, "notificationIDList": { "1": true }, "tags": [{ "tag_id": 1, "monitor_id": 1, "value": "", "name": "web", "color": "#059669" }], "parent": null },
+    { "id": 2, "name": "Login page", "type": "keyword", "url": "https://app.example.com/login", "method": "GET", "keyword": "Sign in", "invertKeyword": false, "interval": 120, "maxretries": 0, "accepted_statuscodes": ["200-299"], "active": true, "notificationIDList": {} },
+    { "id": 3, "name": "Status JSON", "type": "json-query", "url": "https://api.example.com/status", "method": "GET", "jsonPath": "data.status", "expectedValue": "ok", "interval": 60, "maxretries": 1, "accepted_statuscodes": ["200-299"], "active": true, "headers": "{\"Accept\":\"application/json\"}", "authMethod": "basic", "basic_auth_user": "monitor", "basic_auth_pass": "redacted-test-password" },
+    { "id": 4, "name": "Postgres port", "type": "port", "hostname": "db.example.com", "port": 5432, "interval": 60, "maxretries": 3, "active": false },
+    { "id": 5, "name": "MX records", "type": "dns", "hostname": "example.com", "dns_resolve_type": "MX", "dns_resolve_server": "1.1.1.1", "interval": 3600, "maxretries": 0, "active": true },
+    { "id": 6, "name": "Cron job", "type": "push", "pushToken": "redactedpushtoken", "interval": 3600, "maxretries": 0, "active": true },
+    { "id": 7, "name": "Gateway", "type": "ping", "hostname": "203.0.113.1", "interval": 60, "active": true },
+    { "id": 8, "name": "Containers", "type": "docker", "docker_container": "web", "docker_host": 1, "interval": 60, "active": true },
+    { "id": 9, "name": "Production", "type": "group", "interval": 60, "active": true },
+    { "id": 10, "name": "Maintenance flag", "type": "http", "url": "https://www.example.com/maintenance", "upsideDown": true, "interval": 60, "active": true }
+  ],
+  "dbVersion": 1
+}

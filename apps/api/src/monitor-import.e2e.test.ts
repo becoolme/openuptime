@@ -3,6 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { unmetered } from "./entitlements";
 import { MASK } from "./secrets";
+import robotFile from "./import-fixtures/uptimerobot-getmonitors.json";
+import kumaFile from "./import-fixtures/uptime-kuma-backup.json";
+
+// the samples name example.com hosts; point them at an address that needs no DNS lookup
+const offline = <T>(file: T): T => JSON.parse(JSON.stringify(file).replace(/(https?:\/\/)[a-z.]*example\.com/g, "$11.1.1.1").replace(/"(mail|db)\.example\.com"/g, '"1.1.1.1"'));
 
 const url = process.env.TEST_DATABASE_URL;
 const origin = "http://localhost:8787";
@@ -148,5 +153,40 @@ describe.skipIf(!url)("monitor import preview and identity", () => {
     const one = { source: "test", monitors: [row("1")] };
     expect((await call("POST", "/monitors/import", one)).body.created).toBe(1);
     expect((await call("POST", "/monitors/import", one)).body).toMatchObject({ duplicates: 1, created: 0, capacity: null });
+  });
+
+  it("imports an Uptime Kuma backup as it is, keeps ids, explains skipped rows and dedupes a second run", async () => {
+    const call = await account();
+    const file = offline(kumaFile);
+    const preview = await call("POST", "/monitors/import/preview", file);
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({ format: "uptime-kuma", ready: 6, created: 0 });
+    expect(preview.body.report.map((r: any) => [r.name, r.status])).toEqual([["Homepage", "ready"], ["Login page", "ready"], ["Status JSON", "ready"], ["Postgres port", "ready"], ["MX records", "ready"], ["Cron job", "ready"], ["Gateway", "skipped"], ["Containers", "skipped"], ["Production", "skipped"], ["Maintenance flag", "skipped"]]);
+    expect(preview.body.report[6]).toMatchObject({ source: "uptime-kuma", sourceId: "7" });
+    expect(preview.body.report[0]).toMatchObject({ source: "uptime-kuma", sourceId: "1" });
+    expect(preview.body.report[6].error).toMatch(/ICMP ping/);
+    // nothing about the source tool's fields is called unsupported, and no secret is echoed
+    expect(preview.body.report.flatMap((r: any) => r.warnings).join(" ")).not.toMatch(/Unsupported fields/);
+    expect(JSON.stringify(preview.body)).not.toContain("redacted-test-password");
+    const done = await call("POST", "/monitors/import", { ...file, destination: preview.body.destination });
+    expect(done.body).toMatchObject({ created: 6, duplicates: 0 });
+    const monitors = (await call("GET", "/monitors")).body;
+    expect(monitors.find((m: any) => m.name === "Login page")).toMatchObject({ type: "http", keyword: "Sign in", keywordMode: "contains", failureThreshold: 1, importSource: "uptime-kuma", importSourceId: "2" });
+    expect(monitors.find((m: any) => m.name === "Cron job")).toMatchObject({ type: "heartbeat", intervalSec: 3600 });
+    // the dashboard sends the list alone; the second run is recognised
+    expect((await call("POST", "/monitors/import", { monitors: file.monitorList })).body).toMatchObject({ format: "uptime-kuma", created: 0, duplicates: 6 });
+  });
+
+  it("imports an UptimeRobot getMonitors answer with the plan's interval and keyword semantics", async () => {
+    const call = await account(limited);
+    const file = offline(robotFile);
+    const one = { ...file, monitors: [file.monitors[2], file.monitors[6]] };
+    const preview = await call("POST", "/monitors/import/preview", one);
+    expect(preview.body).toMatchObject({ format: "uptimerobot", ready: 1 });
+    expect(preview.body.report[0]).toMatchObject({ source: "uptimerobot", sourceId: "777000003", intervalSec: 300 });
+    expect(preview.body.report[1]).toMatchObject({ status: "skipped", error: expect.stringMatching(/ICMP ping/) });
+    expect((await call("POST", "/monitors/import", one)).body.created).toBe(1);
+    expect((await call("GET", "/monitors")).body[0]).toMatchObject({ keyword: "Service unavailable", keywordMode: "absent" });
+    expect((await call("POST", "/monitors/import/preview", { ...one, format: "nope" })).status).toBe(400);
   });
 });

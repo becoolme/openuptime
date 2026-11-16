@@ -54,6 +54,29 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     upgrade: { en: "Update self-hosted regional probes to this version to get the details from each region; older probes still report their result and error.", zh: "自托管的地区探针需要更新到这个版本才能提供各地区的详细信息；旧版探针仍会上报结果和错误。" },
   },
   {
+    id: "migration-troubleshooting-guides", date: "2026-11-16", edition: "community",
+    title: { en: "Migration and troubleshooting guides", zh: "迁移与排障指南" },
+    summary: { en: "Step-by-step guides for moving from UptimeRobot or Uptime Kuma, and for three problems that a status code alone does not explain.", zh: "新增从 UptimeRobot 或 Uptime Kuma 迁移的分步指南，以及三个仅看状态码无法解释的问题的排查指南。" },
+    points: [
+      { en: "The migration guides show how to export from each tool, what every monitor type becomes, and how to run both side by side before switching.", zh: "迁移指南介绍如何从各工具导出、每种监控类型会变成什么，以及切换前如何让两边并行运行。" },
+      { en: "Troubleshooting guides cover a site that is down in one region only, a page that answers 200 but is broken, and DNS changes that have not reached every resolver yet.", zh: "排障指南涵盖只在某个地区故障、返回 200 但页面已坏，以及 DNS 变更尚未传到所有解析服务器这三种情况。" },
+      { en: "The UptimeRobot and Uptime Kuma comparison pages now describe the direct import and link to the guides.", zh: "UptimeRobot 和 Uptime Kuma 对比页已改为介绍直接导入，并链接到对应的迁移指南。" },
+    ],
+    link: { href: "/docs/migrate-uptime-kuma", label: { en: "Read the Uptime Kuma migration guide", zh: "阅读 Uptime Kuma 迁移指南" } },
+  },
+  {
+    id: "import-uptimerobot-uptime-kuma", date: "2026-11-16", edition: "community",
+    title: { en: "Import from UptimeRobot and Uptime Kuma", zh: "从 UptimeRobot 和 Uptime Kuma 导入" },
+    summary: { en: "Import an UptimeRobot getMonitors answer or an Uptime Kuma 1.x backup file as it is, and see before importing which monitors need setting up by hand.", zh: "直接导入 UptimeRobot getMonitors 的返回结果或 Uptime Kuma 1.x 备份文件，并在导入前看到哪些监控需要手动设置。" },
+    points: [
+      { en: "HTTP, keyword, port and heartbeat monitors carry over from both tools, plus DNS, push and simple JSON query monitors from Uptime Kuma.", zh: "两个工具的 HTTP、关键词、端口和心跳监控都能导入，Uptime Kuma 的 DNS、推送和简单 JSON 查询监控也可以。" },
+      { en: "The preview names the file format and gives each skipped monitor a reason, such as ICMP ping, Docker or database monitors.", zh: "预览会显示识别出的文件格式，并为每个被跳过的监控说明原因，例如 ICMP Ping、Docker 或数据库监控。" },
+      { en: "Each monitor keeps its original id, so importing the same file again skips what is already here.", zh: "每个监控都保留原工具中的 ID，再次导入同一个文件时会跳过已经存在的监控。" },
+      { en: "Settings that do not carry over, such as alert contacts, notifications, proxies and ignored certificate errors, are listed per monitor instead of being dropped silently.", zh: "无法导入的设置，例如告警联系人、通知、代理和忽略证书错误，会逐个监控列出，而不是悄悄丢弃。" },
+    ],
+    link: { href: "/docs/migrate-uptimerobot", label: { en: "Read the UptimeRobot migration guide", zh: "阅读 UptimeRobot 迁移指南" } },
+  },
+  {
     id: "keyword-patterns", date: "2026-11-15", edition: "community",
     title: { en: "Match keywords with regular expressions", zh: "关键词支持正则表达式" },
     summary: { en: "HTTP and WebSocket monitors can check the response against a regular expression, not only a fixed piece of text.", zh: "HTTP 和 WebSocket 监控除了查找固定文本，还可以用正则表达式检查响应内容。" },

@@ -34,6 +34,8 @@ export interface Tool {
   bestThem: L[];
   bestUs: L[];
   migrate: L[];
+  /** a step-by-step migration guide under /docs, linked below the migration steps */
+  guide?: string;
   faq: Faq[];
 }
 
@@ -103,9 +105,12 @@ const faqSelfHost = (name: string): Faq => ({
     "可以。OpenUptime 可用一个 Docker 镜像加 Postgres 运行，也可部署在 Cloudflare Workers 上并使用你自己提供的 Postgres 数据库。自托管版本与托管服务是同一份代码。",
   ),
 });
-const faqImport = (name: string): Faq => ({
+const faqImport = (name: string, direct = false): Faq => ({
   q: l(`How do I move my ${name} monitors to OpenUptime?`, `如何把 ${name} 的监控项迁移到 OpenUptime？`),
-  a: l(
+  a: direct ? l(
+    `Import ${name}'s own export file on the Monitors page or through the API. The preview lists every monitor as ready or skipped, with what did not carry over, before anything is created; importing the file again adds only new monitors. Channels and status pages are set up again by hand. The migration guide walks through each step.`,
+    `在监控页或通过 API 导入 ${name} 自己导出的文件。创建之前，预览会把每个监控标为就绪或跳过，并列出没能迁过来的设置；再次导入同一个文件只会添加新的监控。告警渠道和状态页需要手动重新设置。迁移指南会逐步说明。`,
+  ) : l(
     "Put your monitors in a JSON list and import it on the Monitors page or through the API. The importer accepts common field names used by other tools, skips entries it cannot read and reports why. Channels and status pages are set up again by hand.",
     "把监控项整理成 JSON 列表，在监控页或通过 API 导入。导入器接受其他工具常见的字段名，读不懂的条目会被跳过并说明原因。告警渠道和状态页需要手动重新设置。",
   ),
@@ -163,13 +168,13 @@ export const TOOLS: Tool[] = [
       l("You want to manage monitors from scripts or from an AI agent over MCP.", "你想通过脚本或经 MCP 的 AI Agent 管理监控项。"),
     ],
     migrate: [
-      l("Export or copy your monitors from UptimeRobot into a JSON list: for each one a name, a url or hostname, the interval in seconds, and the type.", "把 UptimeRobot 中的监控项导出或整理成 JSON 列表：每项包含名称、url 或 hostname、以秒为单位的间隔和类型。"),
-      fieldsStep,
+      l("Save the answer of UptimeRobot's getMonitors API call, made with a read-only API key, to a file. OpenUptime reads that file as it is: HTTP, keyword, port and heartbeat monitors are converted, and the preview names what does not carry over.", "用只读 API Key 调用 UptimeRobot 的 getMonitors 接口，把返回结果存成文件。OpenUptime 可以原样读取这个文件：HTTP、关键词、端口和心跳监控会被转换，预览会列出没能迁过来的设置。"),
       importStep,
       channelsStep,
       parallelStep,
     ],
-    faq: [faqImport("UptimeRobot"), faqSelfHost("UptimeRobot"), faqGaps("UptimeRobot"), faqPricing("UptimeRobot")],
+    guide: "/docs/migrate-uptimerobot",
+    faq: [faqImport("UptimeRobot", true), faqSelfHost("UptimeRobot"), faqGaps("UptimeRobot"), faqPricing("UptimeRobot")],
   },
   {
     slug: "better-stack",
@@ -344,6 +349,7 @@ export const TOOLS: Tool[] = [
   },
   {
     slug: "uptime-kuma",
+    guide: "/docs/migrate-uptime-kuma",
     name: "Uptime Kuma",
     title: l("Uptime Kuma alternative", "Uptime Kuma 替代方案"),
     description: l(
@@ -381,10 +387,9 @@ export const TOOLS: Tool[] = [
       l("You want to drive monitoring from scripts or an AI agent.", "你想通过脚本或 AI Agent 驱动监控。"),
     ],
     migrate: [
-      l("Write your Kuma monitors as a JSON list with a name, a url or hostname, the interval in seconds and the type. OpenUptime does not read Kuma's backup file directly.", "把 Kuma 的监控项整理成 JSON 列表，每项包含名称、url 或 hostname、以秒为单位的间隔和类型。OpenUptime 不能直接读取 Kuma 的备份文件。"),
-      fieldsStep,
+      l("Export a backup from Uptime Kuma 1.x (Settings, Backup, Export). OpenUptime reads that file as it is: HTTP, keyword, JSON query, port, DNS and push monitors are converted. Kuma 2.x has no backup export, so write those monitors as a JSON list instead.", "在 Uptime Kuma 1.x 中导出备份（设置 → 备份 → 导出）。OpenUptime 可以原样读取这个文件：HTTP、关键词、JSON 查询、端口、DNS 和 Push 监控会被转换。Kuma 2.x 没有备份导出，请把这些监控整理成 JSON 列表。"),
       importStep,
-      l("Ping, certificate expiry and other types OpenUptime does not have are skipped with a reason; replace ping with a TCP or HTTP check where that makes sense.", "OpenUptime 不支持的 ping、证书到期等类型会连同原因被跳过；合适时可用 TCP 或 HTTP 检测代替 ping。"),
+      l("Ping, certificate expiry, Docker, group, database and upside-down monitors are skipped with a reason; replace ping with a TCP or HTTP check where that makes sense.", "Ping、证书到期、Docker、分组、数据库和反转模式的监控会连同原因被跳过；合适时可用 TCP 或 HTTP 检测代替 ping。"),
       l("Monitors that point at private addresses are refused unless you set ALLOW_PRIVATE_TARGETS=true on your instance. Read the self-host docs before turning that on.", "指向内网地址的监控项会被拒绝，除非你在自己的实例上设置 ALLOW_PRIVATE_TARGETS=true。开启前请先阅读自托管文档。"),
       channelsStep,
     ],
@@ -392,11 +397,11 @@ export const TOOLS: Tool[] = [
       {
         q: l("Is OpenUptime a drop-in replacement for Uptime Kuma?", "OpenUptime 能直接替换 Uptime Kuma 吗？"),
         a: l(
-          "For HTTP, TCP, DNS, heartbeat and database reachability checks, largely yes. It has no ping or certificate expiry monitor, and Kuma's backup file cannot be imported directly, so plan for a small conversion step.",
-          "对于 HTTP、TCP、DNS、心跳和数据库连通性检测，基本可以。它没有 ping 和证书到期监控，也不能直接导入 Kuma 的备份文件，需要做一步简单的格式转换。",
+          "For HTTP, TCP, DNS, heartbeat and database reachability checks, largely yes. It has no ping or certificate expiry monitor. The backup file of Kuma 1.x imports as it is, with a report of what needs work by hand.",
+          "对于 HTTP、TCP、DNS、心跳和数据库连通性检测，基本可以。它没有 ping 和证书到期监控。Kuma 1.x 的备份文件可以原样导入，并附上需要手动处理的内容清单。",
         ),
       },
-      faqImport("Uptime Kuma"),
+      faqImport("Uptime Kuma", true),
       {
         q: l("What does self-hosting OpenUptime need compared with Uptime Kuma?", "和 Uptime Kuma 相比，自托管 OpenUptime 需要什么？"),
         a: l(
