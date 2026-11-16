@@ -113,7 +113,8 @@ h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em}
   .btn::after,.nav::after,.auth a::after,.page a:not(.tr)::after{content:"";position:absolute;inset:-6px -4px}
   .nav::after{inset:-4px 0}
   .side .btn::after{inset:-8px -4px}
-  .modal{place-items:end center}
+  /* above the bottom tab bar, so the form buttons at the end of a sheet stay reachable */
+  .modal{place-items:end center;z-index:25}
   .modal .card{width:100%;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom))}
   .auth{padding:16px;place-items:start center}.auth .card{padding:24px 20px}
 }

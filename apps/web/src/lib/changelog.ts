@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "mobile-form-buttons",
+    date: "2026-11-16",
+    edition: "community",
+    title: { en: "Form buttons reachable on phones", zh: "手机上可点到表单按钮" },
+    summary: {
+      en: "On narrow screens, the save and cancel buttons of dialogs such as Add channel are no longer hidden behind the bottom navigation bar.",
+      zh: "在窄屏上，“添加渠道”等对话框的保存和取消按钮不再被底部导航栏遮住。",
+    },
+    points: [
+      { en: "Dialogs that open as a sheet from the bottom of the screen now sit above the navigation bar.", zh: "从屏幕底部弹出的对话框现在显示在导航栏之上。" },
+    ],
+  },
+  {
     id: "monitors-from-git", date: "2026-11-16", edition: "community",
     title: { en: "Manage monitors from Git", zh: "用 Git 管理监控项" },
     summary: { en: "A new example keeps a project's monitors in a JSON file in your repository and applies it from CI over the REST API.", zh: "新增一个示例：把项目的监控项保存在仓库里的 JSON 文件中，并在 CI 中通过 REST API 应用。" },
