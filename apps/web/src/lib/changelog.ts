@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "more-private-ipv6-refused",
+    date: "2026-11-16",
+    edition: "community",
+    title: { en: "More private IPv6 addresses refused", zh: "拒绝更多内网 IPv6 地址" },
+    summary: {
+      en: "Monitors, alert webhooks and other outbound requests now refuse a few more IPv6 spellings and reserved ranges that can lead to a private address.",
+      zh: "监控、告警 webhook 等出站请求现在会拒绝更多可能指向内网的 IPv6 写法和保留地址段。",
+    },
+    points: [
+      { en: "These addresses are refused by default, like other private targets; ALLOW_PRIVATE_TARGETS=true still allows them.", zh: "与其他内网目标一样，这些地址默认会被拒绝；设置 ALLOW_PRIVATE_TARGETS=true 后仍可访问。" },
+    ],
+  },
+  {
     id: "mobile-form-buttons",
     date: "2026-11-16",
     edition: "community",

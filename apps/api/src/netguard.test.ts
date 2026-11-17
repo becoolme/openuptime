@@ -23,6 +23,15 @@ describe("addressBlocked", () => {
     }
     for (const ip of ["2606:4700:4700::1111", "2001:4860:4860::8888", "::ffff:8.8.8.8"]) expect([ip, addressBlocked(ip)]).toEqual([ip, false]);
   });
+  it("refuses the less common IPv6 spellings and reserved ranges", () => {
+    for (const ip of ["::ffff:0:127.0.0.1", "::ffff:0:a9fe:a9fe", "64:ff9b:1::7f00:1", "64:ff9b:1::808:808", "2001:10::1", "2001:20::1", "2001:2f::1", "2001:2::1", "3fff::1", "5f00::1"]) {
+      expect([ip, addressBlocked(ip)]).toEqual([ip, true]);
+    }
+    // neighbours of those ranges, and an IPv4-translated public address, stay reachable
+    for (const ip of ["::ffff:0:8.8.8.8", "64:ff9b:2::1", "2001:30::1", "2001:3::1", "2001:2:1::1", "3fff:1000::1", "5f01::1"]) {
+      expect([ip, addressBlocked(ip)]).toEqual([ip, false]);
+    }
+  });
 });
 
 describe("hostBlocked", () => {
