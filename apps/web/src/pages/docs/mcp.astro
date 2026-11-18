@@ -16,6 +16,11 @@ const tools: Tool[] = [
   { name: "run_check", en: "Run a check right now and record the result. With a region, a one-off request from that region that is not recorded.", zh: "立即执行一次检测并记录结果。传入 region 时，仅从该区域发出一次不记录的请求。" },
   { name: "list_regions", en: "Regions a monitor can check from, and how many one monitor may use.", zh: "监控项可用的检测区域，以及单个监控项最多可用的区域数。" },
   { name: "delete_monitor", en: "Permanently delete a monitor and its history.", zh: "永久删除监控项及其历史。" },
+  { name: "get_server_install", en: "The command that installs the server agent, with the project's key and optional name and tags. Owner/admin only; the key appears in the conversation.", zh: "安装服务器 agent 的命令，包含项目密钥，可指定名称和标签。仅限所有者或管理员；密钥会出现在对话中。" },
+  { name: "list_servers / get_server", en: "Servers with their online state and latest metrics; one server with metric history.", zh: "服务器列表及在线状态和最新指标；单台服务器的指标历史。" },
+  { name: "update_server", en: "Rename a server, replace its tags or change its report interval.", zh: "修改服务器名称、标签或上报间隔。" },
+  { name: "delete_server", en: "Remove a server and its history. The agent keeps running until uninstalled. Owner/admin only.", zh: "删除服务器及其历史。agent 在卸载前会继续运行。仅限所有者或管理员。" },
+  { name: "rotate_server_agent_key", en: "Replace the agent key; agents with the old key stop being accepted. Owner/admin only.", zh: "更换 agent 密钥，使用旧密钥的 agent 会立即被拒绝。仅限所有者或管理员。" },
   { name: "list_incidents / get_incident", en: "Incidents, open ones first, with their timeline.", zh: "事件列表（未结束的在前）及时间线。" },
   { name: "create_incident", en: "Open a manual incident, optionally tied to a monitor.", zh: "创建手动事件，可关联监控项。" },
   { name: "update_incident", en: "Set or clear an incident's root cause and postmortem, and publish them to the status page.", zh: "设置或清除事件的根因和复盘，并可发布到状态页。" },
@@ -32,7 +37,7 @@ const tools: Tool[] = [
   { name: "cancel_maintenance_series", en: "Cancel future occurrences and end active ones, retaining completed history. Owner/admin only.", zh: "取消未来窗口并结束当前窗口，保留已完成历史。仅限所有者或管理员。" },
 ];
 ---
-<Doc titleZh="MCP：让 Claude 管理你的监控" descriptionZh="把 Claude、Cursor 等 MCP 客户端连接到 OpenUptime，用来管理监控、故障和状态页。" description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-10-17" toc>
+<Doc titleZh="MCP：让 Claude 管理你的监控" descriptionZh="把 Claude、Cursor 等 MCP 客户端连接到 OpenUptime，用来管理监控、故障和状态页。" description="Connect Claude, Cursor and other MCP clients to OpenUptime to manage monitors, incidents and status pages." title="MCP" updated="2026-11-18" toc>
   <div lang="en">
     <h1>MCP server</h1>
     <p>To monitor another MCP server, see <a href="/docs/mcp-monitors">MCP Uptime Monitor</a>.</p>

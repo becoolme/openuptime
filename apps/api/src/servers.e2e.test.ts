@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { Edition } from "./edition";
 import { type Plan, unmetered } from "./entitlements";
-import { diskTotals, minServerInterval, reportSchema, serverDeadline, serverOnline } from "./routes/servers";
+import { diskTotals, INSTALL_SCRIPT, installCommand, minServerInterval, reportSchema, serverDeadline, serverOnline } from "./routes/servers";
 
 describe("server reports", () => {
   it("allows 30 s without plans, and what the plan says otherwise", () => {
@@ -48,6 +48,25 @@ describe("server reports", () => {
     const r = reportSchema.parse({ machineId: "abcdef0123456789", metrics: { cpu: 5, memUsed: 1 }, disks: null, interfaces: [{ name: "lo", ipv4: null }] });
     expect(r.disks).toEqual([]);
     expect(r.interfaces[0].ipv4).toEqual([]);
+  });
+  it("takes the install command's name and tags without ever refusing a report for them", () => {
+    const base = { machineId: "abcdef0123456789", metrics: { cpu: 5, memUsed: 1 } };
+    expect(reportSchema.parse(base)).toMatchObject({ name: "", tags: [] });
+    const r = reportSchema.parse({ ...base, name: `  web\u0007 1 ${"x".repeat(200)}`, tags: [" prod ", "prod", "", 7, "t".repeat(40), ...Array.from({ length: 30 }, (_, i) => `t${i}`)] });
+    expect(r.name).toHaveLength(120);
+    expect(r.name.startsWith("web 1 ")).toBe(true);
+    expect(r.tags).toHaveLength(20);
+    expect(r.tags.slice(0, 3)).toEqual(["prod", "t".repeat(32), "t0"]);
+    expect(reportSchema.parse({ ...base, name: 42, tags: "prod" })).toMatchObject({ name: "", tags: [] });
+  });
+  it("builds an install command a shell reads as intended", () => {
+    const key = "oua_" + "a".repeat(48);
+    expect(installCommand({ key, endpoint: "https://openuptime.app" }))
+      .toBe(`curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint https://openuptime.app`);
+    expect(installCommand({ key, endpoint: "https://up.example.com", name: "web 1", tags: ["prod", "東京", "prod"] }))
+      .toBe(`curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint https://up.example.com --name 'web 1' --tags 'prod,東京'`);
+    expect(installCommand({ key, endpoint: "http://10.0.0.5:8787" })).toMatch(/ --allow-http$/);
+    expect(installCommand({ key, endpoint: "http://localhost:8787" })).not.toMatch(/allow-http/);
   });
   it("keeps the offline deadline when the interval gets shorter", () => {
     const now = Date.UTC(2026, 10, 18);
@@ -128,6 +147,33 @@ describe.skipIf(!url)("Server monitoring", () => {
     // the backing heartbeat monitor carries offline alerts
     const monitor = (await call("GET", `/monitors/${s.monitorId}`)).body;
     expect(monitor).toMatchObject({ type: "heartbeat", tags: ["server"] });
+  });
+
+  it("names and tags a server from its install command, once", async () => {
+    const call = await signUp();
+    const install = await call("POST", "/servers/install", { name: "Tokyo edge", tags: ["prod", "jp"] });
+    expect(install.status).toBe(200);
+    const { key } = install.body;
+    expect(key).toBe((await call("GET", "/servers/agent-key")).body.key);
+    expect(install.body).toMatchObject({ endpoint: ORIGIN, script: INSTALL_SCRIPT });
+    expect(install.body.command).toBe(installCommand({ key, endpoint: ORIGIN, name: "Tokyo edge", tags: ["prod", "jp"] }));
+    expect(install.body.uninstallCommand).toMatch(/--uninstall$/);
+    expect((await call("POST", "/servers/install", { name: "it's" })).status).toBe(400);
+    expect((await call("POST", "/servers/install", { tags: ["a,b"] })).status).toBe(400);
+    expect((await call("POST", "/servers/install")).status).toBe(200);
+
+    expect((await report(key, { ...sample("machine-named"), name: "Tokyo edge", tags: ["prod", "jp"] })).status).toBe(200);
+    const s = (await call("GET", "/servers")).body.servers[0];
+    expect(s).toMatchObject({ name: "Tokyo edge", tags: ["prod", "jp"], hostname: "web-1" });
+    expect((await call("GET", `/monitors/${s.monitorId}`)).body.name).toBe("Tokyo edge");
+
+    // renamed in the dashboard: a reinstall with other options does not undo that
+    await call("PATCH", `/servers/${s.id}`, { name: "edge-1", tags: [] });
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 120_000 });
+    try {
+      expect((await report(key, { ...sample("machine-named"), name: "Other", tags: ["x"] })).status).toBe(200);
+    } finally { vi.useRealTimers(); }
+    expect((await call("GET", `/servers/${s.id}`)).body).toMatchObject({ name: "edge-1", tags: [] });
   });
 
   it("changes the interval, keeps the monitor in step and deletes both", async () => {

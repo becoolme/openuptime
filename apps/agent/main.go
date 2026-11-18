@@ -1,7 +1,7 @@
 // Command openuptime-agent reports a server's CPU, memory, disk and network metrics to OpenUptime.
 //
 // It only makes outbound HTTPS requests: nothing listens on the server. Configuration comes from flags or from the
-// environment (OPENUPTIME_KEY, OPENUPTIME_ENDPOINT), which is what the install script writes for the systemd unit so
+// environment (OPENUPTIME_KEY, OPENUPTIME_ENDPOINT, OPENUPTIME_NAME, OPENUPTIME_TAGS), which is what the install script writes for the systemd unit so
 // the key does not show up in the process list.
 package main
 
@@ -35,17 +35,28 @@ type config struct {
 	interval time.Duration
 	ignore   []string
 	once     bool
+	// name and tags the server gets when it registers; the dashboard owns them afterwards
+	name string
+	tags []string
 }
+
+const (
+	maxNameLen = 120
+	maxTags    = 20
+	maxTagLen  = 32
+)
 
 func main() {
 	cfg := config{}
-	var ignore string
+	var ignore, tags string
 	showVersion := false
 	flag.StringVar(&cfg.key, "key", os.Getenv("OPENUPTIME_KEY"), "agent key of the project (env OPENUPTIME_KEY)")
 	flag.StringVar(&cfg.endpoint, "endpoint", envOr("OPENUPTIME_ENDPOINT", "https://openuptime.app"), "OpenUptime address (env OPENUPTIME_ENDPOINT)")
 	flag.DurationVar(&cfg.interval, "interval", defaultInterval, "first report interval; the server's answer takes over")
 	flag.StringVar(&ignore, "ignore-interfaces", envOr("OPENUPTIME_IGNORE_INTERFACES", "lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan"),
 		"comma-separated interface name prefixes to leave out (env OPENUPTIME_IGNORE_INTERFACES)")
+	flag.StringVar(&cfg.name, "name", os.Getenv("OPENUPTIME_NAME"), "name the server gets when it first reports; defaults to the host name (env OPENUPTIME_NAME)")
+	flag.StringVar(&tags, "tags", os.Getenv("OPENUPTIME_TAGS"), "comma-separated tags the server gets when it first reports (env OPENUPTIME_TAGS)")
 	flag.BoolVar(&cfg.once, "once", false, "collect one report, print it as JSON and exit without sending")
 	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flag.Parse()
@@ -54,6 +65,8 @@ func main() {
 		return
 	}
 	cfg.endpoint = strings.TrimRight(cfg.endpoint, "/")
+	cfg.name = cutRunes(strings.TrimSpace(cfg.name), maxNameLen)
+	cfg.tags = parseTags(tags)
 	for _, p := range strings.Split(ignore, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			cfg.ignore = append(cfg.ignore, p)
@@ -63,6 +76,31 @@ func main() {
 	if err := run(cfg); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// parseTags splits a comma-separated list, dropping blanks and repeats and keeping what the dashboard accepts.
+func parseTags(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, t := range strings.Split(s, ",") {
+		t = cutRunes(strings.TrimSpace(t), maxTagLen)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+		if len(out) == maxTags {
+			break
+		}
+	}
+	return out
+}
+
+func cutRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return strings.TrimSpace(string(r[:n]))
+	}
+	return s
 }
 
 func envOr(name, fallback string) string {
@@ -83,6 +121,7 @@ func run(cfg config) error {
 		if err != nil {
 			return err
 		}
+		r.Name, r.Tags = cfg.name, cfg.tags
 		out, _ := json.MarshalIndent(r, "", "  ")
 		fmt.Println(string(out))
 		return nil
@@ -103,6 +142,7 @@ func run(cfg config) error {
 			wait = interval
 			continue
 		}
+		r.Name, r.Tags = cfg.name, cfg.tags
 		next, err := send(client, cfg, r)
 		switch {
 		case errors.Is(err, errInvalidKey):

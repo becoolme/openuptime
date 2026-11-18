@@ -161,4 +161,29 @@ describe("edition tools", () => {
     expect(names).toHaveLength(TOOLS.length + PUBLIC_TOOLS.length + 1);
     expect(names.indexOf("edition_probe")).toBe(TOOLS.length);
   });
+
+  it("sets up and manages servers through the servers API", async () => {
+    calls.length = 0;
+    await rpc(1, "tools/call", { name: "get_server_install", arguments: { name: "web 1", tags: ["prod", "eu"] } });
+    await rpc(2, "tools/call", { name: "get_server", arguments: { id: ID } });
+    await rpc(3, "tools/call", { name: "update_server", arguments: { id: ID, tags: [] } });
+    await rpc(4, "tools/call", { name: "delete_server", arguments: { id: ID } });
+    await rpc(5, "tools/call", { name: "rotate_server_agent_key", arguments: {} });
+    expect(calls).toEqual([
+      { method: "POST", path: "/api/servers/install", body: { name: "web 1", tags: ["prod", "eu"] } },
+      { method: "GET", path: `/api/servers/${ID}?range=1h` },
+      { method: "PATCH", path: `/api/servers/${ID}`, body: { tags: [] } },
+      { method: "DELETE", path: `/api/servers/${ID}` },
+      { method: "POST", path: "/api/servers/agent-key/rotate" },
+    ]);
+    const bad = await rpc(6, "tools/call", { name: "update_server", arguments: { id: ID, intervalSec: 45 } });
+    expect(bad.result?.isError ?? !!bad.error).toBeTruthy();
+    expect(calls).toHaveLength(5);
+    const { result } = await rpc(7, "tools/list");
+    const annotations = (name: string) => result.tools.find((t: any) => t.name === name).annotations;
+    expect(annotations("list_servers").readOnlyHint).toBe(true);
+    expect(annotations("delete_server").destructiveHint).toBe(true);
+    expect(annotations("rotate_server_agent_key").destructiveHint).toBe(true);
+    expect(annotations("get_server_install").readOnlyHint).toBe(false); // a POST, so OAuth clients need write scope
+  });
 });

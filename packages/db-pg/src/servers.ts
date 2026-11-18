@@ -43,7 +43,7 @@ export function serverRepo(db: DbExecutor): ServerMethods {
       return (row as Server | undefined) ?? null;
     },
     async createServer(orgId, projectId, s) {
-      const [row] = await db.insert(S).values({ organizationId: orgId, projectId, machineId: s.machineId, name: s.name, intervalSec: s.intervalSec, monitorId: s.monitorId, ...s.host })
+      const [row] = await db.insert(S).values({ organizationId: orgId, projectId, machineId: s.machineId, name: s.name, tags: s.tags ?? [], intervalSec: s.intervalSec, monitorId: s.monitorId, ...s.host })
         .onConflictDoNothing({ target: [S.projectId, S.machineId] }).returning();
       if (row) return { server: row as Server, created: true };
       const [existing] = await db.select().from(S).where(and(eq(S.projectId, projectId), eq(S.machineId, s.machineId)));

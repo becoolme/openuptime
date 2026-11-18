@@ -1,4 +1,5 @@
 import { createMcpServer, defineTool, type Tool } from "@openuptime/mcp-rest";
+import { SERVER_INTERVALS } from "@openuptime/repo";
 import { z } from "zod";
 import { maintenanceMcpSchema } from "./routes/maintenance";
 import { monitorCreateSchema, monitorPatchSchema, monitorImportSchema } from "./routes/monitors";
@@ -136,6 +137,39 @@ export const TOOLS: Tool[] = [
     build: (a) => ({ method: "DELETE", path: `/api/maintenance/series/${a.seriesId}` }),
   },
   { name: "list_maintenance", description: "Read maintenance windows in the selected project, including schedule and monitor associations. Use this authenticated list for planning; list_public_status_page_maintenance only shows windows for a published page slug. Records include recurrence metadata and seriesId. Use create_maintenance to schedule, skip_maintenance for one occurrence, end_maintenance for an active occurrence, or cancel_maintenance_series for the remaining series.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/maintenance" }) },
+  {
+    name: "get_server_install",
+    description: "Get the shell command that installs the OpenUptime agent on a Linux server with systemd, so its CPU, memory, disk, load and network show up in the selected project. Returns the command, the project's agent key, the endpoint and an uninstall command. The key is shared by every server of the project and lets anyone holding it report as one, so treat the output as a secret: it will appear in this conversation. name and tags apply only when the server first reports (default name: its hostname); after that use update_server. Requires owner/admin access and write scope; nothing is changed.",
+    schema: z.object({
+      name: z.string().trim().min(1).max(120).optional().describe("Name the server gets in OpenUptime; defaults to its hostname. No quotes, $, backticks or backslashes."),
+      tags: z.array(z.string().trim().min(1).max(32)).max(20).optional().describe("Tags the server gets, up to 20, each up to 32 characters and without commas."),
+    }),
+    idempotent: true,
+    build: (a) => ({ method: "POST", path: "/api/servers/install", body: a }),
+  },
+  { name: "list_servers", description: "Read the servers that report through the OpenUptime agent in the selected project, with name, tags, online state, report interval, host details, latest metrics snapshot and recent CPU. Use get_server for metric history and update_server to rename or retag. To add a server, use get_server_install.", schema: z.object({}), readOnly: true, build: () => ({ method: "GET", path: "/api/servers" }) },
+  {
+    name: "get_server",
+    description: "Read one server by its UUID from list_servers: host details, latest snapshot (disks, interfaces), the status of its offline monitor and metric history (CPU, memory, swap, disk, load, disk and network throughput) over the chosen range.",
+    schema: z.object({ id, range: z.enum(["1h", "6h", "24h", "7d"]).default("1h").describe("History window: 1h, 6h, 24h or 7d; defaults to 1h. Points are never closer than the report interval.") }),
+    readOnly: true,
+    build: ({ id, range }) => ({ method: "GET", path: `/api/servers/${id}?range=${range}` }),
+  },
+  {
+    name: "update_server",
+    description: "Rename a server, replace its tags or change how often its agent reports; returns the updated server. Omitted fields stay unchanged; tags replace the previous list. A shorter interval than the plan allows is refused. The agent picks up a new interval with its next report.",
+    schema: z.object({
+      id,
+      name: z.string().trim().min(1).max(120).optional().describe("New name, 1 to 120 characters."),
+      tags: z.array(z.string().trim().min(1).max(32)).max(20).optional().describe("Replacement tags, up to 20, each up to 32 characters; [] clears them."),
+      intervalSec: z.number().int().refine((v) => (SERVER_INTERVALS as readonly number[]).includes(v), `Use one of ${SERVER_INTERVALS.join(", ")}`).optional()
+        .describe(`Seconds between reports: one of ${SERVER_INTERVALS.join(", ")}. Plans may set a minimum.`),
+    }),
+    idempotent: true,
+    build: ({ id, ...body }) => ({ method: "PATCH", path: `/api/servers/${id}`, body }),
+  },
+  { name: "delete_server", description: "Remove a server, its metric history and its offline monitor from OpenUptime; returns an empty success response. The agent on the machine keeps running: if it reports again, the server registers anew. Uninstall the agent first (see get_server_install) to stop it for good. Requires owner/admin access.", schema: z.object({ id }), destructive: true, idempotent: true, build: (a) => ({ method: "DELETE", path: `/api/servers/${a.id}` }) },
+  { name: "rotate_server_agent_key", description: "Replace the project's agent key and return the new one. Every agent installed with the old key stops being accepted at once and must be reinstalled with the command from get_server_install. Use this when the key has leaked. Requires owner/admin access.", schema: z.object({}), destructive: true, build: () => ({ method: "POST", path: "/api/servers/agent-key/rotate" }) },
 ];
 
 /**
@@ -182,7 +216,7 @@ export const SERVER_INFO = { name: "openuptime", version: "1.0.0" };
 export const createServer = (extraTools: Tool[] = []) => createMcpServer({
   info: SERVER_INFO,
   instructions:
-    "Manage monitor configuration, investigate incidents and publish status pages. Start with list_workspaces to discover accessible workspace/project ids, then the resource list tool for UUIDs. Private tools accept optional workspace/project selectors and use the caller's existing OAuth/API-key permissions; public-status tools use a slug and no credentials. Omitted patch fields stay unchanged; supplied lists replace prior lists. Use pause_monitor/resume_monitor for pause-only changes and post_incident_update for incident status changes or subscriber messages. Use create_maintenance and the maintenance end/skip/cancel tools to manage planned downtime; alert-channel configuration remains managed in the app or REST API.",
+    "Manage monitor configuration, investigate incidents and publish status pages. Start with list_workspaces to discover accessible workspace/project ids, then the resource list tool for UUIDs. Private tools accept optional workspace/project selectors and use the caller's existing OAuth/API-key permissions; public-status tools use a slug and no credentials. Omitted patch fields stay unchanged; supplied lists replace prior lists. Use pause_monitor/resume_monitor for pause-only changes and post_incident_update for incident status changes or subscriber messages. Use create_maintenance and the maintenance end/skip/cancel tools to manage planned downtime. To monitor a Linux server, get_server_install returns the install command; list_servers and get_server read its metrics; alert-channel configuration remains managed in the app or REST API.",
   tools: [...TOOLS, ...extraTools, ...PUBLIC_TOOLS],
   context: {
     shape: whereShape,

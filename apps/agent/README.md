@@ -25,7 +25,7 @@ unencrypted). Pass `--binary-url` (or set `OPENUPTIME_AGENT_URL`) to download fr
 a `SHA256SUMS` file next to the binary or `--sha256 HEX`. Run the script again with `--uninstall` to remove it.
 
 One key per project: run the same command on as many servers as you like. Each machine registers itself on its first
-report, by `/etc/machine-id`, and takes its host name as its name.
+report, by `/etc/machine-id`, and takes its host name as its name unless `--name` gives another.
 
 ## Options
 
@@ -33,6 +33,8 @@ report, by `/etc/machine-id`, and takes its host name as its name.
 | --- | --- | --- |
 | `--key` | `OPENUPTIME_KEY` | (required) |
 | `--endpoint` | `OPENUPTIME_ENDPOINT` | `https://openuptime.app` |
+| `--name` | `OPENUPTIME_NAME` | the host name; used only when the server registers |
+| `--tags` | `OPENUPTIME_TAGS` | none; comma-separated, used only when the server registers |
 | `--ignore-interfaces` | `OPENUPTIME_IGNORE_INTERFACES` | `lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan` (name prefixes) |
 | `--interval` | | `60s`, until the server answers with the interval set in the dashboard |
 | `--once` | | print one report as JSON and exit, without sending it |

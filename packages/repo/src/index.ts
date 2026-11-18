@@ -899,7 +899,7 @@ export interface Repo {
   serverAgentKeyOwner(key: string): Promise<{ orgId: string; projectId: string } | null>;
   serverByMachine(projectId: string, machineId: string): Promise<Server | null>;
   /** Registers a machine; when another report won the race, returns that row and `created: false`. */
-  createServer(orgId: string, projectId: string, s: { machineId: string; name: string; intervalSec: number; monitorId: string | null; host: ServerHost }): Promise<{ server: Server; created: boolean }>;
+  createServer(orgId: string, projectId: string, s: { machineId: string; name: string; tags?: string[]; intervalSec: number; monitorId: string | null; host: ServerHost }): Promise<{ server: Server; created: boolean }>;
   /** Stores a report: host details and snapshot on the row, one metric row for the charts. */
   recordServerReport(serverId: string, host: ServerHost, snapshot: ServerSnapshot, diskUsed: number, diskTotal: number): Promise<void>;
   listServers(orgId: string, projectId: string): Promise<Server[]>;
