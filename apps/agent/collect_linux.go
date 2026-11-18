@@ -123,14 +123,16 @@ func (c *collector) collect() (*report, error) {
 		}
 		r.Metrics.NetRxBps += n.RxBps
 		r.Metrics.NetTxBps += n.TxBps
-		r.Ifaces = append(r.Ifaces, n)
+		if len(r.Ifaces) < maxListed {
+			r.Ifaces = append(r.Ifaces, n)
+		}
 	}
 
 	r.Disks = []disk{}
 	if b, err := os.ReadFile("/proc/self/mounts"); err == nil {
 		for _, m := range parseMounts(string(b)) {
 			total, used, ok := c.mounts.statfs(m.Mount)
-			if ok && total > 0 {
+			if ok && total > 0 && len(r.Disks) < maxListed {
 				m.Total, m.Used = total, used
 				r.Disks = append(r.Disks, m)
 			}

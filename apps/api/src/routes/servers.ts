@@ -24,26 +24,31 @@ const REGISTRATIONS_PER_HOUR = 30;
 
 // totals of several disks still fit a bigint column
 const num = z.number().finite().min(0).max(1e15);
-const str = (max: number) => z.string().max(max).default("");
+// byte counts go into bigint columns
+const bytes = num.transform(Math.round);
+// an odd host (a long mount path, hundreds of interfaces) is cut down to size rather than refused, so it keeps reporting
+const cut = (max: number) => z.string().transform((s) => s.slice(0, max));
+const str = (max: number) => cut(max).default("");
 // a list the agent found empty may arrive as null
-const list = <T extends z.ZodTypeAny>(item: T, max: number) => z.preprocess((v) => v ?? undefined, z.array(item).max(max).default([]));
-const addresses = list(z.string().max(64), 32);
+const list = <T extends z.ZodTypeAny>(item: T, max: number) =>
+  z.preprocess((v) => v ?? undefined, z.array(item).default([]).transform((a) => a.slice(0, max)));
+const addresses = list(cut(64), 32);
 export const reportSchema = z.object({
   version: str(32),
   machineId: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/),
   hostname: z.string().trim().max(253).default(""),
   host: z.object({
     os: str(64), platform: str(64), platformVersion: str(64), kernel: str(128), arch: str(32), cpuModel: str(200),
-    cores: z.number().int().min(0).max(4096).default(0), memTotal: num.default(0), swapTotal: num.default(0),
+    cores: z.number().int().min(0).max(4096).default(0), memTotal: bytes.default(0), swapTotal: bytes.default(0),
     bootTime: z.number().int().min(0).max(4102444800).optional(), uptimeSec: num.optional(),
   }).default({} as never),
   metrics: z.object({
-    cpu: z.number().finite().min(0).max(100), memUsed: num, memCached: num.default(0), swapUsed: num.default(0),
+    cpu: z.number().finite().min(0).max(100), memUsed: bytes, memCached: bytes.default(0), swapUsed: bytes.default(0),
     load1: num.default(0), load5: num.default(0), load15: num.default(0),
     diskReadBps: num.default(0), diskWriteBps: num.default(0), netRxBps: num.default(0), netTxBps: num.default(0),
   }),
-  disks: list(z.object({ device: str(200), mount: z.string().max(1024), fs: str(64), total: num, used: num }), 64),
-  interfaces: list(z.object({ name: z.string().max(64), mac: str(64), ipv4: addresses, ipv6: addresses, rxBps: num.default(0), txBps: num.default(0) }), 64),
+  disks: list(z.object({ device: str(200), mount: cut(1024), fs: str(64), total: bytes, used: bytes }), 64),
+  interfaces: list(z.object({ name: cut(64), mac: str(64), ipv4: addresses, ipv6: addresses, rxBps: num.default(0), txBps: num.default(0) }), 64),
 });
 export type AgentReport = z.infer<typeof reportSchema>;
 
