@@ -111,7 +111,8 @@ export type Usage =
       credits: Quota | null;
       emails: Quota | null;
       activeMonitors: number;
-      plan: { id: string; name: string; maxActiveMonitors: number | null; minIntervalSec: number; maxRegions?: number | null; upgradeUrl?: string; manageUrl?: string } | null;
+      servers: number;
+      plan: { id: string; name: string; maxActiveMonitors: number | null; minIntervalSec: number; maxRegions?: number | null; maxServers?: number | null; upgradeUrl?: string; manageUrl?: string } | null;
     };
 
 /** Starts the shell's reads and the data of the route at `pathname` right away. */
@@ -242,7 +243,8 @@ export type Server = {
   /** reported within the last three intervals */
   online: boolean;
 };
-export type ServerList = { servers: (Server & { cpuSeries: number[] })[]; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };
+/** `maxServers` is the plan's cap across the workspace (null: none) and `serverCount` the servers counted against it. */
+export type ServerList = { servers: (Server & { cpuSeries: number[] })[]; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null; maxServers: number | null; serverCount: number | null };
 export type ServerMetricPoint = { t: string; cpu: number; memUsed: number; swapUsed: number; diskUsed: number; diskTotal: number; diskReadBps: number; diskWriteBps: number; netRxBps: number; netTxBps: number; load1: number };
 export type ServerRange = "1h" | "6h" | "24h" | "7d";
 export type ServerDetail = Server & { points: ServerMetricPoint[]; stepSec: number; monitorStatus: Monitor["status"] | null; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };

@@ -42,7 +42,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Click a server for a side panel with its current state, or open its page for charts over the last hour up to seven days.", zh: "点击服务器可在侧边面板查看当前状态，也可打开详情页查看最近 1 小时到 7 天的图表。" },
       { en: "A server that stops reporting raises an alert through the project's alert channels, like any heartbeat monitor.", zh: "服务器停止上报时，会像心跳监控一样通过项目的告警渠道发出告警。" },
     ],
-    cloud: { en: "Servers report every 60 seconds by default; reporting every 30 seconds needs a paid plan.", zh: "服务器默认每 60 秒上报一次；每 30 秒上报一次需要付费套餐。" },
+    cloud: { en: "The free plan allows 3 servers per workspace and reports every 60 seconds; paid plans allow more servers and reporting every 30 seconds. Servers do not count toward the monitor limit.", zh: "免费套餐每个工作区最多 3 台服务器，每 60 秒上报一次；付费套餐可以添加更多服务器，并支持每 30 秒上报。服务器不占用监控数量。" },
     link: { href: "/docs/servers", label: { en: "Read the install and uninstall guide", zh: "阅读安装与卸载指南" } },
   },
   {

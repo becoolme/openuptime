@@ -509,7 +509,9 @@ export const monitors = new Hono<AppEnv>()
     const failed: { id: string; error: string }[] = [];
     const targets = ids.filter((id) => rows.has(id) || (failed.push({ id, error: "Not found" }), false)).map((id) => rows.get(id)!);
     if (action === "resume") {
-      const resuming = targets.filter((m) => m.paused).length;
+      const paused = targets.filter((m) => m.paused).map((m) => m.id);
+      // a server's monitor counts against the server cap, not the monitor one
+      const resuming = paused.length - (await repo.serverMonitorIds(orgId, paused)).length;
       const refused = await overPlan(c, { add: resuming });
       if (refused) return refused;
     }
@@ -644,7 +646,7 @@ export const monitors = new Hono<AppEnv>()
         if (current.type === "domain" && v.intervalSec !== undefined) v.intervalSec = Math.min(86400, Math.max(v.intervalSec, 3600));
         // only a faster interval is checked against the plan's floor; leaving an older, faster one in place is fine
         const faster = v.intervalSec !== undefined && v.intervalSec < current.intervalSec && current.type !== "heartbeat";
-        const resuming = v.paused === false && current.status === "paused";
+        const resuming = v.paused === false && current.status === "paused" && !(await repo.serverMonitorIds(c.get("orgId"), [current.id])).length;
         const refused = await overPlan(c, { add: resuming ? 1 : 0, intervalSec: faster ? v.intervalSec : undefined });
         if (refused) return refused;
       }

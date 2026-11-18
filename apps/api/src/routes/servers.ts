@@ -15,6 +15,10 @@ import { newServerMonitor, serverMonitorTiming } from "./monitors";
 /** The shortest report interval allowed: 30 s where there are no plans (self-hosted), else what the plan says (60 s by default). */
 export const minServerInterval = (plan: Plan | null) => (plan ? (plan.minServerIntervalSec ?? DEFAULT_SERVER_INTERVAL_SEC) : SERVER_INTERVALS[0]);
 
+/** The 402 an agent gets when the workspace has no room for this server under its plan. */
+const serverLimit = (c: Context<AppEnv>, plan: Plan & { maxServers: number }) =>
+  c.json({ error: `The ${plan.name} plan allows ${plan.maxServers} servers`, code: "server_limit", limit: plan.maxServers, plan: plan.id, upgradeUrl: plan.upgradeUrl ?? null }, 402);
+
 /** A server counts as offline once three reports in a row are missing. */
 export const serverOnline = (s: Pick<Server, "lastSeenAt" | "intervalSec">, now = Date.now()) =>
   !!s.lastSeenAt && now - s.lastSeenAt.getTime() < s.intervalSec * 3 * 1000;
@@ -88,23 +92,38 @@ export const agent = new Hono<AppEnv>()
     const r = parsed.data;
     const host = hostOf(r);
     let s = await repo.serverByMachine(owner.projectId, r.machineId);
+    const entitlements = c.get("entitlements");
     if (!s) {
-      const entitlements = c.get("entitlements");
       if (!(await allow(repo, `server-register:${owner.projectId}`, REGISTRATIONS_PER_HOUR, 3600))) return c.json({ error: "Too many new servers, try again later" }, 429);
       const plan = await entitlements.plan(owner.orgId);
-      if (plan?.maxActiveMonitors != null && (await repo.activeMonitorCount(owner.orgId)) + 1 > plan.maxActiveMonitors) {
-        return c.json({ error: `The ${plan.name} plan allows ${plan.maxActiveMonitors} active monitors`, code: "monitor_limit" }, 402);
-      }
+      const cap = plan?.maxServers ?? null;
+      if (plan && cap !== null && (await repo.serverCount(owner.orgId)) >= cap) return serverLimit(c, { ...plan, maxServers: cap });
       const name = (r.hostname || r.machineId).slice(0, 120);
       const intervalSec = Math.max(DEFAULT_SERVER_INTERVAL_SEC, minServerInterval(plan));
       const monitor = await newServerMonitor(repo, owner.orgId, owner.projectId, name, intervalSec);
       const made = await repo.createServer(owner.orgId, owner.projectId, { machineId: r.machineId, name, intervalSec, monitorId: monitor.id, host });
       // another report of the same machine registered it first: drop the spare monitor
       if (!made.created) await repo.deleteMonitor(owner.orgId, monitor.id, null);
+      // two new machines that passed the count at once: the later one gives its place back
+      else if (plan && cap !== null && (await repo.serverRank(owner.orgId, made.server.id)) >= cap) {
+        await repo.deleteServer(owner.orgId, owner.projectId, made.server.id);
+        await repo.deleteMonitor(owner.orgId, monitor.id, null);
+        return serverLimit(c, { ...plan, maxServers: cap });
+      }
       s = made.server;
     } else if (s.lastSeenAt && Date.now() - s.lastSeenAt.getTime() < (s.intervalSec * 1000) / 2) {
       // too soon after the last report (two agents with one machine id, or a restart loop): acknowledged, not stored
       return c.json({ ok: true, interval: s.intervalSec, skipped: true });
+    } else {
+      const plan = await entitlements.plan(owner.orgId);
+      // after a downgrade the oldest servers keep reporting; the rest are refused until there is room again
+      if (plan?.maxServers != null && (await repo.serverRank(owner.orgId, s.id)) >= plan.maxServers) return serverLimit(c, { ...plan, maxServers: plan.maxServers });
+      // an interval the plan no longer allows is raised, and the agent hears the new one in this answer
+      const min = minServerInterval(plan);
+      if (s.intervalSec < min) {
+        await keepMonitorInStep(repo, owner.orgId, s, { intervalSec: min });
+        s = (await repo.updateServer(owner.orgId, owner.projectId, s.id, { intervalSec: min })) ?? s;
+      }
     }
     const snapshot: ServerSnapshot = {
       at: new Date().toISOString(),
@@ -169,7 +188,12 @@ export const servers = new Hono<AppEnv>()
     const list = await repo.listServers(c.get("orgId"), c.get("projectId"));
     const cpu = await repo.serverCpuSeries(list.map((s) => s.id), 60);
     const plan = await c.get("entitlements").plan(c.get("orgId"));
-    return c.json({ servers: list.map((s) => ({ ...view(s), cpuSeries: cpu[s.id] ?? [] })), minIntervalSec: minServerInterval(plan), intervals: SERVER_INTERVALS, upgradeUrl: plan?.upgradeUrl ?? null });
+    const maxServers = plan?.maxServers ?? null;
+    return c.json({
+      servers: list.map((s) => ({ ...view(s), cpuSeries: cpu[s.id] ?? [] })), minIntervalSec: minServerInterval(plan), intervals: SERVER_INTERVALS, upgradeUrl: plan?.upgradeUrl ?? null,
+      // the cap counts every project of the workspace
+      maxServers, serverCount: maxServers === null ? null : await repo.serverCount(c.get("orgId")),
+    });
   })
   // the key lets anyone report as any server of the project, so only those who may delete servers see it
   .get("/agent-key", requireManager, async (c) => c.json({ key: await c.get("repo").serverAgentKey(c.get("orgId"), c.get("projectId")) }))

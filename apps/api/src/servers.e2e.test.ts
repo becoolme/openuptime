@@ -1,6 +1,8 @@
 import { openDatabase } from "@openuptime/db-pg";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
+import type { Edition } from "./edition";
+import { type Plan, unmetered } from "./entitlements";
 import { diskTotals, minServerInterval, reportSchema, serverDeadline, serverOnline } from "./routes/servers";
 
 describe("server reports", () => {
@@ -63,8 +65,8 @@ const url = process.env.TEST_DATABASE_URL;
 const ORIGIN = "http://localhost:8787";
 const env = { DATABASE_URL: url, BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-123", BETTER_AUTH_URL: ORIGIN, WEB_ORIGIN: ORIGIN, CRON_SECRET: "cron" };
 
-describe.skipIf(!url)("Server monitoring", () => {
-  const app = createApp(openDatabase);
+/** Requests against an app built for one edition; the plan of `limited` below can change between steps. */
+function harness(app: ReturnType<typeof createApp>) {
   const raw = (path: string, init: RequestInit = {}) => app.fetch(new Request(`${ORIGIN}${path}`, init), env as never);
   const signUp = async () => {
     await raw("/internal/migrate", { method: "POST", headers: { "x-cron-secret": "cron" } });
@@ -88,6 +90,12 @@ describe.skipIf(!url)("Server monitoring", () => {
     disks: [{ device: "/dev/sda1", mount: "/", fs: "ext4", total: 100e9, used: 40e9 }, { device: "/dev/sda1", mount: "/srv", fs: "ext4", total: 100e9, used: 40e9 }],
     interfaces: [{ name: "eth0", mac: "00:00:5e:00:53:01", ipv4: ["203.0.113.7", "10.0.0.7"], ipv6: ["2001:db8::7"] }],
   });
+
+  return { raw, signUp, report, sample };
+}
+
+describe.skipIf(!url)("Server monitoring", () => {
+  const { raw, signUp, report, sample } = harness(createApp(openDatabase));
 
   it("registers a machine on its first report and shows its metrics", async () => {
     const call = await signUp();
@@ -144,5 +152,44 @@ describe.skipIf(!url)("Server monitoring", () => {
     expect((await call("DELETE", `/servers/${s.id}`)).status).toBe(204);
     expect((await call("GET", "/servers")).body.servers).toHaveLength(0);
     expect((await call("GET", `/monitors/${s.monitorId}`)).status).toBe(404);
+  });
+});
+
+describe.skipIf(!url)("Server limits of a plan", () => {
+  let plan: Plan = { id: "paid", name: "Paid", maxActiveMonitors: 1, minIntervalSec: 60, minServerIntervalSec: 30, maxServers: 2, upgradeUrl: "/upgrade" };
+  const limited: Edition = { entitlements: () => ({ ...unmetered, plan: async () => plan }) };
+  const { signUp, report, sample } = harness(createApp(openDatabase, { edition: limited }));
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("caps servers per workspace, keeps the oldest after a downgrade and leaves the monitor quota alone", async () => {
+    const call = await signUp();
+    const { key } = (await call("GET", "/servers/agent-key")).body;
+    // the plan allows one monitor, yet two servers register: their heartbeat monitors do not count
+    expect((await report(key, sample("machine-cap-a"))).status).toBe(200);
+    expect((await report(key, sample("machine-cap-b"))).status).toBe(200);
+    const third = await report(key, sample("machine-cap-c"));
+    expect(third.status).toBe(402);
+    expect(await third.json()).toMatchObject({ code: "server_limit", limit: 2, upgradeUrl: "/upgrade" });
+    expect((await call("POST", "/monitors", { name: "Site", type: "http", target: "https://example.com", intervalSec: 60 })).status).toBe(201);
+    expect((await call("GET", "/usage")).body).toMatchObject({ activeMonitors: 1, servers: 2 });
+
+    const list = (await call("GET", "/servers")).body;
+    expect(list).toMatchObject({ maxServers: 2, serverCount: 2, minIntervalSec: 30 });
+    expect(list.servers).toHaveLength(2);
+    const a = list.servers.find((s: any) => s.machineId === "machine-cap-a");
+    expect((await call("PATCH", `/servers/${a.id}`, { intervalSec: 30 })).status).toBe(200);
+
+    // downgrade: one server, 60 s at the fastest
+    plan = { ...plan, maxServers: 1, minServerIntervalSec: 60 };
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 120_000 });
+    const kept = await report(key, sample("machine-cap-a"));
+    expect(kept.status).toBe(200);
+    expect(await kept.json()).toEqual({ ok: true, interval: 60 });
+    expect((await call("GET", `/monitors/${a.monitorId}`)).body).toMatchObject({ intervalSec: 60, graceSec: 120 });
+    expect((await report(key, sample("machine-cap-b"))).status).toBe(402);
+
+    // room again after deleting the kept one: the other server reports
+    expect((await call("DELETE", `/servers/${a.id}`)).status).toBe(204);
+    expect((await report(key, sample("machine-cap-b"))).status).toBe(200);
   });
 });
