@@ -247,7 +247,10 @@ export type Server = {
 export type ServerList = { servers: (Server & { cpuSeries: number[] })[]; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null; maxServers: number | null; serverCount: number | null };
 export type ServerMetricPoint = { t: string; cpu: number; memUsed: number; swapUsed: number; diskUsed: number; diskTotal: number; diskReadBps: number; diskWriteBps: number; netRxBps: number; netTxBps: number; load1: number };
 export type ServerRange = "1h" | "6h" | "24h" | "7d";
-export type ServerDetail = Server & { points: ServerMetricPoint[]; stepSec: number; monitorStatus: Monitor["status"] | null; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };
+/** Offline alerts of a server: its heartbeat monitor's switch and channels (empty = the project's), and any mute in force. */
+export type ServerAlerts = { enabled: boolean; channelIds: string[]; mutedUntil: string | null; mutedByMaintenance: boolean };
+export type ServerMute = Pick<ServerAlerts, "mutedUntil" | "mutedByMaintenance">;
+export type ServerDetail = Server & { points: ServerMetricPoint[]; stepSec: number; monitorStatus: Monitor["status"] | null; alerts: ServerAlerts | null; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };
 
 export const api = {
   timeCoverage: (id: string, days: 7 | 30) => req<TimeCoverage>(`/monitors/${id}/time-coverage?days=${days}`),
@@ -278,6 +281,8 @@ export const api = {
   server: (id: string, range: ServerRange) => req<ServerDetail>(`/servers/${id}?range=${range}`),
   updateServer: (id: string, b: Partial<Pick<Server, "name" | "tags" | "intervalSec">>) => req<Server>(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteServer: (id: string) => req<void>(`/servers/${id}`, { method: "DELETE" }),
+  muteServer: (id: string, minutes = 60) => req<ServerMute>(`/servers/${id}/mute`, { method: "POST", body: JSON.stringify({ minutes }) }),
+  unmuteServer: (id: string) => req<ServerMute>(`/servers/${id}/mute`, { method: "DELETE" }),
   serverAgentKey: () => req<{ key: string }>("/servers/agent-key"),
   rotateServerAgentKey: () => req<{ key: string }>("/servers/agent-key/rotate", { method: "POST" }),
   maintenance: () => req<Maintenance[]>("/maintenance"),

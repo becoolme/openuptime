@@ -521,7 +521,8 @@ export const monitors = new Hono<AppEnv>()
       if (action === "pause") patch = m.paused ? null : { paused: true, status: "paused", nextCheckAt: new Date() };
       else if (action === "resume") {
         if (m.type === "mcp" && m.mcpConfig?.toolCall?.enabled && !manager) { failed.push({ id: m.id, error: "Only workspace owners and admins can resume enabled MCP tool calls" }); continue; }
-        patch = m.paused ? { paused: false, status: "pending", nextCheckAt: new Date() } : null;
+        // a resumed heartbeat gets a full interval for its next ping instead of counting as missed at once
+        patch = m.paused ? { paused: false, status: "pending", nextCheckAt: m.type === "heartbeat" ? nextAfter(m) : new Date() } : null;
       } else {
         const next = action === "add_channels" ? [...new Set([...m.channelIds, ...channelIds])] : m.channelIds.filter((id) => !channelIds.includes(id));
         if (next.length > 50) { failed.push({ id: m.id, error: "A monitor alerts at most 50 channels" }); continue; }
@@ -657,7 +658,8 @@ export const monitors = new Hono<AppEnv>()
     });
     if (!row) return c.json({ error: "Not found" }, 404);
     // a heartbeat's deadline depends on interval + grace, so re-derive it when either changes
-    if (row.type === "heartbeat" && (v.intervalSec !== undefined || v.graceSec !== undefined) && v.paused === undefined) {
+    // (and a resumed one gets a full interval for its next ping, instead of counting as missed at the next tick)
+    if (row.type === "heartbeat" && (((v.intervalSec !== undefined || v.graceSec !== undefined) && v.paused === undefined) || v.paused === false)) {
       const again = await repo.updateMonitor(c.get("orgId"), row.id, c.get("projectScope"), { nextCheckAt: nextAfter(row) });
       return c.json(again ? (await shown(c, [again]))[0] : again);
     }
