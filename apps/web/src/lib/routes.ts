@@ -1,7 +1,7 @@
 import { stripLocale } from "./locale-path";
 
 /** The back-office route table, shared by the static shell (404 status for deep links) and the client router. */
-export type NavKey = "monitors" | "incidents" | "status-pages" | "alerting" | "maintenance" | "team" | "account" | "api-keys" | "settings" | "usage";
+export type NavKey = "monitors" | "servers" | "incidents" | "status-pages" | "alerting" | "maintenance" | "team" | "account" | "api-keys" | "settings" | "usage";
 export type Route = {
   re: RegExp;
   name: string;
@@ -14,13 +14,15 @@ export type Route = {
 };
 
 export const NAV_LABEL: Record<NavKey, string> = {
-  monitors: "Monitors", incidents: "Incidents", "status-pages": "Status pages", alerting: "Alerting",
+  monitors: "Monitors", servers: "Servers", incidents: "Incidents", "status-pages": "Status pages", alerting: "Alerting",
   maintenance: "Maintenance", team: "Team", account: "Account", "api-keys": "API keys", settings: "Settings", usage: "Plan & usage",
 };
 
 export const ROUTES: Route[] = [
   { re: /^\/app$/, name: "Monitors", key: "monitors", title: "Monitors", data: () => ["/monitors", "/incidents", "/channels", "/status-pages"] },
   { re: /^\/app\/monitors\/([^/]+)$/, name: "MonitorDetail", key: "monitors", title: "Monitor", data: ([id]) => [`/monitors/${id}`, "/channels"] },
+  { re: /^\/app\/servers$/, name: "Servers", key: "servers", title: "Servers", data: () => ["/servers"] },
+  { re: /^\/app\/servers\/([^/]+)$/, name: "ServerDetail", key: "servers", title: "Server", data: ([id]) => [`/servers/${id}?range=1h`] },
   { re: /^\/app\/incidents$/, name: "Incidents", key: "incidents", title: "Incidents", data: () => ["/incidents"] },
   { re: /^\/app\/incidents\/([^/]+)$/, name: "IncidentDetail", key: "incidents", title: "Incident", data: ([id]) => [`/incidents/${id}`] },
   { re: /^\/app\/status-pages$/, name: "StatusPages", key: "status-pages", title: "Status pages", data: () => ["/status-pages"] },

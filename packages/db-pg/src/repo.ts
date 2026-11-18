@@ -24,6 +24,7 @@ import * as schema from "./schema";
 import { coverageTime, recordHeartbeatObservation, recordObservation, timeCoverage } from "./coverage";
 import { publicMonitorStatus } from "./public-monitor-status";
 import { mcpSchemaHash, completeMcpDiscovery, comparableMcpConfig, mcpTaskId } from "./mcp-data";
+import { purgeServerMetrics, serverRepo } from "./servers";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -144,6 +145,7 @@ export function createRepo(db: DbExecutor): Repo {
   }
 
   const repo: Repo = {
+    ...serverRepo(db),
     // ── workspaces, users, projects ────────────────────────────────────────────
     async isMember(userId, orgId) {
       const [ok] = await db
@@ -1019,6 +1021,7 @@ export function createRepo(db: DbExecutor): Repo {
           and not exists (select 1 from mcp_alert_outbox q where q.delivery_id = d.id and q.status in ('pending', 'leased'))`);
       // a phone that has not opened the app (which re-registers on launch) for half a year is gone or has a stale token
       await db.delete(schema.pushDevice).where(lte(schema.pushDevice.lastSeenAt, new Date(Date.now() - PUSH_DEVICE_STALE_DAYS * 864e5)));
+      await purgeServerMetrics(db);
     },
     async withinLimit(key, limit, windowSec) {
       const t = schema.rateLimit;

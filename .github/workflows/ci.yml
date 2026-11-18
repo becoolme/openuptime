@@ -7,6 +7,18 @@ permissions:
   contents: read
 
 jobs:
+  agent:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/agent } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: apps/agent/go.mod }
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+      - run: GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null .
+
   check:
     runs-on: ubuntu-latest
     services:

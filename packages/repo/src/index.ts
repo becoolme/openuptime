@@ -534,6 +534,80 @@ export interface Counts {
   alerting: number;
 }
 
+// ── servers (agent-reported metrics) ─────────────────────────────────────────
+/** Report intervals an agent may use, in seconds. */
+export const SERVER_INTERVALS = [30, 60, 120, 300] as const;
+export const DEFAULT_SERVER_INTERVAL_SEC = 60;
+/** Raw metric rows older than this are purged. */
+export const SERVER_METRIC_RETENTION_DAYS = 7;
+
+export interface ServerMetrics {
+  /** percent of all cores, 0-100 */
+  cpu: number;
+  memUsed: number;
+  memCached: number;
+  swapUsed: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  diskReadBps: number;
+  diskWriteBps: number;
+  netRxBps: number;
+  netTxBps: number;
+}
+export interface ServerDisk { device: string; mount: string; fs: string; total: number; used: number }
+export interface ServerInterface { name: string; mac: string; ipv4: string[]; ipv6: string[]; rxBps: number; txBps: number }
+/** What the latest report said, kept whole on the server row. */
+export interface ServerSnapshot {
+  at: string;
+  platformVersion?: string;
+  uptimeSec?: number;
+  metrics: ServerMetrics;
+  disks: ServerDisk[];
+  interfaces: ServerInterface[];
+}
+export interface ServerHost {
+  hostname: string;
+  os: string;
+  platform: string;
+  kernel: string;
+  arch: string;
+  cpuModel: string;
+  cores: number;
+  memTotal: number;
+  swapTotal: number;
+  bootTime: Date | null;
+  agentVersion: string;
+}
+export interface Server extends ServerHost {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  monitorId: string | null;
+  machineId: string;
+  name: string;
+  tags: string[];
+  intervalSec: number;
+  lastSeenAt: Date | null;
+  snapshot: ServerSnapshot | null;
+  createdAt: Date;
+}
+export type ServerPatch = Partial<Pick<Server, "name" | "tags" | "intervalSec" | "monitorId">>;
+/** One point of a metric chart: averages over the bucket starting at `t`. */
+export interface ServerMetricPoint {
+  t: Date;
+  cpu: number;
+  memUsed: number;
+  swapUsed: number;
+  diskUsed: number;
+  diskTotal: number;
+  diskReadBps: number;
+  diskWriteBps: number;
+  netRxBps: number;
+  netTxBps: number;
+  load1: number;
+}
+
 export interface Repo {
   // ── workspaces, users, projects ──────────────────────────────────────────────
   isMember(userId: string, orgId: string): Promise<boolean>;
@@ -814,6 +888,28 @@ export interface Repo {
   /** Marks the token confirmed; returns the page slug it belongs to (null for unknown tokens). */
   confirmSubscriber(token: string): Promise<string | null>;
   removeSubscriber(token: string): Promise<string | null>;
+
+  // ── servers ──────────────────────────────────────────────────────────────────
+  /** The project's agent install key, created on first use. */
+  serverAgentKey(orgId: string, projectId: string): Promise<string>;
+  /** Replaces the key; agents using the old one are refused from now on. */
+  rotateServerAgentKey(orgId: string, projectId: string, key: string): Promise<string>;
+  /** Workspace and project an agent key reports into, or null for an unknown key. */
+  serverAgentKeyOwner(key: string): Promise<{ orgId: string; projectId: string } | null>;
+  serverByMachine(projectId: string, machineId: string): Promise<Server | null>;
+  /** Registers a machine; when another report won the race, returns that row and `created: false`. */
+  createServer(orgId: string, projectId: string, s: { machineId: string; name: string; intervalSec: number; monitorId: string | null; host: ServerHost }): Promise<{ server: Server; created: boolean }>;
+  /** Stores a report: host details and snapshot on the row, one metric row for the charts. */
+  recordServerReport(serverId: string, host: ServerHost, snapshot: ServerSnapshot, diskUsed: number, diskTotal: number): Promise<void>;
+  listServers(orgId: string, projectId: string): Promise<Server[]>;
+  /** CPU of each server over the last `minutes`, oldest first, for list sparklines. */
+  serverCpuSeries(serverIds: string[], minutes: number): Promise<Record<string, number[]>>;
+  server(orgId: string, projectId: string, id: string): Promise<Server | null>;
+  updateServer(orgId: string, projectId: string, id: string, patch: ServerPatch): Promise<Server | null>;
+  /** Removes the server and its metrics; returns the removed row. */
+  deleteServer(orgId: string, projectId: string, id: string): Promise<Server | null>;
+  /** Chart points since `from`, averaged per `stepSec` bucket, oldest first. */
+  serverMetrics(serverId: string, from: Date, stepSec: number): Promise<ServerMetricPoint[]>;
 }
 
 /** An open database: the repo plus the pieces that are tied to a specific backend. */
