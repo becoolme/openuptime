@@ -9,6 +9,7 @@ import {
   primaryIp, serverState, since, specLabel, type ServerFilter,
 } from "../lib/servers";
 import { HideIpsButton, MuteButton, OfflineAlerts } from "./ServerAlerts";
+import { SkeletonRows } from "./Skeleton";
 
 type Row = ServerList["servers"][number];
 
@@ -58,7 +59,8 @@ function Chevron() {
   return <svg className="srv-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5" /></svg>;
 }
 
-const TagChips = ({ tags }: { tags: string[] }) => <>{tags.map((x) => <span key={x} className="srv-tag">{x}</span>)}</>;
+/** A server's tags, left out while addresses are hidden: a tag such as a customer or a region tells as much as an IP. */
+const TagChips = ({ tags, hide }: { tags: string[]; hide: boolean }) => (hide ? null : <>{tags.map((x) => <span key={x} className="srv-tag">{x}</span>)}</>);
 
 /** "Debian 12 · 4 cores · 16 GB · 203.0.113.7": what the machine is, in one line. */
 const subtitle = (s: Server, hide: boolean) => {
@@ -85,28 +87,51 @@ function Stats({ servers }: { servers: Row[] }) {
   const latest = servers.reduce<string | null>((m, s) => (s.lastSeenAt && (!m || s.lastSeenAt > m) ? s.lastSeenAt : m), null);
   const more = (n: number) => (n > 0 ? ` · +${n}` : "");
   return (
-    <div className="srv-stats">
-      <div className="card srv-stat">
+    <div className="kp srv-kp">
+      <div className="card">
         <small>{t("Online")}</small>
-        <b>{servers.filter((s) => s.online).length}<span> / {servers.length}</span></b>
-        <p>{latest ? t("Latest report {d}").replace("{d}", since(latest)) : t("No report yet")}</p>
+        <b>{servers.filter((s) => s.online).length}<u>/ {servers.length}</u></b>
+        <div className="d faint">{latest ? t("Latest report {d}").replace("{d}", since(latest)) : t("No report yet")}</div>
       </div>
-      <div className="card srv-stat">
+      <div className="card">
         <small>{t("High usage")}</small>
         <b className={hot.length ? "warn" : ""}>{hot.length}</b>
-        <p>{hot.length ? hot.slice(0, 2).map((s) => `${s.name} ${hotReasons(s)[0].replace(/ \d+%$/, "")}`).join(" · ") + more(hot.length - 2) : t("CPU, memory and disks under 90%")}</p>
+        <div className={`d ${hot.length ? "warn" : "faint"}`}>{hot.length ? hot.slice(0, 2).map((s) => `${s.name} ${hotReasons(s)[0].replace(/ \d+%$/, "")}`).join(" · ") + more(hot.length - 2) : t("CPU, memory and disks under 90%")}</div>
       </div>
-      <div className="card srv-stat">
+      <div className="card">
         <small>{t("Offline")}</small>
         <b className={offline.length ? "bad" : ""}>{offline.length}</b>
-        <p>{offline.length ? `${offline[0].name} · ${t("last seen {d}").replace("{d}", since(offline[0].lastSeenAt))}${more(offline.length - 1)}` : t("Every server is reporting")}</p>
+        <div className={`d ${offline.length ? "bad" : "faint"}`}>{offline.length ? `${offline[0].name} · ${t("last seen {d}").replace("{d}", since(offline[0].lastSeenAt))}${more(offline.length - 1)}` : t("Every server is reporting")}</div>
       </div>
-      <div className="card srv-stat">
+      <div className="card">
         <small>{t("Average load")}</small>
-        <b>{reporting.length ? Math.round(avg(reporting.map((s) => s.snapshot!.metrics.cpu))) : "—"}<span>% {t("CPU")}</span></b>
-        <p>{reporting.length ? t("Memory {n}% on average · online servers").replace("{n}", String(Math.round(avg(reporting.map(memPct))))) : t("No server online")}</p>
+        <b>{reporting.length ? Math.round(avg(reporting.map((s) => s.snapshot!.metrics.cpu))) : "—"}<u>% {t("CPU")}</u></b>
+        <div className="d faint">{reporting.length ? t("Memory {n}% on average · online servers").replace("{n}", String(Math.round(avg(reporting.map(memPct))))) : t("No server online")}</div>
       </div>
     </div>
+  );
+}
+
+const TH = () => <>
+  <span>{t("Server")}</span><span>{t("Status")}</span><span>{t("CPU")}</span><span>{t("Memory")}</span><span>{t("Disk")}</span>
+  <span>{t("Network in / out")}</span><span>{t("Load")}</span><span>{t("Uptime")}</span><span />
+</>;
+
+/** The list's shape in grey while the first request is out. */
+function ListSkeleton() {
+  return (
+    <>
+      <div className="kp srv-kp" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => <div className="card" key={i}><i className="sk" style={{ width: 70, height: 13 }} /><i className="sk" /><i className="sk" style={{ width: "80%", height: 12 }} /></div>)}
+      </div>
+      <div className="srv-bar" aria-hidden="true"><i className="sk" style={{ width: 360, height: 40, borderRadius: 10 }} /><i className="sk" style={{ width: 220, height: 32, borderRadius: 99 }} /></div>
+      <div className="card srv-tbl">
+        <div className="srv-scroll">
+          <div className="srv-tr srv-th"><TH /></div>
+          <SkeletonRows cols={9} rows={4} rowClassName="srv-tr" />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -123,7 +148,9 @@ export default function Servers() {
   useEffect(() => { load(); return pollWhileVisible(load, 10_000); }, []);
 
   const servers = data?.servers ?? [];
-  const list = filterServers(servers, q, filter);
+  // a tag filter would show the hidden tag in its pill, so hiding falls back to all servers
+  const shown: ServerFilter = hide && filter.startsWith("tag:") ? "all" : filter;
+  const list = filterServers(servers, q, shown);
   const tags = useMemo(() => {
     const n = new Map<string, number>();
     servers.forEach((s) => s.tags.forEach((x) => n.set(x, (n.get(x) ?? 0) + 1)));
@@ -134,7 +161,7 @@ export default function Servers() {
     { f: "all", label: t("All"), n: servers.length },
     { f: "hot", label: t("High usage"), n: count("hot") },
     { f: "offline", label: t("Offline"), n: count("offline") },
-    ...tags.map(([x, n]) => ({ f: `tag:${x}` as ServerFilter, label: x, n })),
+    ...(hide ? [] : tags.map(([x, n]) => ({ f: `tag:${x}` as ServerFilter, label: x, n }))),
   ];
   const full = data?.maxServers != null && (data.serverCount ?? 0) >= data.maxServers;
 
@@ -144,13 +171,14 @@ export default function Servers() {
         <div>
           <h1>{t("Servers")}</h1>
           <p className="muted">{t("CPU, memory, disks and network of your machines, reported by a small open-source agent.")}</p>
+          {data && data.maxServers != null && <p className={`srv-quota ${full ? "full" : "faint"}`}>{t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))}</p>}
         </div>
         <div className="ph-actions">
-          {data && data.maxServers != null && <span className="faint srv-quota">{t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))}</span>}
           <button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>
         </div>
       </div>
       {err && <p className="err">{err}</p>}
+      {!data && !err && <ListSkeleton />}
 
       {data && servers.length === 0 && (
         <div className="empty">
@@ -170,7 +198,7 @@ export default function Servers() {
             </label>
             <div className="srv-pills" role="group" aria-label={t("Filter servers")}>
               {pills.map((p) => (
-                <button key={p.f} type="button" className={`srv-pill${filter === p.f ? " on" : ""}`} aria-pressed={filter === p.f} onClick={() => setFilter(p.f)}>
+                <button key={p.f} type="button" className={`srv-pill${shown === p.f ? " on" : ""}`} aria-pressed={shown === p.f} onClick={() => setFilter(p.f)}>
                   {p.label} <span>{p.n}</span>
                 </button>
               ))}
@@ -179,10 +207,7 @@ export default function Servers() {
           </div>
           <div className="card srv-tbl">
             <div className="srv-scroll">
-              <div className="srv-tr srv-th">
-                <span>{t("Server")}</span><span>{t("Status")}</span><span>{t("CPU")}</span><span>{t("Memory")}</span><span>{t("Disk")}</span>
-                <span>{t("Network in / out")}</span><span>{t("Load")}</span><span>{t("Uptime")}</span><span />
-              </div>
+              <div className="srv-tr srv-th"><TH /></div>
               {list.length === 0 && <div className="srv-tr srv-none"><span className="muted">{t("No servers match.")}</span></div>}
               {list.map((s) => {
                 const m = s.snapshot?.metrics;
@@ -192,7 +217,7 @@ export default function Servers() {
                   <div key={s.id} className={`srv-tr srv-row${open === s.id ? " on" : ""}${st === "offline" ? " off" : ""}`} role="button" tabIndex={0}
                     onClick={() => setOpen(s.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(s.id); } }}>
                     <div className="srv-name">
-                      <div><b>{s.name}</b><TagChips tags={s.tags} /></div>
+                      <div><b>{s.name}</b><TagChips tags={s.tags} hide={hide} /></div>
                       <small>{subtitle(s, hide)}</small>
                     </div>
                     <div className="srv-st"><ServerStatus s={s} /><small>{statusLine(s)}</small></div>
@@ -299,7 +324,7 @@ function ServerDrawer({ id, list, onSelect, onClose }: { id: string; list: Row[]
       <aside className="drawer srv-drawer" role="dialog" aria-label={s.name}>
         <div className="drawer-h">
           <div style={{ minWidth: 0 }}>
-            <div className="srv-dh"><h2>{s.name}</h2><ServerStatus s={s} /><TagChips tags={s.tags} /></div>
+            <div className="srv-dh"><h2>{s.name}</h2><ServerStatus s={s} /><TagChips tags={s.tags} hide={hide} /></div>
             <p className="faint mono">{head || s.hostname}</p>
           </div>
           <div className="srv-dnav">

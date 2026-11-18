@@ -5,18 +5,17 @@ import { fmtDateTime } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useHideIps } from "../lib/hide-ips";
 
-/** The eye switch that hides every address on the servers pages, for screen shares and screenshots. */
+/** The eye switch that hides every address and tag on the servers pages, for screen shares and screenshots. */
 export function HideIpsButton() {
   const [hidden, setHidden] = useHideIps();
-  const label = hidden ? t("Show IPs") : t("Hide IPs");
+  const label = hidden ? t("Show IPs and tags") : t("Hide IPs and tags");
   return (
-    <button type="button" className={`btn srv-eye${hidden ? " on" : ""}`} aria-pressed={hidden} onClick={() => setHidden(!hidden)} title={label}>
+    <button type="button" className={`icon-btn srv-eye${hidden ? " on" : ""}`} aria-pressed={hidden} aria-label={label} onClick={() => setHidden(!hidden)} title={label}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         {hidden
           ? <><path d="M3 3l18 18" /><path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c5 0 8.5 4.5 9.5 7a13 13 0 0 1-3 4.1M6.6 6.6C4.4 8 3 10.2 2.5 12c1 2.5 4.5 7 9.5 7 1.8 0 3.4-.6 4.8-1.4" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>
           : <><path d="M2.5 12C3.5 9.5 7 5 12 5s8.5 4.5 9.5 7c-1 2.5-4.5 7-9.5 7s-8.5-4.5-9.5-7z" /><circle cx="12" cy="12" r="3" /></>}
       </svg>
-      {label}
     </button>
   );
 }
