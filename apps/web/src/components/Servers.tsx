@@ -225,7 +225,9 @@ function AddServer({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const [rotating, setRotating] = useState(false);
   useEffect(() => { api.serverAgentKey().then((r) => setKey(r.key)).catch((e) => setErr((e as Error).message)); }, []);
-  const cmd = key ? `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint ${location.origin}` : "";
+  // a self-hosted dashboard on plain http (a LAN without TLS) needs the script's explicit opt-in
+  const plainHttp = location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const cmd = key ? `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint ${location.origin}${plainHttp ? " --allow-http" : ""}` : "";
 
   async function rotate() {
     if (!confirm(t("Servers using the current key stop reporting until you reinstall them with the new one. Rotate the key?"))) return;
@@ -244,6 +246,7 @@ function AddServer({ onClose }: { onClose: () => void }) {
         </div>
         {err && <p className="err">{err}</p>}
         {!err && <pre className="srv-cmd mono">{cmd || t("Loading…")}</pre>}
+        {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}
         <div className="srv-safe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>
           <div>

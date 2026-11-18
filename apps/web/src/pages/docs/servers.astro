@@ -81,7 +81,8 @@ sudo systemctl restart openuptime-agent`;
       <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td><code>--key oua_…</code></td><td>The project's agent key. Required to install.</td></tr>
-        <tr><td><code>--endpoint URL</code></td><td>Where the agent reports. The dashboard fills in its own address. It must use <code>https://</code>; plain <code>http://</code> is accepted only for <code>localhost</code>, <code>127.0.0.1</code> and <code>[::1]</code>.</td></tr>
+        <tr><td><code>--endpoint URL</code></td><td>Where the agent reports. The dashboard fills in its own address. It must use <code>https://</code>; plain <code>http://</code> is accepted only for <code>localhost</code>, <code>127.0.0.1</code> and <code>[::1]</code>, unless you add <code>--allow-http</code>.</td></tr>
+        <tr><td><code>--allow-http</code></td><td>Accept a plain <code>http://</code> endpoint on another machine, for a self-hosted install on a network without TLS. The key and the metrics then cross the network unencrypted, and the script prints a warning. The dashboard adds this flag itself when you open it over plain HTTP.</td></tr>
         <tr><td><code>--binary-url URL</code></td><td>Download the agent from this <code>https://</code> address instead of GitHub. The environment variable <code>OPENUPTIME_AGENT_URL</code> does the same.</td></tr>
         <tr><td><code>--sha256 HEX</code></td><td>The SHA-256 the agent must have. Without it, the script reads <code>SHA256SUMS</code> from the same folder as the agent.</td></tr>
         <tr><td><code>--uninstall</code></td><td>Stop the service and remove the agent. See <a href="#uninstall">Uninstall</a>.</td></tr>
@@ -155,7 +156,7 @@ sudo systemctl restart openuptime-agent`;
         <tr><td><code>download failed</code></td><td>The server cannot reach GitHub, or the release has no agent yet. Check outbound HTTPS, or use <a href="#mirror"><code>--binary-url</code></a>.</td></tr>
         <tr><td><code>checksum mismatch</code></td><td>The file downloaded is not the one the release lists. Nothing was installed. Run the command again; if it keeps failing, do not install from that source.</td></tr>
         <tr><td><code>could not download SHA256SUMS</code>, <code>SHA256SUMS has no line</code></td><td>The mirror has no checksum file for the agent. Add one, or pass <code>--sha256</code>. See <a href="#mirror">Without access to GitHub</a>.</td></tr>
-        <tr><td><code>--endpoint must start with https://</code></td><td>Use the HTTPS address of your OpenUptime site. Put a TLS proxy in front of a self-hosted install that serves plain HTTP.</td></tr>
+        <tr><td><code>--endpoint must start with https://</code></td><td>Use the HTTPS address of your OpenUptime site. Put a TLS proxy in front of a self-hosted install that serves plain HTTP, or add <code>--allow-http</code> if the network between them is trusted.</td></tr>
         <tr><td>The service runs, but the server never appears</td><td>Read <code>journalctl -u openuptime-agent</code>. Check that the server can reach the address in <code>OPENUPTIME_ENDPOINT</code>: it must be the address you open the dashboard at.</td></tr>
         <tr><td><code>the agent key was rejected</code></td><td>The key was rotated, or the project was deleted. Put the current key in the env file and restart.</td></tr>
         <tr><td><code>HTTP 402</code></td><td>The plan's monitor limit is reached; each server uses one monitor.</td></tr>
@@ -223,7 +224,8 @@ sudo systemctl restart openuptime-agent`;
       <thead><tr><th>选项</th><th>说明</th></tr></thead>
       <tbody>
         <tr><td><code>--key oua_…</code></td><td>项目的 agent 密钥，安装时必填。</td></tr>
-        <tr><td><code>--endpoint URL</code></td><td>agent 上报的地址。后台复制的命令会自动填入当前站点地址。必须使用 <code>https://</code>，只有 <code>localhost</code>、<code>127.0.0.1</code> 和 <code>[::1]</code> 允许用 <code>http://</code>。</td></tr>
+        <tr><td><code>--endpoint URL</code></td><td>agent 上报的地址。后台复制的命令会自动填入当前站点地址。必须使用 <code>https://</code>，只有 <code>localhost</code>、<code>127.0.0.1</code> 和 <code>[::1]</code> 允许用 <code>http://</code>，除非加上 <code>--allow-http</code>。</td></tr>
+        <tr><td><code>--allow-http</code></td><td>允许上报到其他机器上的 <code>http://</code> 地址，适用于没有配置 TLS 的内网自托管实例。此时密钥和指标会以明文在网络上传输，脚本也会打印警告。通过 HTTP 打开后台时，复制出的命令会自动带上这个参数。</td></tr>
         <tr><td><code>--binary-url URL</code></td><td>从这个 <code>https://</code> 地址下载 agent，而不是从 GitHub 下载。也可以用环境变量 <code>OPENUPTIME_AGENT_URL</code> 指定。</td></tr>
         <tr><td><code>--sha256 HEX</code></td><td>agent 应有的 SHA-256 值。不传时，脚本读取 agent 同一目录下的 <code>SHA256SUMS</code>。</td></tr>
         <tr><td><code>--uninstall</code></td><td>停止服务并删除 agent，详见<a href="#uninstall-zh">卸载</a>。</td></tr>
@@ -297,7 +299,7 @@ sudo systemctl restart openuptime-agent`;
         <tr><td><code>download failed</code></td><td>服务器无法访问 GitHub，或者 release 里还没有 agent。请检查出站 HTTPS，或使用 <a href="#mirror-zh"><code>--binary-url</code></a>。</td></tr>
         <tr><td><code>checksum mismatch</code></td><td>下载到的文件和 release 列出的不一致，没有安装任何东西。请重新运行命令；如果一直失败，不要从这个来源安装。</td></tr>
         <tr><td><code>could not download SHA256SUMS</code>、<code>SHA256SUMS has no line</code></td><td>镜像上没有 agent 的校验和文件。请补上，或者传入 <code>--sha256</code>，见<a href="#mirror-zh">无法访问 GitHub 时</a>。</td></tr>
-        <tr><td><code>--endpoint must start with https://</code></td><td>请使用 OpenUptime 站点的 HTTPS 地址。自托管实例如果只提供 HTTP，请在前面加一层 TLS 代理。</td></tr>
+        <tr><td><code>--endpoint must start with https://</code></td><td>请使用 OpenUptime 站点的 HTTPS 地址。自托管实例如果只提供 HTTP，请在前面加一层 TLS 代理；如果两者之间的网络可信，也可以加上 <code>--allow-http</code>。</td></tr>
         <tr><td>服务在运行，但服务器一直没出现</td><td>查看 <code>journalctl -u openuptime-agent</code>。确认服务器能访问 <code>OPENUPTIME_ENDPOINT</code> 中的地址，它必须是你打开后台时使用的地址。</td></tr>
         <tr><td><code>the agent key was rejected</code></td><td>密钥已被轮换，或项目已被删除。把当前密钥写入 env 文件后重启服务。</td></tr>
         <tr><td><code>HTTP 402</code></td><td>已达到套餐的监控数量上限，每台服务器占用一个监控名额。</td></tr>
