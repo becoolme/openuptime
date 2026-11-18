@@ -9,6 +9,7 @@
  */
 
 import type { CheckInput, CheckOutcome } from "./checker";
+import { pinnedLookup } from "@openuptime/kit/pinnedfetch";
 import { keywordOutcome } from "./keyword";
 import { checkUserAgent, connectFailure, forgetResolved, guardAddresses, isWorkers } from "./netguard";
 
@@ -192,13 +193,7 @@ async function nodeUpgrade(u: URL, m: CheckInput, key: string, addresses: string
       path: `${u.pathname}${u.search}`,
       method: "GET",
       headers: { ...handshakeHeaders(m), connection: "Upgrade", upgrade: "websocket", "sec-websocket-version": "13", "sec-websocket-key": key },
-      ...(addresses ? {
-        lookup: (_host: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
-          const list = addresses.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
-          if (opts?.all) cb(null, list);
-          else cb(null, list[0].address, list[0].family);
-        },
-      } : {}),
+      ...(addresses ? { lookup: pinnedLookup(addresses) } : {}),
       // names that are IP literals carry no SNI; named hosts verify the certificate against the name, not the address
       ...(secure && !/^[\d.]+$|:/.test(hostname) ? { servername: hostname } : {}),
     } as import("node:http").RequestOptions);

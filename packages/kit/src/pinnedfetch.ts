@@ -104,6 +104,20 @@ function inflateAuto(zlib: typeof import("node:zlib"), TransformClass: typeof im
   });
 }
 
+/**
+ * A `lookup` for Node's http(s).request that answers only with `addresses`, validated beforehand, in the order given.
+ * It answers asynchronously, as dns.lookup does. An address the kernel refuses at once (no route, broadcast) would
+ * otherwise destroy the TLS socket while tls.connect is still setting it up. That throws out of the request and leaves
+ * the socket's error with no listener, which stops the whole process.
+ */
+export function pinnedLookup(addresses: string[]) {
+  return (_host: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
+    const list = addresses.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
+    if (opts?.all) process.nextTick(cb, null, list);
+    else process.nextTick(cb, null, list[0].address, list[0].family);
+  };
+}
+
 /** `addresses` may be null only behind a proxy (private targets allowed, nothing to pin): the tunnel then names the host. */
 export async function pinnedFetch(url: string, init: RequestInit, addresses: string[] | null): Promise<Response> {
   const u = new URL(url);
@@ -142,12 +156,7 @@ export async function pinnedFetch(url: string, init: RequestInit, addresses: str
         ...(via
           ? { createConnection: (_o: unknown, cb: Connected) => tunnel(net!, tls!, via, addresses?.[0] ?? hostname, Number(u.port || (u.protocol === "https:" ? 443 : 80)), hostname, servername, u.protocol === "https:", signal, cb) }
           : {
-            // dns.lookup contract: hand back only validated addresses, in the order given
-            lookup: (_host: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
-              const list = addresses!.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
-              if (opts?.all) cb(null, list);
-              else cb(null, list[0].address, list[0].family);
-            },
+            lookup: pinnedLookup(addresses!),
           }),
         ...(servername ? { servername } : {}),
       } as import("node:http").RequestOptions,

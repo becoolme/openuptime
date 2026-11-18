@@ -29,6 +29,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
+    title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
+    summary: {
+      en: "A self-hosted install keeps running when an alert webhook or a WebSocket monitor points at an address it cannot reach.",
+      zh: "告警 Webhook 或 WebSocket 监控指向无法连通的地址时，自托管实例会照常运行。",
+    },
+    points: [
+      { en: "An address the network turns down at once, such as an IPv6 address on a server without IPv6, used to stop the whole API process; now only that delivery or check fails and everything else carries on.", zh: "以前遇到网络当场拒绝的地址（比如在没有 IPv6 的服务器上连接 IPv6 地址），整个 API 进程都会退出；现在只有这次发送或检测失败，其他功能照常运行。" },
+    ],
+  },
+  {
     id: "servers-list-alerts", date: "2026-11-18", edition: "community",
     title: { en: "Servers overview and offline alert settings", zh: "服务器总览与离线告警设置" },
     summary: {
