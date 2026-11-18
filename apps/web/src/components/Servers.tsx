@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
-import { ago, api, type Server, type ServerList } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Server, type ServerAlerts, type ServerDetail, type ServerList } from "../lib/api";
+import { useHideIps } from "../lib/hide-ips";
 import { t } from "../lib/i18n";
 import { pollWhileVisible } from "../lib/poll";
 import { toast } from "../lib/toast";
-import { diskUse, fmtBytes, fmtRate, fmtUptime, level, pct, platformLabel, primaryIp } from "../lib/servers";
+import {
+  filterServers, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, level, maskIp, memPct, pct, platformLabel,
+  primaryIp, serverState, since, specLabel, type ServerFilter,
+} from "../lib/servers";
+import { HideIpsButton, MuteButton, OfflineAlerts } from "./ServerAlerts";
 
 type Row = ServerList["servers"][number];
 
@@ -14,6 +19,16 @@ export function Meter({ value, label }: { value: number; label?: string }) {
     <span className={`meter ${level(value)}`} title={label}>
       <i><u style={{ width: `${Math.max(2, Math.min(100, value))}%` }} /></i>
       <b>{v}%</b>
+    </span>
+  );
+}
+
+/** The value above a thin bar, coloured at 75% and 90%: a cell of the servers table. */
+function Gauge({ value, text }: { value: number; text?: string }) {
+  return (
+    <span className={`gauge ${level(value)}`}>
+      <b>{text ?? `${Math.round(value)}%`}</b>
+      <i><u style={{ width: `${Math.max(1, Math.min(100, value))}%` }} /></i>
     </span>
   );
 }
@@ -31,13 +46,69 @@ export function Spark({ values, height = 28 }: { values: number[]; height?: numb
   );
 }
 
-export function ServerStatus({ s }: { s: Pick<Server, "online" | "lastSeenAt"> }) {
-  if (!s.lastSeenAt) return <span className="pill">{t("Waiting")}</span>;
-  return s.online ? <span className="pill up">{t("Online")}</span> : <span className="pill down">{t("Offline")}</span>;
+export function ServerStatus({ s }: { s: Pick<Server, "online" | "lastSeenAt"> & Partial<Pick<Server, "snapshot" | "memTotal">> }) {
+  const st = serverState({ snapshot: null, memTotal: 0, ...s });
+  if (st === "waiting") return <span className="pill">{t("Waiting")}</span>;
+  if (st === "offline") return <span className="pill down">{t("Offline")}</span>;
+  if (st === "hot") return <span className="pill warn">{t("High usage")}</span>;
+  return <span className="pill up">{t("Online")}</span>;
 }
 
-const memPct = (s: Server) => pct(s.snapshot?.metrics.memUsed ?? 0, s.memTotal);
-const diskPct = (s: Server) => { const d = diskUse(s.snapshot?.disks ?? []); return pct(d.used, d.total); };
+function Chevron() {
+  return <svg className="srv-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5" /></svg>;
+}
+
+const TagChips = ({ tags }: { tags: string[] }) => <>{tags.map((x) => <span key={x} className="srv-tag">{x}</span>)}</>;
+
+/** "Debian 12 · 4 cores · 16 GB · 203.0.113.7": what the machine is, in one line. */
+const subtitle = (s: Server, hide: boolean) => {
+  const ip = primaryIp(s);
+  return [platformLabel(s), specLabel(s), ip && (hide ? maskIp(ip) : ip)].filter(Boolean).join(" · ") || s.hostname;
+};
+
+/** Under the status pill: when it last reported, or what runs hot. */
+function statusLine(s: Server) {
+  const st = serverState(s);
+  if (st === "waiting") return t("No report yet");
+  if (st === "hot") return hotReasons(s).join(" · ");
+  if (st === "offline") return t("Last seen {d}").replace("{d}", since(s.lastSeenAt));
+  return since(s.lastSeenAt);
+}
+
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+function Stats({ servers }: { servers: Row[] }) {
+  const reporting = servers.filter((s) => s.online && s.snapshot);
+  const hot = servers.filter((s) => serverState(s) === "hot");
+  const offline = servers.filter((s) => serverState(s) === "offline")
+    .sort((a, b) => new Date(b.lastSeenAt!).getTime() - new Date(a.lastSeenAt!).getTime());
+  const latest = servers.reduce<string | null>((m, s) => (s.lastSeenAt && (!m || s.lastSeenAt > m) ? s.lastSeenAt : m), null);
+  const more = (n: number) => (n > 0 ? ` · +${n}` : "");
+  return (
+    <div className="srv-stats">
+      <div className="card srv-stat">
+        <small>{t("Online")}</small>
+        <b>{servers.filter((s) => s.online).length}<span> / {servers.length}</span></b>
+        <p>{latest ? t("Latest report {d}").replace("{d}", since(latest)) : t("No report yet")}</p>
+      </div>
+      <div className="card srv-stat">
+        <small>{t("High usage")}</small>
+        <b className={hot.length ? "warn" : ""}>{hot.length}</b>
+        <p>{hot.length ? hot.slice(0, 2).map((s) => `${s.name} ${hotReasons(s)[0].replace(/ \d+%$/, "")}`).join(" · ") + more(hot.length - 2) : t("CPU, memory and disks under 90%")}</p>
+      </div>
+      <div className="card srv-stat">
+        <small>{t("Offline")}</small>
+        <b className={offline.length ? "bad" : ""}>{offline.length}</b>
+        <p>{offline.length ? `${offline[0].name} · ${t("last seen {d}").replace("{d}", since(offline[0].lastSeenAt))}${more(offline.length - 1)}` : t("Every server is reporting")}</p>
+      </div>
+      <div className="card srv-stat">
+        <small>{t("Average load")}</small>
+        <b>{reporting.length ? Math.round(avg(reporting.map((s) => s.snapshot!.metrics.cpu))) : "—"}<span>% {t("CPU")}</span></b>
+        <p>{reporting.length ? t("Memory {n}% on average · online servers").replace("{n}", String(Math.round(avg(reporting.map(memPct))))) : t("No server online")}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Servers() {
   const [data, setData] = useState<ServerList | null>(null);
@@ -45,16 +116,27 @@ export default function Servers() {
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<ServerFilter>("all");
+  const [hide] = useHideIps();
 
   const load = () => api.servers().then((d) => { setData(d); setErr(""); }).catch((e) => setErr((e as Error).message));
   useEffect(() => { load(); return pollWhileVisible(load, 10_000); }, []);
 
-  const list = (data?.servers ?? []).filter((s) => !q || `${s.name} ${s.hostname} ${primaryIp(s)} ${s.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()));
-  const online = data?.servers.filter((s) => s.online).length ?? 0;
-  const offline = data?.servers.filter((s) => s.lastSeenAt && !s.online).length ?? 0;
-  const current = data?.servers.find((s) => s.id === open) ?? null;
+  const servers = data?.servers ?? [];
+  const list = filterServers(servers, q, filter);
+  const tags = useMemo(() => {
+    const n = new Map<string, number>();
+    servers.forEach((s) => s.tags.forEach((x) => n.set(x, (n.get(x) ?? 0) + 1)));
+    return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [servers]);
+  const count = (f: ServerFilter) => filterServers(servers, "", f).length;
+  const pills: { f: ServerFilter; label: string; n: number }[] = [
+    { f: "all", label: t("All"), n: servers.length },
+    { f: "hot", label: t("High usage"), n: count("hot") },
+    { f: "offline", label: t("Offline"), n: count("offline") },
+    ...tags.map(([x, n]) => ({ f: `tag:${x}` as ServerFilter, label: x, n })),
+  ];
   const full = data?.maxServers != null && (data.serverCount ?? 0) >= data.maxServers;
-  const cols = "minmax(0,2fr) 92px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 84px";
 
   return (
     <>
@@ -63,11 +145,14 @@ export default function Servers() {
           <h1>{t("Servers")}</h1>
           <p className="muted">{t("CPU, memory, disks and network of your machines, reported by a small open-source agent.")}</p>
         </div>
-        <div className="ph-actions"><button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button></div>
+        <div className="ph-actions">
+          {data && data.maxServers != null && <span className="faint srv-quota">{t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))}</span>}
+          <button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>
+        </div>
       </div>
       {err && <p className="err">{err}</p>}
 
-      {data && data.servers.length === 0 && (
+      {data && servers.length === 0 && (
         <div className="empty">
           <h3>{t("No servers yet")}</h3>
           <p className="muted" style={{ margin: "8px auto 18px", maxWidth: 440 }}>{t("Run one command on a Linux server and it shows up here within a minute. The agent only sends data out; nothing listens on the server.")}</p>
@@ -75,129 +160,230 @@ export default function Servers() {
         </div>
       )}
 
-      {data && data.servers.length > 0 && (
+      {data && servers.length > 0 && (
         <>
+          <Stats servers={servers} />
           <div className="srv-bar">
-            <div className="chips">
-              <span className="chip">{data.maxServers != null
-                ? t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))
-                : t("{n} servers").replace("{n}", String(data.servers.length))}</span>
-              <span className="chip"><span className="dot up" />{t("{n} online").replace("{n}", String(online))}</span>
-              {offline > 0 && <span className="chip"><span className="dot down" />{t("{n} offline").replace("{n}", String(offline))}</span>}
+            <label className="srv-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+              <input type="search" placeholder={t("Search host name, IP or tag")} aria-label={t("Search servers")} value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            <div className="srv-pills" role="group" aria-label={t("Filter servers")}>
+              {pills.map((p) => (
+                <button key={p.f} type="button" className={`srv-pill${filter === p.f ? " on" : ""}`} aria-pressed={filter === p.f} onClick={() => setFilter(p.f)}>
+                  {p.label} <span>{p.n}</span>
+                </button>
+              ))}
             </div>
-            <input className="in" placeholder={t("Filter by name, IP or tag")} value={q} onChange={(e) => setQ(e.target.value)} />
+            <HideIpsButton />
           </div>
-          <div className="card tbl srv-tbl">
-            <div className="tr th" style={{ gridTemplateColumns: cols }}>
-              <span>{t("Server")}</span><span>{t("Status")}</span><span>{t("CPU")}</span><span>{t("Memory")}</span><span>{t("Disk")}</span><span>{t("Network")}</span><span>{t("Seen")}</span>
-            </div>
-            {list.length === 0 && <div className="tr" style={{ gridTemplateColumns: "1fr" }}><span className="muted">{t("No servers match.")}</span></div>}
-            {list.map((s) => {
-              const m = s.snapshot?.metrics;
-              return (
-                <div key={s.id} className={`tr srv-row${open === s.id ? " on" : ""}`} style={{ gridTemplateColumns: cols }} role="button" tabIndex={0}
-                  onClick={() => setOpen(s.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(s.id); } }}>
-                  <div>
-                    <b style={{ fontWeight: 600 }}>{s.name}</b>
-                    <small>{[platformLabel(s), primaryIp(s)].filter(Boolean).join(" · ") || s.hostname}</small>
+          <div className="card srv-tbl">
+            <div className="srv-scroll">
+              <div className="srv-tr srv-th">
+                <span>{t("Server")}</span><span>{t("Status")}</span><span>{t("CPU")}</span><span>{t("Memory")}</span><span>{t("Disk")}</span>
+                <span>{t("Network in / out")}</span><span>{t("Load")}</span><span>{t("Uptime")}</span><span />
+              </div>
+              {list.length === 0 && <div className="srv-tr srv-none"><span className="muted">{t("No servers match.")}</span></div>}
+              {list.map((s) => {
+                const m = s.snapshot?.metrics;
+                const st = serverState(s);
+                const disk = fullestDisk(s.snapshot?.disks ?? []);
+                return (
+                  <div key={s.id} className={`srv-tr srv-row${open === s.id ? " on" : ""}${st === "offline" ? " off" : ""}`} role="button" tabIndex={0}
+                    onClick={() => setOpen(s.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(s.id); } }}>
+                    <div className="srv-name">
+                      <div><b>{s.name}</b><TagChips tags={s.tags} /></div>
+                      <small>{subtitle(s, hide)}</small>
+                    </div>
+                    <div className="srv-st"><ServerStatus s={s} /><small>{statusLine(s)}</small></div>
+                    {m ? <>
+                      <Gauge value={m.cpu} />
+                      <Gauge value={memPct(s)} />
+                      {disk ? <Gauge value={disk.pct} /> : <span className="faint">—</span>}
+                      <span className="mono srv-net"><span>↓ {fmtRate(m.netRxBps)}</span><span>↑ {fmtRate(m.netTxBps)}</span></span>
+                      <span className="mono">{m.load1.toFixed(2)}</span>
+                    </> : <><span className="faint">—</span><span className="faint">—</span><span className="faint">—</span><span className="faint">—</span><span className="faint">—</span></>}
+                    <span className="mono">{fmtSpan(s.snapshot?.uptimeSec)}</span>
+                    <Chevron />
                   </div>
-                  <span><ServerStatus s={s} /></span>
-                  {m ? <><Meter value={m.cpu} label={t("CPU")} /><Meter value={memPct(s)} label={t("Memory")} /><Meter value={diskPct(s)} label={t("Disk")} /></> : <><span className="faint">—</span><span className="faint">—</span><span className="faint">—</span></>}
-                  <span className="mono srv-net">{m ? <>↓ {fmtRate(m.netRxBps)}<br />↑ {fmtRate(m.netTxBps)}</> : <span className="faint">—</span>}</span>
-                  <span className="muted">{ago(s.lastSeenAt)}</span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <div className="tbl-f">
+              {t("Click a row to open its summary · CPU, memory and disk turn yellow at 75% and red at 90%.")}{" "}
+              <a href={SERVER_DOCS}>{t("How the agent works")}</a>
+            </div>
           </div>
         </>
       )}
 
-      {current && <ServerDrawer s={current} onClose={() => setOpen(null)} />}
+      {open && servers.some((s) => s.id === open) && (
+        <ServerDrawer id={open} list={list.some((s) => s.id === open) ? list : servers} onSelect={setOpen} onClose={() => setOpen(null)} />
+      )}
       {adding && <AddServer limit={full ? { max: data!.maxServers!, upgradeUrl: data!.upgradeUrl } : null} onClose={() => { setAdding(false); load(); }} />}
     </>
   );
 }
 
-function ServerDrawer({ s, onClose }: { s: Row; onClose: () => void }) {
+/** One metric of the last hour as a thin area line, with the latest value at the end. */
+function SparkRow({ label, values, max, now, color }: { label: string; values: number[]; max: number; now: string; color: string }) {
+  const W = 400, H = 44;
+  const top = Math.max(max, 1e-9);
+  const pts = values.map((v, i) => `${((i / Math.max(1, values.length - 1)) * W).toFixed(1)},${(H - 2 - (Math.min(top, Math.max(0, v)) / top) * (H - 6)).toFixed(1)}`);
+  return (
+    <div className="srv-sp">
+      <span>{label}</span>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+        <line x1={0} x2={W} y1={H - 1} y2={H - 1} className="base" vectorEffect="non-scaling-stroke" />
+        {values.length > 1 && <>
+          <polygon points={`0,${H} ${pts.join(" ")} ${W},${H}`} style={{ fill: color, opacity: 0.12 }} />
+          <polyline points={pts.join(" ")} style={{ stroke: color }} vectorEffect="non-scaling-stroke" />
+        </>}
+      </svg>
+      <b className="mono">{now}</b>
+    </div>
+  );
+}
+
+/** A current value with its usage bar; without `bar` the value stands alone. */
+export function Tile({ k, value, bar, sub }: { k: string; value: string; bar?: number; sub: string }) {
+  return (
+    <div className={`srv-tile ${bar === undefined ? "" : level(bar)}`}>
+      <div><small>{k}</small><b className="mono">{value}</b></div>
+      {bar !== undefined && <i><u style={{ width: `${Math.max(1, Math.min(100, bar))}%` }} /></i>}
+      <p>{sub}</p>
+    </div>
+  );
+}
+
+function ServerDrawer({ id, list, onSelect, onClose }: { id: string; list: Row[]; onSelect: (id: string) => void; onClose: () => void }) {
+  const [hide] = useHideIps();
+  const [detail, setDetail] = useState<ServerDetail | null>(null);
+  const idx = list.findIndex((s) => s.id === id);
+  const s = list[idx];
+  const prev = idx > 0 ? list[idx - 1] : null;
+  const next = idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
+
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [onClose]);
+    setDetail(null);
+    const get = () => api.server(id, "1h").then(setDetail).catch(() => {});
+    get();
+    return pollWhileVisible(get, 30_000);
+  }, [id]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if ((e.key === "ArrowUp" || e.key === "k") && prev) onSelect(prev.id);
+      if ((e.key === "ArrowDown" || e.key === "j") && next) onSelect(next.id);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onClose, onSelect, prev?.id, next?.id]);
+  if (!s) return null;
+
+  const setAlerts = (alerts: ServerAlerts) => setDetail((d) => (d ? { ...d, alerts } : d));
   const m = s.snapshot?.metrics;
-  const disk = diskUse(s.snapshot?.disks ?? []);
+  const st = serverState(s);
+  const disk = fullestDisk(s.snapshot?.disks ?? []);
+  const ips = ipRows(s.snapshot);
+  const v4 = ips.filter((r) => r.family === "IPv4").length;
+  const points = detail?.id === id ? detail.points : [];
+  const lastRate = m ? fmtRate(m.netRxBps) : "—";
+  const head = [platformLabel(s), specLabel(s), s.snapshot?.uptimeSec && t("up {d}").replace("{d}", fmtSpan(s.snapshot.uptimeSec)), s.lastSeenAt && t("reported {d}").replace("{d}", since(s.lastSeenAt))].filter(Boolean).join(" · ");
+
   return (
     <>
       <div className="drawer-scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-label={s.name}>
+      <aside className="drawer srv-drawer" role="dialog" aria-label={s.name}>
         <div className="drawer-h">
           <div style={{ minWidth: 0 }}>
-            <h2>{s.name} <ServerStatus s={s} /></h2>
-            <p className="faint mono">{[s.hostname, platformLabel(s), s.arch].filter(Boolean).join(" · ")}</p>
+            <div className="srv-dh"><h2>{s.name}</h2><ServerStatus s={s} /><TagChips tags={s.tags} /></div>
+            <p className="faint mono">{head || s.hostname}</p>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label={t("Close")}>✕</button>
+          <div className="srv-dnav">
+            <button className="icon-btn" disabled={!prev} onClick={() => prev && onSelect(prev.id)} aria-label={t("Previous server")} title={t("Previous server")}>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 10 4.5-4.5 4.5 4.5" /></svg>
+            </button>
+            <button className="icon-btn" disabled={!next} onClick={() => next && onSelect(next.id)} aria-label={t("Next server")} title={t("Next server")}>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 6 4.5 4.5 4.5-4.5" /></svg>
+            </button>
+            <button className="icon-btn" onClick={onClose} aria-label={t("Close")}>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </div>
         </div>
         <div className="drawer-b">
-          {m ? (
-            <div className="srv-now">
-              <div><small>{t("CPU")}</small><Meter value={m.cpu} /><span className="faint">{t("{n} cores").replace("{n}", String(s.cores))} · {t("load")} {m.load1.toFixed(2)}</span></div>
-              <div><small>{t("Memory")}</small><Meter value={memPct(s)} /><span className="faint">{fmtBytes(m.memUsed)} / {fmtBytes(s.memTotal)}</span></div>
-              <div><small>{t("Disk")}</small><Meter value={pct(disk.used, disk.total)} /><span className="faint">{fmtBytes(disk.used)} / {fmtBytes(disk.total)}</span></div>
-              <div><small>{t("Swap")}</small><Meter value={pct(m.swapUsed, s.swapTotal)} /><span className="faint">{s.swapTotal ? `${fmtBytes(m.swapUsed)} / ${fmtBytes(s.swapTotal)}` : t("none")}</span></div>
+          {st === "offline" && (
+            <div className="srv-banner bad">
+              <b>{t("Offline for {d}").replace("{d}", fmtSpan((Date.now() - new Date(s.lastSeenAt!).getTime()) / 1000))}</b>
+              {" "}{t("No report for three intervals in a row. The values below are from the last one.")}
             </div>
-          ) : <p className="muted">{t("Waiting for the first report.")}</p>}
+          )}
+          {st === "hot" && <div className="srv-banner warn"><b>{t("High usage")}</b> · {hotReasons(s).join(" · ")}</div>}
+          {!m && <p className="muted">{t("Waiting for the first report.")}</p>}
 
-          {s.cpuSeries.length > 1 && (
+          {m && (
+            <div className="srv-tiles">
+              <Tile k={t("CPU")} value={`${Math.round(m.cpu)}%`} bar={m.cpu} sub={s.cores ? t("{n} cores").replace("{n}", String(s.cores)) : "—"} />
+              <Tile k={t("Memory")} value={`${Math.round(memPct(s))}%`} bar={memPct(s)} sub={t("{n} total").replace("{n}", fmtBytes(s.memTotal))} />
+              <Tile k={t("Disk")} value={disk ? `${Math.round(disk.pct)}%` : "—"} bar={disk?.pct ?? 0} sub={disk ? t("Fullest mount {m}").replace("{m}", disk.mount) : t("No disks reported")} />
+              <Tile k={t("Load")} value={m.load1.toFixed(2)} bar={s.cores ? (m.load1 / s.cores) * 100 : 0} sub={`${t("1-minute average")} · ↓ ${lastRate}`} />
+            </div>
+          )}
+
+          {m && st !== "offline" && (
             <section>
-              <h4>{t("CPU, last hour")}</h4>
-              <div className="srv-spark"><Spark values={s.cpuSeries} height={48} /></div>
+              <div className="srv-sec-h"><h3>{t("Last hour")}</h3>{detail?.stepSec ? <span>{t("One point every {n}s").replace("{n}", String(detail.stepSec))}</span> : null}</div>
+              <div className="srv-sps">
+                <SparkRow label={t("CPU")} color="#0f9d58" max={100} values={points.length ? points.map((p) => p.cpu) : s.cpuSeries} now={`${Math.round(m.cpu)}%`} />
+                <SparkRow label={t("Memory")} color="#2f6fdb" max={100} values={points.map((p) => pct(p.memUsed, s.memTotal))} now={`${Math.round(memPct(s))}%`} />
+                <SparkRow label={t("Network")} color="#7a4fd1" max={Math.max(1, ...points.map((p) => p.netRxBps + p.netTxBps))} values={points.map((p) => p.netRxBps + p.netTxBps)} now={fmtRate(m.netRxBps + m.netTxBps)} />
+              </div>
             </section>
           )}
 
-          {m && (
-            <section className="kv">
-              <div><span>{t("Network")}</span><b className="mono">↓ {fmtRate(m.netRxBps)} · ↑ {fmtRate(m.netTxBps)}</b></div>
-              <div><span>{t("Disk I/O")}</span><b className="mono">R {fmtRate(m.diskReadBps)} · W {fmtRate(m.diskWriteBps)}</b></div>
-              <div><span>{t("Uptime")}</span><b>{fmtUptime(s.snapshot?.uptimeSec)}</b></div>
-              <div><span>{t("Reports every")}</span><b>{s.intervalSec}s</b></div>
-              <div><span>{t("Last report")}</span><b>{ago(s.lastSeenAt)}</b></div>
+          {ips.length > 0 && (
+            <section>
+              <div className="srv-sec-h"><h3>{t("IP addresses")}</h3><span>{t("{a} IPv4 · {b} IPv6").replace("{a}", String(v4)).replace("{b}", String(ips.length - v4))}</span></div>
+              <div className="srv-iplist">
+                {ips.map((r) => (
+                  <div key={r.ip}><i className={r.family === "IPv4" ? "v4" : "v6"}>{r.family}</i><span>{hide ? maskIp(r.ip) : r.ip}</span><small>{r.iface}</small></div>
+                ))}
+              </div>
             </section>
           )}
 
           {!!s.snapshot?.disks.length && (
             <section>
-              <h4>{t("Disks")} <span className="faint">{s.snapshot.disks.length}</span></h4>
-              <div className="srv-list">
-                {s.snapshot.disks.map((d) => (
-                  <div key={d.mount}>
-                    <div className="srv-li-h"><b className="mono">{d.mount}</b><span className="faint mono">{d.fs}</span></div>
-                    <Meter value={pct(d.used, d.total)} />
-                    <small className="faint mono">{d.device} · {fmtBytes(d.used)} / {fmtBytes(d.total)}</small>
-                  </div>
-                ))}
+              <div className="srv-sec-h"><h3>{t("Disks and mounts")}</h3><span>{t("{n} mounts").replace("{n}", String(s.snapshot.disks.length))}</span></div>
+              <div className="srv-disks">
+                {s.snapshot.disks.map((d) => {
+                  const p = pct(d.used, d.total);
+                  return (
+                    <div key={d.mount} className={level(p)}>
+                      <div><b>{d.mount}</b><small>{d.device} · {fmtBytes(d.used)} / {fmtBytes(d.total)}</small></div>
+                      <i><u style={{ width: `${Math.max(1, p)}%` }} /></i>
+                      <span>{Math.round(p)}%</span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
 
-          {!!s.snapshot?.interfaces.length && (
-            <section>
-              <h4>{t("Network interfaces")} <span className="faint">{s.snapshot.interfaces.length}</span></h4>
-              <div className="srv-list">
-                {s.snapshot.interfaces.map((i) => (
-                  <div key={i.name}>
-                    <div className="srv-li-h"><b className="mono">{i.name}</b><span className="faint mono">↓ {fmtRate(i.rxBps)} ↑ {fmtRate(i.txBps)}</span></div>
-                    {[...i.ipv4.map((ip) => ["IPv4", ip]), ...i.ipv6.map((ip) => ["IPv6", ip])].map(([k, ip]) => (
-                      <div key={ip} className="srv-ip"><span className="faint">{k}</span><span className="mono">{ip}</span></div>
-                    ))}
-                    {!i.ipv4.length && !i.ipv6.length && <small className="faint">{t("No addresses")}</small>}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+          <section>
+            <div className="srv-sec-h"><h3>{t("Offline alerts")}</h3></div>
+            {detail?.id === id
+              ? <OfflineAlerts serverId={id} monitorId={detail.monitorId} alerts={detail.alerts} onChange={setAlerts} footerMute />
+              : <p className="faint srv-al-note">{t("Loading…")}</p>}
+          </section>
         </div>
-        <div className="drawer-f">
+        <div className="drawer-f srv-df">
           <a className="btn primary" href={`/app/servers/${s.id}`}>{t("Open details")}</a>
+          {detail?.id === id && <MuteButton serverId={id} alerts={detail.alerts} onChange={setAlerts} />}
+          <a className="btn" href={`/app/servers/${s.id}#settings`}>{t("Edit")}</a>
         </div>
       </aside>
     </>

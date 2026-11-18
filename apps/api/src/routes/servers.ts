@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { DEFAULT_SERVER_INTERVAL_SEC, SERVER_INTERVALS, type Repo, type Server, type ServerDisk, type ServerHost, type ServerSnapshot } from "@openuptime/repo";
+import { DEFAULT_SERVER_INTERVAL_SEC, SERVER_INTERVALS, type MaintenanceWindow, type Repo, type Server, type ServerDisk, type ServerHost, type ServerSnapshot } from "@openuptime/repo";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -188,6 +188,21 @@ const patchSchema = z.object({
   intervalSec: z.number().int().refine((v) => (SERVER_INTERVALS as readonly number[]).includes(v), `Use one of ${SERVER_INTERVALS.join(", ")} seconds`),
 }).partial();
 
+const muteSchema = z.object({ minutes: z.number().int().min(5).max(7 * 24 * 60).default(60) });
+
+/** Maintenance windows covering this monitor right now: windows over the whole project count too. */
+const activeWindows = (windows: MaintenanceWindow[], monitorId: string, now = Date.now()) =>
+  windows.filter((w) => w.startsAt.getTime() <= now && w.endsAt.getTime() > now && (w.monitorIds.length === 0 || w.monitorIds.includes(monitorId)));
+/** A one-off window over this monitor alone, as the mute button makes. */
+const isOwnMute = (w: MaintenanceWindow, monitorId: string) => !w.seriesId && w.monitorIds.length === 1 && w.monitorIds[0] === monitorId;
+
+/** Until when this server's alerts are held back, and whether the server's own mute can lift that. */
+export function muteState(windows: MaintenanceWindow[], monitorId: string, now = Date.now()) {
+  const active = activeWindows(windows, monitorId, now);
+  const until = active.reduce<Date | null>((m, w) => (!m || w.endsAt > m ? w.endsAt : m), null);
+  return { mutedUntil: until?.toISOString() ?? null, mutedByMaintenance: active.some((w) => !isOwnMute(w, monitorId)) };
+}
+
 async function keepMonitorInStep(repo: Repo, orgId: string, s: Server, patch: { name?: string; intervalSec?: number }) {
   if (!s.monitorId) return;
   const m = await repo.getMonitor(orgId, s.monitorId, null);
@@ -255,7 +270,30 @@ export const servers = new Hono<AppEnv>()
     const points = await repo.serverMetrics(s.id, new Date(Date.now() - range.sec * 1000), step);
     const monitor = s.monitorId ? await repo.getMonitor(c.get("orgId"), s.monitorId, null) : null;
     const plan = await c.get("entitlements").plan(c.get("orgId"));
-    return c.json({ ...view(s), points, stepSec: step, monitorStatus: monitor?.status ?? null, minIntervalSec: minServerInterval(plan), intervals: SERVER_INTERVALS, upgradeUrl: plan?.upgradeUrl ?? null });
+    const alerts = monitor ? { enabled: !monitor.paused, channelIds: monitor.channelIds, ...muteState(await repo.listMaintenance(c.get("orgId"), c.get("projectId")), monitor.id) } : null;
+    return c.json({ ...view(s), points, stepSec: step, monitorStatus: monitor?.status ?? null, alerts, minIntervalSec: minServerInterval(plan), intervals: SERVER_INTERVALS, upgradeUrl: plan?.upgradeUrl ?? null });
+  })
+  // muting is a maintenance window over the server's monitor alone, so it also holds back reminders and shows in the maintenance list
+  .post("/:id/mute", uuidParams, zValidator("json", muteSchema), async (c) => {
+    const repo = c.get("repo");
+    const s = await repo.server(c.get("orgId"), c.get("projectId"), c.req.param("id"));
+    if (!s?.monitorId) return c.json({ error: "Not found" }, 404);
+    const now = Date.now();
+    await repo.createMaintenance(c.get("orgId"), c.get("projectId"), {
+      name: `${s.name}: alerts muted`, startsAt: new Date(now), endsAt: new Date(now + c.req.valid("json").minutes * 60_000), monitorIds: [s.monitorId], recurrence: null,
+    });
+    return c.json(muteState(await repo.listMaintenance(c.get("orgId"), c.get("projectId")), s.monitorId));
+  })
+  // ends only windows that cover this server alone; a wider maintenance window stays a manager's call
+  .delete("/:id/mute", uuidParams, async (c) => {
+    const repo = c.get("repo");
+    const s = await repo.server(c.get("orgId"), c.get("projectId"), c.req.param("id"));
+    if (!s?.monitorId) return c.json({ error: "Not found" }, 404);
+    const windows = await repo.listMaintenance(c.get("orgId"), c.get("projectId"));
+    for (const w of activeWindows(windows, s.monitorId)) {
+      if (isOwnMute(w, s.monitorId)) await repo.endMaintenance(c.get("orgId"), w.id, c.get("projectScope"));
+    }
+    return c.json(muteState(await repo.listMaintenance(c.get("orgId"), c.get("projectId")), s.monitorId));
   })
   .patch("/:id", uuidParams, zValidator("json", patchSchema), async (c) => {
     const repo = c.get("repo");

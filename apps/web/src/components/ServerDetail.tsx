@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ago, api, ApiError, type ServerDetail as Detail, type ServerMetricPoint, type ServerRange } from "../lib/api";
+import { api, ApiError, type ServerDetail as Detail, type ServerMetricPoint, type ServerRange } from "../lib/api";
+import { useHideIps } from "../lib/hide-ips";
 import { t } from "../lib/i18n";
 import { navigate } from "../lib/nav";
 import { pollWhileVisible } from "../lib/poll";
 import { fmtDateTime, fmtTime } from "../lib/time";
 import { toast } from "../lib/toast";
-import { diskUse, fmtBytes, fmtRate, fmtUptime, pct, platformLabel } from "../lib/servers";
-import { CommandBox, Meter, SERVER_DOCS, ServerStatus, UNINSTALL_CMD } from "./Servers";
+import { diskUse, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, maskIp, memPct, pct, platformLabel, primaryIp, serverState, since, specLabel } from "../lib/servers";
+import { HideIpsButton, OfflineAlerts } from "./ServerAlerts";
+import { CommandBox, Meter, SERVER_DOCS, ServerStatus, Tile, UNINSTALL_CMD } from "./Servers";
 
 const RANGES: { k: ServerRange; sec: number }[] = [{ k: "1h", sec: 3600 }, { k: "6h", sec: 6 * 3600 }, { k: "24h", sec: 86400 }, { k: "7d", sec: 7 * 86400 }];
 
@@ -70,23 +72,40 @@ export default function ServerDetail({ id }: { id: string }) {
   const [s, setS] = useState<Detail | null>(null);
   const [err, setErr] = useState("");
   const [name, setName] = useState("");
+  const [tags, setTags] = useState("");
+  const [hide] = useHideIps();
   const [saving, setSaving] = useState(false);
   const [upgrade, setUpgrade] = useState<string | null>(null);
 
   const load = () => api.server(id, range).then((d) => { setS(d); setErr(""); }).catch((e) => setErr((e as Error).message));
   useEffect(() => { load(); return pollWhileVisible(load, 30_000); }, [id, range]);
   useEffect(() => { if (s) setName(s.name); }, [s?.id, s?.name]);
+  useEffect(() => { if (s) setTags(s.tags.join(", ")); }, [s?.id, s?.tags.join(",")]);
+  // the side panel's Edit link lands on the settings card once it is rendered
+  useEffect(() => { if (s && location.hash.length > 1) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" }); }, [!!s]);
 
   if (err && !s) return <><p className="crumb-back"><a href="/app/servers" className="muted">{t("← Servers")}</a></p><p className="err">{err}</p></>;
   if (!s) return <p className="muted">{t("Loading…")}</p>;
 
   const m = s.snapshot?.metrics;
   const disk = diskUse(s.snapshot?.disks ?? []);
+  const fullest = fullestDisk(s.snapshot?.disks ?? []);
+  const st = serverState(s);
+  const ips = ipRows(s.snapshot);
+  const ip = primaryIp(s);
+  const showIp = (v: string) => (hide ? maskIp(v) : v);
+  const tagList = [...new Set(tags.split(",").map((x) => x.trim()).filter(Boolean))];
+  const tagsChanged = tagList.join(",") !== s.tags.join(",");
+  const head = [
+    platformLabel(s), s.cpuModel, specLabel(s),
+    ip && (ips.length > 1 ? t("{ip} and {n} more addresses").replace("{ip}", showIp(ip)).replace("{n}", String(ips.length - 1)) : showIp(ip)),
+    s.lastSeenAt && t("last report {d}").replace("{d}", since(s.lastSeenAt)),
+  ].filter(Boolean).join(" · ");
   const to = Date.now();
   const from = to - (RANGES.find((r) => r.k === range)?.sec ?? 3600) * 1000;
   const common = { points: s.points, from, to, stepSec: s.stepSec };
 
-  async function save(patch: { name?: string; intervalSec?: number }) {
+  async function save(patch: { name?: string; tags?: string[]; intervalSec?: number }) {
     setSaving(true);
     setUpgrade(null);
     try {
@@ -110,19 +129,27 @@ export default function ServerDetail({ id }: { id: string }) {
       <div className="ph">
         <div>
           <div className="ph-title"><h1>{s.name}</h1><ServerStatus s={s} /></div>
-          <p className="muted mono" style={{ marginTop: 6 }}>{[s.hostname, platformLabel(s), s.arch, s.cpuModel].filter(Boolean).join(" · ")}</p>
+          <p className="muted mono srv-head" style={{ marginTop: 6 }}>{head || s.hostname}</p>
         </div>
         <div className="ph-actions">
+          <HideIpsButton />
           <div className="seg srv-range">{RANGES.map((r) => <i key={r.k} className={range === r.k ? "on" : ""} onClick={() => setRange(r.k)}>{r.k}</i>)}</div>
         </div>
       </div>
 
+      {st === "offline" && (
+        <div className="srv-banner bad" style={{ marginBottom: 18 }}>
+          <b>{t("Offline for {d}").replace("{d}", fmtSpan((Date.now() - new Date(s.lastSeenAt!).getTime()) / 1000))}</b>
+          {" "}{t("No report for three intervals in a row. The values below are from the last one.")}
+        </div>
+      )}
+      {st === "hot" && <div className="srv-banner warn" style={{ marginBottom: 18 }}><b>{t("High usage")}</b> · {hotReasons(s).join(" · ")}</div>}
       {m ? (
-        <div className="kp">
-          <div className="card"><small>{t("CPU")}<span>{t("{n} cores").replace("{n}", String(s.cores))}</span></small><b>{m.cpu.toFixed(1)}<u>%</u></b><div className="d faint">{t("load")} {m.load1.toFixed(2)} · {m.load5.toFixed(2)} · {m.load15.toFixed(2)}</div></div>
-          <div className="card"><small>{t("Memory")}<span>{fmtBytes(s.memTotal)}</span></small><b>{pct(m.memUsed, s.memTotal).toFixed(0)}<u>%</u></b><div className="d faint">{fmtBytes(m.memUsed)} {t("used")} · {fmtBytes(m.memCached)} {t("cache")}</div></div>
-          <div className="card"><small>{t("Disk")}<span>{fmtBytes(disk.total)}</span></small><b>{pct(disk.used, disk.total).toFixed(0)}<u>%</u></b><div className="d faint">{fmtBytes(disk.total - disk.used)} {t("free")}</div></div>
-          <div className="card"><small>{t("Uptime")}<span>{ago(s.lastSeenAt)}</span></small><b>{fmtUptime(s.snapshot?.uptimeSec)}</b><div className="d faint">{t("agent")} {s.agentVersion || "—"}</div></div>
+        <div className="srv-tiles wide">
+          <Tile k={t("CPU")} value={`${m.cpu.toFixed(1)}%`} bar={m.cpu} sub={`${t("{n} cores").replace("{n}", String(s.cores))} · ${t("load")} ${m.load1.toFixed(2)} · ${m.load5.toFixed(2)} · ${m.load15.toFixed(2)}`} />
+          <Tile k={t("Memory")} value={`${Math.round(memPct(s))}%`} bar={memPct(s)} sub={`${fmtBytes(m.memUsed)} / ${fmtBytes(s.memTotal)} · ${fmtBytes(m.memCached)} ${t("cache")}`} />
+          <Tile k={t("Disk")} value={fullest ? `${Math.round(fullest.pct)}%` : "—"} bar={fullest?.pct ?? 0} sub={fullest ? `${t("Fullest mount {m}").replace("{m}", fullest.mount)} · ${fmtBytes(fullest.total - fullest.used)} ${t("free")}` : t("No disks reported")} />
+          <Tile k={t("Uptime")} value={fmtSpan(s.snapshot?.uptimeSec)} sub={`${t("agent")} ${s.agentVersion || "—"}`} />
         </div>
       ) : <div className="empty" style={{ marginBottom: 24 }}><p className="muted">{t("Waiting for the first report.")}</p></div>}
 
@@ -155,8 +182,8 @@ export default function ServerDetail({ id }: { id: string }) {
               <div key={i.name} className="tr" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1.6fr)" }}>
                 <div><b className="mono">{i.name}</b><small>{i.mac || "—"}</small><small>↓ {fmtRate(i.rxBps)} ↑ {fmtRate(i.txBps)}</small></div>
                 <div className="srv-ips">
-                  {i.ipv4.map((ip) => <div key={ip} className="srv-ip"><span className="faint">IPv4</span><span className="mono">{ip}</span></div>)}
-                  {i.ipv6.map((ip) => <div key={ip} className="srv-ip"><span className="faint">IPv6</span><span className="mono">{ip}</span></div>)}
+                  {i.ipv4.map((ip) => <div key={ip} className="srv-ip"><span className="faint">IPv4</span><span className="mono">{showIp(ip)}</span></div>)}
+                  {i.ipv6.map((ip) => <div key={ip} className="srv-ip"><span className="faint">IPv6</span><span className="mono">{showIp(ip)}</span></div>)}
                   {!i.ipv4.length && !i.ipv6.length && <span className="faint">{t("No addresses")}</span>}
                 </div>
               </div>
@@ -181,12 +208,23 @@ export default function ServerDetail({ id }: { id: string }) {
             <div><span>{t("Added")}</span><b>{fmtDateTime(s.createdAt)}</b></div>
           </div>
         </div>
-        <div className="card cc">
+        <div className="srv-stack">
+        <div className="card cc" id="alerts">
+          <div className="cc-h"><h3>{t("Offline alerts")}</h3></div>
+          <OfflineAlerts serverId={s.id} monitorId={s.monitorId} alerts={s.alerts} onChange={(alerts) => setS((d) => (d ? { ...d, alerts } : d))} />
+        </div>
+        <div className="card cc" id="settings">
           <div className="cc-h"><h3>{t("Settings")}</h3></div>
           <form className="srv-form" onSubmit={(e) => { e.preventDefault(); if (name.trim() && name !== s.name) save({ name: name.trim() }); }}>
             <label className="fld"><span>{t("Name")}</span>
               <div style={{ display: "flex", gap: 8 }}><input className="in" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} /><button className="btn" disabled={saving || !name.trim() || name === s.name}>{t("Save")}</button></div>
             </label>
+          </form>
+          <form className="srv-form" onSubmit={(e) => { e.preventDefault(); if (tagsChanged) save({ tags: tagList }); }}>
+            <label className="fld"><span>{t("Tags")}</span>
+              <div style={{ display: "flex", gap: 8 }}><input className="in" value={tags} placeholder="prod, eu-west" onChange={(e) => setTags(e.target.value)} /><button className="btn" disabled={saving || !tagsChanged}>{t("Save")}</button></div>
+            </label>
+            <small className="faint">{t("Separate tags with commas. Tags show up as filters on the servers list.")}</small>
           </form>
           <div className="fld">
             <span>{t("Report every")}</span>
@@ -200,7 +238,6 @@ export default function ServerDetail({ id }: { id: string }) {
               {upgrade !== null && <> <span className="err">{t("Your plan does not allow this interval.")}</span>{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</>}
             </p>
           </div>
-          {s.monitorStatus && <p className="faint" style={{ fontSize: 13 }}>{t("Offline alerts go through a heartbeat monitor, so this server's alerts follow the project's alert channels.")}{s.monitorId && <> <a href={`/app/monitors/${s.monitorId}`}>{t("Open monitor")}</a></>}</p>}
           <div className="fld" style={{ borderTop: "1px solid var(--line)", paddingTop: 16, marginTop: 8 }}>
             <span>{t("Remove this server")}</span>
             <p className="faint" style={{ fontSize: 13, margin: "0 0 8px" }}>
@@ -210,6 +247,7 @@ export default function ServerDetail({ id }: { id: string }) {
             <CommandBox cmd={UNINSTALL_CMD} label={t("Copy uninstall command")} />
             <div style={{ marginTop: 12 }}><button className="btn" style={{ color: "var(--down)" }} onClick={remove}>{t("Delete server")}</button></div>
           </div>
+        </div>
         </div>
       </div>
     </>

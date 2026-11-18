@@ -29,6 +29,22 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "servers-list-alerts", date: "2026-11-18", edition: "community",
+    title: { en: "Servers overview and offline alert settings", zh: "服务器总览与离线告警设置" },
+    summary: {
+      en: "The Servers page shows each machine's cores and memory, can hide every IP address, and lets you choose how a server's offline alerts behave.",
+      zh: "“服务器”页面会显示每台机器的核数和内存，可以一键隐藏所有 IP 地址，还能设置服务器离线时如何告警。",
+    },
+    points: [
+      { en: "The list opens with counts of servers online, running hot and offline, and can be searched by host name, IP or tag and filtered by tag; a server at 90% CPU, memory or disk is marked High usage, which is shown only and sends no alert.", zh: "列表顶部汇总在线、占用过高和离线的服务器数量，可以按主机名、IP 或标签搜索，也可以按标签筛选；CPU、内存或硬盘达到 90% 的服务器会标为“占用过高”，这只是提示，不会发告警。" },
+      { en: "Each row and the side panel show the operating system, CPU cores and memory; the panel adds the last hour of CPU, memory and network, every IP address and every mount, and steps to the previous or next server.", zh: "每一行和侧边面板都会显示操作系统、CPU 核数和内存；侧边面板还会显示最近 1 小时的 CPU、内存和网络，所有 IP 地址和挂载点，并能切换到上一台或下一台服务器。" },
+      { en: "Hide IPs masks every address on the list, the side panel and the server page, and is remembered in this browser.", zh: "“隐藏 IP”会遮住列表、侧边面板和详情页里的所有地址，并记在当前浏览器里。" },
+      { en: "On the server page and in the side panel you can turn offline alerts off and on, pick the channels they go to, and mute them for an hour; tags can now be edited on the server page.", zh: "在详情页和侧边面板里可以开关离线告警、选择发送的渠道，也可以静音 1 小时；详情页里现在也能修改标签。" },
+      { en: "Resuming a paused heartbeat monitor no longer reports it as missed straight away; it gets a full interval to check in.", zh: "恢复已暂停的心跳监控时，不再立刻判定为错过心跳，而是等待一个完整的周期。" },
+    ],
+    link: { href: "/docs/servers", label: { en: "Read the server monitoring docs", zh: "阅读服务器监控文档" } },
+  },
+  {
     id: "server-install-name-tags-mcp", date: "2026-11-18", edition: "community",
     title: { en: "Name servers at install, add them via MCP", zh: "安装时命名服务器，并可通过 MCP 添加" },
     summary: {

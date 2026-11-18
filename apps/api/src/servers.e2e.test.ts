@@ -176,6 +176,40 @@ describe.skipIf(!url)("Server monitoring", () => {
     expect((await call("GET", `/servers/${s.id}`)).body).toMatchObject({ name: "edge-1", tags: [] });
   });
 
+  it("turns offline alerts off and on, and mutes them for a while", async () => {
+    const call = await signUp();
+    const { key } = (await call("GET", "/servers/agent-key")).body;
+    await report(key, sample("machine-alerts"));
+    const s = (await call("GET", "/servers")).body.servers[0];
+    expect((await call("GET", `/servers/${s.id}`)).body.alerts).toEqual({ enabled: true, channelIds: [], mutedUntil: null, mutedByMaintenance: false });
+
+    expect((await call("PATCH", `/monitors/${s.monitorId}`, { paused: true })).status).toBe(200);
+    expect((await call("GET", `/servers/${s.id}`)).body.alerts.enabled).toBe(false);
+    const resumed = await call("PATCH", `/monitors/${s.monitorId}`, { paused: false });
+    expect(resumed.status).toBe(200);
+    // the next report is a full interval plus grace away, not overdue the moment alerts come back on
+    expect(new Date(resumed.body.nextCheckAt).getTime()).toBeGreaterThan(Date.now() + 150_000);
+    expect((await call("GET", `/servers/${s.id}`)).body.alerts.enabled).toBe(true);
+
+    expect((await call("POST", `/servers/${s.id}/mute`, { minutes: 1 })).status).toBe(400);
+    const muted = await call("POST", `/servers/${s.id}/mute`, {});
+    expect(muted.status).toBe(200);
+    const until = new Date(muted.body.mutedUntil).getTime();
+    expect(until).toBeGreaterThan(Date.now() + 55 * 60_000);
+    expect(until).toBeLessThan(Date.now() + 61 * 60_000);
+    expect(muted.body.mutedByMaintenance).toBe(false);
+    const windows = (await call("GET", "/maintenance")).body;
+    expect(windows).toHaveLength(1);
+    expect(windows[0].monitorIds).toEqual([s.monitorId]);
+
+    // a maintenance window over the whole project mutes too, and unmuting the server leaves it running
+    await call("POST", "/maintenance", { name: "Upgrade", startsAt: new Date(Date.now() - 1000).toISOString(), endsAt: new Date(Date.now() + 30 * 60_000).toISOString() });
+    const unmuted = await call("DELETE", `/servers/${s.id}/mute`);
+    expect(unmuted.status).toBe(200);
+    expect(unmuted.body.mutedByMaintenance).toBe(true);
+    expect(new Date(unmuted.body.mutedUntil).getTime()).toBeLessThan(Date.now() + 31 * 60_000);
+  });
+
   it("changes the interval, keeps the monitor in step and deletes both", async () => {
     const call = await signUp();
     const { key } = (await call("GET", "/servers/agent-key")).body;
