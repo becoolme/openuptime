@@ -529,6 +529,18 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .modal .type-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:6px}
 .modal .fld .seg{margin-top:6px}
 .modal .fld .route.tog{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:none;cursor:pointer;font:inherit;color:inherit;text-align:left}
+/* collapsible card: a one-line header that opens into the card body (time coverage) */
+.fold{padding:0}
+.fold>summary{display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;list-style:none;user-select:none}
+.fold>summary::-webkit-details-marker{display:none}
+.fold-t{font-weight:600;font-size:15px}
+.fold-h{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fold-chev{flex:none;color:var(--muted);font-size:14px;line-height:1;transition:transform .15s}
+.fold[open]>summary .fold-chev{transform:rotate(180deg)}
+.fold[open]>summary{border-bottom:1px solid var(--line)}
+.fold-body{padding:16px 20px 20px;display:grid;gap:12px;justify-items:start}
+.fold-body>*{margin:0}
+.fold-body dl{justify-self:stretch}
 /* region picker: a one-line summary that opens into a compact grid */
 .region-fld{grid-template-columns:minmax(0,1fr)}
 .region-sum{min-width:0;display:flex;align-items:center;gap:10px;width:100%;margin-top:6px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:none;cursor:pointer;font:inherit;font-weight:400;color:inherit;text-align:left}

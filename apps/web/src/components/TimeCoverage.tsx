@@ -19,10 +19,11 @@ export default function TimeCoverage({ id }: { id: string }) {
     const a = document.createElement("a"); a.href = url; a.download = `monitor-${id}-time-coverage.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return <section className="card sect" style={{ marginBottom: 26 }}>
-    <h3>{t("Time coverage")}</h3>
+  return <details className="card fold" style={{ marginBottom: 26 }}>
+    <summary><span className="fold-t">{t("Time coverage")}</span><span className="faint fold-h">{t("7 or 30 days, on demand")}</span><span className="fold-chev" aria-hidden="true">▾</span></summary>
+    <div className="fold-body">
     <p className="muted">{t("Time inferred from fresh checks, not exact outage duration. Missing history stays unknown. Maintenance is included.")}</p>
-    <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+    <div style={{ display: "flex", gap: 8 }}>
       <select className="in" aria-label={t("Coverage window")} value={days} disabled={busy} onChange={(e) => { setDays(Number(e.target.value) as 7 | 30); setReport(null); }}>
         <option value={7}>{t("7 days")}</option><option value={30}>{t("30 days")}</option>
       </select>
@@ -37,5 +38,6 @@ export default function TimeCoverage({ id }: { id: string }) {
       <p className="muted">{t("Paused and unknown time are separate. The export includes exact millisecond totals and observed maintenance labels.")}</p>
       <button className="btn sm" onClick={download}>{t("Export JSON report")}</button>
     </>}
-  </section>;
+    </div>
+  </details>;
 }

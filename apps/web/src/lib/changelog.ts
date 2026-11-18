@@ -29,6 +29,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "time-coverage-collapsed", date: "2026-11-17", edition: "community",
+    title: { en: "Time coverage folds away", zh: "时间覆盖报告默认收起" },
+    summary: { en: "The time coverage report on a monitor's page is now a single collapsed row that opens when you click it.", zh: "监控详情页上的时间覆盖报告现在收起为一行，点击后展开，再次点击即可收起。" },
+    points: [
+      { en: "Uptime, latency and recent checks now sit near the top of the monitor page instead of below a large report card.", zh: "可用率、延迟和最近检测结果回到监控页靠上的位置，不再被一张大的报告卡片挤到下方。" },
+    ],
+  },
+  {
     id: "more-private-ipv6-refused",
     date: "2026-11-16",
     edition: "community",
