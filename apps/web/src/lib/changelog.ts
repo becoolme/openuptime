@@ -29,6 +29,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "server-install-name-tags-mcp", date: "2026-11-18", edition: "community",
+    title: { en: "Name servers at install, add them via MCP", zh: "安装时命名服务器，并可通过 MCP 添加" },
+    summary: {
+      en: "Give a server its name and tags in the install command, and let an AI agent fetch that command and manage servers through MCP.",
+      zh: "可以在安装命令里指定服务器的名称和标签，AI 助手也能通过 MCP 获取安装命令并管理服务器。",
+    },
+    points: [
+      { en: "The Add server dialog has optional name and tags fields, which become --name and --tags in the command; without a name the server keeps showing its host name.", zh: "“添加服务器”对话框新增可选的名称和标签输入框，会作为 --name 和 --tags 写入命令；不填名称时仍显示主机名。" },
+      { en: "Name and tags apply when the server first reports; after that, what you set on its page stays, even if the agent is reinstalled with other values.", zh: "名称和标签在服务器第一次上报时生效；之后以详情页里的设置为准，用其他值重新安装 agent 也不会覆盖。" },
+      { en: "New MCP tools: get_server_install returns the install command with the project's key, and list_servers, get_server, update_server, delete_server and rotate_server_agent_key cover the rest.", zh: "新增 MCP 工具：get_server_install 返回带项目密钥的安装命令，list_servers、get_server、update_server、delete_server 和 rotate_server_agent_key 用于查看和管理服务器。" },
+      { en: "Naming at install needs agent 0.1.6 or later; older agents keep reporting and register under the host name.", zh: "安装时命名需要 agent 0.1.6 或更新版本；旧版 agent 照常上报，并以主机名注册。" },
+    ],
+    link: { href: "/docs/servers#options", label: { en: "Read the install options", zh: "查看安装选项" } },
+  },
+  {
     id: "server-monitoring", date: "2026-11-18", edition: "community",
     title: { en: "Server monitoring", zh: "服务器监控" },
     summary: {

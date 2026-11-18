@@ -9,6 +9,9 @@
 # Options:
 #   --key KEY          the project's agent key (required to install)
 #   --endpoint URL     where the agent reports (default: https://openuptime.app); https, or http to this machine
+#   --name NAME        the server's name in the dashboard (default: its host name)
+#   --tags A,B         comma-separated tags for the server
+#                      Name and tags apply when the server first reports; after that, change them in the dashboard.
 #   --allow-http       accept a plain http:// endpoint on another machine, such as a self-hosted install on a LAN
 #                      without TLS. The key and the metrics then cross the network unencrypted.
 #   --binary-url URL   download the agent from here instead of GitHub releases (mirrors, air-gapped installs);
@@ -22,6 +25,8 @@
 set -eu
 
 KEY=""
+SERVER_NAME=""
+SERVER_TAGS=""
 ENDPOINT="https://openuptime.app"
 BINARY_URL="${OPENUPTIME_AGENT_URL:-}"
 SHA256=""
@@ -38,6 +43,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --key) KEY="${2:-}"; shift 2 ;;
     --key=*) KEY="${1#*=}"; shift ;;
+    --name) SERVER_NAME="${2:-}"; shift 2 ;;
+    --name=*) SERVER_NAME="${1#*=}"; shift ;;
+    --tags) SERVER_TAGS="${2:-}"; shift 2 ;;
+    --tags=*) SERVER_TAGS="${1#*=}"; shift ;;
     --endpoint) ENDPOINT="${2:-}"; shift 2 ;;
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --binary-url) BINARY_URL="${2:-}"; shift 2 ;;
@@ -65,6 +74,12 @@ fi
 # what goes into the env file must be a plain value: no spaces, quotes, backslashes or $
 # grep reads line by line, so a value holding a newline is refused before it is matched
 matches() { [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] && printf '%s' "$1" | grep -Eq "$2"; }
+# a name or tags may hold spaces and any script, but no quote, $, backtick, backslash or control character, so the
+# value stays literal inside the env file's double quotes
+plain_text() {
+  [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] && [ "$(printf '%s' "$1" | wc -c)" -le 1024 ] \
+    && [ "$(printf '%s' "$1" | LC_ALL=C tr -d '"$`\\\047' | LC_ALL=C tr -d '[:cntrl:]')" = "$1" ]
+}
 URL_CHARS='^[]A-Za-z0-9._~:/?#@!&()*+,;=%[-]+$'
 matches "$KEY" '^oua_[A-Za-z0-9]{16,64}$' || fail "pass the agent key from the dashboard: --key oua_…"
 matches "$ENDPOINT" "$URL_CHARS" || fail "--endpoint is not a valid URL"
@@ -75,6 +90,8 @@ if ! matches "$ENDPOINT" '^https://[^/]+' && ! matches "$ENDPOINT" '^http://(loc
   printf 'openuptime-agent: warning: %s is plain http; the key and metrics cross the network unencrypted\n' "$ENDPOINT" >&2
 fi
 ENDPOINT="${ENDPOINT%/}"
+[ -z "$SERVER_NAME" ] || plain_text "$SERVER_NAME" || fail "--name may not hold quotes, \$, backticks, backslashes or control characters"
+[ -z "$SERVER_TAGS" ] || plain_text "$SERVER_TAGS" || fail "--tags may not hold quotes, \$, backticks, backslashes or control characters"
 [ -z "$SHA256" ] || matches "$SHA256" '^[0-9a-fA-F]{64}$' || fail "--sha256 takes 64 hex characters"
 
 case "$(uname -m)" in
@@ -127,6 +144,8 @@ cat > "$ENV_FILE" <<EOF
 OPENUPTIME_KEY=$KEY
 OPENUPTIME_ENDPOINT=$ENDPOINT
 EOF
+[ -z "$SERVER_NAME" ] || printf 'OPENUPTIME_NAME="%s"\n' "$SERVER_NAME" >> "$ENV_FILE"
+[ -z "$SERVER_TAGS" ] || printf 'OPENUPTIME_TAGS="%s"\n' "$SERVER_TAGS" >> "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 
 umask 022

@@ -6,13 +6,16 @@ const maxListed = 64
 
 // report is the body of POST /api/agent/report. Byte counts are bytes, rates are bytes per second, cpu is a percentage.
 type report struct {
-	Version   string     `json:"version"`
-	MachineID string     `json:"machineId"`
-	Hostname  string     `json:"hostname"`
-	Host      hostInfo   `json:"host"`
-	Metrics   metrics    `json:"metrics"`
-	Disks     []disk     `json:"disks"`
-	Ifaces    []netIface `json:"interfaces"`
+	Version   string `json:"version"`
+	MachineID string `json:"machineId"`
+	Hostname  string `json:"hostname"`
+	// used only when the server registers: the dashboard owns its name and tags after that
+	Name    string     `json:"name,omitempty"`
+	Tags    []string   `json:"tags,omitempty"`
+	Host    hostInfo   `json:"host"`
+	Metrics metrics    `json:"metrics"`
+	Disks   []disk     `json:"disks"`
+	Ifaces  []netIface `json:"interfaces"`
 }
 
 type hostInfo struct {

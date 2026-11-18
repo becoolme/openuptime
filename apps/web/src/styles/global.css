@@ -749,6 +749,7 @@ a.muted:hover{color:var(--ink)}
 .srv-safe svg{flex:none;width:20px;height:20px;color:var(--accent);margin-top:1px}
 .srv-safe b{font-weight:600;display:block;margin-bottom:2px}
 .srv-safe p{color:var(--muted);margin:0}.srv-safe p+p{margin-top:4px}
+.srv-opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:560px){.srv-opts{grid-template-columns:1fr}}
 .srv-cmdbox{display:flex;gap:8px;align-items:flex-start}.srv-cmdbox .srv-cmd{flex:1;min-width:0;padding:10px 12px}.srv-cmdbox .btn{flex:none}
 .srv-uninstall{font-size:13px}.srv-uninstall summary{cursor:pointer;color:var(--muted)}.srv-uninstall[open] summary{margin-bottom:8px}.srv-uninstall p{margin:0 0 8px}
 @media (max-width:560px){.srv-cmdbox{flex-direction:column;align-items:stretch}}

@@ -37,10 +37,20 @@ const str = (max: number) => cut(max).default("");
 const list = <T extends z.ZodTypeAny>(item: T, max: number) =>
   z.preprocess((v) => v ?? undefined, z.array(item).default([]).transform((a) => a.slice(0, max)));
 const addresses = list(cut(64), 32);
+// control characters never belong in a name or tag
+const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max);
+/** The name the install command gave, cut to size; anything odd is dropped rather than refusing the report. */
+const startName = z.unknown().optional().transform((v) => (typeof v === "string" ? clean(v, 120) : ""));
+/** The tags the install command gave: at most 20, each cut to 32 characters, blanks and repeats dropped. */
+const startTags = z.unknown().optional().transform((v) =>
+  Array.isArray(v) ? [...new Set(v.filter((t): t is string => typeof t === "string").map((t) => clean(t, 32)).filter(Boolean))].slice(0, 20) : []);
 export const reportSchema = z.object({
   version: str(32),
   machineId: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/),
   hostname: z.string().trim().max(253).default(""),
+  // set by the install command; used only when the machine registers, since the dashboard owns them afterwards
+  name: startName,
+  tags: startTags,
   host: z.object({
     os: str(64), platform: str(64), platformVersion: str(64), kernel: str(128), arch: str(32), cpuModel: str(200),
     cores: z.number().int().min(0).max(4096).default(0), memTotal: bytes.default(0), swapTotal: bytes.default(0),
@@ -98,10 +108,10 @@ export const agent = new Hono<AppEnv>()
       const plan = await entitlements.plan(owner.orgId);
       const cap = plan?.maxServers ?? null;
       if (plan && cap !== null && (await repo.serverCount(owner.orgId)) >= cap) return serverLimit(c, { ...plan, maxServers: cap });
-      const name = (r.hostname || r.machineId).slice(0, 120);
+      const name = (r.name || r.hostname || r.machineId).slice(0, 120);
       const intervalSec = Math.max(DEFAULT_SERVER_INTERVAL_SEC, minServerInterval(plan));
       const monitor = await newServerMonitor(repo, owner.orgId, owner.projectId, name, intervalSec);
-      const made = await repo.createServer(owner.orgId, owner.projectId, { machineId: r.machineId, name, intervalSec, monitorId: monitor.id, host });
+      const made = await repo.createServer(owner.orgId, owner.projectId, { machineId: r.machineId, name, tags: r.tags, intervalSec, monitorId: monitor.id, host });
       // another report of the same machine registered it first: drop the spare monitor
       if (!made.created) await repo.deleteMonitor(owner.orgId, monitor.id, null);
       // two new machines that passed the count at once: the later one gives its place back
@@ -141,6 +151,28 @@ export const agent = new Hono<AppEnv>()
     }
     return c.json({ ok: true, interval: s.intervalSec });
   });
+
+/** The install script; the dashboard's Add server dialog points at the same file. */
+export const INSTALL_SCRIPT = "https://raw.githubusercontent.com/becoolme/openuptime/main/apps/agent/install.sh";
+
+// install.sh refuses quotes, $, backticks, backslashes and control characters in a name or tags
+const SHELL_SAFE = /^[^"'$`\\\u0000-\u001f\u007f]+$/;
+const installSchema = z.object({
+  name: z.string().trim().min(1).max(120).regex(SHELL_SAFE, "No quotes, $, backticks or backslashes").optional(),
+  tags: z.array(z.string().trim().min(1).max(32).regex(SHELL_SAFE, "No quotes, $, backticks or backslashes").refine((t) => !t.includes(","), "No commas")).max(20).optional(),
+});
+
+const shellWord = (v: string) => (/^[A-Za-z0-9._,:@%+=/-]+$/.test(v) ? v : `'${v.replace(/'/g, `'\\''`)}'`);
+
+/** The command that installs the agent; `--allow-http` is added for a plain http endpoint on another machine. */
+export function installCommand(o: { key: string; endpoint: string; name?: string; tags?: string[] }) {
+  const args = ["--key", o.key, "--endpoint", shellWord(o.endpoint)];
+  if (o.name) args.push("--name", shellWord(o.name));
+  const tags = [...new Set(o.tags ?? [])];
+  if (tags.length) args.push("--tags", shellWord(tags.join(",")));
+  if (/^http:\/\//.test(o.endpoint) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(o.endpoint)) args.push("--allow-http");
+  return `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- ${args.join(" ")}`;
+}
 
 const RANGES = { "1h": { sec: 3600, step: 60 }, "6h": { sec: 6 * 3600, step: 300 }, "24h": { sec: 86400, step: 900 }, "7d": { sec: 7 * 86400, step: 3600 } } as const;
 
@@ -200,6 +232,18 @@ export const servers = new Hono<AppEnv>()
   .post("/agent-key/rotate", requireManager, async (c) => {
     const key = `oua_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     return c.json({ key: await c.get("repo").rotateServerAgentKey(c.get("orgId"), c.get("projectId"), key) });
+  })
+  // the same key as above, ready to paste: for agents and scripts setting servers up (POST, so OAuth clients need write scope)
+  .post("/install", requireManager, async (c) => {
+    const parsed = installSchema.safeParse((await c.req.json().catch(() => null)) ?? {});
+    if (!parsed.success) return c.json({ error: "Invalid name or tags", issues: parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`) }, 400);
+    const key = await c.get("repo").serverAgentKey(c.get("orgId"), c.get("projectId"));
+    const endpoint = (c.env.WEB_ORIGIN || new URL(c.req.url).origin).replace(/\/+$/, "");
+    return c.json({
+      key, endpoint, command: installCommand({ key, endpoint, ...parsed.data }),
+      uninstallCommand: `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --uninstall`, script: INSTALL_SCRIPT,
+      note: "Run the command as root on a Linux server with systemd. Name and tags apply when the server first reports; after that, rename or retag the server in OpenUptime, not by reinstalling.",
+    });
   })
   .get("/:id", uuidParams, async (c) => {
     const repo = c.get("repo");

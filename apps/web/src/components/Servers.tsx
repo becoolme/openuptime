@@ -222,15 +222,25 @@ export function CommandBox({ cmd, label }: { cmd: string; label?: string }) {
   );
 }
 
+// install.sh refuses these in a name or tags, so the command never needs more than single quotes
+const UNSAFE_TEXT = /["'$`\\\u0000-\u001f\u007f]/;
+const shellWord = (v: string) => (/^[A-Za-z0-9._,:@%+=/-]+$/.test(v) ? v : `'${v}'`);
+
 function AddServer({ onClose, limit }: { onClose: () => void; limit: { max: number; upgradeUrl: string | null } | null }) {
   const [key, setKey] = useState("");
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [rotating, setRotating] = useState(false);
+  const [name, setName] = useState("");
+  const [tags, setTags] = useState("");
   useEffect(() => { api.serverAgentKey().then((r) => setKey(r.key)).catch((e) => setErr((e as Error).message)); }, []);
   // a self-hosted dashboard on plain http (a LAN without TLS) needs the script's explicit opt-in
   const plainHttp = location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-  const cmd = key ? `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint ${location.origin}${plainHttp ? " --allow-http" : ""}` : "";
+  const tagList = [...new Set(tags.split(",").map((x) => x.trim()).filter(Boolean))];
+  const optionErr = UNSAFE_TEXT.test(name) || UNSAFE_TEXT.test(tags) ? t("A name or tag may not hold quotes, $, backticks or backslashes.")
+    : tagList.length > 20 || tagList.some((x) => x.length > 32) ? t("Use at most 20 tags, each up to 32 characters.") : "";
+  const options = [name.trim() && `--name ${shellWord(name.trim())}`, tagList.length > 0 && `--tags ${shellWord(tagList.join(","))}`].filter(Boolean).join(" ");
+  const cmd = key && !optionErr ? `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --key ${key} --endpoint ${location.origin}${options ? ` ${options}` : ""}${plainHttp ? " --allow-http" : ""}` : "";
 
   async function rotate() {
     if (!confirm(t("Servers using the current key stop reporting until you reinstall them with the new one. Rotate the key?"))) return;
@@ -254,7 +264,12 @@ function AddServer({ onClose, limit }: { onClose: () => void; limit: { max: numb
           </p>
         )}
         {err && <p className="err">{err}</p>}
-        {!err && <pre className="srv-cmd mono">{cmd || t("Loading…")}</pre>}
+        <div className="srv-opts">
+          <label className="fld">{t("Name (optional)")}<input className="in" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("The server's hostname")} /></label>
+          <label className="fld">{t("Tags (optional)")}<input className="in" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="prod, eu-west" /></label>
+        </div>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>{optionErr ? <span className="err">{optionErr}</span> : t("Used when the server first reports. Without a name it shows its hostname; rename it here at any time.")}</p>
+        {!err && <pre className="srv-cmd mono">{cmd || (optionErr ? "" : t("Loading…"))}</pre>}
         {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}
         <div className="srv-safe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>

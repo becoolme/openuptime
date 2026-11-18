@@ -39,10 +39,12 @@ sudo systemctl restart openuptime-agent`;
     <h2 id="install">Install</h2>
     <ol>
       <li>Open <strong>Servers</strong> and click <strong>Add server</strong>. Only workspace owners and admins see the key.</li>
+      <li>Optionally give the server a name and tags. Leave the name empty to use the server's host name.</li>
       <li>Click <strong>Copy command</strong>. The command carries your project's agent key and this site's address.</li>
       <li>Run it on the server. It finishes in a few seconds.</li>
-      <li>The server appears in the list within about a minute, named after its host name. You can rename it on its page.</li>
+      <li>The server appears in the list within about a minute, named after its host name unless you gave it a name. You can rename it on its page.</li>
     </ol>
+    <p>An AI agent connected through <a href="/docs/mcp">MCP</a> can fetch the same command with the <code>get_server_install</code> tool, then read servers with <code>list_servers</code> and <code>get_server</code>.</p>
     <p>The command looks like this:</p>
     <pre><code>{install}</code></pre>
     <p>The script comes straight from the <a href={source}>public repository</a>, not from your OpenUptime site, so what runs as root is the published source. To read it before running it, download it first:</p>
@@ -82,18 +84,23 @@ sudo systemctl restart openuptime-agent`;
       <tbody>
         <tr><td><code>--key oua_…</code></td><td>The project's agent key. Required to install.</td></tr>
         <tr><td><code>--endpoint URL</code></td><td>Where the agent reports. The dashboard fills in its own address. It must use <code>https://</code>; plain <code>http://</code> is accepted only for <code>localhost</code>, <code>127.0.0.1</code> and <code>[::1]</code>, unless you add <code>--allow-http</code>.</td></tr>
+        <tr><td><code>--name NAME</code></td><td>The server's name in OpenUptime. Without it, the server takes its host name. Quotes, <code>$</code>, backticks and backslashes are refused.</td></tr>
+        <tr><td><code>--tags A,B</code></td><td>Comma-separated tags for the server: up to 20, each up to 32 characters.</td></tr>
         <tr><td><code>--allow-http</code></td><td>Accept a plain <code>http://</code> endpoint on another machine, for a self-hosted install on a network without TLS. The key and the metrics then cross the network unencrypted, and the script prints a warning. The dashboard adds this flag itself when you open it over plain HTTP.</td></tr>
         <tr><td><code>--binary-url URL</code></td><td>Download the agent from this <code>https://</code> address instead of GitHub. The environment variable <code>OPENUPTIME_AGENT_URL</code> does the same.</td></tr>
         <tr><td><code>--sha256 HEX</code></td><td>The SHA-256 the agent must have. Without it, the script reads <code>SHA256SUMS</code> from the same folder as the agent.</td></tr>
         <tr><td><code>--uninstall</code></td><td>Stop the service and remove the agent. See <a href="#uninstall">Uninstall</a>.</td></tr>
       </tbody>
     </table>
+    <p><code>--name</code> and <code>--tags</code> apply only when the server first reports; after that, OpenUptime keeps whatever is set on the server's page, and running the script again with other values does not change it. They need agent 0.1.6 or later; older agents register under the host name.</p>
     <p>The agent itself accepts these flags, or the environment variables in the unit's env file:</p>
     <table>
       <thead><tr><th>Flag</th><th>Environment</th><th>Default</th></tr></thead>
       <tbody>
         <tr><td><code>--key</code></td><td><code>OPENUPTIME_KEY</code></td><td>none, required</td></tr>
         <tr><td><code>--endpoint</code></td><td><code>OPENUPTIME_ENDPOINT</code></td><td><code>https://openuptime.app</code></td></tr>
+        <tr><td><code>--name</code></td><td><code>OPENUPTIME_NAME</code></td><td>the host name; used when the server registers</td></tr>
+        <tr><td><code>--tags</code></td><td><code>OPENUPTIME_TAGS</code></td><td>none; comma-separated, used when the server registers</td></tr>
         <tr><td><code>--ignore-interfaces</code></td><td><code>OPENUPTIME_IGNORE_INTERFACES</code></td><td><code>lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan</code>: interface name prefixes to leave out</td></tr>
         <tr><td><code>--once</code></td><td></td><td>Print one report as JSON and exit without sending it</td></tr>
         <tr><td><code>--version</code></td><td></td><td>Print the version and exit</td></tr>
@@ -183,10 +190,12 @@ sudo systemctl restart openuptime-agent`;
     <h2 id="install-zh">安装</h2>
     <ol>
       <li>打开<strong>服务器</strong>页面，点击<strong>添加服务器</strong>。只有工作区所有者和管理员能看到密钥。</li>
+      <li>可以为服务器填写名称和标签。名称留空时使用服务器的主机名。</li>
       <li>点击<strong>复制命令</strong>。命令里已经带上了项目的 agent 密钥和当前站点地址。</li>
       <li>在服务器上运行，几秒钟即可完成。</li>
-      <li>大约一分钟内，服务器会出现在列表中，名称默认是它的主机名，可以在详情页修改。</li>
+      <li>大约一分钟内，服务器会出现在列表中，没有填写名称时显示它的主机名，之后可以在详情页修改。</li>
     </ol>
+    <p>通过 <a href="/docs/mcp">MCP</a> 连接的 AI 助手可以用 <code>get_server_install</code> 工具拿到同样的安装命令，再用 <code>list_servers</code> 和 <code>get_server</code> 查看服务器。</p>
     <p>命令大致如下：</p>
     <pre><code>{install}</code></pre>
     <p>安装脚本直接来自<a href={source}>公开仓库</a>，而不是你的 OpenUptime 站点，所以以 root 身份运行的就是公开的源码。想先看一遍再运行，可以先下载：</p>
@@ -226,18 +235,23 @@ sudo systemctl restart openuptime-agent`;
       <tbody>
         <tr><td><code>--key oua_…</code></td><td>项目的 agent 密钥，安装时必填。</td></tr>
         <tr><td><code>--endpoint URL</code></td><td>agent 上报的地址。后台复制的命令会自动填入当前站点地址。必须使用 <code>https://</code>，只有 <code>localhost</code>、<code>127.0.0.1</code> 和 <code>[::1]</code> 允许用 <code>http://</code>，除非加上 <code>--allow-http</code>。</td></tr>
+        <tr><td><code>--name NAME</code></td><td>服务器在 OpenUptime 中的名称，不传时使用主机名。不能包含引号、<code>$</code>、反引号和反斜杠。</td></tr>
+        <tr><td><code>--tags A,B</code></td><td>服务器的标签，用逗号分隔，最多 20 个，每个不超过 32 个字符。</td></tr>
         <tr><td><code>--allow-http</code></td><td>允许上报到其他机器上的 <code>http://</code> 地址，适用于没有配置 TLS 的内网自托管实例。此时密钥和指标会以明文在网络上传输，脚本也会打印警告。通过 HTTP 打开后台时，复制出的命令会自动带上这个参数。</td></tr>
         <tr><td><code>--binary-url URL</code></td><td>从这个 <code>https://</code> 地址下载 agent，而不是从 GitHub 下载。也可以用环境变量 <code>OPENUPTIME_AGENT_URL</code> 指定。</td></tr>
         <tr><td><code>--sha256 HEX</code></td><td>agent 应有的 SHA-256 值。不传时，脚本读取 agent 同一目录下的 <code>SHA256SUMS</code>。</td></tr>
         <tr><td><code>--uninstall</code></td><td>停止服务并删除 agent，详见<a href="#uninstall-zh">卸载</a>。</td></tr>
       </tbody>
     </table>
+    <p><code>--name</code> 和 <code>--tags</code> 只在服务器第一次上报时生效。之后以服务器详情页里的设置为准，用其他值重新运行脚本也不会改动。这两个选项需要 agent 0.1.6 或更新版本，旧版 agent 仍以主机名注册。</p>
     <p>agent 本身支持以下参数，也可以通过服务的 env 文件里的环境变量设置：</p>
     <table>
       <thead><tr><th>参数</th><th>环境变量</th><th>默认值</th></tr></thead>
       <tbody>
         <tr><td><code>--key</code></td><td><code>OPENUPTIME_KEY</code></td><td>无，必填</td></tr>
         <tr><td><code>--endpoint</code></td><td><code>OPENUPTIME_ENDPOINT</code></td><td><code>https://openuptime.app</code></td></tr>
+        <tr><td><code>--name</code></td><td><code>OPENUPTIME_NAME</code></td><td>主机名；仅在服务器注册时使用</td></tr>
+        <tr><td><code>--tags</code></td><td><code>OPENUPTIME_TAGS</code></td><td>无；用逗号分隔，仅在服务器注册时使用</td></tr>
         <tr><td><code>--ignore-interfaces</code></td><td><code>OPENUPTIME_IGNORE_INTERFACES</code></td><td><code>lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan</code>：要排除的网卡名前缀</td></tr>
         <tr><td><code>--once</code></td><td></td><td>以 JSON 输出一次上报内容后退出，不会发送</td></tr>
         <tr><td><code>--version</code></td><td></td><td>输出版本号后退出</td></tr>
