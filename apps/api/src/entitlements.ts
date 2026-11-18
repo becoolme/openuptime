@@ -42,6 +42,8 @@ export type Plan = {
   maxActiveMonitors: number | null;
   /** The shortest check interval the plan allows, in seconds. */
   minIntervalSec: number;
+  /** The shortest server-agent report interval, in seconds. Absent = 60; deployments without plans allow 30. */
+  minServerIntervalSec?: number;
   /** Regions one monitor may check from (`auto` counts as one). Absent or null = no cap. */
   maxRegions?: number | null;
   /** Whether a status page may hide OpenUptime's name and mark. Absent = yes, like the other limits; an edition that sells it sets false on the plans without it. */

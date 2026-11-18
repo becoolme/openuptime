@@ -25,7 +25,9 @@ import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
 import { availableRegions } from "./probes";
 import { PROBE_TYPES } from "./regions";
-import { completeRecovery, runDueChecks } from "./scheduler";
+import { runDueChecks } from "./scheduler";
+import { acceptHeartbeat } from "./heartbeat";
+import { agent, servers } from "./routes/servers";
 
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
   const edition = options.edition ?? community;
@@ -145,18 +147,12 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     const m = await repo.monitorByHeartbeatToken(c.req.param("token"));
     if (!m) return c.json({ error: "Unknown token" }, 404);
     // a paused monitor stays paused: the ping is acknowledged but changes nothing
-    if (m.status === "paused") return c.json({ ok: true, paused: true });
-    const accepted = await repo.recordHeartbeatObservation(m);
-    if (!accepted) return c.json({ ok: true, paused: true });
-    await repo.recordCheck({ monitorId: m.id, ok: true });
-    const wasDown = accepted.status === "down";
-    const ready = (accepted.consecutiveSuccesses ?? 0) >= (accepted.recoveryThreshold ?? 1);
-    // the status stays "down" until the incident is resolved, so a failed resolve is retried by the next ping
-    if (wasDown && ready) {
-      await completeRecovery(repo, accepted, "up", 0, c.get("entitlements"));
-    }
+    if (!(await acceptHeartbeat(repo, m, c.get("entitlements")))) return c.json({ ok: true, paused: true });
     return c.json({ ok: true });
   });
+
+  // server agents report here with their project's install key; it can do nothing else
+  app.route("/api/agent", agent);
 
   // trigger checks from an external scheduler when Workers Cron is not available
   app.post("/internal/run-checks", async (c) => {
@@ -190,7 +186,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   const authed = new Hono<AppEnv>();
   authed.use("*", requireOrg);
   // routes that act on the active project: in the "All projects" view only their reads work
-  for (const path of ["/monitors", "/incidents", "/channels", "/alert-log", "/maintenance", "/status-pages"]) authed.use(`${path}/*`, rejectInAllProjects);
+  for (const path of ["/monitors", "/incidents", "/channels", "/alert-log", "/maintenance", "/status-pages", "/servers"]) authed.use(`${path}/*`, rejectInAllProjects);
   authed.route("/projects", projects);
   authed.route("/monitors", monitors);
   authed.route("/incidents", incidents);
@@ -200,6 +196,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   authed.route("/settings", settings);
   authed.route("/maintenance", maintenance);
   authed.route("/status-pages", statusPages);
+  authed.route("/servers", servers);
   // what this credential may reach: a session sees every workspace of the user, a key or an agent only what it was given
   authed.get("/workspaces", async (c) => {
     const repo = c.get("repo");

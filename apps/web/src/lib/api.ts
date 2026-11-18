@@ -228,6 +228,25 @@ export type TimeCoverage = {
   observedMaintenanceMs: number; policy: "bounded-observation-v1";
 };
 
+/** A machine running the server agent: host details, and the last report in `snapshot`. */
+export type ServerSnapshot = {
+  at: string; platformVersion?: string; uptimeSec?: number;
+  metrics: { cpu: number; memUsed: number; memCached: number; swapUsed: number; load1: number; load5: number; load15: number; diskReadBps: number; diskWriteBps: number; netRxBps: number; netTxBps: number };
+  disks: { device: string; mount: string; fs: string; total: number; used: number }[];
+  interfaces: { name: string; mac: string; ipv4: string[]; ipv6: string[]; rxBps: number; txBps: number }[];
+};
+export type Server = {
+  id: string; name: string; tags: string[]; hostname: string; os: string; platform: string; kernel: string; arch: string; cpuModel: string;
+  cores: number; memTotal: number; swapTotal: number; bootTime: string | null; agentVersion: string; intervalSec: number;
+  lastSeenAt: string | null; createdAt: string; monitorId: string | null; snapshot: ServerSnapshot | null;
+  /** reported within the last three intervals */
+  online: boolean;
+};
+export type ServerList = { servers: (Server & { cpuSeries: number[] })[]; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };
+export type ServerMetricPoint = { t: string; cpu: number; memUsed: number; swapUsed: number; diskUsed: number; diskTotal: number; diskReadBps: number; diskWriteBps: number; netRxBps: number; netTxBps: number; load1: number };
+export type ServerRange = "1h" | "6h" | "24h" | "7d";
+export type ServerDetail = Server & { points: ServerMetricPoint[]; stepSec: number; monitorStatus: Monitor["status"] | null; minIntervalSec: number; intervals: number[]; upgradeUrl: string | null };
+
 export const api = {
   timeCoverage: (id: string, days: 7 | 30) => req<TimeCoverage>(`/monitors/${id}/time-coverage?days=${days}`),
   monitors: () => req<Monitor[]>("/monitors"),
@@ -253,6 +272,12 @@ export const api = {
   createProject: (name: string) => req<Project>("/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: string, name: string) => req<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   deleteProject: (id: string) => req<void>(`/projects/${id}`, { method: "DELETE" }),
+  servers: () => req<ServerList>("/servers"),
+  server: (id: string, range: ServerRange) => req<ServerDetail>(`/servers/${id}?range=${range}`),
+  updateServer: (id: string, b: Partial<Pick<Server, "name" | "tags" | "intervalSec">>) => req<Server>(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  deleteServer: (id: string) => req<void>(`/servers/${id}`, { method: "DELETE" }),
+  serverAgentKey: () => req<{ key: string }>("/servers/agent-key"),
+  rotateServerAgentKey: () => req<{ key: string }>("/servers/agent-key/rotate", { method: "POST" }),
   maintenance: () => req<Maintenance[]>("/maintenance"),
   createMaintenance: (b: Omit<Maintenance, "id">) => req<Maintenance>("/maintenance", { method: "POST", body: JSON.stringify(b) }),
   endMaintenance: (id: string) => req<{ ok: boolean }>(`/maintenance/${id}/end`, { method: "POST" }),

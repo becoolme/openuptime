@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ApiFlow, DomainExpiry, IncidentDiagnostics, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
+import type { ApiFlow, ServerSnapshot, DomainExpiry, IncidentDiagnostics, JsonAssertion, McpConfig, McpToolSchema, McpObservation, McpCheckDiagnostics, McpAlertEvent } from "@openuptime/repo";
 import { organization, user } from "./auth-schema";
 
 export const monitorType = pgEnum("monitor_type", ["http", "tcp", "dns", "heartbeat", "postgres", "mysql", "redis", "websocket", "domain", "mcp", "evm", "solana", "ping"]);
@@ -443,6 +443,71 @@ export const statusPageComponent = pgTable("status_page_component", {
   position: integer("position").notNull().default(0),
   visible: boolean("visible").notNull().default(true),
 });
+
+/** The install key of a project's server agents: it can only report metrics, and is shown again in the dashboard. */
+export const serverAgentKey = pgTable("server_agent_key", {
+  projectId: uuid("project_id").primaryKey().references(() => project.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  key: text("key").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+});
+
+/** A machine running the agent; registered by its first report. */
+export const server = pgTable(
+  "server",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull().references(() => project.id, { onDelete: "cascade" }),
+    /** heartbeat monitor that turns missed reports into incidents; null = no offline alerts */
+    monitorId: uuid("monitor_id").references(() => monitor.id, { onDelete: "set null" }),
+    machineId: text("machine_id").notNull(),
+    name: text("name").notNull(),
+    tags: text("tags").array().notNull().default([]),
+    hostname: text("hostname").notNull().default(""),
+    os: text("os").notNull().default(""),
+    platform: text("platform").notNull().default(""),
+    kernel: text("kernel").notNull().default(""),
+    arch: text("arch").notNull().default(""),
+    cpuModel: text("cpu_model").notNull().default(""),
+    cores: integer("cores").notNull().default(0),
+    memTotal: bigint("mem_total", { mode: "number" }).notNull().default(0),
+    swapTotal: bigint("swap_total", { mode: "number" }).notNull().default(0),
+    bootTime: timestamp("boot_time", { withTimezone: true }),
+    agentVersion: text("agent_version").notNull().default(""),
+    intervalSec: integer("interval_sec").notNull().default(60),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    /** the latest report: metrics, every disk and mount, every interface with its addresses */
+    snapshot: jsonb("snapshot").$type<ServerSnapshot>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("server_machine_unique").on(t.projectId, t.machineId), index("server_org_idx").on(t.organizationId)],
+);
+
+/** One report's numbers; raw rows are kept for a week. */
+export const serverMetric = pgTable(
+  "server_metric",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    serverId: uuid("server_id").notNull().references(() => server.id, { onDelete: "cascade" }),
+    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    cpu: doublePrecision("cpu").notNull().default(0),
+    memUsed: bigint("mem_used", { mode: "number" }).notNull().default(0),
+    memCached: bigint("mem_cached", { mode: "number" }).notNull().default(0),
+    swapUsed: bigint("swap_used", { mode: "number" }).notNull().default(0),
+    diskUsed: bigint("disk_used", { mode: "number" }).notNull().default(0),
+    diskTotal: bigint("disk_total", { mode: "number" }).notNull().default(0),
+    diskReadBps: doublePrecision("disk_read_bps").notNull().default(0),
+    diskWriteBps: doublePrecision("disk_write_bps").notNull().default(0),
+    netRxBps: doublePrecision("net_rx_bps").notNull().default(0),
+    netTxBps: doublePrecision("net_tx_bps").notNull().default(0),
+    load1: doublePrecision("load1").notNull().default(0),
+    load5: doublePrecision("load5").notNull().default(0),
+    load15: doublePrecision("load15").notNull().default(0),
+  },
+  (t) => [index("server_metric_server_ts_idx").on(t.serverId, t.ts)],
+);
 
 export const monitorRelations = relations(monitor, ({ many }) => ({
   results: many(checkResult),

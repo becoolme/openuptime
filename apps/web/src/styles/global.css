@@ -701,3 +701,84 @@ a.muted:hover{color:var(--ink)}
 @keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
 @media (prefers-reduced-motion:reduce){.sk{animation:none}}
 .sort-h{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px}.sort-h:hover,.sort-h.on{color:var(--ink)}.sort-h:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}.sort-h i{font-style:normal}
+
+/* ── servers ── */
+.srv-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.srv-bar .chips{margin-top:0}.srv-bar .chip{gap:6px}.srv-bar .chip .dot{width:7px;height:7px}
+.srv-bar .in{width:min(280px,100%)}
+.srv-row{cursor:pointer;transition:background .12s}
+.srv-row:hover,.srv-row.on{background:var(--surface-2)}
+.srv-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.srv-net{font-size:12px;line-height:1.5;color:var(--muted)}
+.meter{display:flex;align-items:center;gap:8px;min-width:0}
+.meter i{flex:1;min-width:28px;height:6px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.meter u{display:block;height:100%;border-radius:inherit;background:var(--accent);text-decoration:none}
+.meter.warn u{background:var(--warn)}.meter.bad u{background:var(--down)}
+.meter b{font:500 12.5px var(--mono);color:var(--muted);min-width:34px;text-align:right}
+.meter.bad b{color:var(--down)}
+.spark{display:block;width:100%;height:100%}
+.spark-line{fill:none;stroke:var(--accent);stroke-width:1.5}
+.spark-fill{fill:color-mix(in srgb,var(--accent) 12%,transparent);stroke:none}
+.drawer-scrim{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.28);animation:srv-fade .18s ease}
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:46;width:min(460px,100vw);display:flex;flex-direction:column;background:var(--surface);border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.16);animation:srv-in .22s cubic-bezier(.2,.8,.2,1)}
+.drawer-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 22px 16px;border-bottom:1px solid var(--line)}
+.drawer-h h2{font-size:21px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;overflow-wrap:anywhere}
+.drawer-h p{font-size:12.5px;margin-top:4px;overflow-wrap:anywhere}
+.drawer-b{flex:1;overflow-y:auto;padding:18px 22px;display:grid;gap:22px;align-content:start}
+.drawer-b h4,.srv-chart h4{font:500 11px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;display:flex;gap:8px}
+.drawer-f{padding:14px 22px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+@keyframes srv-in{from{transform:translateX(100%)}to{transform:none}}
+@keyframes srv-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.drawer,.drawer-scrim{animation:none}}
+.srv-now{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}
+.srv-now>div{display:grid;gap:6px;min-width:0}
+.srv-now small{font-size:12.5px;color:var(--muted)}
+.srv-now .faint{font:12px var(--mono)}
+.srv-spark{height:48px}
+.srv-list{display:grid;gap:12px}
+.srv-list>div{display:grid;gap:6px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;min-width:0}
+.srv-li-h{display:flex;justify-content:space-between;gap:10px;font-size:13px;min-width:0}
+.srv-li-h b{font-weight:500;overflow-wrap:anywhere}
+.srv-li-h span{font-size:12px;white-space:nowrap}
+.srv-ip{display:flex;gap:10px;font-size:12.5px;min-width:0}
+.srv-ip>span:first-child{flex:none;width:34px;font:11px var(--mono);padding-top:1px}
+.srv-ip>span:last-child{overflow-wrap:anywhere;min-width:0}
+.srv-ips{display:grid;gap:4px;min-width:0}
+.srv-cmd{margin:0;padding:14px 16px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;user-select:all}
+.srv-safe{display:flex;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:13px;line-height:1.5}
+.srv-safe svg{flex:none;width:20px;height:20px;color:var(--accent);margin-top:1px}
+.srv-safe b{font-weight:600;display:block;margin-bottom:2px}
+.srv-safe p{color:var(--muted);margin:0}.srv-safe p+p{margin-top:4px}
+.srv-notes{margin:0;padding-left:18px;font-size:13px;line-height:1.55;display:grid;gap:4px}
+.srv-range{min-width:220px}
+.srv-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.srv-chart{padding:16px 18px}
+.srv-chart-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.srv-chart-h h4{margin-bottom:8px}
+.srv-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.srv-legend span{display:inline-flex;align-items:center;gap:6px}
+.srv-legend i{width:10px;height:3px;border-radius:2px;display:inline-block;background:var(--accent)}
+.srv-legend i.c2{background:var(--warn)}
+.srv-legend b{font-weight:500;color:var(--ink)}
+.srv-plot{position:relative;height:150px}
+.srv-plot svg{display:block;width:100%;height:100%;cursor:crosshair}
+.srv-plot .grid{stroke:var(--line);stroke-width:1}
+.srv-plot .ln{fill:none;stroke-width:1.6;stroke-linejoin:round}
+.srv-plot .ln.c1{stroke:var(--accent)}.srv-plot .ln.c2{stroke:var(--warn)}
+.srv-plot .cursor{stroke:var(--line-2);stroke-width:1;stroke-dasharray:3 3}
+.srv-top{position:absolute;top:0;left:0;font-size:10.5px;pointer-events:none}
+.srv-at{position:absolute;top:0;right:0;font-size:10.5px;pointer-events:none}
+.srv-chart-empty{height:150px;display:grid;place-items:center;font-size:13px}
+.srv-cols{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:22px}
+.srv-sub{margin:0 -24px -22px;border-top:1px solid var(--line)}
+.srv-sub .tr:first-child{border-top:0}
+.srv-sub b{font-weight:500;overflow-wrap:anywhere}
+.srv-form{margin-bottom:16px}
+.srv-form .in{flex:1;min-width:0}
+@media (max-width:1100px){.srv-charts,.srv-cols{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){
+  .srv-tbl .srv-row>.meter{flex:1 1 calc(33% - 14px)}
+  .srv-tbl .srv-net br{display:none}
+  .srv-now{grid-template-columns:minmax(0,1fr)}
+  .srv-range{min-width:0;width:100%}
+}

@@ -202,6 +202,20 @@ const newMonitor = (v: z.infer<typeof body>) => ({
   ...(v.type === "heartbeat" ? { nextCheckAt: nextAfter({ ...v, type: "heartbeat" as const }) } : {}),
 });
 
+/**
+ * The heartbeat monitor behind a server: each agent report counts as a ping, and three missed reports in a row mark it
+ * down. It has no ping URL of its own, so only the agent can keep it up.
+ */
+export async function newServerMonitor(repo: Repo, orgId: string, projectId: string, name: string, intervalSec: number) {
+  const v = body.parse({ name, type: "heartbeat", target: "", failureThreshold: 1, tags: ["server"] });
+  const timing = serverMonitorTiming(intervalSec);
+  const channelIds = await withAutoChannels(repo, orgId, projectId, []);
+  return repo.createMonitor(orgId, projectId, { ...newMonitor({ ...v, ...timing, channelIds }), heartbeatToken: null });
+}
+
+/** Interval and grace of a server's monitor: missed after one interval plus two more. */
+export const serverMonitorTiming = (intervalSec: number) => ({ intervalSec, graceSec: intervalSec * 2 });
+
 /** A new monitor also alerts the project's auto-enable channels, on top of whatever it was given. */
 async function withAutoChannels(repo: Repo, orgId: string, projectId: string, channelIds: string[]) {
   const auto = await repo.autoEnabledChannelIds(orgId, projectId);

@@ -12,6 +12,8 @@ import IncidentDetail from "./IncidentDetail";
 import StatusPages, { StatusPageEditor } from "./StatusPages";
 import Alerting from "./Alerting";
 import Maintenance from "./Maintenance";
+import Servers from "./Servers";
+import ServerDetail from "./ServerDetail";
 import Team from "./Team";
 import Account from "./Account";
 import ApiKeys from "./ApiKeys";
@@ -44,13 +46,15 @@ function internal(a: HTMLAnchorElement, e: MouseEvent) {
 }
 
 /** Pages that work on one project: in the "All projects" view they ask for a choice instead of showing the oldest project. */
-const PER_PROJECT = new Set(["StatusPages", "Alerting", "Maintenance"]);
+const PER_PROJECT = new Set(["StatusPages", "Alerting", "Maintenance", "Servers", "ServerDetail"]);
 
 function View({ name, params, title }: { name: string; params: string[]; title: string }) {
   if (PER_PROJECT.has(name) && isAllProjects()) return <ChooseProject title={title} />;
   switch (name) {
     case "Monitors": return <Monitors />;
     case "MonitorDetail": return <MonitorDetail id={params[0]} />;
+    case "Servers": return <Servers />;
+    case "ServerDetail": return <ServerDetail id={params[0]} />;
     case "Incidents": return <Incidents />;
     case "IncidentDetail": return <IncidentDetail id={params[0]} />;
     case "StatusPages": return <StatusPages />;
