@@ -8,7 +8,9 @@
 #
 # Options:
 #   --key KEY          the project's agent key (required to install)
-#   --endpoint URL     where the agent reports (default: https://openuptime.app)
+#   --endpoint URL     where the agent reports (default: https://openuptime.app); https, or http to this machine
+#   --allow-http       accept a plain http:// endpoint on another machine, such as a self-hosted install on a LAN
+#                      without TLS. The key and the metrics then cross the network unencrypted.
 #   --binary-url URL   download the agent from here instead of GitHub releases (mirrors, air-gapped installs);
 #                      https only, with a SHA256SUMS file next to it or --sha256
 #   --sha256 HEX       the checksum the agent must have, instead of reading SHA256SUMS
@@ -23,6 +25,7 @@ KEY=""
 ENDPOINT="https://openuptime.app"
 BINARY_URL="${OPENUPTIME_AGENT_URL:-}"
 SHA256=""
+ALLOW_HTTP=0
 UNINSTALL=0
 BIN=/usr/local/bin/openuptime-agent
 ENV_FILE=/etc/openuptime-agent.env
@@ -41,6 +44,7 @@ while [ $# -gt 0 ]; do
     --binary-url=*) BINARY_URL="${1#*=}"; shift ;;
     --sha256) SHA256="${2:-}"; shift 2 ;;
     --sha256=*) SHA256="${1#*=}"; shift ;;
+    --allow-http) ALLOW_HTTP=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     *) fail "unknown option: $1" ;;
   esac
@@ -64,9 +68,12 @@ matches() { [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] && printf '%s' "$1" | grep -
 URL_CHARS='^[]A-Za-z0-9._~:/?#@!&()*+,;=%[-]+$'
 matches "$KEY" '^oua_[A-Za-z0-9]{16,64}$' || fail "pass the agent key from the dashboard: --key oua_…"
 matches "$ENDPOINT" "$URL_CHARS" || fail "--endpoint is not a valid URL"
-# plain http only to this machine, where nothing is on the wire
-matches "$ENDPOINT" '^https://[^/]+' || matches "$ENDPOINT" '^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/|$)' \
-  || fail "--endpoint must start with https://"
+# plain http only to this machine, where nothing is on the wire, unless --allow-http says otherwise
+if ! matches "$ENDPOINT" '^https://[^/]+' && ! matches "$ENDPOINT" '^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/|$)'; then
+  matches "$ENDPOINT" '^http://[^/]+' && [ "$ALLOW_HTTP" -eq 1 ] \
+    || fail "--endpoint must start with https:// (add --allow-http to report over plain http)"
+  printf 'openuptime-agent: warning: %s is plain http; the key and metrics cross the network unencrypted\n' "$ENDPOINT" >&2
+fi
 ENDPOINT="${ENDPOINT%/}"
 [ -z "$SHA256" ] || matches "$SHA256" '^[0-9a-fA-F]{64}$' || fail "--sha256 takes 64 hex characters"
 

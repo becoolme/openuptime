@@ -864,6 +864,7 @@ export const zh: Record<string, string> = {
   "Linux on amd64 or arm64, with systemd. One key works for every server in this project.": "支持 amd64 或 arm64 的 Linux，需要 systemd。同一个密钥可用于本项目的所有服务器。",
   "Reports CPU, memory, swap, load, every mounted disk, disk I/O, and each network interface with all its IPv4 and IPv6 addresses.": "上报 CPU、内存、交换分区、负载、所有已挂载磁盘、磁盘 I/O，以及每块网卡及其全部 IPv4 和 IPv6 地址。",
   "The script and the agent binary download from GitHub, not from this site.": "安装脚本和 Agent 程序都从 GitHub 下载，而不是从本站下载。",
+  "This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.": "当前后台使用的是 http，因此命令中加了 --allow-http：密钥和指标会以明文在网络上传输。为 OpenUptime 配置 https 即可避免。",
   "The key is a secret: anyone with it can add servers to this project and send false reports for them. Rotate it if it leaks.": "密钥需要保密：拿到它的人可以往这个项目添加服务器，也能替它们发送伪造的数据。密钥泄露时请轮换。",
   "No data in this range": "该时间段内没有数据",
   "← Servers": "← 服务器",

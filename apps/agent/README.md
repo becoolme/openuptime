@@ -20,7 +20,8 @@ The script ([`install.sh`](install.sh)) comes straight from this repository, so 
 downloads the binary for the machine (amd64 or arm64) from the latest GitHub release, checks it against the release's
 `SHA256SUMS` before running it, writes the key to `/etc/openuptime-agent.env` (readable by root only) and starts the
 `openuptime-agent` systemd service under a dynamic, unprivileged user. The report address must use HTTPS (plain HTTP
-only for localhost). Pass `--binary-url` (or set `OPENUPTIME_AGENT_URL`) to download from an HTTPS mirror instead, with
+only for localhost, or with `--allow-http` for a self-hosted install on a network without TLS, which sends the key
+unencrypted). Pass `--binary-url` (or set `OPENUPTIME_AGENT_URL`) to download from an HTTPS mirror instead, with
 a `SHA256SUMS` file next to the binary or `--sha256 HEX`. Run the script again with `--uninstall` to remove it.
 
 One key per project: run the same command on as many servers as you like. Each machine registers itself on its first
