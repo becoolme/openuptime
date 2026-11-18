@@ -1,7 +1,7 @@
 import { openDatabase } from "@openuptime/db-pg";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
-import { diskTotals, minServerInterval, reportSchema, serverOnline } from "./routes/servers";
+import { diskTotals, minServerInterval, reportSchema, serverDeadline, serverOnline } from "./routes/servers";
 
 describe("server reports", () => {
   it("allows 30 s without plans, and what the plan says otherwise", () => {
@@ -27,6 +27,21 @@ describe("server reports", () => {
     expect(reportSchema.safeParse({ ...base, machineId: "../../etc/passwd" }).success).toBe(false);
     expect(reportSchema.safeParse({ ...base, metrics: { cpu: 101, memUsed: 1 } }).success).toBe(false);
     expect(reportSchema.safeParse({ ...base, disks: Array.from({ length: 65 }, () => ({ mount: "/", total: 1, used: 1 })) }).success).toBe(false);
+    expect(reportSchema.safeParse({ ...base, metrics: { cpu: 5, memUsed: 2e15 } }).success).toBe(false);
+  });
+  it("takes an empty list sent as null", () => {
+    const r = reportSchema.parse({ machineId: "abcdef0123456789", metrics: { cpu: 5, memUsed: 1 }, disks: null, interfaces: [{ name: "lo", ipv4: null }] });
+    expect(r.disks).toEqual([]);
+    expect(r.interfaces[0].ipv4).toEqual([]);
+  });
+  it("keeps the offline deadline when the interval gets shorter", () => {
+    const now = Date.UTC(2026, 10, 18);
+    const later = new Date(now + 900_000);
+    // 300 s -> 30 s: the agent still reports on the old interval once, so the old deadline stands
+    expect(serverDeadline(later, { intervalSec: 30, graceSec: 60 }, now)).toBe(later);
+    // 30 s -> 300 s: the new, later deadline applies at once
+    expect(serverDeadline(new Date(now + 90_000), { intervalSec: 300, graceSec: 600 }, now).getTime()).toBe(now + 900_000);
+    expect(serverDeadline(null, { intervalSec: 60, graceSec: 120 }, now).getTime()).toBe(now + 180_000);
   });
 });
 
@@ -104,7 +119,10 @@ describe.skipIf(!url)("Server monitoring", () => {
     const patched = await call("PATCH", `/servers/${s.id}`, { intervalSec: 30, name: "db" });
     expect(patched.status).toBe(200);
     expect(patched.body).toMatchObject({ name: "db", intervalSec: 30 });
-    expect((await call("GET", `/monitors/${s.monitorId}`)).body).toMatchObject({ name: "db", intervalSec: 30 });
+    const monitor = (await call("GET", `/monitors/${s.monitorId}`)).body;
+    expect(monitor).toMatchObject({ name: "db", intervalSec: 30, graceSec: 60 });
+    // the agent still reports on the 60 s interval until it hears the new one: no early offline deadline
+    expect(new Date(monitor.nextCheckAt).getTime()).toBeGreaterThan(Date.now() + 150_000);
 
     const rotated = (await call("POST", "/servers/agent-key/rotate")).body.key;
     expect(rotated).not.toBe(key);

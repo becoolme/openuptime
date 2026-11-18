@@ -506,7 +506,8 @@ export const serverMetric = pgTable(
     load5: doublePrecision("load5").notNull().default(0),
     load15: doublePrecision("load15").notNull().default(0),
   },
-  (t) => [index("server_metric_server_ts_idx").on(t.serverId, t.ts)],
+  // the second index serves the retention purge, which deletes by age across all servers
+  (t) => [index("server_metric_server_ts_idx").on(t.serverId, t.ts), index("server_metric_ts_idx").on(t.ts)],
 );
 
 export const monitorRelations = relations(monitor, ({ many }) => ({

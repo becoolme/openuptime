@@ -159,7 +159,11 @@ var dataFS = map[string]bool{
 	"nfs": true, "nfs4": true, "cifs": true, "smb3": true, "ceph": true, "glusterfs": true, "fuse.sshfs": true, "9p": true, "virtiofs": true,
 }
 
-var skipMountPrefixes = []string{"/proc", "/sys", "/dev", "/run", "/snap", "/var/lib/docker", "/var/lib/containers", "/var/lib/kubelet"}
+// Kernel and runtime trees, never data disks.
+var skipMountPrefixes = []string{"/proc", "/sys", "/dev", "/run", "/snap"}
+
+// Container runtimes mount volumes and layers below these. A disk mounted on the directory itself is kept.
+var skipBelowPrefixes = []string{"/var/lib/docker", "/var/lib/containers", "/var/lib/kubelet"}
 
 // parseMounts lists data filesystems, each mount point once. Btrfs subvolumes and bind mounts share a device; the
 // server counts a device once in its totals.
@@ -175,6 +179,11 @@ func parseMounts(s string) []disk {
 		skip := seen[mount]
 		for _, p := range skipMountPrefixes {
 			if mount == p || strings.HasPrefix(mount, p+"/") {
+				skip = true
+			}
+		}
+		for _, p := range skipBelowPrefixes {
+			if strings.HasPrefix(mount, p+"/") {
 				skip = true
 			}
 		}

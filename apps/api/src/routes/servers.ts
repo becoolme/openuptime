@@ -22,9 +22,12 @@ export const serverOnline = (s: Pick<Server, "lastSeenAt" | "intervalSec">, now 
 /** New machines one project may register per hour; a leaked key cannot flood the dashboard. */
 const REGISTRATIONS_PER_HOUR = 30;
 
-const num = z.number().finite().min(0).max(1e18);
+// totals of several disks still fit a bigint column
+const num = z.number().finite().min(0).max(1e15);
 const str = (max: number) => z.string().max(max).default("");
-const addresses = z.array(z.string().max(64)).max(32).default([]);
+// a list the agent found empty may arrive as null
+const list = <T extends z.ZodTypeAny>(item: T, max: number) => z.preprocess((v) => v ?? undefined, z.array(item).max(max).default([]));
+const addresses = list(z.string().max(64), 32);
 export const reportSchema = z.object({
   version: str(32),
   machineId: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/),
@@ -39,8 +42,8 @@ export const reportSchema = z.object({
     load1: num.default(0), load5: num.default(0), load15: num.default(0),
     diskReadBps: num.default(0), diskWriteBps: num.default(0), netRxBps: num.default(0), netTxBps: num.default(0),
   }),
-  disks: z.array(z.object({ device: str(200), mount: z.string().max(1024), fs: str(64), total: num, used: num })).max(64).default([]),
-  interfaces: z.array(z.object({ name: z.string().max(64), mac: str(64), ipv4: addresses, ipv6: addresses, rxBps: num.default(0), txBps: num.default(0) })).max(64).default([]),
+  disks: list(z.object({ device: str(200), mount: z.string().max(1024), fs: str(64), total: num, used: num }), 64),
+  interfaces: list(z.object({ name: z.string().max(64), mac: str(64), ipv4: addresses, ipv6: addresses, rxBps: num.default(0), txBps: num.default(0) }), 64),
 });
 export type AgentReport = z.infer<typeof reportSchema>;
 
@@ -88,8 +91,9 @@ export const agent = new Hono<AppEnv>()
         return c.json({ error: `The ${plan.name} plan allows ${plan.maxActiveMonitors} active monitors`, code: "monitor_limit" }, 402);
       }
       const name = (r.hostname || r.machineId).slice(0, 120);
-      const monitor = await newServerMonitor(repo, owner.orgId, owner.projectId, name, DEFAULT_SERVER_INTERVAL_SEC);
-      const made = await repo.createServer(owner.orgId, owner.projectId, { machineId: r.machineId, name, intervalSec: DEFAULT_SERVER_INTERVAL_SEC, monitorId: monitor.id, host });
+      const intervalSec = Math.max(DEFAULT_SERVER_INTERVAL_SEC, minServerInterval(plan));
+      const monitor = await newServerMonitor(repo, owner.orgId, owner.projectId, name, intervalSec);
+      const made = await repo.createServer(owner.orgId, owner.projectId, { machineId: r.machineId, name, intervalSec, monitorId: monitor.id, host });
       // another report of the same machine registered it first: drop the spare monitor
       if (!made.created) await repo.deleteMonitor(owner.orgId, monitor.id, null);
       s = made.server;
@@ -117,7 +121,7 @@ export const agent = new Hono<AppEnv>()
 const RANGES = { "1h": { sec: 3600, step: 60 }, "6h": { sec: 6 * 3600, step: 300 }, "24h": { sec: 86400, step: 900 }, "7d": { sec: 7 * 86400, step: 3600 } } as const;
 
 const view = (s: Server) => ({
-  id: s.id, name: s.name, tags: s.tags, hostname: s.hostname, os: s.os, platform: s.platform, kernel: s.kernel, arch: s.arch, cpuModel: s.cpuModel,
+  id: s.id, name: s.name, tags: s.tags, machineId: s.machineId, hostname: s.hostname, os: s.os, platform: s.platform, kernel: s.kernel, arch: s.arch, cpuModel: s.cpuModel,
   cores: s.cores, memTotal: s.memTotal, swapTotal: s.swapTotal, bootTime: s.bootTime, agentVersion: s.agentVersion, intervalSec: s.intervalSec,
   lastSeenAt: s.lastSeenAt, createdAt: s.createdAt, monitorId: s.monitorId, snapshot: s.snapshot, online: serverOnline(s),
 });
@@ -132,12 +136,21 @@ async function keepMonitorInStep(repo: Repo, orgId: string, s: Server, patch: { 
   if (!s.monitorId) return;
   const m = await repo.getMonitor(orgId, s.monitorId, null);
   if (!m) return;
-  const timing = patch.intervalSec !== undefined ? serverMonitorTiming(patch.intervalSec) : null;
+  const timing = patch.intervalSec !== undefined && patch.intervalSec !== m.intervalSec ? serverMonitorTiming(patch.intervalSec) : null;
   if (!timing && patch.name === undefined) return;
   await repo.updateMonitor(orgId, m.id, null, {
     ...(patch.name !== undefined ? { name: patch.name } : {}),
-    ...(timing ? { ...timing, nextCheckAt: nextAfter({ ...m, ...timing }) } : {}),
+    ...(timing ? { ...timing, nextCheckAt: serverDeadline(m.nextCheckAt, timing) } : {}),
   });
+}
+
+/**
+ * When a server's monitor next counts as missed after its interval changes. The agent learns the new interval only at
+ * its next report, which still follows the old one, so a shorter interval keeps the deadline already set.
+ */
+export function serverDeadline(current: Date | null, timing: { intervalSec: number; graceSec: number }, now = Date.now()) {
+  const fresh = nextAfter({ ...timing, type: "heartbeat" }, now);
+  return current && current > fresh ? current : fresh;
 }
 
 /** Servers of the active project, for the dashboard. */
@@ -153,7 +166,8 @@ export const servers = new Hono<AppEnv>()
     const plan = await c.get("entitlements").plan(c.get("orgId"));
     return c.json({ servers: list.map((s) => ({ ...view(s), cpuSeries: cpu[s.id] ?? [] })), minIntervalSec: minServerInterval(plan), intervals: SERVER_INTERVALS, upgradeUrl: plan?.upgradeUrl ?? null });
   })
-  .get("/agent-key", async (c) => c.json({ key: await c.get("repo").serverAgentKey(c.get("orgId"), c.get("projectId")) }))
+  // the key lets anyone report as any server of the project, so only those who may delete servers see it
+  .get("/agent-key", requireManager, async (c) => c.json({ key: await c.get("repo").serverAgentKey(c.get("orgId"), c.get("projectId")) }))
   .post("/agent-key/rotate", requireManager, async (c) => {
     const key = `oua_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     return c.json({ key: await c.get("repo").rotateServerAgentKey(c.get("orgId"), c.get("projectId"), key) });
@@ -191,8 +205,10 @@ export const servers = new Hono<AppEnv>()
   .delete("/:id", uuidParams, requireManager, async (c) => {
     const repo = c.get("repo");
     const orgId = c.get("orgId");
-    const s = await repo.deleteServer(orgId, c.get("projectId"), c.req.param("id"));
+    const s = await repo.server(orgId, c.get("projectId"), c.req.param("id"));
     if (!s) return c.json({ error: "Not found" }, 404);
+    // the monitor goes first: should the second step fail, the server stays listed instead of leaving an orphan monitor
     if (s.monitorId) await repo.deleteMonitor(orgId, s.monitorId, null);
+    await repo.deleteServer(orgId, c.get("projectId"), s.id);
     return c.body(null, 204);
   });

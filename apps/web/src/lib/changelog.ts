@@ -36,13 +36,14 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "在 Linux 服务器上用一条命令安装开源的小型 agent，即可在“服务器”页面查看它的 CPU、内存、磁盘和网络。",
     },
     points: [
-      { en: "The install command fetches the script and the agent from GitHub, so you can read both before running them.", zh: "安装命令从 GitHub 获取安装脚本和 agent 程序，运行前可以先查看源码。" },
-      { en: "The agent only sends metrics out: it opens no port and cannot run commands sent from the dashboard.", zh: "agent 只向外发送指标，不监听任何端口，也无法执行来自后台的命令。" },
+      { en: "The install command fetches the script and the agent from GitHub, so you can read both first; another command, shown on each server's page, removes everything it installed.", zh: "安装命令从 GitHub 获取安装脚本和 agent 程序，运行前可以先查看源码；每台服务器的详情页上还有一条卸载命令，可删除它安装的所有内容。" },
+      { en: "The agent only sends metrics out, opens no port and cannot run commands sent from the dashboard, and the script checks its SHA-256 checksum before running it.", zh: "agent 只向外发送指标，不监听任何端口，也无法执行来自后台的命令；安装脚本会先核对它的 SHA-256 校验和再运行。" },
       { en: "Each server reports every mounted disk and every network interface with all of its IPv4 and IPv6 addresses.", zh: "每台服务器会上报所有已挂载的磁盘，以及每个网卡及其全部 IPv4 和 IPv6 地址。" },
       { en: "Click a server for a side panel with its current state, or open its page for charts over the last hour up to seven days.", zh: "点击服务器可在侧边面板查看当前状态，也可打开详情页查看最近 1 小时到 7 天的图表。" },
       { en: "A server that stops reporting raises an alert through the project's alert channels, like any heartbeat monitor.", zh: "服务器停止上报时，会像心跳监控一样通过项目的告警渠道发出告警。" },
     ],
     cloud: { en: "Servers report every 60 seconds by default; reporting every 30 seconds needs a paid plan.", zh: "服务器默认每 60 秒上报一次；每 30 秒上报一次需要付费套餐。" },
+    link: { href: "/docs/servers", label: { en: "Read the install and uninstall guide", zh: "阅读安装与卸载指南" } },
   },
   {
     id: "time-coverage-collapsed", date: "2026-11-17", edition: "community",

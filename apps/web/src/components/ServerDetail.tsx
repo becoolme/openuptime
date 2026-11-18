@@ -6,7 +6,7 @@ import { pollWhileVisible } from "../lib/poll";
 import { fmtDateTime, fmtTime } from "../lib/time";
 import { toast } from "../lib/toast";
 import { diskUse, fmtBytes, fmtRate, fmtUptime, pct, platformLabel } from "../lib/servers";
-import { Meter, ServerStatus } from "./Servers";
+import { CommandBox, Meter, SERVER_DOCS, ServerStatus, UNINSTALL_CMD } from "./Servers";
 
 const RANGES: { k: ServerRange; sec: number }[] = [{ k: "1h", sec: 3600 }, { k: "6h", sec: 6 * 3600 }, { k: "24h", sec: 86400 }, { k: "7d", sec: 7 * 86400 }];
 
@@ -99,7 +99,7 @@ export default function ServerDetail({ id }: { id: string }) {
     } finally { setSaving(false); }
   }
   async function remove() {
-    if (!confirm(t("Delete this server and its history? The agent keeps running until you uninstall it, and would add the server again."))) return;
+    if (!confirm(t("Delete this server and its history? If the agent is still installed, the server comes back at its next report."))) return;
     try { await api.deleteServer(id); navigate("/app/servers"); }
     catch (e) { toast((e as Error).message, "err"); }
   }
@@ -177,6 +177,7 @@ export default function ServerDetail({ id }: { id: string }) {
             <div><span>{t("Memory")}</span><b>{fmtBytes(s.memTotal)}{s.swapTotal ? ` + ${fmtBytes(s.swapTotal)} ${t("swap")}` : ""}</b></div>
             <div><span>{t("Booted")}</span><b>{s.bootTime ? fmtDateTime(s.bootTime) : "—"}</b></div>
             <div><span>{t("Agent")}</span><b className="mono">{s.agentVersion || "—"}</b></div>
+            <div title={t("Servers are told apart by this ID. Cloned machines that share it report as one server.")}><span>{t("Machine ID")}</span><b className="mono">{s.machineId}</b></div>
             <div><span>{t("Added")}</span><b>{fmtDateTime(s.createdAt)}</b></div>
           </div>
         </div>
@@ -200,8 +201,14 @@ export default function ServerDetail({ id }: { id: string }) {
             </p>
           </div>
           {s.monitorStatus && <p className="faint" style={{ fontSize: 13 }}>{t("Offline alerts go through a heartbeat monitor, so this server's alerts follow the project's alert channels.")}{s.monitorId && <> <a href={`/app/monitors/${s.monitorId}`}>{t("Open monitor")}</a></>}</p>}
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 16, marginTop: 8 }}>
-            <button className="btn" style={{ color: "var(--down)" }} onClick={remove}>{t("Delete server")}</button>
+          <div className="fld" style={{ borderTop: "1px solid var(--line)", paddingTop: 16, marginTop: 8 }}>
+            <span>{t("Remove this server")}</span>
+            <p className="faint" style={{ fontSize: 13, margin: "0 0 8px" }}>
+              {t("First uninstall the agent on the server, then delete the server here. Deleted while the agent still runs, the server comes back at its next report.")}{" "}
+              <a href={`${SERVER_DOCS}#uninstall`} target="_blank" rel="noopener">{t("Guide")}</a>
+            </p>
+            <CommandBox cmd={UNINSTALL_CMD} label={t("Copy uninstall command")} />
+            <div style={{ marginTop: 12 }}><button className="btn" style={{ color: "var(--down)" }} onClick={remove}>{t("Delete server")}</button></div>
           </div>
         </div>
       </div>
