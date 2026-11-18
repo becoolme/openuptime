@@ -36,12 +36,13 @@ export default function Usage() {
       </>
     );
   }
-  const { plan, credits, emails, activeMonitors } = u;
+  const { plan, credits, emails, activeMonitors, servers } = u;
   // the checks each monitor makes in a month at its interval: where the allowance goes
   const perMonth = (m: Monitor) => (m.type === "heartbeat" || m.status === "paused" ? 0 : Math.round((30 * 86400) / Math.max(1, m.intervalSec)));
   const top = [...monitors].map((m) => ({ m, n: perMonth(m) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
   const total = monitors.reduce((s, m) => s + perMonth(m), 0);
   const capPct = plan?.maxActiveMonitors ? Math.min(100, Math.round((activeMonitors / plan.maxActiveMonitors) * 100)) : 0;
+  const serverPct = plan?.maxServers ? Math.min(100, Math.round((servers / plan.maxServers) * 100)) : 0;
   return (
     <>
       <div className="ph"><div><h1>{t("Plan & usage")}</h1><p className="muted">{t("Usage is counted per workspace and resets every billing period.")}</p></div></div>
@@ -67,6 +68,14 @@ export default function Usage() {
               <div><span className="meter-n">{fmt(activeMonitors)}</span>{plan.maxActiveMonitors !== null && <span className="muted mono"> / {fmt(plan.maxActiveMonitors)}</span>}</div>
               {plan.maxActiveMonitors !== null && <div className="track"><div className={`fill${capPct >= 100 ? " warn" : ""}`} style={{ width: `${capPct}%` }} /></div>}
               <small className="muted">{t("Paused monitors do not count and use no checks.")}</small>
+            </div>
+          )}
+          {plan && plan.maxServers != null && (
+            <div className="card meter">
+              <div className="meter-h"><span className="k">{t("Servers")}</span>{serverPct >= 100 && <span className="pill warn">{t("Limit reached")}</span>}</div>
+              <div><span className="meter-n">{fmt(servers)}</span><span className="muted mono"> / {fmt(plan.maxServers)}</span></div>
+              <div className="track"><div className={`fill${serverPct >= 100 ? " warn" : ""}`} style={{ width: `${serverPct}%` }} /></div>
+              <small className="muted">{t("Machines reporting through the agent, in every project. They do not count as monitors.")}</small>
             </div>
           )}
           {emails && <Meter label={t("Email notifications")} q={emails} note={t("Alert emails and status page subscriber emails.")} />}

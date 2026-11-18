@@ -633,6 +633,7 @@ export interface Repo {
   exportAccount(userId: string): Promise<AccountExport>;
   counts(orgId: string, projectId: string): Promise<Counts>;
   /** Monitors of the workspace (every project) that are not paused: what a plan's monitor cap counts. */
+  /** Monitors that are not paused, leaving out the ones that back a server: those count against the server cap instead. */
   activeMonitorCount(orgId: string): Promise<number>;
   cachedRdap(key: string, load: () => Promise<RdapCacheEntry>, refreshAheadMs?: number): Promise<RdapCacheEntry>;
 
@@ -902,6 +903,12 @@ export interface Repo {
   /** Stores a report: host details and snapshot on the row, one metric row for the charts. */
   recordServerReport(serverId: string, host: ServerHost, snapshot: ServerSnapshot, diskUsed: number, diskTotal: number): Promise<void>;
   listServers(orgId: string, projectId: string): Promise<Server[]>;
+  /** Servers registered in the workspace, across its projects. */
+  serverCount(orgId: string): Promise<number>;
+  /** How many of the workspace's servers were registered before this one; a plan's server cap keeps the oldest. */
+  serverRank(orgId: string, serverId: string): Promise<number>;
+  /** Which of these monitors back a server. */
+  serverMonitorIds(orgId: string, monitorIds: string[]): Promise<string[]>;
   /** CPU of each server over the last `minutes`, oldest first, for list sparklines. */
   serverCpuSeries(serverIds: string[], minutes: number): Promise<Record<string, number[]>>;
   server(orgId: string, projectId: string, id: string): Promise<Server | null>;

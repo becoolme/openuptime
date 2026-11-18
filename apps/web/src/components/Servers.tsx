@@ -53,6 +53,7 @@ export default function Servers() {
   const online = data?.servers.filter((s) => s.online).length ?? 0;
   const offline = data?.servers.filter((s) => s.lastSeenAt && !s.online).length ?? 0;
   const current = data?.servers.find((s) => s.id === open) ?? null;
+  const full = data?.maxServers != null && (data.serverCount ?? 0) >= data.maxServers;
   const cols = "minmax(0,2fr) 92px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 84px";
 
   return (
@@ -78,7 +79,9 @@ export default function Servers() {
         <>
           <div className="srv-bar">
             <div className="chips">
-              <span className="chip">{t("{n} servers").replace("{n}", String(data.servers.length))}</span>
+              <span className="chip">{data.maxServers != null
+                ? t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))
+                : t("{n} servers").replace("{n}", String(data.servers.length))}</span>
               <span className="chip"><span className="dot up" />{t("{n} online").replace("{n}", String(online))}</span>
               {offline > 0 && <span className="chip"><span className="dot down" />{t("{n} offline").replace("{n}", String(offline))}</span>}
             </div>
@@ -110,7 +113,7 @@ export default function Servers() {
       )}
 
       {current && <ServerDrawer s={current} onClose={() => setOpen(null)} />}
-      {adding && <AddServer onClose={() => { setAdding(false); load(); }} />}
+      {adding && <AddServer limit={full ? { max: data!.maxServers!, upgradeUrl: data!.upgradeUrl } : null} onClose={() => { setAdding(false); load(); }} />}
     </>
   );
 }
@@ -219,7 +222,7 @@ export function CommandBox({ cmd, label }: { cmd: string; label?: string }) {
   );
 }
 
-function AddServer({ onClose }: { onClose: () => void }) {
+function AddServer({ onClose, limit }: { onClose: () => void; limit: { max: number; upgradeUrl: string | null } | null }) {
   const [key, setKey] = useState("");
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
@@ -244,6 +247,12 @@ function AddServer({ onClose }: { onClose: () => void }) {
           <h3>{t("Add a server")}</h3>
           <p className="muted" style={{ marginTop: 6 }}>{t("Run this on the server as root. It installs the agent as a systemd service; the server appears here after its first report.")}</p>
         </div>
+        {limit && (
+          <p className="err" style={{ margin: 0 }}>
+            {t("Your plan allows {n} servers in this workspace, and all of them are in use. A new server is refused until you delete one or upgrade.").replace("{n}", String(limit.max))}
+            {limit.upgradeUrl && <> <a href={limit.upgradeUrl}>{t("Upgrade")}</a></>}
+          </p>
+        )}
         {err && <p className="err">{err}</p>}
         {!err && <pre className="srv-cmd mono">{cmd || t("Loading…")}</pre>}
         {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}

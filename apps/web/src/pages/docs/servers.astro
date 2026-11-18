@@ -73,7 +73,7 @@ sudo systemctl restart openuptime-agent`;
     <p>One key works for every server in a project: run the same command on each one. A server is recognised by <code>/etc/machine-id</code>, so reinstalling on the same machine keeps its history.</p>
     <p>Machines cloned from one image can share a machine id and would show up as a single server. The id is listed under <strong>System</strong> on each server's page. Give each clone its own id:</p>
     <pre><code>{machineId}</code></pre>
-    <p>A project accepts up to 30 new servers an hour. Each server is backed by a heartbeat monitor, so where a plan limits monitors, each server counts as one.</p>
+    <p>A project accepts up to 30 new servers an hour. Each server is backed by a heartbeat monitor that carries its offline alerts; it does not count toward a plan's monitor limit. Where a plan limits servers, the limit covers every project in the workspace.</p>
 
     <h2 id="options">Options</h2>
     <p>The install script accepts:</p>
@@ -123,7 +123,7 @@ sudo systemctl restart openuptime-agent`;
 
     <h2 id="interval">Report interval</h2>
     <p>Servers report every 60 seconds by default. Change it per server under <strong>Settings</strong> on the server's page: 30 seconds, 1, 2 or 5 minutes. The agent picks up a new interval at its next report. A report that arrives much sooner than the interval is acknowledged but not stored.</p>
-    <p>On the hosted service, reporting every 30 seconds needs a paid plan. A self-hosted install allows every interval.</p>
+    <p>On the hosted service, reporting every 30 seconds needs a paid plan, and each plan allows a number of servers per workspace, counted across its projects. Servers do not count toward the monitor limit. A self-hosted install allows every interval and any number of servers.</p>
 
     <h2 id="alerts">Offline alerts</h2>
     <p>A server counts as offline after about three intervals without a report: three minutes at the default interval. Each server has a heartbeat monitor tagged <code>server</code> that opens an incident at that point and resolves it when reports resume, so alerts go to the project's alert channels like any other monitor's. The monitor is linked from the server's page.</p>
@@ -160,7 +160,7 @@ sudo systemctl restart openuptime-agent`;
         <tr><td><code>--endpoint must start with https://</code></td><td>Use the HTTPS address of your OpenUptime site. Put a TLS proxy in front of a self-hosted install that serves plain HTTP, or add <code>--allow-http</code> if the network between them is trusted.</td></tr>
         <tr><td>The service runs, but the server never appears</td><td>Read <code>journalctl -u openuptime-agent</code>. Check that the server can reach the address in <code>OPENUPTIME_ENDPOINT</code>: it must be the address you open the dashboard at.</td></tr>
         <tr><td><code>the agent key was rejected</code></td><td>The key was rotated, or the project was deleted. Put the current key in the env file and restart.</td></tr>
-        <tr><td><code>HTTP 402</code></td><td>The plan's monitor limit is reached; each server uses one monitor.</td></tr>
+        <tr><td><code>HTTP 402</code>, <code>server_limit</code></td><td>The workspace has as many servers as its plan allows. Delete a server you no longer need, or upgrade. After a downgrade, the servers added first keep reporting.</td></tr>
         <tr><td><code>HTTP 429</code></td><td>More than 30 new servers in an hour. The agent keeps trying and gets in later.</td></tr>
         <tr><td>Two machines show as one server</td><td>They share a machine id. See <a href="#more-servers">More servers</a>.</td></tr>
         <tr><td>A disk or interface is missing</td><td>Run <code>openuptime-agent --once</code> to see what it reports. Interfaces whose names start with an ignored prefix are left out; change <code>OPENUPTIME_IGNORE_INTERFACES</code>.</td></tr>
@@ -217,7 +217,7 @@ sudo systemctl restart openuptime-agent`;
     <p>同一个项目的所有服务器共用一个密钥，在每台服务器上运行同一条命令即可。服务器通过 <code>/etc/machine-id</code> 识别，所以在同一台机器上重新安装会保留历史数据。</p>
     <p>从同一个镜像克隆出来的机器可能拥有相同的 machine id，会被当成同一台服务器。每台服务器详情页的<strong>系统</strong>一栏里能看到这个 ID。请为每台克隆机重新生成：</p>
     <pre><code>{machineId}</code></pre>
-    <p>每个项目每小时最多新增 30 台服务器。每台服务器背后都有一个心跳监控，因此在限制监控数量的套餐里，每台服务器占用一个监控名额。</p>
+    <p>每个项目每小时最多新增 30 台服务器。每台服务器背后都有一个负责离线告警的心跳监控，它不占用套餐的监控数量。套餐限制服务器数量时，统计的是工作区内的所有项目。</p>
 
     <h2 id="options-zh">选项</h2>
     <p>安装脚本支持以下选项：</p>
@@ -267,7 +267,7 @@ sudo systemctl restart openuptime-agent`;
 
     <h2 id="interval-zh">上报间隔</h2>
     <p>服务器默认每 60 秒上报一次。可以在服务器详情页的<strong>设置</strong>里单独修改：30 秒、1 分钟、2 分钟或 5 分钟。agent 会在下一次上报时采用新的间隔。比间隔早很多到达的上报会被确认，但不会存储。</p>
-    <p>在托管服务上，每 30 秒上报一次需要付费套餐。自托管部署可以使用所有间隔。</p>
+    <p>在托管服务上，每 30 秒上报一次需要付费套餐；每个套餐对一个工作区（所有项目合计）的服务器数量也有上限。服务器不占用监控数量。自托管部署可以使用所有间隔，服务器数量也不受限制。</p>
 
     <h2 id="alerts-zh">离线告警</h2>
     <p>大约三个间隔没有收到上报，服务器就算离线：默认间隔下是三分钟。每台服务器都有一个带 <code>server</code> 标签的心跳监控，届时会创建事件，恢复上报后自动解决，所以告警会像其他监控一样发送到项目的告警渠道。服务器详情页上有这个监控的链接。</p>
@@ -304,7 +304,7 @@ sudo systemctl restart openuptime-agent`;
         <tr><td><code>--endpoint must start with https://</code></td><td>请使用 OpenUptime 站点的 HTTPS 地址。自托管实例如果只提供 HTTP，请在前面加一层 TLS 代理；如果两者之间的网络可信，也可以加上 <code>--allow-http</code>。</td></tr>
         <tr><td>服务在运行，但服务器一直没出现</td><td>查看 <code>journalctl -u openuptime-agent</code>。确认服务器能访问 <code>OPENUPTIME_ENDPOINT</code> 中的地址，它必须是你打开后台时使用的地址。</td></tr>
         <tr><td><code>the agent key was rejected</code></td><td>密钥已被轮换，或项目已被删除。把当前密钥写入 env 文件后重启服务。</td></tr>
-        <tr><td><code>HTTP 402</code></td><td>已达到套餐的监控数量上限，每台服务器占用一个监控名额。</td></tr>
+        <tr><td><code>HTTP 402</code>、<code>server_limit</code></td><td>工作区的服务器数量已达到套餐上限。删除不再需要的服务器，或升级套餐。降级后，最早添加的服务器会继续上报。</td></tr>
         <tr><td><code>HTTP 429</code></td><td>一小时内新增了超过 30 台服务器。agent 会继续重试，稍后即可加入。</td></tr>
         <tr><td>两台机器显示成了一台服务器</td><td>它们的 machine id 相同，见<a href="#more-servers-zh">添加更多服务器</a>。</td></tr>
         <tr><td>缺少某块磁盘或某个网卡</td><td>运行 <code>openuptime-agent --once</code> 查看上报内容。名称以被排除前缀开头的网卡不会上报，可以修改 <code>OPENUPTIME_IGNORE_INTERFACES</code>。</td></tr>

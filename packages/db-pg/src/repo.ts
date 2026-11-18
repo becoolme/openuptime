@@ -280,7 +280,8 @@ export function createRepo(db: DbExecutor): Repo {
       });
     },
     async activeMonitorCount(o) {
-      const r = await rows<{ n: number }>(db.execute(sql`select count(*)::int as n from monitor where organization_id = ${o} and status <> 'paused'`));
+      const r = await rows<{ n: number }>(db.execute(sql`select count(*)::int as n from monitor where organization_id = ${o} and status <> 'paused'
+        and id not in (select monitor_id from server where organization_id = ${o} and monitor_id is not null)`));
       return r[0]?.n ?? 0;
     },
 

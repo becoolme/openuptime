@@ -5,7 +5,7 @@ import * as schema from "./schema";
 
 type ServerMethods = Pick<Repo,
   | "serverAgentKey" | "rotateServerAgentKey" | "serverAgentKeyOwner" | "serverByMachine" | "createServer" | "recordServerReport"
-  | "listServers" | "serverCpuSeries" | "server" | "updateServer" | "deleteServer" | "serverMetrics">;
+  | "listServers" | "serverCount" | "serverRank" | "serverMonitorIds" | "serverCpuSeries" | "server" | "updateServer" | "deleteServer" | "serverMetrics">;
 
 const newKey = () => `oua_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 const S = schema.server;
@@ -60,6 +60,22 @@ export function serverRepo(db: DbExecutor): ServerMethods {
     async listServers(orgId, projectId) {
       const rows = await db.select().from(S).where(and(eq(S.organizationId, orgId), eq(S.projectId, projectId))).orderBy(asc(S.name));
       return rows as Server[];
+    },
+    async serverCount(orgId) {
+      const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(S).where(eq(S.organizationId, orgId));
+      return r?.n ?? 0;
+    },
+    async serverRank(orgId, serverId) {
+      const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(S).where(and(
+        eq(S.organizationId, orgId),
+        sql`(${S.createdAt}, ${S.id}) < (select created_at, id from server where id = ${serverId})`,
+      ));
+      return r?.n ?? 0;
+    },
+    async serverMonitorIds(orgId, monitorIds) {
+      if (!monitorIds.length) return [];
+      const rows = await db.select({ id: S.monitorId }).from(S).where(and(eq(S.organizationId, orgId), inArray(S.monitorId, monitorIds)));
+      return rows.map((r) => r.id!);
     },
     async serverCpuSeries(serverIds, minutes) {
       if (!serverIds.length) return {};

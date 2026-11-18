@@ -250,9 +250,10 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
   authed.get("/usage", async (c) => {
     const e = c.get("entitlements");
     const orgId = c.get("orgId");
-    const [credits, emails, plan, activeMonitors] = await Promise.all([e.creditBalance(orgId), e.emailBalance(orgId), e.plan(orgId), c.get("repo").activeMonitorCount(orgId)]);
+    const repo = c.get("repo");
+    const [credits, emails, plan, activeMonitors, servers] = await Promise.all([e.creditBalance(orgId), e.emailBalance(orgId), e.plan(orgId), repo.activeMonitorCount(orgId), repo.serverCount(orgId)]);
     if (!credits && !emails && !plan) return c.json({ metered: false });
-    return c.json({ metered: true, ...(credits ?? {}), credits, emails, plan, activeMonitors });
+    return c.json({ metered: true, ...(credits ?? {}), credits, emails, plan, activeMonitors, servers });
   });
   // where checks can run from on this deployment, and how many of those one monitor may use under the workspace's plan (null: no limit)
   authed.get("/regions", async (c) => {
