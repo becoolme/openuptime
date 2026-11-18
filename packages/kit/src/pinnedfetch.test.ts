@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
 import { brotliCompressSync, deflateRawSync, deflateSync, gzipSync } from "node:zlib";
-import { pinnedFetch } from "./pinnedfetch";
+import { pinnedFetch, pinnedLookup } from "./pinnedfetch";
 
 describe("pinnedFetch", () => {
   const servers: Server[] = [];
@@ -82,5 +82,36 @@ describe("pinnedFetch", () => {
     await expect(pinnedFetch(`http://pinned.test:${closed}/`, {}, ["127.0.0.1"])).rejects.toMatchObject({ message: "fetch failed", cause: { code: "ECONNREFUSED" } });
     const slow = await serve(() => {});
     await expect(pinnedFetch(`http://pinned.test:${slow}/`, { signal: AbortSignal.timeout(100) }, ["127.0.0.1"])).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("rejects, without an uncaught socket error, when every address is refused before it is even dialled", async () => {
+    // the kernel turns down TCP to broadcast and multicast at once (ENETUNREACH on Linux, EAFNOSUPPORT on macOS), like an
+    // IPv6 address on a host with no IPv6 route; this used to throw inside tls.connect and crash the process
+    const uncaught: unknown[] = [];
+    const record = (e: unknown) => uncaught.push(e);
+    process.on("uncaughtException", record);
+    try {
+      for (const url of ["https://pinned.test/", "http://pinned.test/"]) {
+        for (const addresses of [["255.255.255.255"], ["255.255.255.255", "224.0.0.1"]]) {
+          await expect(pinnedFetch(url, { method: "POST", body: "{}", signal: AbortSignal.timeout(3000) }, addresses)).rejects.toMatchObject({ message: "fetch failed" });
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off("uncaughtException", record);
+    }
+  });
+
+  it("pinnedLookup answers with the pinned addresses, on a later tick like dns.lookup", async () => {
+    const lookup = pinnedLookup(["2001:db8::1", "192.0.2.1"]);
+    let all: unknown = null;
+    let one: unknown[] | null = null;
+    lookup("pinned.test", { all: true }, (_e, list) => { all = list; });
+    lookup("pinned.test", {}, (...a) => { one = a; });
+    expect([all, one]).toEqual([null, null]);
+    await new Promise((r) => process.nextTick(r));
+    expect(all).toEqual([{ address: "2001:db8::1", family: 6 }, { address: "192.0.2.1", family: 4 }]);
+    expect(one).toEqual([null, "2001:db8::1", 6]);
   });
 });
