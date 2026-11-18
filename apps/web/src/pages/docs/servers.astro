@@ -135,7 +135,7 @@ sudo systemctl restart openuptime-agent`;
     <h2 id="alerts">Offline alerts</h2>
     <p>A server counts as offline after about three intervals without a report: three minutes at the default interval. Each server has a heartbeat monitor tagged <code>server</code> that opens an incident at that point and resolves it when reports resume, so alerts go to the project's alert channels like any other monitor's.</p>
     <p>Set them under <strong>Offline alerts</strong> on the server's page or in its side panel on the list. Turn them off for a server you do not need to hear about, pick the channels they go to (none picked means all of them), or mute them for an hour before a restart or a move; a maintenance window that covers the server mutes them too.</p>
-    <p>The list marks an online server as <strong>High usage</strong> when its CPU, memory or fullest disk reaches 90%. That mark is shown only; it sends no alert. <strong>Hide IPs</strong> masks every address on the server pages for screen sharing, and is remembered in that browser.</p>
+    <p>The list marks an online server as <strong>High usage</strong> when its CPU, memory or fullest disk reaches 90%. That mark is shown only; it sends no alert. The eye button next to the filters masks every address and hides every tag on the server pages for screen sharing, and is remembered in that browser.</p>
 
     <h2 id="security">Security</h2>
     <ul>
@@ -288,7 +288,7 @@ sudo systemctl restart openuptime-agent`;
     <h2 id="alerts-zh">离线告警</h2>
     <p>大约三个间隔没有收到上报，服务器就算离线：默认间隔下是三分钟。每台服务器都有一个带 <code>server</code> 标签的心跳监控，届时会创建事件，恢复上报后自动解决，所以告警会像其他监控一样发送到项目的告警渠道。</p>
     <p>在服务器详情页或列表的侧边面板里，可以在<strong>离线告警</strong>中设置：不需要关注的服务器可以关闭告警；可以选择发送到哪些渠道（不选就是全部渠道）；重启或迁移之前可以静音 1 小时。覆盖这台服务器的维护窗口也会让告警静音。</p>
-    <p>在线服务器的 CPU、内存或最满的硬盘达到 90% 时，列表会标为<strong>占用过高</strong>。这只是提示，不会发送告警。<strong>隐藏 IP</strong> 会遮住服务器页面上的所有地址，方便共享屏幕，并记在当前浏览器里。</p>
+    <p>在线服务器的 CPU、内存或最满的硬盘达到 90% 时，列表会标为<strong>占用过高</strong>。这只是提示，不会发送告警。筛选栏旁的眼睛按钮会遮住服务器页面上的所有地址并隐藏所有标签，方便共享屏幕，并记在当前浏览器里。</p>
 
     <h2 id="security-zh">安全性</h2>
     <ul>

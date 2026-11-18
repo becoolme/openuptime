@@ -85,7 +85,7 @@ export default function ServerDetail({ id }: { id: string }) {
   useEffect(() => { if (s && location.hash.length > 1) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" }); }, [!!s]);
 
   if (err && !s) return <><p className="crumb-back"><a href="/app/servers" className="muted">{t("← Servers")}</a></p><p className="err">{err}</p></>;
-  if (!s) return <p className="muted">{t("Loading…")}</p>;
+  if (!s) return <DetailSkeleton />;
 
   const m = s.snapshot?.metrics;
   const disk = diskUse(s.snapshot?.disks ?? []);
@@ -251,5 +251,23 @@ export default function ServerDetail({ id }: { id: string }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** The page's shape in grey while the server loads. */
+function DetailSkeleton() {
+  return (
+    <div role="status" aria-busy="true" aria-label={t("Loading…")}>
+      <p className="crumb-back"><a href="/app/servers" className="muted">{t("← Servers")}</a></p>
+      <div className="ph" aria-hidden="true">
+        <div style={{ flex: 1 }}><i className="sk" style={{ width: 220, height: 34 }} /><i className="sk" style={{ width: "min(520px, 90%)", height: 13, marginTop: 12 }} /></div>
+      </div>
+      <div className="srv-tiles wide" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => <div className="srv-tile" key={i}><i className="sk" style={{ width: 60, height: 11 }} /><i className="sk" style={{ width: 90, height: 26 }} /><i className="sk" style={{ height: 6 }} /></div>)}
+      </div>
+      <div className="srv-charts" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => <div className="card cc srv-chart" key={i}><i className="sk" style={{ width: 80, height: 13 }} /><i className="sk" style={{ height: 120, marginTop: 14, borderRadius: 8 }} /></div>)}
+      </div>
+    </div>
   );
 }
