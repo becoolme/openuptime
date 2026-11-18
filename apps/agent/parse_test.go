@@ -43,8 +43,10 @@ nas:/export /mnt/nas nfs4 rw 0 0
 overlay /var/lib/docker/overlay2/x/merged overlay rw 0 0
 /dev/loop0 /snap/core/1 squashfs ro 0 0
 /dev/sda2 /var/lib/docker btrfs rw 0 0
+/dev/sda2 /var/lib/docker/btrfs/subvolumes/abc btrfs rw 0 0
+/dev/sdc /var/lib/kubelet/pods/x/volumes/pv ext4 rw 0 0
 `)
-	want := []string{"/", "/mnt/data disk", "/mnt/nas"}
+	want := []string{"/", "/mnt/data disk", "/mnt/nas", "/var/lib/docker"}
 	if len(got) != len(want) {
 		t.Fatalf("got %+v", got)
 	}

@@ -59,4 +59,5 @@ ALTER TABLE "server_agent_key" ADD CONSTRAINT "server_agent_key_organization_id_
 ALTER TABLE "server_metric" ADD CONSTRAINT "server_metric_server_id_server_id_fk" FOREIGN KEY ("server_id") REFERENCES "public"."server"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "server_machine_unique" ON "server" USING btree ("project_id","machine_id");--> statement-breakpoint
 CREATE INDEX "server_org_idx" ON "server" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX "server_metric_server_ts_idx" ON "server_metric" USING btree ("server_id","ts");
+CREATE INDEX "server_metric_server_ts_idx" ON "server_metric" USING btree ("server_id","ts");--> statement-breakpoint
+CREATE INDEX "server_metric_ts_idx" ON "server_metric" USING btree ("ts");

@@ -204,6 +204,20 @@ function ServerDrawer({ s, onClose }: { s: Row; onClose: () => void }) {
 /** Served from the repository, not from this deployment, so the script that runs as root is the published source. */
 const INSTALL_SCRIPT = "https://raw.githubusercontent.com/becoolme/openuptime/main/apps/agent/install.sh";
 const AGENT_SOURCE = "https://github.com/becoolme/openuptime/tree/main/apps/agent";
+export const SERVER_DOCS = "/docs/servers";
+export const UNINSTALL_CMD = `curl -fsSL ${INSTALL_SCRIPT} | sudo sh -s -- --uninstall`;
+
+/** A shell command to copy, with its copy button. */
+export function CommandBox({ cmd, label }: { cmd: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => navigator.clipboard?.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
+  return (
+    <div className="srv-cmdbox">
+      <pre className="srv-cmd mono">{cmd}</pre>
+      <button type="button" className="btn sm" onClick={copy}>{copied ? t("Copied ✓") : (label ?? t("Copy"))}</button>
+    </div>
+  );
+}
 
 function AddServer({ onClose }: { onClose: () => void }) {
   const [key, setKey] = useState("");
@@ -229,7 +243,7 @@ function AddServer({ onClose }: { onClose: () => void }) {
           <p className="muted" style={{ marginTop: 6 }}>{t("Run this on the server as root. It installs the agent as a systemd service; the server appears here after its first report.")}</p>
         </div>
         {err && <p className="err">{err}</p>}
-        <pre className="srv-cmd mono">{cmd || t("Loading…")}</pre>
+        {!err && <pre className="srv-cmd mono">{cmd || t("Loading…")}</pre>}
         <div className="srv-safe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>
           <div>
@@ -248,8 +262,14 @@ function AddServer({ onClose }: { onClose: () => void }) {
           <li>{t("Linux on amd64 or arm64, with systemd. One key works for every server in this project.")}</li>
           <li>{t("Reports CPU, memory, swap, load, every mounted disk, disk I/O, and each network interface with all its IPv4 and IPv6 addresses.")}</li>
           <li>{t("The script and the agent binary download from GitHub, not from this site.")}</li>
-          <li>{t("The key is a secret: anyone with it can add servers to this project. Remove the agent with --uninstall.")}</li>
+          <li>{t("The key is a secret: anyone with it can add servers to this project and send false reports for them. Rotate it if it leaks.")}</li>
         </ul>
+        <details className="srv-uninstall">
+          <summary>{t("Uninstall the agent")}</summary>
+          <p className="muted">{t("Run this on the server as root. It stops the service and removes the agent, its key file and the systemd unit. Then delete the server here.")}</p>
+          <CommandBox cmd={UNINSTALL_CMD} />
+        </details>
+        <p className="muted" style={{ fontSize: 13, margin: 0 }}><a href={SERVER_DOCS} target="_blank" rel="noopener">{t("Install and uninstall guide")}</a></p>
       </div>
     </div>
   );

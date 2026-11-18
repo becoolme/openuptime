@@ -1,0 +1,310 @@
+---
+import Doc from "../../layouts/Doc.astro";
+
+const script = "https://raw.githubusercontent.com/becoolme/openuptime/main/apps/agent/install.sh";
+const source = "https://github.com/becoolme/openuptime/tree/main/apps/agent";
+const install = `curl -fsSL ${script} | sudo sh -s -- --key oua_… --endpoint https://your-openuptime.example`;
+const uninstall = `curl -fsSL ${script} | sudo sh -s -- --uninstall`;
+const mirrorInstall = `sudo sh install.sh --key oua_… --endpoint https://your-openuptime.example \\
+  --binary-url https://mirror.example/openuptime-agent-linux-amd64 \\
+  --sha256 <64 hex characters from sha256sum>`;
+const readFirst = `curl -fsSL ${script} -o install.sh
+less install.sh
+sudo sh install.sh --key oua_… --endpoint https://your-openuptime.example`;
+const status = `systemctl status openuptime-agent
+journalctl -u openuptime-agent -f
+openuptime-agent --version`;
+const manualUninstall = `sudo systemctl disable --now openuptime-agent
+sudo rm -f /etc/systemd/system/openuptime-agent.service /usr/local/bin/openuptime-agent /etc/openuptime-agent.env
+sudo systemctl daemon-reload`;
+const changeKey = `sudoedit /etc/openuptime-agent.env      # OPENUPTIME_KEY=oua_…
+sudo systemctl restart openuptime-agent`;
+const machineId = `sudo rm /etc/machine-id
+sudo systemd-machine-id-setup
+sudo systemctl restart openuptime-agent`;
+---
+<Doc titleZh="服务器监控：安装与卸载 agent" descriptionZh="用一条命令在 Linux 服务器上安装只上报数据的开源 agent，查看 CPU、内存、磁盘和网络，并在不需要时完整卸载。" description="Install the open-source, report-only agent on a Linux server with one command, see its CPU, memory, disks and network, and remove it cleanly when you are done." title="Server monitoring: install and uninstall the agent" updated="2026-11-18" toc>
+  <div lang="en">
+    <h1>Server monitoring</h1>
+    <p class="lede">A small open-source agent runs on each Linux server and reports its CPU, memory, swap, load, disks, disk I/O and network interfaces. The servers show up under <strong>Servers</strong> in the dashboard, and one that stops reporting raises an alert.</p>
+
+    <h2 id="requirements">Requirements</h2>
+    <ul>
+      <li>Linux on <code>amd64</code> (x86_64) or <code>arm64</code> (aarch64), with systemd. Other systems are not supported.</li>
+      <li>Root access, through <code>sudo</code> or a root shell, to install and to uninstall.</li>
+      <li><code>curl</code> or <code>wget</code>.</li>
+      <li>Outbound HTTPS to <code>raw.githubusercontent.com</code> and <code>github.com</code> while installing, and to your OpenUptime address while running. The agent needs no inbound port.</li>
+    </ul>
+
+    <h2 id="install">Install</h2>
+    <ol>
+      <li>Open <strong>Servers</strong> and click <strong>Add server</strong>. Only workspace owners and admins see the key.</li>
+      <li>Click <strong>Copy command</strong>. The command carries your project's agent key and this site's address.</li>
+      <li>Run it on the server. It finishes in a few seconds.</li>
+      <li>The server appears in the list within about a minute, named after its host name. You can rename it on its page.</li>
+    </ol>
+    <p>The command looks like this:</p>
+    <pre><code>{install}</code></pre>
+    <p>The script comes straight from the <a href={source}>public repository</a>, not from your OpenUptime site, so what runs as root is the published source. To read it before running it, download it first:</p>
+    <pre><code>{readFirst}</code></pre>
+
+    <h3 id="what-install-does">What the script does</h3>
+    <ol>
+      <li>Checks that the machine runs Linux with systemd, that it runs as root, that the key has the right form, and that the address starts with <code>https://</code>.</li>
+      <li>Downloads the agent for the machine's CPU from the latest GitHub release, together with the release's <code>SHA256SUMS</code>. If the checksum does not match, or the file does not run, it stops and installs nothing.</li>
+      <li>Writes the key and the address to <code>/etc/openuptime-agent.env</code>, readable by root only.</li>
+      <li>Installs the <code>openuptime-agent</code> systemd service, enables it at boot and starts it.</li>
+    </ol>
+    <p>It creates these files and nothing else:</p>
+    <table>
+      <thead><tr><th>Path</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td><code>/usr/local/bin/openuptime-agent</code></td><td>The agent, a single static binary</td></tr>
+        <tr><td><code>/etc/openuptime-agent.env</code></td><td>The key and the address, mode 0600</td></tr>
+        <tr><td><code>/etc/systemd/system/openuptime-agent.service</code></td><td>The systemd unit</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="check">Check that it runs</h3>
+    <pre><code>{status}</code></pre>
+    <p>A running agent logs one line when it starts, and after that only errors.</p>
+
+    <h2 id="more-servers">More servers</h2>
+    <p>One key works for every server in a project: run the same command on each one. A server is recognised by <code>/etc/machine-id</code>, so reinstalling on the same machine keeps its history.</p>
+    <p>Machines cloned from one image can share a machine id and would show up as a single server. The id is listed under <strong>System</strong> on each server's page. Give each clone its own id:</p>
+    <pre><code>{machineId}</code></pre>
+    <p>A project accepts up to 30 new servers an hour. Each server is backed by a heartbeat monitor, so where a plan limits monitors, each server counts as one.</p>
+
+    <h2 id="options">Options</h2>
+    <p>The install script accepts:</p>
+    <table>
+      <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--key oua_…</code></td><td>The project's agent key. Required to install.</td></tr>
+        <tr><td><code>--endpoint URL</code></td><td>Where the agent reports. The dashboard fills in its own address. It must use <code>https://</code>; plain <code>http://</code> is accepted only for <code>localhost</code>, <code>127.0.0.1</code> and <code>[::1]</code>.</td></tr>
+        <tr><td><code>--binary-url URL</code></td><td>Download the agent from this <code>https://</code> address instead of GitHub. The environment variable <code>OPENUPTIME_AGENT_URL</code> does the same.</td></tr>
+        <tr><td><code>--sha256 HEX</code></td><td>The SHA-256 the agent must have. Without it, the script reads <code>SHA256SUMS</code> from the same folder as the agent.</td></tr>
+        <tr><td><code>--uninstall</code></td><td>Stop the service and remove the agent. See <a href="#uninstall">Uninstall</a>.</td></tr>
+      </tbody>
+    </table>
+    <p>The agent itself accepts these flags, or the environment variables in the unit's env file:</p>
+    <table>
+      <thead><tr><th>Flag</th><th>Environment</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>--key</code></td><td><code>OPENUPTIME_KEY</code></td><td>none, required</td></tr>
+        <tr><td><code>--endpoint</code></td><td><code>OPENUPTIME_ENDPOINT</code></td><td><code>https://openuptime.app</code></td></tr>
+        <tr><td><code>--ignore-interfaces</code></td><td><code>OPENUPTIME_IGNORE_INTERFACES</code></td><td><code>lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan</code>: interface name prefixes to leave out</td></tr>
+        <tr><td><code>--once</code></td><td></td><td>Print one report as JSON and exit without sending it</td></tr>
+        <tr><td><code>--version</code></td><td></td><td>Print the version and exit</td></tr>
+      </tbody>
+    </table>
+    <p>To change a setting after installing, edit <code>/etc/openuptime-agent.env</code> and restart the service:</p>
+    <pre><code>{changeKey}</code></pre>
+    <p>To see exactly what the agent would send, run <code>openuptime-agent --once</code>.</p>
+
+    <h3 id="mirror">Without access to GitHub</h3>
+    <p>Build the agent from the repository (<code>GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build</code> in <code>apps/agent</code>) or copy it from a release, host it over HTTPS where the server can reach it, and pass its address with <code>--binary-url</code>. Copy the install script to the server along with it.</p>
+    <p>The script checks the download before running it. Either put a <code>SHA256SUMS</code> file next to the agent, with a line for the agent's file name as <code>sha256sum</code> writes it, or pass the checksum yourself:</p>
+    <pre><code>{mirrorInstall}</code></pre>
+
+    <h2 id="metrics">What is reported</h2>
+    <ul>
+      <li><strong>CPU</strong>: use across all cores, the model and the core count.</li>
+      <li><strong>Memory and swap</strong>: used, cache and total.</li>
+      <li><strong>Load</strong>: the 1, 5 and 15 minute load averages.</li>
+      <li><strong>Disks</strong>: every mounted local disk and network share (ext4, XFS, Btrfs, ZFS, NFS, CIFS and the like), with used and total space, and the read and write rate of the physical disks. Virtual and container file systems are left out. A device mounted in several places is listed at each mount and counted once in the totals.</li>
+      <li><strong>Network</strong>: each interface with its MAC address, all of its IPv4 and IPv6 addresses, and its receive and send rate. Loopback, Docker, bridge and overlay interfaces are left out by default.</li>
+      <li><strong>System</strong>: host name, distribution, kernel, architecture, boot time and uptime.</li>
+    </ul>
+    <p>Click a server for its current state in a side panel, or open its page for charts over the last hour, 6 hours, 24 hours or 7 days. Metrics are kept for 7 days.</p>
+    <p>The agent reads system statistics from <code>/proc</code>, plus <code>/etc/machine-id</code> and <code>/etc/os-release</code>. It does not read logs, processes, users' files or anything else stored on the server.</p>
+
+    <h2 id="interval">Report interval</h2>
+    <p>Servers report every 60 seconds by default. Change it per server under <strong>Settings</strong> on the server's page: 30 seconds, 1, 2 or 5 minutes. The agent picks up a new interval at its next report. A report that arrives much sooner than the interval is acknowledged but not stored.</p>
+    <p>On the hosted service, reporting every 30 seconds needs a paid plan. A self-hosted install allows every interval.</p>
+
+    <h2 id="alerts">Offline alerts</h2>
+    <p>A server counts as offline after about three intervals without a report: three minutes at the default interval. Each server has a heartbeat monitor tagged <code>server</code> that opens an incident at that point and resolves it when reports resume, so alerts go to the project's alert channels like any other monitor's. The monitor is linked from the server's page.</p>
+
+    <h2 id="security">Security</h2>
+    <ul>
+      <li><strong>Report-only.</strong> The agent only sends data out. It opens no port and cannot run commands, scripts or updates sent from the dashboard. The only thing it reads back is the report interval. A test in the repository fails if the agent's code starts running programs or listening on a port.</li>
+      <li><strong>Unprivileged.</strong> The service runs as a temporary system user (systemd <code>DynamicUser</code>) with <code>NoNewPrivileges</code>, a read-only view of the system (<code>ProtectSystem=strict</code>) and a read-only <code>/home</code>. Root is only needed to install and uninstall.</li>
+      <li><strong>Checked downloads.</strong> The script compares the agent with the release's <code>SHA256SUMS</code> before running it, and accepts only HTTPS for the download and the report address.</li>
+      <li><strong>The key is a secret.</strong> Anyone with it can register servers in the project and send reports as any of its servers, including false ones that hide an outage. It cannot read data or change settings. Only workspace owners and admins can see or rotate it. On the server it is stored in a file only root can read, so it does not appear in the process list.</li>
+      <li><strong>Rotate the key</strong> under <strong>Servers → Add server → Rotate key</strong> if it leaks. Every server using the old key stops reporting, and its agent tries again every 5 minutes. Put the new key in <code>/etc/openuptime-agent.env</code> and restart the service, or run the install command again.</li>
+    </ul>
+
+    <h2 id="update">Update the agent</h2>
+    <p>Run the install command again. It downloads the latest release, replaces the binary, rewrites the env file with the key and address you pass, and restarts the service. The server keeps its history. Check the version with <code>openuptime-agent --version</code>.</p>
+
+    <h2 id="uninstall">Uninstall</h2>
+    <p>Run this on the server:</p>
+    <pre><code>{uninstall}</code></pre>
+    <p>It stops and disables the service, deletes the three files listed under <a href="#what-install-does">What the script does</a>, and reloads systemd. Nothing else is left on the server: the service's temporary user goes away with it. No key is needed.</p>
+    <p>Then delete the server in the dashboard: open its page and click <strong>Delete server</strong>. This removes its history and its heartbeat monitor. Do it in this order: a server deleted while its agent still runs comes back at the next report. The command is also on each server's page and in the <strong>Add server</strong> dialog.</p>
+    <p>To uninstall by hand, without downloading the script:</p>
+    <pre><code>{manualUninstall}</code></pre>
+
+    <h2 id="troubleshoot">Troubleshooting</h2>
+    <table>
+      <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>only Linux is supported</code>, <code>systemd is required</code>, <code>unsupported CPU architecture</code></td><td>The machine is not one the agent supports. See <a href="#requirements">Requirements</a>.</td></tr>
+        <tr><td><code>run as root</code></td><td>Pipe into <code>sudo sh -s -- …</code>, not into <code>sh</code>.</td></tr>
+        <tr><td><code>download failed</code></td><td>The server cannot reach GitHub, or the release has no agent yet. Check outbound HTTPS, or use <a href="#mirror"><code>--binary-url</code></a>.</td></tr>
+        <tr><td><code>checksum mismatch</code></td><td>The file downloaded is not the one the release lists. Nothing was installed. Run the command again; if it keeps failing, do not install from that source.</td></tr>
+        <tr><td><code>could not download SHA256SUMS</code>, <code>SHA256SUMS has no line</code></td><td>The mirror has no checksum file for the agent. Add one, or pass <code>--sha256</code>. See <a href="#mirror">Without access to GitHub</a>.</td></tr>
+        <tr><td><code>--endpoint must start with https://</code></td><td>Use the HTTPS address of your OpenUptime site. Put a TLS proxy in front of a self-hosted install that serves plain HTTP.</td></tr>
+        <tr><td>The service runs, but the server never appears</td><td>Read <code>journalctl -u openuptime-agent</code>. Check that the server can reach the address in <code>OPENUPTIME_ENDPOINT</code>: it must be the address you open the dashboard at.</td></tr>
+        <tr><td><code>the agent key was rejected</code></td><td>The key was rotated, or the project was deleted. Put the current key in the env file and restart.</td></tr>
+        <tr><td><code>HTTP 402</code></td><td>The plan's monitor limit is reached; each server uses one monitor.</td></tr>
+        <tr><td><code>HTTP 429</code></td><td>More than 30 new servers in an hour. The agent keeps trying and gets in later.</td></tr>
+        <tr><td>Two machines show as one server</td><td>They share a machine id. See <a href="#more-servers">More servers</a>.</td></tr>
+        <tr><td>A disk or interface is missing</td><td>Run <code>openuptime-agent --once</code> to see what it reports. Interfaces whose names start with an ignored prefix are left out; change <code>OPENUPTIME_IGNORE_INTERFACES</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div lang="zh-CN">
+    <h1>服务器监控</h1>
+    <p class="lede">在每台 Linux 服务器上运行一个开源的小型 agent，它会上报 CPU、内存、交换分区、负载、磁盘、磁盘读写和网卡数据。服务器会出现在后台的<strong>服务器</strong>页面，停止上报时会发出告警。</p>
+
+    <h2 id="requirements-zh">环境要求</h2>
+    <ul>
+      <li>运行在 <code>amd64</code>（x86_64）或 <code>arm64</code>（aarch64）上、使用 systemd 的 Linux。不支持其他系统。</li>
+      <li>安装和卸载需要 root 权限，可以用 <code>sudo</code>，也可以直接在 root shell 中运行。</li>
+      <li>需要 <code>curl</code> 或 <code>wget</code>。</li>
+      <li>安装时需要能通过 HTTPS 访问 <code>raw.githubusercontent.com</code> 和 <code>github.com</code>，运行时需要能访问你的 OpenUptime 地址。agent 不需要开放任何入站端口。</li>
+    </ul>
+
+    <h2 id="install-zh">安装</h2>
+    <ol>
+      <li>打开<strong>服务器</strong>页面，点击<strong>添加服务器</strong>。只有工作区所有者和管理员能看到密钥。</li>
+      <li>点击<strong>复制命令</strong>。命令里已经带上了项目的 agent 密钥和当前站点地址。</li>
+      <li>在服务器上运行，几秒钟即可完成。</li>
+      <li>大约一分钟内，服务器会出现在列表中，名称默认是它的主机名，可以在详情页修改。</li>
+    </ol>
+    <p>命令大致如下：</p>
+    <pre><code>{install}</code></pre>
+    <p>安装脚本直接来自<a href={source}>公开仓库</a>，而不是你的 OpenUptime 站点，所以以 root 身份运行的就是公开的源码。想先看一遍再运行，可以先下载：</p>
+    <pre><code>{readFirst}</code></pre>
+
+    <h3 id="what-install-does-zh">脚本做了什么</h3>
+    <ol>
+      <li>检查系统是否为带 systemd 的 Linux、是否以 root 运行、密钥格式是否正确，以及上报地址是否以 <code>https://</code> 开头。</li>
+      <li>从 GitHub 最新的 release 下载与本机 CPU 架构对应的 agent，同时下载该 release 的 <code>SHA256SUMS</code>。校验和对不上，或者文件无法运行，就中止安装，什么都不装。</li>
+      <li>把密钥和地址写入 <code>/etc/openuptime-agent.env</code>，只有 root 可读。</li>
+      <li>安装 <code>openuptime-agent</code> systemd 服务，设为开机启动并立即启动。</li>
+    </ol>
+    <p>脚本只会创建下面这些文件：</p>
+    <table>
+      <thead><tr><th>路径</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>/usr/local/bin/openuptime-agent</code></td><td>agent 程序，单个静态二进制文件</td></tr>
+        <tr><td><code>/etc/openuptime-agent.env</code></td><td>密钥和地址，权限 0600</td></tr>
+        <tr><td><code>/etc/systemd/system/openuptime-agent.service</code></td><td>systemd 单元文件</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="check-zh">确认运行状态</h3>
+    <pre><code>{status}</code></pre>
+    <p>agent 启动时会输出一行日志，之后只在出错时记录。</p>
+
+    <h2 id="more-servers-zh">添加更多服务器</h2>
+    <p>同一个项目的所有服务器共用一个密钥，在每台服务器上运行同一条命令即可。服务器通过 <code>/etc/machine-id</code> 识别，所以在同一台机器上重新安装会保留历史数据。</p>
+    <p>从同一个镜像克隆出来的机器可能拥有相同的 machine id，会被当成同一台服务器。每台服务器详情页的<strong>系统</strong>一栏里能看到这个 ID。请为每台克隆机重新生成：</p>
+    <pre><code>{machineId}</code></pre>
+    <p>每个项目每小时最多新增 30 台服务器。每台服务器背后都有一个心跳监控，因此在限制监控数量的套餐里，每台服务器占用一个监控名额。</p>
+
+    <h2 id="options-zh">选项</h2>
+    <p>安装脚本支持以下选项：</p>
+    <table>
+      <thead><tr><th>选项</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--key oua_…</code></td><td>项目的 agent 密钥，安装时必填。</td></tr>
+        <tr><td><code>--endpoint URL</code></td><td>agent 上报的地址。后台复制的命令会自动填入当前站点地址。必须使用 <code>https://</code>，只有 <code>localhost</code>、<code>127.0.0.1</code> 和 <code>[::1]</code> 允许用 <code>http://</code>。</td></tr>
+        <tr><td><code>--binary-url URL</code></td><td>从这个 <code>https://</code> 地址下载 agent，而不是从 GitHub 下载。也可以用环境变量 <code>OPENUPTIME_AGENT_URL</code> 指定。</td></tr>
+        <tr><td><code>--sha256 HEX</code></td><td>agent 应有的 SHA-256 值。不传时，脚本读取 agent 同一目录下的 <code>SHA256SUMS</code>。</td></tr>
+        <tr><td><code>--uninstall</code></td><td>停止服务并删除 agent，详见<a href="#uninstall-zh">卸载</a>。</td></tr>
+      </tbody>
+    </table>
+    <p>agent 本身支持以下参数，也可以通过服务的 env 文件里的环境变量设置：</p>
+    <table>
+      <thead><tr><th>参数</th><th>环境变量</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>--key</code></td><td><code>OPENUPTIME_KEY</code></td><td>无，必填</td></tr>
+        <tr><td><code>--endpoint</code></td><td><code>OPENUPTIME_ENDPOINT</code></td><td><code>https://openuptime.app</code></td></tr>
+        <tr><td><code>--ignore-interfaces</code></td><td><code>OPENUPTIME_IGNORE_INTERFACES</code></td><td><code>lo,docker,veth,br-,virbr,cni,flannel,cali,vxlan</code>：要排除的网卡名前缀</td></tr>
+        <tr><td><code>--once</code></td><td></td><td>以 JSON 输出一次上报内容后退出，不会发送</td></tr>
+        <tr><td><code>--version</code></td><td></td><td>输出版本号后退出</td></tr>
+      </tbody>
+    </table>
+    <p>安装后想修改设置，编辑 <code>/etc/openuptime-agent.env</code> 然后重启服务：</p>
+    <pre><code>{changeKey}</code></pre>
+    <p>想确切知道 agent 会发送什么，运行 <code>openuptime-agent --once</code>。</p>
+
+    <h3 id="mirror-zh">无法访问 GitHub 时</h3>
+    <p>在仓库的 <code>apps/agent</code> 目录下自行编译（<code>GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build</code>），或从 release 中复制 agent，通过 HTTPS 放到服务器能访问的地址，再用 <code>--binary-url</code> 指定。安装脚本也一并复制到服务器上运行。</p>
+    <p>脚本会先校验下载的文件再运行它。可以在 agent 旁边放一个 <code>SHA256SUMS</code> 文件，按 <code>sha256sum</code> 的输出格式写上 agent 文件名对应的一行；也可以自己传入校验和：</p>
+    <pre><code>{mirrorInstall}</code></pre>
+
+    <h2 id="metrics-zh">上报哪些数据</h2>
+    <ul>
+      <li><strong>CPU</strong>：所有核心的总体使用率、型号和核心数。</li>
+      <li><strong>内存和交换分区</strong>：已用、缓存和总量。</li>
+      <li><strong>负载</strong>：1、5、15 分钟平均负载。</li>
+      <li><strong>磁盘</strong>：所有已挂载的本地磁盘和网络共享（ext4、XFS、Btrfs、ZFS、NFS、CIFS 等）的已用和总容量，以及物理磁盘的读写速率。虚拟文件系统和容器文件系统不计入。同一个设备挂载在多个位置时，每个挂载点都会列出，但总量里只算一次。</li>
+      <li><strong>网络</strong>：每个网卡的 MAC 地址、全部 IPv4 和 IPv6 地址，以及接收和发送速率。默认排除回环、Docker、网桥和 overlay 网卡。</li>
+      <li><strong>系统</strong>：主机名、发行版、内核、架构、启动时间和运行时长。</li>
+    </ul>
+    <p>点击服务器可以在侧边面板查看当前状态，打开详情页可以查看最近 1 小时、6 小时、24 小时或 7 天的图表。指标数据保留 7 天。</p>
+    <p>agent 只从 <code>/proc</code> 读取系统统计信息，另外读取 <code>/etc/machine-id</code> 和 <code>/etc/os-release</code>。它不会读取日志、进程、用户文件或服务器上存储的其他任何内容。</p>
+
+    <h2 id="interval-zh">上报间隔</h2>
+    <p>服务器默认每 60 秒上报一次。可以在服务器详情页的<strong>设置</strong>里单独修改：30 秒、1 分钟、2 分钟或 5 分钟。agent 会在下一次上报时采用新的间隔。比间隔早很多到达的上报会被确认，但不会存储。</p>
+    <p>在托管服务上，每 30 秒上报一次需要付费套餐。自托管部署可以使用所有间隔。</p>
+
+    <h2 id="alerts-zh">离线告警</h2>
+    <p>大约三个间隔没有收到上报，服务器就算离线：默认间隔下是三分钟。每台服务器都有一个带 <code>server</code> 标签的心跳监控，届时会创建事件，恢复上报后自动解决，所以告警会像其他监控一样发送到项目的告警渠道。服务器详情页上有这个监控的链接。</p>
+
+    <h2 id="security-zh">安全性</h2>
+    <ul>
+      <li><strong>只上报。</strong>agent 只向外发送数据，不监听任何端口，也无法执行后台下发的命令、脚本或更新。它从服务端读取的只有上报间隔。仓库里有一项测试，一旦 agent 的代码开始运行程序或监听端口就会失败。</li>
+      <li><strong>非特权运行。</strong>服务以临时系统用户运行（systemd <code>DynamicUser</code>），启用 <code>NoNewPrivileges</code>，系统目录只读（<code>ProtectSystem=strict</code>），<code>/home</code> 也只读。只有安装和卸载需要 root。</li>
+      <li><strong>下载经过校验。</strong>脚本运行 agent 之前，会用 release 的 <code>SHA256SUMS</code> 核对文件；下载地址和上报地址都只接受 HTTPS。</li>
+      <li><strong>密钥需要保密。</strong>拿到密钥的人可以在项目里注册服务器，也能冒充项目里的任意一台服务器上报，包括伪造数据来掩盖故障。它不能读取数据，也不能修改设置。只有工作区所有者和管理员能查看或轮换密钥。在服务器上，密钥保存在只有 root 可读的文件里，不会出现在进程列表中。</li>
+      <li><strong>密钥泄露时请轮换：</strong>进入<strong>服务器 → 添加服务器 → 轮换密钥</strong>。所有使用旧密钥的服务器都会停止上报，agent 每 5 分钟重试一次。把新密钥写入 <code>/etc/openuptime-agent.env</code> 并重启服务，或重新运行安装命令。</li>
+    </ul>
+
+    <h2 id="update-zh">更新 agent</h2>
+    <p>重新运行安装命令即可。它会下载最新的 release，替换程序文件，用你传入的密钥和地址重写 env 文件，然后重启服务。服务器的历史数据会保留。用 <code>openuptime-agent --version</code> 查看版本。</p>
+
+    <h2 id="uninstall-zh">卸载</h2>
+    <p>在服务器上运行：</p>
+    <pre><code>{uninstall}</code></pre>
+    <p>它会停止并禁用服务，删除<a href="#what-install-does-zh">脚本做了什么</a>中列出的三个文件，并重新加载 systemd。服务器上不会留下其他东西，服务使用的临时用户也会随之消失。卸载不需要密钥。</p>
+    <p>然后在后台删除服务器：打开服务器详情页，点击<strong>删除服务器</strong>。这会删除它的历史数据和心跳监控。请按这个顺序操作：如果 agent 还在运行时就删除，服务器会在下一次上报时重新出现。每台服务器的详情页和<strong>添加服务器</strong>对话框里也有这条卸载命令。</p>
+    <p>不下载脚本、手动卸载：</p>
+    <pre><code>{manualUninstall}</code></pre>
+
+    <h2 id="troubleshoot-zh">常见问题</h2>
+    <table>
+      <thead><tr><th>现象</th><th>处理方法</th></tr></thead>
+      <tbody>
+        <tr><td><code>only Linux is supported</code>、<code>systemd is required</code>、<code>unsupported CPU architecture</code></td><td>这台机器不在支持范围内，见<a href="#requirements-zh">环境要求</a>。</td></tr>
+        <tr><td><code>run as root</code></td><td>要通过管道交给 <code>sudo sh -s -- …</code>，而不是 <code>sh</code>。</td></tr>
+        <tr><td><code>download failed</code></td><td>服务器无法访问 GitHub，或者 release 里还没有 agent。请检查出站 HTTPS，或使用 <a href="#mirror-zh"><code>--binary-url</code></a>。</td></tr>
+        <tr><td><code>checksum mismatch</code></td><td>下载到的文件和 release 列出的不一致，没有安装任何东西。请重新运行命令；如果一直失败，不要从这个来源安装。</td></tr>
+        <tr><td><code>could not download SHA256SUMS</code>、<code>SHA256SUMS has no line</code></td><td>镜像上没有 agent 的校验和文件。请补上，或者传入 <code>--sha256</code>，见<a href="#mirror-zh">无法访问 GitHub 时</a>。</td></tr>
+        <tr><td><code>--endpoint must start with https://</code></td><td>请使用 OpenUptime 站点的 HTTPS 地址。自托管实例如果只提供 HTTP，请在前面加一层 TLS 代理。</td></tr>
+        <tr><td>服务在运行，但服务器一直没出现</td><td>查看 <code>journalctl -u openuptime-agent</code>。确认服务器能访问 <code>OPENUPTIME_ENDPOINT</code> 中的地址，它必须是你打开后台时使用的地址。</td></tr>
+        <tr><td><code>the agent key was rejected</code></td><td>密钥已被轮换，或项目已被删除。把当前密钥写入 env 文件后重启服务。</td></tr>
+        <tr><td><code>HTTP 402</code></td><td>已达到套餐的监控数量上限，每台服务器占用一个监控名额。</td></tr>
+        <tr><td><code>HTTP 429</code></td><td>一小时内新增了超过 30 台服务器。agent 会继续重试，稍后即可加入。</td></tr>
+        <tr><td>两台机器显示成了一台服务器</td><td>它们的 machine id 相同，见<a href="#more-servers-zh">添加更多服务器</a>。</td></tr>
+        <tr><td>缺少某块磁盘或某个网卡</td><td>运行 <code>openuptime-agent --once</code> 查看上报内容。名称以被排除前缀开头的网卡不会上报，可以修改 <code>OPENUPTIME_IGNORE_INTERFACES</code>。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</Doc>

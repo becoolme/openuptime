@@ -1,5 +1,5 @@
 {
-  "id": "914e2c3c-be5f-4387-a97d-b5ffcb22898e",
+  "id": "b8f075c4-cdee-4205-886a-b368caedbe6b",
   "prevId": "b4959322-1466-4024-8923-8981757beaa6",
   "version": "7",
   "dialect": "postgresql",
@@ -4753,6 +4753,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "ts",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "server_metric_ts_idx": {
+          "name": "server_metric_ts_idx",
+          "columns": [
             {
               "expression": "ts",
               "isExpression": false,

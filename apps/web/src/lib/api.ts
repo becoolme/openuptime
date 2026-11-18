@@ -237,7 +237,7 @@ export type ServerSnapshot = {
 };
 export type Server = {
   id: string; name: string; tags: string[]; hostname: string; os: string; platform: string; kernel: string; arch: string; cpuModel: string;
-  cores: number; memTotal: number; swapTotal: number; bootTime: string | null; agentVersion: string; intervalSec: number;
+  cores: number; memTotal: number; swapTotal: number; bootTime: string | null; agentVersion: string; machineId: string; intervalSec: number;
   lastSeenAt: string | null; createdAt: string; monitorId: string | null; snapshot: ServerSnapshot | null;
   /** reported within the last three intervals */
   online: boolean;

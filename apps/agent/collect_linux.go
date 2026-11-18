@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -16,6 +17,7 @@ import (
 type collector struct {
 	ignore []string
 	prev   sample
+	mounts mountWatch
 }
 
 // sample holds the counters that only mean something as a difference between two readings.
@@ -96,6 +98,7 @@ func (c *collector) collect() (*report, error) {
 	r.Metrics.DiskReadBps = rate(prev.diskRead, now.diskRead)
 	r.Metrics.DiskWriteBps = rate(prev.diskWrite, now.diskWrite)
 
+	r.Ifaces = []netIface{}
 	ifaces, _ := net.Interfaces()
 	for _, ifc := range ifaces {
 		if c.ignored(ifc.Name) {
@@ -126,7 +129,7 @@ func (c *collector) collect() (*report, error) {
 	r.Disks = []disk{}
 	if b, err := os.ReadFile("/proc/self/mounts"); err == nil {
 		for _, m := range parseMounts(string(b)) {
-			total, used, ok := statfs(m.Mount)
+			total, used, ok := c.mounts.statfs(m.Mount)
 			if ok && total > 0 {
 				m.Total, m.Used = total, used
 				r.Disks = append(r.Disks, m)
@@ -136,14 +139,36 @@ func (c *collector) collect() (*report, error) {
 	return r, nil
 }
 
+// mountWatch remembers mounts whose statfs has not come back (a dead NFS server), so each report waits on a hung
+// mount once and leaves at most one stuck call behind per mount rather than one per report.
+type mountWatch struct {
+	mu   sync.Mutex
+	busy map[string]bool
+}
+
 // statfs gives up after a few seconds so a hung network mount cannot stall the report.
-func statfs(path string) (total, used uint64, ok bool) {
+func (w *mountWatch) statfs(path string) (total, used uint64, ok bool) {
 	type result struct {
 		total, used uint64
 		ok          bool
 	}
+	w.mu.Lock()
+	if w.busy[path] {
+		w.mu.Unlock()
+		return 0, 0, false
+	}
+	if w.busy == nil {
+		w.busy = map[string]bool{}
+	}
+	w.busy[path] = true
+	w.mu.Unlock()
 	ch := make(chan result, 1)
 	go func() {
+		defer func() {
+			w.mu.Lock()
+			delete(w.busy, path)
+			w.mu.Unlock()
+		}()
 		// a file bind-mounted over another (containers do this for /etc/hosts) is not a disk
 		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
 			ch <- result{}

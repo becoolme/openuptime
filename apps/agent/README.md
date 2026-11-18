@@ -17,10 +17,11 @@ curl -fsSL https://raw.githubusercontent.com/becoolme/openuptime/main/apps/agent
 ```
 
 The script ([`install.sh`](install.sh)) comes straight from this repository, so you can read it before running it. It
-downloads the binary for the machine (amd64 or arm64) from the latest GitHub release, writes the key to
-`/etc/openuptime-agent.env` (readable by root only) and starts the `openuptime-agent` systemd service under a dynamic,
-unprivileged user. Pass `--binary-url` (or set `OPENUPTIME_AGENT_URL`) to download from a mirror instead. Run the
-script again with `--uninstall` to remove it.
+downloads the binary for the machine (amd64 or arm64) from the latest GitHub release, checks it against the release's
+`SHA256SUMS` before running it, writes the key to `/etc/openuptime-agent.env` (readable by root only) and starts the
+`openuptime-agent` systemd service under a dynamic, unprivileged user. The report address must use HTTPS (plain HTTP
+only for localhost). Pass `--binary-url` (or set `OPENUPTIME_AGENT_URL`) to download from an HTTPS mirror instead, with
+a `SHA256SUMS` file next to the binary or `--sha256 HEX`. Run the script again with `--uninstall` to remove it.
 
 One key per project: run the same command on as many servers as you like. Each machine registers itself on its first
 report, by `/etc/machine-id`, and takes its host name as its name.
