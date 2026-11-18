@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, createRepo, eq, schema, sql } from "./index";
 
@@ -157,7 +158,13 @@ describe.skipIf(!url)("monitors and maintenance", () => {
       const row = (await repo.claimDue(1000)).find((x) => x.id === m.id)!;
       return { id: m.id, token: row.nextCheckAt, generation: row.runGeneration! };
     };
-    const a = await claim(3600);
+    // Long intervals come due at an offset derived from the monitor id, so the first slot can fall anywhere in the next
+    // interval. Pick a long interval whose slot is well past the short one, so the shortened claim really comes first.
+    const phase = (interval: number) => Number.parseInt(createHash("md5").update(m.id).digest("hex").slice(0, 8), 16) % interval;
+    const untilSlot = (interval: number) => interval - ((Math.floor(Date.now() / 1000) - phase(interval)) % interval + interval) % interval;
+    let long = 3600;
+    while (untilSlot(long) < 600) long += 60;
+    const a = await claim(long);
     expect(a.generation).toBeGreaterThan(0);
     expect((await Promise.all([repo.beginRuns([a]), repo.beginRuns([a])])).flat()).toEqual([m.id]);
     const b = await claim(60);
