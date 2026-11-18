@@ -117,6 +117,7 @@ sudo systemctl restart openuptime-agent`;
       <li><strong>Network</strong>: each interface with its MAC address, all of its IPv4 and IPv6 addresses, and its receive and send rate. Loopback, Docker, bridge and overlay interfaces are left out by default.</li>
       <li><strong>System</strong>: host name, distribution, kernel, architecture, boot time and uptime.</li>
     </ul>
+    <p>A report lists at most 64 disks and 64 network interfaces, with up to 32 IPv4 and 32 IPv6 addresses on each interface. On a host with more, such as one with hundreds of ZFS datasets or VM tap interfaces, the first ones are listed. The network rates still count every interface; the disk totals count the listed disks.</p>
     <p>Click a server for its current state in a side panel, or open its page for charts over the last hour, 6 hours, 24 hours or 7 days. Metrics are kept for 7 days.</p>
     <p>The agent reads system statistics from <code>/proc</code>, plus <code>/etc/machine-id</code> and <code>/etc/os-release</code>. It does not read logs, processes, users' files or anything else stored on the server.</p>
 
@@ -260,6 +261,7 @@ sudo systemctl restart openuptime-agent`;
       <li><strong>网络</strong>：每个网卡的 MAC 地址、全部 IPv4 和 IPv6 地址，以及接收和发送速率。默认排除回环、Docker、网桥和 overlay 网卡。</li>
       <li><strong>系统</strong>：主机名、发行版、内核、架构、启动时间和运行时长。</li>
     </ul>
+    <p>每次上报最多列出 64 个磁盘和 64 个网卡，每个网卡最多 32 个 IPv4 和 32 个 IPv6 地址。主机上更多时（比如有几百个 ZFS 数据集或虚拟机 tap 网卡），只列出前面的部分。网络速率仍然统计所有网卡，磁盘总量只统计列出的磁盘。</p>
     <p>点击服务器可以在侧边面板查看当前状态，打开详情页可以查看最近 1 小时、6 小时、24 小时或 7 天的图表。指标数据保留 7 天。</p>
     <p>agent 只从 <code>/proc</code> 读取系统统计信息，另外读取 <code>/etc/machine-id</code> 和 <code>/etc/os-release</code>。它不会读取日志、进程、用户文件或服务器上存储的其他任何内容。</p>
 

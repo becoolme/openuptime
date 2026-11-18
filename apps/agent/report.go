@@ -1,5 +1,9 @@
 package main
 
+// maxListed caps the disks and interfaces in one report, as the dashboard keeps no more: a host with hundreds of
+// datasets or VM taps sends the first ones and stays well under the size limit.
+const maxListed = 64
+
 // report is the body of POST /api/agent/report. Byte counts are bytes, rates are bytes per second, cpu is a percentage.
 type report struct {
 	Version   string     `json:"version"`

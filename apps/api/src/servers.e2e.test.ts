@@ -26,8 +26,21 @@ describe("server reports", () => {
     expect(reportSchema.safeParse({ ...base, machineId: "short" }).success).toBe(false);
     expect(reportSchema.safeParse({ ...base, machineId: "../../etc/passwd" }).success).toBe(false);
     expect(reportSchema.safeParse({ ...base, metrics: { cpu: 101, memUsed: 1 } }).success).toBe(false);
-    expect(reportSchema.safeParse({ ...base, disks: Array.from({ length: 65 }, () => ({ mount: "/", total: 1, used: 1 })) }).success).toBe(false);
     expect(reportSchema.safeParse({ ...base, metrics: { cpu: 5, memUsed: 2e15 } }).success).toBe(false);
+  });
+  it("cuts an oversized report down instead of refusing it", () => {
+    const r = reportSchema.parse({
+      machineId: "abcdef0123456789",
+      metrics: { cpu: 5, memUsed: 1.5, swapUsed: 2.4 },
+      disks: Array.from({ length: 300 }, (_, i) => ({ mount: `/${"d".repeat(2000)}${i}`, total: 10.6, used: 1 })),
+      interfaces: Array.from({ length: 300 }, (_, i) => ({ name: `tap${i}i0`, ipv6: Array.from({ length: 50 }, () => "2001:db8::1") })),
+    });
+    expect(r.disks).toHaveLength(64);
+    expect(r.disks[0].mount).toHaveLength(1024);
+    expect(r.disks[0].total).toBe(11);
+    expect(r.interfaces).toHaveLength(64);
+    expect(r.interfaces[0].ipv6).toHaveLength(32);
+    expect(r.metrics).toMatchObject({ memUsed: 2, swapUsed: 2 });
   });
   it("takes an empty list sent as null", () => {
     const r = reportSchema.parse({ machineId: "abcdef0123456789", metrics: { cpu: 5, memUsed: 1 }, disks: null, interfaces: [{ name: "lo", ipv4: null }] });
