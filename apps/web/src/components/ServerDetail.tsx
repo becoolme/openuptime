@@ -5,7 +5,7 @@ import { t } from "../lib/i18n";
 import { navigate } from "../lib/nav";
 import { pollWhileVisible } from "../lib/poll";
 import { fmtDateTime, fmtTime } from "../lib/time";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { diskUse, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, maskIp, memPct, pct, platformLabel, primaryIp, serverState, since, specLabel } from "../lib/servers";
 import { HideIpsButton, OfflineAlerts } from "./ServerAlerts";
 import { CommandBox, Meter, SERVER_DOCS, ServerStatus, Tile, UNINSTALL_CMD } from "./Servers";

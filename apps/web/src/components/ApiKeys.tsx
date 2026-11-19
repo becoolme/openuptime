@@ -1,6 +1,6 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { ago, api, type Project } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import QRCode from "qrcode";

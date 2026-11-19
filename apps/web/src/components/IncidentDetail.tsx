@@ -2,7 +2,7 @@ import { adoptProject, backToAll } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { fmtTime } from "../lib/time";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { ago, api, type Incident } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 import IncidentDiagnosis from "./IncidentDiagnosis";

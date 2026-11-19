@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { authClient } from "../lib/auth-client";
 import { t } from "../lib/i18n";
 import { AuthShell } from "./AuthShell";

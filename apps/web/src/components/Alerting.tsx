@@ -1,6 +1,6 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 

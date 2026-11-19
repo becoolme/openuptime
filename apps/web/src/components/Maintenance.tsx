@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { api, type Maintenance as Window, type Monitor } from "../lib/api";
 import { t } from "../lib/i18n";
 import { fmtDateTime } from "../lib/time";

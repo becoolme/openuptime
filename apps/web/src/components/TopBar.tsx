@@ -1,5 +1,5 @@
 import { LOCALES, type Locale } from "../lib/i18n";
-import Select from "./Select";
+import Select from "@openuptime/ui/select";
 import { switchLocale } from "../lib/locale-path";
 
 /** Top-bar language select + theme toggle (locale in a cookie read by SSR, theme in localStorage). */

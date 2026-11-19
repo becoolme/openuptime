@@ -9,6 +9,9 @@ export interface ToastOptions {
   action?: { label: string; run: () => void };
 }
 
+/** Window event carrying a toast; kept as `ou:toast` so existing listeners keep working. */
+export const TOAST_EVENT = "ou:toast";
+
 export const toast = (message: string, kind: ToastKind = "ok", opts: ToastOptions = {}) => {
-  window.dispatchEvent(new CustomEvent("ou:toast", { detail: { message, kind, ...opts } }));
+  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { message, kind, ...opts } }));
 };

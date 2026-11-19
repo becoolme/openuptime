@@ -1,4 +1,4 @@
-import { toast } from "./toast";
+import { toast } from "@openuptime/ui/toast";
 import { t } from "./i18n";
 
 /** How often a running tab asks the server whether a newer version was deployed. */

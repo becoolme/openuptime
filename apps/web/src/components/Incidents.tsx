@@ -1,10 +1,10 @@
-import { SkeletonRows } from "./Skeleton";
-import Select from "./Select";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
+import Select from "@openuptime/ui/select";
 import { navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { ago, api, type Incident, type Monitor } from "../lib/api";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ScopeChip, useProjects } from "./AllProjects";
 

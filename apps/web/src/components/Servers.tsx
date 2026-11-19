@@ -3,13 +3,13 @@ import { api, type Server, type ServerAlerts, type ServerDetail, type ServerList
 import { useHideIps } from "../lib/hide-ips";
 import { t } from "../lib/i18n";
 import { pollWhileVisible } from "../lib/poll";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import {
   filterServers, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, level, maskIp, memPct, pct, platformLabel,
   primaryIp, serverState, since, specLabel, type ServerFilter,
 } from "../lib/servers";
 import { HideIpsButton, MuteButton, OfflineAlerts } from "./ServerAlerts";
-import { SkeletonRows } from "./Skeleton";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
 
 type Row = ServerList["servers"][number];
 

@@ -1,13 +1,13 @@
-import { SkeletonRows } from "./Skeleton";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
 import MonitorImport from "./MonitorImport";
 import { monitorState } from "../lib/domain-expiry";
-import Select from "./Select";
+import Select from "@openuptime/ui/select";
 import { McpFields, initialMcpForm, mcpConfigForSave, mcpDiscoveryConfig, McpConnectionFields, McpToolCatalog, mcpConnectionKey } from "./McpFields";
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { ago, api, everyShort, type Channel, type Incident, type ApiFlow, type JsonAssertion, type KeywordMode, type McpPreview, type Monitor, type ProjectOverview } from "../lib/api";
 import { pollWhileVisible } from "../lib/poll";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";

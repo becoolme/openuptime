@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import QRCode from "qrcode";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { type Clock, fmtTime, getClock, setClock } from "../lib/time";
 
 type Me = { name?: string; email?: string; locale?: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null };
