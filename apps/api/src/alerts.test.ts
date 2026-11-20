@@ -3,6 +3,7 @@ import { sendPush } from "./apns";
 import { configureEmail, sendEmail } from "./email";
 import { signWebhook } from "./webhook-signing";
 import { clearProjectNames, deliver, dispatchAlert, retryDeliveries, sendEscalations, sendReminders, withProject } from "./alerts";
+import { unmetered } from "./entitlements";
 
 // these tests stub the global fetch and use made-up host names; the pinned connection would bypass the stub and go to the real network
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
@@ -402,6 +403,46 @@ describe("project name in alerts", () => {
     expect(bodies[0]).toEqual({ text: "🔴 WWW homepage is down — WWW homepage is down" });
     const w = await sent(opened, [], "webhook", { listProjects: async () => { throw new Error("db down"); } });
     expect(w.bodies[0]).not.toHaveProperty("project");
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("keeps sending when the delivery row cannot be written", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const down = async () => { throw new Error("db down"); };
+    const text = expect.stringContaining("WWW homepage is down");
+    expect((await sent(opened, two, "slack", { queueDeliveries: down })).bodies[0]).toMatchObject({ text });
+    expect((await sent(opened, two, "slack", { logDeliveries: down })).bodies[0]).toMatchObject({ text });
+    await expect(sent(opened, two, "slack", { channelsToAlert: down })).resolves.toBeTruthy();
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("leaves a queued delivery for the sweep when the claim fails", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { bodies } = await sent(opened, two, "slack", { claimDelivery: async () => { throw new Error("db down"); } });
+    expect(bodies).toEqual([]);
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("applies routing policy and email allowance when no row can be queued", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bodies: unknown[] = [];
+    const logged: Record<string, unknown>[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => (bodies.push(JSON.parse(String(init?.body))), new Response("", { status: 200 })));
+    const repoFor = (type: string) => ({
+      listProjects: async () => two,
+      channelsToAlert: async () => [{ id: "c1", organizationId: "o", projectId: null, type, name: "c", enabled: true, config: type === "email" ? { to: "a@example.com" } : { url: "https://hooks.example/s" } }],
+      logDeliveries: async (rows: Record<string, unknown>[]) => { logged.push(...rows); },
+      queueDeliveries: async () => [],
+      claimDelivery: async () => null,
+      finishDelivery: async () => {},
+      subscribersFor: async () => [],
+    });
+    await dispatchAlert(repoFor("slack") as never, "o", opened as never, [], { ...unmetered, allowAlertChannel: async () => false });
+    expect(bodies).toEqual([]);
+    expect(logged).toEqual([expect.objectContaining({ status: "skipped", error: "skipped: not selected by alert routing policy" })]);
+    await dispatchAlert(repoFor("email") as never, "o", opened as never, [], { ...unmetered, spendEmails: async () => 0 });
+    expect(bodies).toEqual([]);
+    expect(logged.at(-1)).toMatchObject({ status: "skipped" });
     expect(err).toHaveBeenCalled();
   });
 

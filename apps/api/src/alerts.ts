@@ -309,23 +309,27 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     // a repeat or escalation is pointless once someone has taken the incident
     if ((delivery.kind === "incident.reminder" || delivery.kind === "incident.escalated") && (incident.acknowledgedAt || incident.resolvedAt)) {
       const why = incident.resolvedAt ? "skipped: the incident was resolved before this alert could be sent" : "skipped: the incident was acknowledged before this alert could be sent";
-      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why }).catch((e) => console.error("delivery could not be marked skipped", e));
       continue;
     }
     // the incident changed while this alert waited for its retry: a "down" for one that has recovered, or a "recovered" for one that was reopened
     if ((delivery.kind === "incident.opened" && incident.resolvedAt) || (delivery.kind === "incident.resolved" && !incident.resolvedAt)) {
       const why = delivery.kind === "incident.opened" ? "skipped: the incident was resolved before this alert could be sent" : "skipped: the incident was reopened before this alert could be sent";
-      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+      await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why }).catch((e) => console.error("delivery could not be marked skipped", e));
       continue;
     }
     // A reopened incident alerts again as "down again". Which of its down alerts this is follows from the order they were
     // queued in: a later one makes this a stale original, an earlier one makes this the "again".
     let reopened = false;
     if (delivery.kind === "incident.opened" && incident.evaluationNote?.startsWith("reopened")) {
-      const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)).filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
+      // A failed lookup loses the "again" wording and cannot suppress a stale original, but the already-claimed row is
+      // still sent rather than left behind.
+      const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)
+        .catch((e) => (console.error(`delivery history lookup failed for incident ${incident.id}`, e), [])))
+        .filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
       if (opened.some((x) => x.channelId === delivery.channelId && x.createdAt > delivery.createdAt && wasDelivered(x))) {
         const why = "skipped: the incident was reopened and alerted again before this alert could be sent";
-        await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why });
+        await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why }).catch((e) => console.error("delivery could not be marked skipped", e));
         continue;
       }
       reopened = opened.some((x) => x.createdAt < delivery.createdAt);
@@ -334,7 +338,8 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
     const pendingRouting = delivery.error === ROUTING_UNAVAILABLE;
-    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
+    const lang = await languageFor(repo, channel).catch((e) => (console.error(`alert language lookup failed for ${channel.name}`, e), "en" as const));
+    await execute(repo, delivery, channel, ev, lang, pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
   }
   return due.length;
 }
@@ -346,38 +351,66 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
  */
 async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertChannel[], entitlements: Entitlements, extra: Partial<NewDelivery> = {}) {
   const ev = await withProject(repo, orgId, event);
-  const fallback = channels.some((c) => c.type === "email") ? await orgLang(repo, orgId) : "en";
+  // every lookup below may fail while the alert itself is still deliverable: keep the alert, lose only the decoration
+  const fallback = channels.some((c) => c.type === "email")
+    ? await orgLang(repo, orgId).catch((e) => (console.error("owner language lookup failed; alerting in English", e), "en" as const))
+    : "en";
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name, ...extra };
   const live = channels.filter((c) => c.enabled);
   const off = channels.filter((c) => !c.enabled);
-  await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })));
+  await repo.logDeliveries(off.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped" as const, error: "skipped: channel disabled", statusMessage: "skipped: channel disabled" })))
+    .catch((e) => console.error("disabled-channel deliveries could not be logged; the alerts still go out", e));
   // a phone is pushed once per event, however many push channels reach it
   const pushed: PushedDevices = new Map();
   // Persist the pending authorization before claiming: worker recovery must not bypass the policy.
   // A completed provider attempt replaces this marker; interrupted attempts retain it for safe reevaluation.
-  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, ...(entitlements.allowAlertChannel ? { error: ROUTING_UNAVAILABLE } : {}) })));
+  // Without rows nothing can be claimed or retried, so every channel takes the direct-send path below rather than losing the alert.
+  const rows = await repo.queueDeliveries(live.map((c) => ({ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, ...(entitlements.allowAlertChannel ? { error: ROUTING_UNAVAILABLE } : {}) })))
+    .catch((e) => {
+      console.error("alert deliveries could not be queued; sending without a durable retry", e);
+      return [] as Awaited<ReturnType<Repo["queueDeliveries"]>>;
+    });
+  /**
+   * Send a channel that no claimed row owns, because the queue write failed. Authorization and the email allowance still
+   * apply; without a row there is no durable retry, so a policy failure here loses this alert.
+   */
+  const sendWithoutClaim = async (c: AlertChannel, lang: Lang) => {
+    try {
+      if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
+    } catch (e) {
+      if (e instanceof Skipped) {
+        await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: e.message, statusMessage: e.message }]).catch(() => {});
+        return;
+      }
+      console.error(`ALERT NOT SENT via ${c.name} (${c.id}): routing policy failed and the delivery could not be queued for retry`, e);
+      await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "failed", error: ROUTING_UNAVAILABLE, statusMessage: `failed: ${ROUTING_UNAVAILABLE} (could not be queued for retry)` }]).catch(() => {});
+      return;
+    }
+    // A direct send has no delivery row to meter, so charge the email allowance here; a failed allowance read stays fail-open.
+    if (c.type === "email" && (await withinEmails(entitlements, c.organizationId, [c])).skipped) {
+      await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: SKIPPED, statusMessage: SKIPPED }]).catch(() => {});
+      return;
+    }
+    await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
+  };
   await Promise.all(
     live.map(async (c) => {
-      const lang = await languageFor(repo, c, fallback);
+      const lang = await languageFor(repo, c, fallback).catch((e) => (console.error(`alert language lookup failed for ${c.name}`, e), fallback));
       const row = rows.find((r) => r.channelId === c.id);
       if (!row) {
         // no row to claim: send anyway, only the history is missing
-        try {
-          if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
-        } catch (e) {
-          if (e instanceof Skipped) {
-            await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: e.message, statusMessage: e.message }]).catch(() => {});
-            return;
-          }
-          // No row means no durable retry, so a policy failure here loses this alert: say so loudly and try to leave a trace.
-          console.error(`ALERT NOT SENT via ${c.name} (${c.id}): routing policy failed and the delivery could not be queued for retry`, e);
-          await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "failed", error: ROUTING_UNAVAILABLE, statusMessage: `failed: ${ROUTING_UNAVAILABLE} (could not be queued for retry)` }]).catch(() => {});
-          return;
-        }
-        await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
+        await sendWithoutClaim(c, lang);
         return;
       }
-      const claimed = await repo.claimDelivery(row.id);
+      let claimed: Awaited<ReturnType<Repo["claimDelivery"]>> = null;
+      try {
+        claimed = await repo.claimDelivery(row.id);
+      } catch (e) {
+        // The row is already queued, so the stuck-delivery sweep retries it. Sending here would bypass the claim, spend the
+        // email allowance a second time, and then leave that row to be sent again.
+        console.error(`alert delivery could not be claimed for ${c.name}; leaving it for the delivery sweep`, e);
+        return;
+      }
       if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed, entitlements.allowAlertChannel ? claimed.createdAt ?? new Date() : undefined);
     }),
   );
@@ -385,7 +418,11 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
 
 /** Fan an event out to every enabled channel in the org. Failures are logged, never thrown. */
 export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channelIds: string[] = [], entitlements: Entitlements = unmetered) {
-  const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId, withDisabled: true });
+  const channels = await repo.channelsToAlert(orgId, { channelIds, projectId: ev.monitor.projectId, withDisabled: true })
+    .catch((e) => {
+      console.error("alert channels could not be loaded; status page subscribers are still notified", e);
+      return [] as AlertChannel[];
+    });
   await fanOut(repo, orgId, ev, channels, entitlements);
   const base = { organizationId: orgId, projectId: ev.monitor.projectId ?? null, kind: ev.kind, incidentId: ev.incident.id, monitorName: ev.monitor.name };
   const subs = await notifySubscribers(repo, orgId, ev, entitlements).catch(async () => {
@@ -396,7 +433,8 @@ export async function dispatchAlert(repo: Repo, orgId: string, ev: Event, channe
   });
   if (subs && subs.total > 0) {
     const error = subs.failed ? `${subs.failed}/${subs.total} failed: ${subs.error}` : subs.skipped ? `${subs.denied ? "skipped: subscriber access policy or email allowance" : SKIPPED} (${subs.skipped}/${subs.total} not sent)` : null;
-    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: !error, error, status: !error ? "sent" : subs.failed ? "failed" : "skipped", statusMessage: error && (subs.failed ? `failed: ${error}` : error) }]);
+    await repo.logDeliveries([{ ...base, channelId: null, channelName: "Status page subscribers", channelType: "email", ok: !error, error, status: !error ? "sent" : subs.failed ? "failed" : "skipped", statusMessage: error && (subs.failed ? `failed: ${error}` : error) }])
+      .catch((e) => console.error("subscriber delivery log failed", e));
   }
 }
 
