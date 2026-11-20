@@ -36,7 +36,8 @@ export function fmtTime(iso: string | number | Date, o: { seconds?: boolean; utc
 export function fmtDateTime(iso: string | number | Date, o: { timeZone?: string; clock?: Clock; locale?: string } = {}): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  // dateStyle cannot be combined with hourCycle, and timeStyle is not padded to two digits on every locale, so ask for the
-  // fields explicitly: the date still follows the locale, while a 24-hour clock always shows 00:05 rather than 0:05.
+  // Date/time style options cannot be combined with explicit components such as `hour: "2-digit"`, and timeStyle does not
+  // pad the hour on every locale, so ask for the fields explicitly: the date still follows the locale, while a 24-hour
+  // clock always shows 00:05 rather than 0:05.
   return d.toLocaleString(o.locale ?? [], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", ...cycle(o.clock ?? getClock()), timeZone: o.timeZone });
 }
