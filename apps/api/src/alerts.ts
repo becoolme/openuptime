@@ -406,7 +406,6 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
       try {
         claimed = await repo.claimDelivery(row.id);
       } catch (e) {
-        // The database cannot confirm the claim. Sending may duplicate a notice, but not sending loses the alert.
         // The row is already queued, so the stuck-delivery sweep retries it. Sending here would bypass the claim, spend the
         // email allowance a second time, and then leave that row to be sent again.
         console.error(`alert delivery could not be claimed for ${c.name}; leaving it for the delivery sweep`, e);
