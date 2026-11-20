@@ -29,7 +29,7 @@ and skip `wrangler queues create`: the minute cron then runs up to 40 monitors i
 2. It atomically leases due monitors (`UPDATE … FOR UPDATE SKIP LOCKED`), so overlapping runs never duplicate work. A monitor with an interval longer than a minute is checked at a fixed offset within that interval,
    derived from its id, so monitors created at the same time are spread over the interval instead of running in one tick.
 3. Leased monitors are packed 25 per message into the `openuptime-checks` Queue.
-4. The queue consumer (same Worker) runs each pack with its own invocation budget, writes results, opens and resolves incidents, and fans out alerts (Slack, Lark / Feishu, webhook, Telegram, PagerDuty, email).
+4. The queue consumer (same Worker) runs each pack with its own invocation budget, writes results, opens and resolves incidents, and fans out alerts (Slack, Discord, Microsoft Teams, Telegram, Lark / Feishu, ntfy, Bark, Apprise, PagerDuty, webhook, email and push).
 
 Without a bound queue (local dev, or `POST /internal/run-checks` with `x-cron-secret`), checks run inline.
 
@@ -72,8 +72,11 @@ Clients authorize with OAuth 2.1 (dynamic client registration + PKCE; discovery 
 ## Monitoring features
 
 - **HTTP** checks: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS; optional request bodies up to 16 KiB UTF-8 for methods other than GET/HEAD; expected status (one code, or a list of codes, ranges and classes such as `200-299,401`, with `!` to exclude), optional keyword (must contain / must not contain, as plain text or as an RE2 regular expression), custom request headers (use for bearer/basic auth).
-- **TCP**, **DNS**, **Heartbeat** (with a grace period before a missed ping counts as a failure).
+- **TCP**, **DNS**, **WebSocket** (opening handshake, optionally a sent message and the reply it expects) and **Heartbeat** (with a grace period before a missed ping counts as a failure).
 - **PostgreSQL**, **MySQL / MariaDB**, **Redis** reachability probes (handshake / `PING`; no credentials are sent).
+- **Domain expiry** through RDAP, **MCP server** checks (initialization and tool discovery; tool calls and schema drift are optional), **EVM** (`eth_syncing`) and **Solana** (`getHealth`) node health.
+- **Ping (ICMP)** on self-hosted installs and your own probes only: the Workers runtime cannot send ICMP, so the monitor type is not offered there.
+- **Servers**: the [agent](apps/agent/README.md) reports CPU, memory, swap, load, disks, disk I/O and network interfaces; a server that stops reporting raises an alert.
 - **Response-time alerts**: per-monitor "slow" threshold (default 1500 ms) marks a monitor degraded; optionally open a minor incident after N consecutive slow checks.
 - **Tags** to group and filter monitors, plus **JSON import / export** (`GET /api/monitors/export`, `POST /api/monitors/import`).
 - **Stats** come from an hourly rollup (`check_rollup`), so uptime stays cheap as history grows. Raw check results are kept 90 days by default (Settings → Check history); rollups for a year.
