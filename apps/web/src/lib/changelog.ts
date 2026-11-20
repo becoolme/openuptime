@@ -29,6 +29,21 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
+    title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
+    summary: {
+      en: "A heartbeat ping now finds its monitor through an index instead of scanning the monitor table.",
+      zh: "心跳上报现在通过索引找到对应的监控，不再扫描整张监控表。",
+    },
+    points: [
+      { en: "Heartbeat pings and monitor lookups no longer slow down as the number of monitors in the database grows.", zh: "数据库中的监控越来越多时，心跳上报和监控查询也不会随之变慢。" },
+    ],
+    upgrade: {
+      en: "The first upgrade past this version builds an index on the monitor table. On a large table the build blocks monitor writes while it runs, so upgrade in a quiet window.",
+      zh: "升级到这个版本后第一次启动会为监控表建立索引。表很大时，建索引期间会阻塞监控写入，请在低峰时段升级。",
+    },
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
