@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "hourly-housekeeping-isolation", date: "2026-11-20", edition: "community",
+    title: { en: "Hourly cleanup can no longer delay alerts", zh: "整点清理不再拖延告警" },
+    summary: {
+      en: "A failed hourly cleanup stays contained instead of skipping the five-minute alert and report work.",
+      zh: "整点清理失败不会再连带跳过每五分钟执行的告警和报告任务。",
+    },
+    points: [
+      { en: "When the hourly purge fails, repeat reminders, escalations, maintenance reminders and monthly reports still run on their next tick.", zh: "整点清理失败时，重复提醒、升级告警、维护提醒和月度报告仍会在下一次调度中执行。" },
+      { en: "The failure is logged and no longer ends the scheduled run with an unhandled rejection.", zh: "失败会写入日志，不再让本次定时任务以未处理的异常结束。" },
+    ],
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
