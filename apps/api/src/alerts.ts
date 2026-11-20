@@ -322,7 +322,10 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     // queued in: a later one makes this a stale original, an earlier one makes this the "again".
     let reopened = false;
     if (delivery.kind === "incident.opened" && incident.evaluationNote?.startsWith("reopened")) {
-      const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)).filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
+      // a failed lookup only loses the "again" wording; the already-claimed row is still sent rather than left behind
+      const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)
+        .catch((e) => (console.error(`delivery history lookup failed for incident ${incident.id}`, e), [])))
+        .filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
       if (opened.some((x) => x.channelId === delivery.channelId && x.createdAt > delivery.createdAt && wasDelivered(x))) {
         const why = "skipped: the incident was reopened and alerted again before this alert could be sent";
         await repo.finishDelivery(delivery.id, { status: "skipped", error: why, message: why }).catch((e) => console.error("delivery could not be marked skipped", e));
@@ -334,7 +337,8 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
     const pendingRouting = delivery.error === ROUTING_UNAVAILABLE;
-    await execute(repo, delivery, channel, ev, await languageFor(repo, channel), pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
+    const lang = await languageFor(repo, channel, "en").catch((e) => (console.error(`alert language lookup failed for ${channel.name}`, e), "en" as const));
+    await execute(repo, delivery, channel, ev, lang, pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
   }
   return due.length;
 }
@@ -365,25 +369,36 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
       console.error("alert deliveries could not be queued; sending without a durable retry", e);
       return [] as Awaited<ReturnType<Repo["queueDeliveries"]>>;
     });
+  /**
+   * Send a channel that no claimed row owns, because the queue write or the claim failed. Authorization and the email
+   * allowance still apply; without a row there is no durable retry, so a policy failure here loses this alert.
+   */
+  const sendWithoutClaim = async (c: AlertChannel, lang: Lang) => {
+    try {
+      if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
+    } catch (e) {
+      if (e instanceof Skipped) {
+        await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: e.message, statusMessage: e.message }]).catch(() => {});
+        return;
+      }
+      console.error(`ALERT NOT SENT via ${c.name} (${c.id}): routing policy failed and the delivery could not be queued for retry`, e);
+      await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "failed", error: ROUTING_UNAVAILABLE, statusMessage: `failed: ${ROUTING_UNAVAILABLE} (could not be queued for retry)` }]).catch(() => {});
+      return;
+    }
+    // A direct send has no delivery row to meter, so charge the email allowance here; a failed allowance read stays fail-open.
+    if (c.type === "email" && (await withinEmails(entitlements, c.organizationId, [c])).skipped) {
+      await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: SKIPPED, statusMessage: SKIPPED }]).catch(() => {});
+      return;
+    }
+    await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
+  };
   await Promise.all(
     live.map(async (c) => {
       const lang = await languageFor(repo, c, fallback).catch((e) => (console.error(`alert language lookup failed for ${c.name}`, e), fallback));
       const row = rows.find((r) => r.channelId === c.id);
       if (!row) {
         // no row to claim: send anyway, only the history is missing
-        try {
-          if (entitlements.allowAlertChannel) await authorizeChannel(c, ev, entitlements, new Date());
-        } catch (e) {
-          if (e instanceof Skipped) {
-            await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "skipped", error: e.message, statusMessage: e.message }]).catch(() => {});
-            return;
-          }
-          // No row means no durable retry, so a policy failure here loses this alert: say so loudly and try to leave a trace.
-          console.error(`ALERT NOT SENT via ${c.name} (${c.id}): routing policy failed and the delivery could not be queued for retry`, e);
-          await repo.logDeliveries([{ ...base, channelId: c.id, channelName: c.name, channelType: c.type, ok: false, status: "failed", error: ROUTING_UNAVAILABLE, statusMessage: `failed: ${ROUTING_UNAVAILABLE} (could not be queued for retry)` }]).catch(() => {});
-          return;
-        }
-        await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((e) => console.error(`alert via ${c.name} failed`, e));
+        await sendWithoutClaim(c, lang);
         return;
       }
       let claimed: Awaited<ReturnType<Repo["claimDelivery"]>> = null;
@@ -392,7 +407,7 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
       } catch (e) {
         // The database cannot confirm the claim. Sending may duplicate a notice, but not sending loses the alert.
         console.error(`alert delivery could not be claimed for ${c.name}; sending without the claim`, e);
-        await deliver(c, ev, alertText(ev), lang, repo, pushed).catch((err) => console.error(`alert via ${c.name} failed`, err));
+        await sendWithoutClaim(c, lang);
         return;
       }
       if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed, entitlements.allowAlertChannel ? claimed.createdAt ?? new Date() : undefined);

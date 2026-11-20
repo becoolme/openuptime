@@ -36,8 +36,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "记录或排队投递失败时，告警不再丢失，触发告警的请求也不会因此报错。",
     },
     points: [
-      { en: "When delivery rows cannot be written, each channel is still sent directly, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去时，仍会直接向每个渠道发送，数据库出问题不会让一次故障变成无声的故障。" },
-      { en: "A failed owner-language or channel lookup falls back to English and the configured channels instead of stopping the fan-out.", zh: "读取工作区语言或渠道失败时，会回退到英文和已配置的渠道，而不是中断整次分发。" },
+      { en: "When delivery rows cannot be written or claimed, each channel is still sent directly under the same routing policy and email allowance, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去或认领失败时，仍会在相同的路由策略和邮件配额下直接发送，数据库出问题不会让一次故障变成无声的故障。" },
+      { en: "A failed owner-language lookup falls back to English, and a failed channel lookup still notifies status page subscribers instead of failing the request.", zh: "读取工作区语言失败时会回退到英文；读取渠道失败时仍会通知状态页订阅者，而不是让请求报错。" },
       { en: "A manual check or a heartbeat ping no longer returns an error only because the alert history could not be written.", zh: "手动检测或心跳上报不会再仅因为告警历史写入失败而返回错误。" },
     ],
   },
