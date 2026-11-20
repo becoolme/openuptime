@@ -28,36 +28,34 @@ const hostedSpecifier = /(^|\/)(cloud|edge)(\/|$)|worker\.cloud|wrangler\.(cloud
 
 /**
  * The hosted branch merges `main` and legitimately holds the hosted files, so these checks only apply on `main` and its
- * pull requests. A feature branch cut from `cloud` also holds those files without being named `cloud*`; treat it as hosted
- * so a local run does not report the files as a leak. `main` and `master` never get that exemption, so a real leak is still
- * caught even if the files are already there locally.
+ * pull requests. Locally, a branch is treated as hosted when its name or its upstream names a cloud branch, so a feature
+ * branch cut from `cloud` does not report the inherited files as a leak. A Community feature branch that accidentally adds
+ * a hosted file is still checked, because neither its name nor its upstream looks like cloud.
  */
-export const isHostedCheckout = (branch: string, hasHostedFiles: boolean) =>
-  /^cloud/.test(branch) || (!/^(main|master)$/.test(branch) && hasHostedFiles);
+const cloudRef = (ref: string) => ref.split("/").some((part) => /^cloud/.test(part));
+export const isHostedCheckout = (branch: string, upstream: string) => cloudRef(branch) || cloudRef(upstream);
 
 const targetBranch = () => process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME || "";
-const localBranch = () => {
+const localRef = (args: string) => {
   try {
-    return execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return execSync(`git rev-parse --abbrev-ref --symbolic-full-name ${args}`, { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {
     return "";
   }
 };
-const hosted = targetBranch()
-  ? /^cloud/.test(targetBranch())
-  : isHostedCheckout(localBranch(), CLOUD_ONLY_PATHS.some((p) => existsSync(join(ROOT, p))));
+const hosted = targetBranch() ? cloudRef(targetBranch()) : isHostedCheckout(localRef("HEAD"), localRef("@{upstream}"));
 
 describe("hosted checkout detection", () => {
-  it("treats a cloud branch, and a feature branch carrying hosted files, as hosted", () => {
-    expect(isHostedCheckout("cloud", false)).toBe(true);
-    expect(isHostedCheckout("cloud-private/traditional-chinese", true)).toBe(true);
-    expect(isHostedCheckout("traditional-chinese", true)).toBe(true);
+  it("treats a cloud branch, or a branch tracking one, as hosted", () => {
+    expect(isHostedCheckout("cloud", "")).toBe(true);
+    expect(isHostedCheckout("cloud-private/traditional-chinese", "")).toBe(true);
+    expect(isHostedCheckout("traditional-chinese", "cloud-private/traditional-chinese")).toBe(true);
   });
 
-  it("still checks main when hosted files leaked into it", () => {
-    expect(isHostedCheckout("main", true)).toBe(false);
-    expect(isHostedCheckout("main", false)).toBe(false);
-    expect(isHostedCheckout("feature", false)).toBe(false);
+  it("still checks a community branch that carries a hosted file by accident", () => {
+    expect(isHostedCheckout("fix-webhooks", "origin/fix-webhooks")).toBe(false);
+    expect(isHostedCheckout("fix-webhooks", "")).toBe(false);
+    expect(isHostedCheckout("main", "origin/main")).toBe(false);
   });
 });
 
