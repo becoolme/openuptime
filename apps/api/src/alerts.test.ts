@@ -406,18 +406,24 @@ describe("project name in alerts", () => {
     expect(err).toHaveBeenCalled();
   });
 
-  it("keeps sending when the delivery row cannot be written or claimed", async () => {
+  it("keeps sending when the delivery row cannot be written", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const down = async () => { throw new Error("db down"); };
     const text = expect.stringContaining("WWW homepage is down");
     expect((await sent(opened, two, "slack", { queueDeliveries: down })).bodies[0]).toMatchObject({ text });
     expect((await sent(opened, two, "slack", { logDeliveries: down })).bodies[0]).toMatchObject({ text });
-    expect((await sent(opened, two, "slack", { claimDelivery: down })).bodies[0]).toMatchObject({ text });
     await expect(sent(opened, two, "slack", { channelsToAlert: down })).resolves.toBeTruthy();
     expect(err).toHaveBeenCalled();
   });
 
-  it("applies routing policy and email allowance when the claim fails", async () => {
+  it("leaves a queued delivery for the sweep when the claim fails", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { bodies } = await sent(opened, two, "slack", { claimDelivery: async () => { throw new Error("db down"); } });
+    expect(bodies).toEqual([]);
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("applies routing policy and email allowance when no row can be queued", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const bodies: unknown[] = [];
     const logged: Record<string, unknown>[] = [];
@@ -426,8 +432,8 @@ describe("project name in alerts", () => {
       listProjects: async () => two,
       channelsToAlert: async () => [{ id: "c1", organizationId: "o", projectId: null, type, name: "c", enabled: true, config: type === "email" ? { to: "a@example.com" } : { url: "https://hooks.example/s" } }],
       logDeliveries: async (rows: Record<string, unknown>[]) => { logged.push(...rows); },
-      queueDeliveries: async (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r, id: "d1", attempts: 0 })),
-      claimDelivery: async () => { throw new Error("db down"); },
+      queueDeliveries: async () => [],
+      claimDelivery: async () => null,
       finishDelivery: async () => {},
       subscribersFor: async () => [],
     });

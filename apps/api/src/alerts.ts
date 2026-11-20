@@ -322,7 +322,8 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     // queued in: a later one makes this a stale original, an earlier one makes this the "again".
     let reopened = false;
     if (delivery.kind === "incident.opened" && incident.evaluationNote?.startsWith("reopened")) {
-      // a failed lookup only loses the "again" wording; the already-claimed row is still sent rather than left behind
+      // A failed lookup loses the "again" wording and cannot suppress a stale original, but the already-claimed row is
+      // still sent rather than left behind.
       const opened = (await repo.incidentDeliveries(incident.organizationId, incident.id)
         .catch((e) => (console.error(`delivery history lookup failed for incident ${incident.id}`, e), [])))
         .filter((x) => x.kind === "incident.opened" && x.id !== delivery.id);
@@ -337,7 +338,7 @@ export async function retryDeliveries(repo: Repo, limit = 10, entitlements: Enti
     const eventKey = `${incident.id}:${delivery.kind}:${ev.count ?? 0}`;
     if (!pushedBy.has(eventKey)) pushedBy.set(eventKey, new Map());
     const pendingRouting = delivery.error === ROUTING_UNAVAILABLE;
-    const lang = await languageFor(repo, channel, "en").catch((e) => (console.error(`alert language lookup failed for ${channel.name}`, e), "en" as const));
+    const lang = await languageFor(repo, channel).catch((e) => (console.error(`alert language lookup failed for ${channel.name}`, e), "en" as const));
     await execute(repo, delivery, channel, ev, lang, pendingRouting ? entitlements : undefined, pushedBy.get(eventKey), pendingRouting ? delivery.createdAt : undefined);
   }
   return due.length;
@@ -370,8 +371,8 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
       return [] as Awaited<ReturnType<Repo["queueDeliveries"]>>;
     });
   /**
-   * Send a channel that no claimed row owns, because the queue write or the claim failed. Authorization and the email
-   * allowance still apply; without a row there is no durable retry, so a policy failure here loses this alert.
+   * Send a channel that no claimed row owns, because the queue write failed. Authorization and the email allowance still
+   * apply; without a row there is no durable retry, so a policy failure here loses this alert.
    */
   const sendWithoutClaim = async (c: AlertChannel, lang: Lang) => {
     try {
@@ -406,8 +407,9 @@ async function fanOut(repo: Repo, orgId: string, event: Event, channels: AlertCh
         claimed = await repo.claimDelivery(row.id);
       } catch (e) {
         // The database cannot confirm the claim. Sending may duplicate a notice, but not sending loses the alert.
-        console.error(`alert delivery could not be claimed for ${c.name}; sending without the claim`, e);
-        await sendWithoutClaim(c, lang);
+        // The row is already queued, so the stuck-delivery sweep retries it. Sending here would bypass the claim, spend the
+        // email allowance a second time, and then leave that row to be sent again.
+        console.error(`alert delivery could not be claimed for ${c.name}; leaving it for the delivery sweep`, e);
         return;
       }
       if (claimed) await execute(repo, claimed, c, ev, lang, entitlements, pushed, entitlements.allowAlertChannel ? claimed.createdAt ?? new Date() : undefined);
