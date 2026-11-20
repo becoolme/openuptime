@@ -1,0 +1,198 @@
+---
+// Everything here comes from src/generated/api.json (scripts/gen-api.mjs reads packages/ui) and from src/demos.
+import "@openuptime/ui/theme.css";
+import "@openuptime/ui/base.css";
+import "../docs.css";
+import api from "../generated/api.json";
+import Demo, { demos } from "../components/Demo";
+
+const sources = import.meta.glob<string>("../demos/*.demo.tsx", { query: "?raw", import: "default", eager: true });
+const sourceOf = (name: string) => Object.entries(sources).find(([p]) => p.endsWith(`/${name}.demo.tsx`))?.[1];
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const inline = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/`([^`]+)`/g, "<code>$1</code>");
+
+/** The README is a few bullets and paragraphs: enough markdown for that, no parser dependency. */
+function readme(md: string) {
+  const out: string[] = [];
+  let list = false;
+  for (const raw of md.split("\n\n").flatMap((b) => b.replace(/\n(?!- )/g, " ").split("\n"))) {
+    const line = raw.trim();
+    if (!line || line.startsWith("# ")) continue;
+    if (line.startsWith("- ")) { if (!list) out.push("<ul>"); list = true; out.push(`<li>${inline(line.slice(2))}</li>`); continue; }
+    if (list) { out.push("</ul>"); list = false; }
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  if (list) out.push("</ul>");
+  return out.join("");
+}
+
+const exports = api.modules.flatMap((m) => m.exports.map((e) => ({ ...e, module: m.specifier, file: m.file })));
+const missingDemos = exports.filter((e) => (e.kind === "component" || e.kind === "hook") && !demos[e.name]).map((e) => e.name);
+const tokenGroups = ["colour", "shape", "font"].map((g) => ({ g, tokens: api.tokens.filter((t) => t.group === g) }));
+const styles = api.styles[0];
+// sections drawn by a component are shown by that component's demo; the rest get a specimen per class combination
+const standalone = styles.specimens.filter((s) => !/\.tsx\)/.test(s.section));
+const sectionOwner = (title: string) => title.match(/\((\w+)\.tsx\)/)?.[1];
+const tags: Record<string, string> = { btn: "button", in: "input", card: "div", fld: "label" };
+const tag = (base: string) => tags[base] ?? "span";
+const kindLabel: Record<string, string> = { component: "Component", hook: "Hook", function: "Function", type: "Type", const: "Constant" };
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{api.package} reference</title>
+  </head>
+  <body>
+    <aside class="nav">
+      <div class="brand"><span class="mono">{api.package}</span><span class="faint">generated reference</span></div>
+      <div class="theme" role="group" aria-label="Theme">
+        <button data-set-theme="">Auto</button><button data-set-theme="light">Light</button><button data-set-theme="dark">Dark</button>
+      </div>
+      <a href="#overview">Overview</a>
+      <a href="#tokens">Tokens</a>
+      <a href="#classes">Classes</a>
+      <div class="nav-h">Modules</div>
+      {api.modules.map((m) => (
+        <>
+          <a class="nav-m mono" href={`#${slug(m.specifier)}`}>{m.specifier.replace(`${api.package}/`, "")}</a>
+          {m.exports.map((e) => <a class="nav-e" href={`#${slug(e.name)}`}>{e.name}</a>)}
+        </>
+      ))}
+      <div class="nav-h">Stylesheet</div>
+      {styles.sections.map((s) => <a class="nav-e" href={`#css-${slug(s.title)}`}>{s.title}</a>)}
+    </aside>
+
+    <main>
+      <section id="overview">
+        <h1>{api.package}</h1>
+        <div class="readme" set:html={readme(api.readme)} />
+        <p class="faint small">
+          {api.modules.length} modules · {exports.length} exports · {api.tokens.length} tokens · {styles.sections.reduce((n, s) => n + s.rules.length, 0)} CSS rules.
+          Regenerated from <code>packages/ui</code> on every <code>dev</code> and <code>build</code>.
+        </p>
+        {missingDemos.length > 0 && <p class="warn">No demo yet for: {missingDemos.join(", ")} (add <code>src/demos/&lt;Name&gt;.demo.tsx</code>).</p>}
+      </section>
+
+      <section id="tokens">
+        <h2>Tokens <span class="mono faint small">@openuptime/ui/theme.css</span></h2>
+        {tokenGroups.map(({ g, tokens }) => (
+          <>
+            <h3>{g}</h3>
+            <div class="tokens">
+              {tokens.map((t) => (
+                <div class="tok card">
+                  {g === "colour" && (
+                    <div class="sw">
+                      <span style={`background:${t.derived ? `var(${t.name})` : t.light}`} title={`light: ${t.light}`} />
+                      {t.dark && <span style={`background:${t.dark}`} title={`dark: ${t.dark}`} />}
+                    </div>
+                  )}
+                  {g === "shape" && <div class="shape" style={t.name.includes("radius") ? `border-radius:var(${t.name})` : `box-shadow:var(${t.name})`} />}
+                  {g === "font" && <div class="font" style={`font-family:var(${t.name})`}>Aa 监控 Uptime 0123</div>}
+                  <code>{t.name}</code>
+                  <span class="mono faint small val">{t.light}</span>
+                  {t.dark && <span class="mono faint small val">dark {t.dark}</span>}
+                </div>
+              ))}
+            </div>
+          </>
+        ))}
+      </section>
+
+      <section id="classes">
+        <h2>Classes <span class="mono faint small">{styles.specifier}</span></h2>
+        <p class="muted">Every class combination declared in the stylesheet. Classes that belong to a component are shown in its demo.</p>
+        <div class="specimens">
+          {standalone.map((s) => (
+            <div class="spec card">
+              <div class="spec-h"><code>.{s.base}</code><span class="faint small">{s.section}</span></div>
+              <div class="demo-row">
+                {s.variants.map((v) => {
+                  const T = tag(s.base);
+                  if (T === "input") return <input class={v} placeholder={`class="${v}"`} />;
+                  if (T === "label") return <label class={v}>Label<input class="in" placeholder="Inside .fld" /></label>;
+                  if (T === "div") return <div class={v} style="padding:14px 18px">class="{v}"</div>;
+                  const text = v.includes(" ") ? v.split(" ").slice(1).join(" ") : v;
+                  return T === "button" ? <button class={v}>{text}</button> : <span class={v}>{text}</span>;
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {api.modules.map((m) => (
+        <section id={slug(m.specifier)} class="module">
+          <h2 class="mono">{m.specifier}</h2>
+          <p class="faint small mono">packages/ui/{m.file}</p>
+          {m.exports.map((e) => (
+            <article id={slug(e.name)} class="export">
+              <div class="ex-h">
+                <h3 class="mono">{e.name}</h3>
+                <span class={`kind ${e.kind}`}>{kindLabel[e.kind]}</span>
+                {e.isDefault && <span class="kind">default export</span>}
+              </div>
+              {e.doc && <p class="doc" set:html={inline(e.doc)} />}
+              <pre class="sig"><code>{e.isDefault ? `import ${e.name} from "${m.specifier}";` : `import { ${e.kind === "type" ? "type " : ""}${e.name} } from "${m.specifier}";`}</code></pre>
+              {"signature" in e && e.signature && <pre class="sig"><code>{e.kind === "component" ? `<${e.name}${e.typeParams?.length ? `<${e.typeParams.join(", ")}>` : ""} …props /> → ${e.returns}` : `${e.name}${e.signature}`}</code></pre>}
+              {e.kind !== "component" && "text" in e && e.text && <pre class="sig"><code>{e.kind === "type" ? `type ${e.name} = ${e.text}` : `const ${e.name}: ${e.text}`}</code></pre>}
+              {((e.kind === "component" && e.props?.length) || (e.kind === "type" && e.members?.length)) && (
+                <table>
+                  <thead><tr><th>{e.kind === "component" ? "Prop" : "Field"}</th><th>Type</th>{e.kind === "component" && <th>Default</th>}<th>Description</th></tr></thead>
+                  <tbody>
+                    {(e.kind === "component" ? e.props! : e.members!).map((p: any) => (
+                      <tr>
+                        <td class="mono">{p.name}{!p.optional && <span class="req" title="required">*</span>}</td>
+                        <td class="mono t">{p.type}</td>
+                        {e.kind === "component" && <td class="mono">{p.default ?? "—"}</td>}
+                        <td>{p.doc || <span class="faint">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {demos[e.name] && (
+                <div class="demo">
+                  <div class="demo-live"><Demo client:load name={e.name} /></div>
+                  <details><summary>Demo source</summary><pre><code>{sourceOf(e.name)}</code></pre></details>
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
+      ))}
+
+      <section id="stylesheet">
+        <h2>Stylesheet rules <span class="mono faint small">{styles.specifier}</span></h2>
+        {styles.sections.map((s) => (
+          <details id={`css-${slug(s.title)}`} class="rules" open={s.title === "base"}>
+            <summary>{s.title} <span class="faint small">{s.rules.length} rules{sectionOwner(s.title) && <> · drawn by <a href={`#${slug(sectionOwner(s.title)!)}`}>{sectionOwner(s.title)}</a></>}</span></summary>
+            {s.rules.map((r) => (
+              <pre class="rule"><code>{r.media && `@media ${r.media} `}<b>{r.selector}</b>{" {\n"}{r.declarations.map((d) => `  ${d};\n`).join("")}{"}"}</code></pre>
+            ))}
+          </details>
+        ))}
+      </section>
+    </main>
+
+    <script>
+      const root = document.documentElement;
+      const apply = (v: string) => {
+        if (v) root.dataset.theme = v; else delete root.dataset.theme;
+        document.querySelectorAll<HTMLButtonElement>("[data-set-theme]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.setTheme === v)));
+      };
+      let saved = "";
+      try { saved = localStorage.getItem("ui-docs-theme") ?? ""; } catch {}
+      apply(saved);
+      document.querySelectorAll<HTMLButtonElement>("[data-set-theme]").forEach((b) =>
+        b.addEventListener("click", () => {
+          apply(b.dataset.setTheme ?? "");
+          try { localStorage.setItem("ui-docs-theme", b.dataset.setTheme ?? ""); } catch {}
+        }),
+      );
+    </script>
+  </body>
+</html>

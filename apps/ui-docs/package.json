@@ -1,0 +1,31 @@
+{
+  "name": "@openuptime/ui-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node scripts/gen-api.mjs",
+    "predev": "node scripts/gen-api.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/gen-api.mjs",
+    "build": "astro build",
+    "pretypecheck": "node scripts/gen-api.mjs",
+    "typecheck": "astro check",
+    "pretest": "node scripts/gen-api.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.0.1",
+    "@openuptime/ui": "workspace:*",
+    "astro": "^7.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.3"
+  }
+}
