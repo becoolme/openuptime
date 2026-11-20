@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Monitor, type Quota, type Usage as UsageData } from "../lib/api";
 import { t } from "../lib/i18n";
+import PageHeader from "@openuptime/ui/page-header";
 
 const fmt = (n: number) => n.toLocaleString();
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -31,7 +32,7 @@ export default function Usage() {
   if (!u.metered) {
     return (
       <>
-        <div className="ph"><div><h1>{t("Plan & usage")}</h1></div></div>
+        <PageHeader title={t("Plan & usage")} />
         <div className="card sect"><p className="muted">{t("This deployment has no plans or usage limits.")}</p></div>
       </>
     );
@@ -45,7 +46,7 @@ export default function Usage() {
   const serverPct = plan?.maxServers ? Math.min(100, Math.round((servers / plan.maxServers) * 100)) : 0;
   return (
     <>
-      <div className="ph"><div><h1>{t("Plan & usage")}</h1><p className="muted">{t("Usage is counted per workspace and resets every billing period.")}</p></div></div>
+      <PageHeader title={t("Plan & usage")} description={t("Usage is counted per workspace and resets every billing period.")} />
       <div className="usage-wrap">
         {plan && (
           <section className="card sect plan-card">

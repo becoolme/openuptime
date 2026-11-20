@@ -6,6 +6,7 @@ import { useBusy } from "@openuptime/ui/use-busy";
 import { ago, api, type Incident } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 import IncidentDiagnosis from "./IncidentDiagnosis";
+import Segmented from "@openuptime/ui/segmented";
 
 const KIND: Record<string, string> = { "incident.opened": "Down alert", "incident.resolved": "Recovery alert", "incident.reminder": "Reminder", "incident.escalated": "Escalation", "incident.muted": "Down alert muted" };
 
@@ -66,10 +67,8 @@ export default function IncidentDetail({ id }: { id: string }) {
         <div className="col">
           <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body, hidden); }}>
             <div className="cc-h"><h3>{t("Post an update")}</h3><span className="faint" style={{ fontSize: 13 }}>{hidden ? t("Visible to your team only") : t("Sent to status page subscribers")}</span></div>
-            <div className="seg">{STATES.map((s) => <i key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>{t(s)}</i>)}</div>
-            <div className="seg" style={{ marginTop: 14 }}>
-              {(["public", "internal"] as const).map((v) => <i key={v} className={(hidden ? "internal" : "public") === v ? "on" : ""} onClick={() => setInternal(v === "internal")}>{t(v === "public" ? "Public update" : "Internal note")}</i>)}
-            </div>
+            <Segmented label={t("Status")} value={status} onChange={setStatus} options={STATES.map((s) => ({ value: s, label: t(s) }))} />
+            <Segmented style={{ marginTop: 14 }} label={t("Visibility")} value={hidden ? "internal" : "public"} onChange={(v) => setInternal(v === "internal")} options={[{ value: "public", label: t("Public update") }, { value: "internal", label: t("Internal note") }]} />
             <textarea className="in" style={{ height: 96, padding: 12, marginTop: 14 }} required value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("What do customers need to know?")} />
             <div className="formact"><button className="btn primary sm" disabled={busy}>{busy ? t("Publishing…") : t("Publish update")}</button></div>
           </form>

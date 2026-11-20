@@ -4,6 +4,7 @@ import { t } from "../lib/i18n";
 import { selectProject } from "../lib/nav";
 import { plural } from "../lib/plural";
 import { projectName, showBadges } from "../lib/scope";
+import PageHeader from "@openuptime/ui/page-header";
 
 /** The projects of the workspace, for naming the rows of a merged list. */
 export function useProjects(): Project[] {
@@ -48,7 +49,7 @@ export function ChooseProject({ title }: { title: string }) {
   const projects = useProjects();
   return (
     <>
-      <div className="ph"><div><h1>{t(title)}</h1><p className="muted">{t("This page belongs to a single project. Choose one to continue.")}</p></div></div>
+      <PageHeader title={t(title)} description={t("This page belongs to a single project. Choose one to continue.")} />
       <div className="card" style={{ padding: 8, maxWidth: 420 }}>
         <div className="menu-h nav-l"><span>{t("Projects")}</span></div>
         <div className="menu" style={{ position: "static", boxShadow: "none", border: 0, padding: 0 }}>

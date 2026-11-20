@@ -11,6 +11,10 @@ import { toast } from "@openuptime/ui/toast";
 import { regionLocked, toggleRegion } from "../lib/regions";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ProjectStrip, ScopeChip, useProjects } from "./AllProjects";
+import Modal from "@openuptime/ui/modal";
+import Segmented from "@openuptime/ui/segmented";
+import EmptyState from "@openuptime/ui/empty-state";
+import PageHeader from "@openuptime/ui/page-header";
 
 const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP", evm: "EVM", solana: "SOLANA", ping: "PING" };
 
@@ -256,20 +260,14 @@ export default function Monitors() {
 
   return (
     <>
-      <div className="ph">
-        <div>
-          <h1>{t("Monitors")}{everything && <ScopeChip />}</h1>
-          <p className="muted">
-            {items === null ? t("Loading…") : down.length ? `${down.length} ${t(down.some((m) => m.type === "domain") ? "checks need attention" : "down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
-          </p>
-        </div>
-        {!everything && <div className="acts">
+      <PageHeader title={<>{t("Monitors")}{everything && <ScopeChip />}</>}
+        description={items === null ? t("Loading…") : down.length ? `${down.length} ${t(down.some((m) => m.type === "domain") ? "checks need attention" : "down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
+        actions={!everything && <>
           <input id="mon-import" type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
           <button className="btn" onClick={() => document.getElementById("mon-import")?.click()}>{t("Import")}</button>
           {all.length > 0 && <a className="btn" href="/api/monitors/export" download="openuptime-monitors.json">{t("Export")}</a>}
           <button className="btn primary" onClick={() => setOpen(true)}>{t("+ New monitor")}</button>
-        </div>}
-      </div>
+        </>} />
       {importText !== null && <MonitorImport raw={importText} onClose={() => setImportText(null)} onImported={() => { load(); window.dispatchEvent(new Event("ou:changed")); }} />}
       {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
       {everything && <ProjectStrip rows={overview} />}
@@ -302,7 +300,7 @@ export default function Monitors() {
           <SkeletonRows cols={6} />
         </div>
       ) : items.length === 0 && everything ? (
-        <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No monitors yet")}</h3><p className="muted">{t("Choose a project to add the first one.")}</p></div>
+        <EmptyState title={t("No monitors yet")} description={t("Choose a project to add the first one.")} />
       ) : items.length === 0 ? (
         <div className="onb">
           <div className="onb-h">
@@ -328,11 +326,8 @@ export default function Monitors() {
               </div>
             ))}
           </div>
-          <div className="empty">
-            <h3 style={{ fontSize: 26 }}>{t("No monitors yet")}</h3>
-            <p className="muted" style={{ margin: "6px 0 18px" }}>{t("Add a URL and we’ll check it every minute.")}</p>
-            <button className="btn primary" onClick={() => setOpen(true)}>{t("+ Add your first monitor")}</button>
-          </div>
+          <EmptyState title={t("No monitors yet")} description={t("Add a URL and we’ll check it every minute.")}
+            action={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ Add your first monitor")}</button>} />
         </div>
       ) : (
         <>
@@ -527,13 +522,16 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
     }
   }
   return (
-    <div className="modal">
-      <form className="card mform" onSubmit={submit}>
-        <div className="mhead">
-          <h2 style={{ fontSize: 30 }}>{monitor ? t("Edit monitor") : t("New monitor")}</h2>
-          <button type="button" className="icon-btn mclose" aria-label={t("Close")} title={t("Close")} onClick={onClose}>×</button>
-        </div>
-        <div className="mbody">
+    <Modal as="form" onClose={onClose} onSubmit={submit} backdropClose={false} title={monitor ? t("Edit monitor") : t("New monitor")} closeLabel={t("Close")} footer={<>
+          {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
+          <div className="mact">
+            <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * (PROBED.includes(f.type) ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{PROBED.includes(f.type) && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
+            <div className="mbtns">
+              <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
+              <button className="btn primary" disabled={busy || bodyTooLarge}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
+            </div>
+          </div>
+        </>}>
         <label className="fld">{t("Name")}<input className="in" required autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("Production API")} /></label>
         <div className="fld">{t("Type")}
           <div className="type-grid">
@@ -559,13 +557,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <small className="muted">{t("One timeout covers initialization, all tool-list pages and the optional tool call.")}</small>
         </label>}
         <div className="fld">{t("Check every")}
-          <div className="seg">
-            {![60, 300, 900].includes(f.intervalSec) && <i className="on">{f.intervalSec}s</i>}
-            {([[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"]] as const).map(([v, l]) => {
+          <Segmented label={t("Check every")} value={f.intervalSec} onChange={(v) => set("intervalSec", v)} options={[
+            ...(![60, 300, 900].includes(f.intervalSec) ? [{ value: f.intervalSec, label: `${f.intervalSec}s` }] : []),
+            ...([[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"]] as const).map(([v, l]) => {
               const locked = f.type !== "heartbeat" && v < floor && v < (monitor?.intervalSec ?? Infinity);
-              return <i key={v} className={`${f.intervalSec === v ? "on" : ""}${locked ? " locked" : ""}`} title={locked ? t("Not available on your plan") : undefined} onClick={() => !locked && set("intervalSec", v)}>{t(l)}</i>;
-            })}
-          </div>
+              return { value: v as number, label: t(l), locked, title: locked ? t("Not available on your plan") : undefined };
+            }),
+          ]} />
         </div>
         {f.type !== "heartbeat" && (
           <div style={{ display: "grid", gridTemplateColumns: f.type === "http" ? "1fr 1fr" : "1fr", gap: 10 }}>
@@ -758,18 +756,6 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             )}
           </div>
         )}
-        </div>
-        <div className="mfoot">
-          {err && <p className="err">{err}{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</p>}
-          <div className="mact">
-            <div className="est"><b>≈ {Math.round((30 * 86400) / Math.max(1, f.intervalSec) * (PROBED.includes(f.type) ? Math.max(1, new Set(f.regions).size) : 1)).toLocaleString()} {t("checks / month")}</b>{PROBED.includes(f.type) && new Set(f.regions).size > 1 && <small> · {t("each region counts as a check")}</small>}</div>
-            <div className="mbtns">
-              <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy || bodyTooLarge}>{busy ? t(monitor ? "Saving…" : "Creating…") : monitor ? t("Save") : t("Create monitor")}</button>
-            </div>
-          </div>
-        </div>
-      </form>
-    </div>
+    </Modal>
   );
 }

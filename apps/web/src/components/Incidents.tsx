@@ -7,6 +7,10 @@ import { ago, api, type Incident, type Monitor } from "../lib/api";
 import { useBusy } from "@openuptime/ui/use-busy";
 import { isAllProjects } from "../lib/scope";
 import { ProjectBadge, ScopeChip, useProjects } from "./AllProjects";
+import Modal from "@openuptime/ui/modal";
+import Segmented from "@openuptime/ui/segmented";
+import EmptyState from "@openuptime/ui/empty-state";
+import PageHeader from "@openuptime/ui/page-header";
 
 const DAY = 86400_000;
 const dur = (a: string, b: string | null) => {
@@ -42,15 +46,13 @@ export default function Incidents() {
 
   return (
     <>
-      <div className="ph">
-        <div><h1 className="serif">{t("Incidents")}{everything && <ScopeChip />}</h1><p className="muted">{t("Everything that went wrong, and how fast we fixed it.")}</p></div>
-        {!everything && <div className="ph-actions">
+      <PageHeader title={<>{t("Incidents")}{everything && <ScopeChip />}</>} description={t("Everything that went wrong, and how fast we fixed it.")}
+        actions={!everything && <>
           <a className="btn" href="/app/maintenance">{t("Schedule maintenance")}</a>
           <button className="btn primary" onClick={() => setDeclaring(true)}>
             <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>{t("Declare incident")}
           </button>
-        </div>}
-      </div>
+        </>} />
       {everything && <p className="muted" style={{ marginTop: -10, marginBottom: 16 }}>{t("Read-only overview. Choose a project to make changes.")}</p>}
 
       <div className="kp">
@@ -77,7 +79,7 @@ export default function Incidents() {
           <SkeletonRows cols={5} />
         </div>
       ) : shown.length === 0 ? (
-        <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No incidents")}</h3><p className="muted">{t("Quiet is good.")}</p></div>
+        <EmptyState title={t("No incidents")} description={t("Quiet is good.")} />
       ) : (
         <div className="card tbl inc-tbl">
           <div className="tr th"><span>{t("Incident")}</span><span>{t("Status")}</span><span>{t("Started")}</span><span>{t("Duration")}</span><span>{t("Affected")}</span></div>
@@ -107,27 +109,24 @@ function Declare({ onClose, onDone }: { onClose: () => void; onDone: (id: string
   const [busy, run] = useBusy();
   useEffect(() => { api.monitors().then(setMonitors).catch(() => {}); }, []);
   return (
-    <div className="modal" onClick={onClose}>
-      <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={(e) => {
-        e.preventDefault();
-        setErr("");
-        run(async () => {
-          try { const i = await api.declareIncident({ title, body: body || undefined, severity: sev, monitorId: mon || null }); onDone(i.id); }
-          catch (x) { setErr((x as Error).message); }
-        });
+    <Modal as="form" onClose={onClose} title={t("Declare incident")} onSubmit={(e) => {
+      e.preventDefault();
+      setErr("");
+      run(async () => {
+        try { const i = await api.declareIncident({ title, body: body || undefined, severity: sev, monitorId: mon || null }); onDone(i.id); }
+        catch (x) { setErr((x as Error).message); }
+      });
       }}>
-        <h2 style={{ fontSize: 30 }}>{t("Declare incident")}</h2>
-        <label className="fld">{t("Title")}<input className="in" required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("Payments are failing")} /></label>
-        <label className="fld">{t("Affected monitor")}
-          <Select className="in" value={mon} onChange={setMon} options={[{ value: "", label: t("None") }, ...monitors.map((m) => ({ value: m.id, label: m.name }))]} />
-        </label>
-        <div className="fld">{t("Severity")}
-          <div className="seg">{(["major", "minor"] as const).map((s) => <i key={s} className={sev === s ? "on" : ""} onClick={() => setSev(s)}>{t(s)}</i>)}</div>
-        </div>
-        <label className="fld">{t("What do customers need to know?")}<textarea className="in" style={{ height: 90, padding: 12 }} value={body} onChange={(e) => setBody(e.target.value)} /></label>
-        {err && <p className="err">{err}</p>}
-        <div className="formact"><button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button><button className="btn primary" disabled={busy}>{busy ? t("Declaring…") : t("Declare incident")}</button></div>
-      </form>
-    </div>
+      <label className="fld">{t("Title")}<input className="in" required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("Payments are failing")} /></label>
+      <label className="fld">{t("Affected monitor")}
+        <Select className="in" value={mon} onChange={setMon} options={[{ value: "", label: t("None") }, ...monitors.map((m) => ({ value: m.id, label: m.name }))]} />
+      </label>
+      <div className="fld">{t("Severity")}
+        <Segmented label={t("Severity")} value={sev} onChange={setSev} options={(["major", "minor"] as const).map((s) => ({ value: s, label: t(s) }))} />
+      </div>
+      <label className="fld">{t("What do customers need to know?")}<textarea className="in" style={{ height: 90, padding: 12 }} value={body} onChange={(e) => setBody(e.target.value)} /></label>
+      {err && <p className="err">{err}</p>}
+      <div className="formact"><button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button><button className="btn primary" disabled={busy}>{busy ? t("Declaring…") : t("Declare incident")}</button></div>
+    </Modal>
   );
 }

@@ -3,6 +3,7 @@ import { useBusy } from "@openuptime/ui/use-busy";
 import { api, type Maintenance as Window, type Monitor } from "../lib/api";
 import { t } from "../lib/i18n";
 import { fmtDateTime } from "../lib/time";
+import PageHeader from "@openuptime/ui/page-header";
 
 const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
@@ -36,7 +37,7 @@ export default function Maintenance() {
 
   return (
     <>
-      <div className="ph"><div><h1>{t("Maintenance")}</h1><p className="muted">{t("Checks keep running, but no incidents or alerts are created during a window.")}</p></div></div>
+      <PageHeader title={t("Maintenance")} description={t("Checks keep running, but no incidents or alerts are created during a window.")} />
       <div className="card tbl" style={{ marginBottom: 24 }}>
         <div className="tr th" style={{ gridTemplateColumns: "minmax(0,1.8fr) minmax(0,1fr) 110px 150px" }}><span>{t("Window")}</span><span>{t("Covers")}</span><span>{t("State")}</span><span /></div>
         {items?.length === 0 && <div className="tr" style={{ gridTemplateColumns: "1fr" }}><span className="muted">{t("No maintenance windows.")}</span></div>}

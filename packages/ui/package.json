@@ -10,7 +10,11 @@
     "./toaster": "./src/Toaster.tsx",
     "./toast": "./src/toast.ts",
     "./skeleton": "./src/Skeleton.tsx",
-    "./use-busy": "./src/use-busy.ts"
+    "./use-busy": "./src/use-busy.ts",
+    "./modal": "./src/Modal.tsx",
+    "./segmented": "./src/Segmented.tsx",
+    "./empty-state": "./src/EmptyState.tsx",
+    "./page-header": "./src/PageHeader.tsx"
   },
   "scripts": { "typecheck": "tsc -p .", "test": "vitest run" },
   "peerDependencies": { "react": "^19.0.0" },
