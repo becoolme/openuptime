@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ROOT, read, walk } from "./helpers";
@@ -28,12 +28,19 @@ const hostedSpecifier = /(^|\/)(cloud|edge)(\/|$)|worker\.cloud|wrangler\.(cloud
 
 /**
  * The hosted branch merges `main` and legitimately holds the hosted files, so these checks only apply on `main` and its
- * pull requests. Locally, a branch is treated as hosted when its name or its upstream names a cloud branch, so a feature
- * branch cut from `cloud` does not report the inherited files as a leak. A Community feature branch that accidentally adds
- * a hosted file is still checked, because neither its name nor its upstream looks like cloud.
+ * pull requests. Locally, a branch is hosted when its name starts with `cloud`, it tracks a cloud remote or branch, or
+ * its history contains a cloud ref. A nested name such as `feature/cloudflare-timeouts` is not cloud, and neither is a
+ * Community branch that accidentally adds a hosted file, so those are still checked. `OPENUPTIME_HOSTED=1` opts out.
  */
-const cloudRef = (ref: string) => ref.split("/").some((part) => /^cloud/.test(part));
-export const isHostedCheckout = (branch: string, upstream: string) => cloudRef(branch) || cloudRef(upstream);
+const cloudName = /^cloud($|[-/])/;
+const hostedRef = (ref: string) => {
+  const slash = ref.indexOf("/");
+  const remote = slash < 0 ? ref : ref.slice(0, slash);
+  const branch = slash < 0 ? "" : ref.slice(slash + 1);
+  return cloudName.test(remote) || cloudName.test(branch);
+};
+export const isHostedCheckout = (branch: string, upstream: string, descendsFromHosted: boolean) =>
+  hostedRef(branch) || hostedRef(upstream) || descendsFromHosted;
 
 const targetBranch = () => process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME || "";
 const localRef = (args: string) => {
@@ -43,19 +50,38 @@ const localRef = (args: string) => {
     return "";
   }
 };
-const hosted = targetBranch() ? cloudRef(targetBranch()) : isHostedCheckout(localRef("HEAD"), localRef("@{upstream}"));
+/** A branch cut from `cloud` (or tracking one) has a cloud ref in its history, whatever its own name looks like. */
+const descendsFromHosted = () => {
+  try {
+    const refs = execSync("git for-each-ref --format=%(refname:short) refs/heads refs/remotes", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+      .toString().split("\n").map((r) => r.trim()).filter((r) => r && hostedRef(r));
+    return refs.some((ref) => {
+      try {
+        execFileSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"], { cwd: ROOT, stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+};
+const hosted = process.env.OPENUPTIME_HOSTED === "1"
+  || (targetBranch() ? hostedRef(targetBranch()) : isHostedCheckout(localRef("HEAD"), localRef("@{upstream}"), descendsFromHosted()));
 
 describe("hosted checkout detection", () => {
-  it("treats a cloud branch, or a branch tracking one, as hosted", () => {
-    expect(isHostedCheckout("cloud", "")).toBe(true);
-    expect(isHostedCheckout("cloud-private/traditional-chinese", "")).toBe(true);
-    expect(isHostedCheckout("traditional-chinese", "cloud-private/traditional-chinese")).toBe(true);
+  it("treats a cloud branch, a branch tracking one, or a branch descending from one as hosted", () => {
+    expect(isHostedCheckout("cloud", "", false)).toBe(true);
+    expect(isHostedCheckout("cloud-private/traditional-chinese", "", false)).toBe(true);
+    expect(isHostedCheckout("traditional-chinese", "cloud-private/traditional-chinese", false)).toBe(true);
+    expect(isHostedCheckout("traditional-chinese", "origin/traditional-chinese", true)).toBe(true);
   });
 
-  it("still checks a community branch that carries a hosted file by accident", () => {
-    expect(isHostedCheckout("fix-webhooks", "origin/fix-webhooks")).toBe(false);
-    expect(isHostedCheckout("fix-webhooks", "")).toBe(false);
-    expect(isHostedCheckout("main", "origin/main")).toBe(false);
+  it("still checks a community branch, including cloud-like nested names", () => {
+    expect(isHostedCheckout("fix-webhooks", "origin/fix-webhooks", false)).toBe(false);
+    expect(isHostedCheckout("feature/cloudflare-timeouts", "origin/feature/cloudflare-timeouts", false)).toBe(false);
+    expect(isHostedCheckout("main", "origin/main", false)).toBe(false);
   });
 });
 
