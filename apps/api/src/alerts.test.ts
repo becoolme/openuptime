@@ -405,6 +405,17 @@ describe("project name in alerts", () => {
     expect(err).toHaveBeenCalled();
   });
 
+  it("keeps sending when the delivery row cannot be written or claimed", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const down = async () => { throw new Error("db down"); };
+    const text = expect.stringContaining("WWW homepage is down");
+    expect((await sent(opened, two, "slack", { queueDeliveries: down })).bodies[0]).toMatchObject({ text });
+    expect((await sent(opened, two, "slack", { logDeliveries: down })).bodies[0]).toMatchObject({ text });
+    expect((await sent(opened, two, "slack", { claimDelivery: down })).bodies[0]).toMatchObject({ text });
+    await expect(sent(opened, two, "slack", { channelsToAlert: down })).resolves.toBeTruthy();
+    expect(err).toHaveBeenCalled();
+  });
+
   it("reads the workspace's projects once for a burst of alerts", async () => {
     const repo = projects(two);
     await withProject(repo as never, "o", opened);

@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "alert-delivery-write-failures", date: "2026-11-20", edition: "community",
+    title: { en: "Alerts survive a database write failure", zh: "数据库写入失败时告警仍会发出" },
+    summary: {
+      en: "A failure to log or queue a delivery no longer drops the alert or fails the request that triggered it.",
+      zh: "记录或排队投递失败时，告警不再丢失，触发告警的请求也不会因此报错。",
+    },
+    points: [
+      { en: "When delivery rows cannot be written, each channel is still sent directly, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去时，仍会直接向每个渠道发送，数据库出问题不会让一次故障变成无声的故障。" },
+      { en: "A failed owner-language or channel lookup falls back to English and the configured channels instead of stopping the fan-out.", zh: "读取工作区语言或渠道失败时，会回退到英文和已配置的渠道，而不是中断整次分发。" },
+      { en: "A manual check or a heartbeat ping no longer returns an error only because the alert history could not be written.", zh: "手动检测或心跳上报不会再仅因为告警历史写入失败而返回错误。" },
+    ],
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
