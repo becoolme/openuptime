@@ -33,42 +33,52 @@ const hostedSpecifier = /(^|\/)(cloud|edge)(\/|$)|worker\.cloud|wrangler\.(cloud
  * Community branch that accidentally adds a hosted file, so those are still checked. `OPENUPTIME_HOSTED=1` opts out.
  */
 const cloudName = /^cloud($|[-/])/;
+/** A local branch name is hosted when it starts with cloud; feature/cloud-sync is not. */
+const hostedBranch = (branch: string) => cloudName.test(branch);
+/** A remote ref is hosted when its remote or its branch starts with cloud. */
 const hostedRef = (ref: string) => {
   const slash = ref.indexOf("/");
-  const remote = slash < 0 ? ref : ref.slice(0, slash);
-  const branch = slash < 0 ? "" : ref.slice(slash + 1);
-  return cloudName.test(remote) || cloudName.test(branch);
+  if (slash < 0) return hostedBranch(ref);
+  return cloudName.test(ref.slice(0, slash)) || cloudName.test(ref.slice(slash + 1));
 };
 export const isHostedCheckout = (branch: string, upstream: string, descendsFromHosted: boolean) =>
-  hostedRef(branch) || hostedRef(upstream) || descendsFromHosted;
+  hostedBranch(branch) || hostedRef(upstream) || descendsFromHosted;
 
 const targetBranch = () => process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME || "";
-const localRef = (args: string) => {
+const localRef = (args: string[]) => {
   try {
-    return execSync(`git rev-parse --abbrev-ref --symbolic-full-name ${args}`, { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return execFileSync("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", ...args], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {
     return "";
   }
 };
-/** A branch cut from `cloud` (or tracking one) has a cloud ref in its history, whatever its own name looks like. */
+/**
+ * A branch cut from `cloud` has the hosted files in its history, whatever its own name looks like. Check the commit that
+ * introduced a hosted path against the cloud refs, so a Community branch that merely adds such a file is not exempt.
+ */
 const descendsFromHosted = () => {
   try {
-    const refs = execSync("git for-each-ref --format=%(refname:short) refs/heads refs/remotes", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+    const refs = execFileSync("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
       .toString().split("\n").map((r) => r.trim()).filter((r) => r && hostedRef(r));
-    return refs.some((ref) => {
-      try {
-        execFileSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"], { cwd: ROOT, stdio: "ignore" });
-        return true;
-      } catch {
-        return false;
-      }
+    if (!refs.length) return false;
+    return CLOUD_ONLY_PATHS.some((path) => {
+      const introduced = execFileSync("git", ["log", "--max-count=1", "--format=%H", "HEAD", "--", path], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+        .toString().trim();
+      return introduced !== "" && refs.some((ref) => {
+        try {
+          execFileSync("git", ["merge-base", "--is-ancestor", introduced, ref], { cwd: ROOT, stdio: "ignore" });
+          return true;
+        } catch {
+          return false;
+        }
+      });
     });
   } catch {
     return false;
   }
 };
 const hosted = process.env.OPENUPTIME_HOSTED === "1"
-  || (targetBranch() ? hostedRef(targetBranch()) : isHostedCheckout(localRef("HEAD"), localRef("@{upstream}"), descendsFromHosted()));
+  || (targetBranch() ? hostedBranch(targetBranch()) : isHostedCheckout(localRef(["HEAD"]), localRef(["@{upstream}"]), descendsFromHosted()));
 
 describe("hosted checkout detection", () => {
   it("treats a cloud branch, a branch tracking one, or a branch descending from one as hosted", () => {
@@ -81,7 +91,9 @@ describe("hosted checkout detection", () => {
   it("still checks a community branch, including cloud-like nested names", () => {
     expect(isHostedCheckout("fix-webhooks", "origin/fix-webhooks", false)).toBe(false);
     expect(isHostedCheckout("feature/cloudflare-timeouts", "origin/feature/cloudflare-timeouts", false)).toBe(false);
+    expect(isHostedCheckout("feature/cloud-sync", "origin/feature/cloud-sync", false)).toBe(false);
     expect(isHostedCheckout("main", "origin/main", false)).toBe(false);
+    expect(isHostedCheckout("fix-webhooks", "origin/cloud", false)).toBe(true);
   });
 });
 
