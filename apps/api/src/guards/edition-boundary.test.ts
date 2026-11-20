@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ROOT, read, walk } from "./helpers";
@@ -42,7 +42,7 @@ const hostedRef = (ref: string) => {
   return cloudName.test(ref.slice(0, slash)) || cloudName.test(ref.slice(slash + 1));
 };
 export const isHostedCheckout = (branch: string, upstream: string, descendsFromHosted: boolean) =>
-  hostedBranch(branch) || hostedRef(upstream) || descendsFromHosted;
+  !/^(main|master)$/.test(branch) && (hostedBranch(branch) || hostedRef(upstream) || descendsFromHosted);
 
 const targetBranch = () => process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME || "";
 const localRef = (args: string[]) => {
@@ -52,30 +52,38 @@ const localRef = (args: string[]) => {
     return "";
   }
 };
+const refsOf = (namespace: string) => {
+  try {
+    return execFileSync("git", ["for-each-ref", "--format=%(refname:short)", namespace], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+      .toString().split("\n").map((r) => r.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
 /**
- * A branch cut from `cloud` has the hosted files in its history, whatever its own name looks like. Check the commit that
- * introduced a hosted path against the cloud refs, so a Community branch that merely adds such a file is not exempt.
+ * A branch cut from `cloud` has the hosted files in its history, whatever its own name looks like. Check whether a cloud
+ * ref that contains a hosted path is an ancestor of HEAD, so a Community branch that merely adds such a file is not exempt,
+ * and neither is a leak that cloud later merged from main.
  */
 const descendsFromHosted = () => {
-  try {
-    const refs = execFileSync("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
-      .toString().split("\n").map((r) => r.trim()).filter((r) => r && hostedRef(r));
-    if (!refs.length) return false;
-    return CLOUD_ONLY_PATHS.some((path) => {
-      const introduced = execFileSync("git", ["log", "--max-count=1", "--format=%H", "HEAD", "--", path], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
-        .toString().trim();
-      return introduced !== "" && refs.some((ref) => {
-        try {
-          execFileSync("git", ["merge-base", "--is-ancestor", introduced, ref], { cwd: ROOT, stdio: "ignore" });
-          return true;
-        } catch {
-          return false;
-        }
-      });
+  const refs = [...refsOf("refs/heads").filter(hostedBranch), ...refsOf("refs/remotes").filter(hostedRef)];
+  return refs.some((ref) => {
+    const hasHosted = CLOUD_ONLY_PATHS.some((path) => {
+      try {
+        execFileSync("git", ["cat-file", "-e", `${ref}:${path}`], { cwd: ROOT, stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
     });
-  } catch {
-    return false;
-  }
+    if (!hasHosted) return false;
+    try {
+      execFileSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"], { cwd: ROOT, stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  });
 };
 const hosted = process.env.OPENUPTIME_HOSTED === "1"
   || (targetBranch() ? hostedBranch(targetBranch()) : isHostedCheckout(localRef(["HEAD"]), localRef(["@{upstream}"]), descendsFromHosted()));
@@ -93,6 +101,8 @@ describe("hosted checkout detection", () => {
     expect(isHostedCheckout("feature/cloudflare-timeouts", "origin/feature/cloudflare-timeouts", false)).toBe(false);
     expect(isHostedCheckout("feature/cloud-sync", "origin/feature/cloud-sync", false)).toBe(false);
     expect(isHostedCheckout("main", "origin/main", false)).toBe(false);
+    expect(isHostedCheckout("main", "", true)).toBe(false);
+    expect(isHostedCheckout("master", "origin/master", true)).toBe(false);
     expect(isHostedCheckout("fix-webhooks", "origin/cloud", false)).toBe(true);
   });
 });
