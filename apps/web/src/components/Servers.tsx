@@ -178,7 +178,7 @@ export default function Servers() {
       {!data && !err && <ListSkeleton />}
 
       {data && servers.length === 0 && (
-        <EmptyState title={t("No servers yet")} description={t("Run one command on a Linux server and it shows up here within a minute. The agent only sends data out; nothing listens on the server.")}
+        <EmptyState className="srv-empty" title={t("No servers yet")} description={t("Run one command on a Linux server and it shows up here within a minute. The agent only sends data out; nothing listens on the server.")}
           action={<button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>} />
       )}
 

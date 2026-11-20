@@ -326,7 +326,7 @@ export default function Monitors() {
               </div>
             ))}
           </div>
-          <EmptyState title={t("No monitors yet")} description={t("Add a URL and we’ll check it every minute.")}
+          <EmptyState className="onb-empty" title={t("No monitors yet")} description={t("Add a URL and we’ll check it every minute.")}
             action={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ Add your first monitor")}</button>} />
         </div>
       ) : (

@@ -80,7 +80,7 @@
   .tbl .tr.th{display:none!important}
   .tbl .tr>*:nth-child(n+3){display:revert}
   /* 16px stops iOS from zooming into focused fields; 44px tap targets */
-  .in,select.in,textarea.in{font-size:16px}
+  .in:not(.dd-btn),select.in,textarea.in{font-size:16px}
   /* keep the visual size; grow only the invisible hit area to ~44px */
   .btn,.nav,.auth a,.page a:not(.tr){position:relative}
   .btn::after,.nav::after,.auth a::after,.page a:not(.tr)::after{content:"";position:absolute;inset:-6px -4px}
@@ -516,6 +516,8 @@ button.route.tog{width:100%;text-align:left;background:none;border:0;border-top:
 .onb { display: grid; gap: 16px; min-width: 0; }
 .onb-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .onb-t { font-family: "Instrument Serif", serif; font-weight: 400; font-size: 32px; margin: 0 0 4px; }
+.empty.onb-empty h3 { font-size: 26px; }
+.empty.onb-empty p:not(:last-child) { margin-bottom: 18px; }
 .onb-steps { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
 .onb-step { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); min-width: 0; }
 .onb-step:last-child { border-bottom: 0; }
@@ -796,6 +798,7 @@ a.muted:hover{color:var(--ink)}
 .srv-top{position:absolute;top:0;left:0;font-size:10.5px;pointer-events:none}
 .srv-at{position:absolute;top:0;right:0;font-size:10.5px;pointer-events:none}
 .srv-chart-empty{height:150px;display:grid;place-items:center;font-size:13px}
+.empty.srv-empty h3{font-size:1.17em}.empty.srv-empty p:not(:last-child){margin:8px auto 18px;max-width:440px}
 .srv-cols{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:22px}
 .srv-sub{margin:0 -24px -22px;border-top:1px solid var(--line)}
 .srv-sub .tr:first-child{border-top:0}
