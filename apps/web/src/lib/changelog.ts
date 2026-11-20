@@ -29,6 +29,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "midnight-zero-padded", date: "2026-11-20", edition: "community",
+    title: { en: "Midnight shows as 00:05 on a 24-hour clock", zh: "24 小时制下午夜显示为 00:05" },
+    summary: {
+      en: "Times just after midnight keep their leading zero in every browser language.",
+      zh: "无论浏览器是什么语言，午夜过后的时间都会保留前导零。",
+    },
+    points: [
+      { en: "On a language such as Japanese or Korean, a 24-hour clock used to show 0:05 for the first hour; it now shows 00:05, and a date shown with the time follows the same rule.", zh: "在日语或韩语等语言下，24 小时制以前会把凌晨一点前显示成 0:05；现在显示为 00:05，带日期的显示也遵循同一规则。" },
+    ],
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
