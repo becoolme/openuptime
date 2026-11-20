@@ -60,31 +60,28 @@ const refsOf = (namespace: string) => {
     return [];
   }
 };
+const hostedRefs = () => [...refsOf("refs/heads").filter(hostedBranch), ...refsOf("refs/remotes").filter(hostedRef)];
 /**
- * A branch cut from `cloud` has the hosted files in its history, whatever its own name looks like. Check whether a cloud
- * ref that contains a hosted path is an ancestor of HEAD, so a Community branch that merely adds such a file is not exempt,
- * and neither is a leak that cloud later merged from main.
+ * A branch cut from `cloud` has the hosted files in its history, whatever its own name looks like. Compare HEAD with each
+ * cloud ref at their merge base, so the exemption survives cloud moving on, while a Community branch that merely adds a
+ * hosted file (including one cloud later merged from main) is still checked.
  */
-const descendsFromHosted = () => {
-  const refs = [...refsOf("refs/heads").filter(hostedBranch), ...refsOf("refs/remotes").filter(hostedRef)];
-  return refs.some((ref) => {
-    const hasHosted = CLOUD_ONLY_PATHS.some((path) => {
-      try {
-        execFileSync("git", ["cat-file", "-e", `${ref}:${path}`], { cwd: ROOT, stdio: "ignore" });
-        return true;
-      } catch {
-        return false;
-      }
-    });
-    if (!hasHosted) return false;
+const descendsFromHosted = () => hostedRefs().some((ref) => {
+  let base = "";
+  try {
+    base = execFileSync("git", ["merge-base", ref, "HEAD"], { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return false;
+  }
+  return base !== "" && CLOUD_ONLY_PATHS.some((path) => {
     try {
-      execFileSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"], { cwd: ROOT, stdio: "ignore" });
+      execFileSync("git", ["cat-file", "-e", `${base}:${path}`], { cwd: ROOT, stdio: "ignore" });
       return true;
     } catch {
       return false;
     }
   });
-};
+});
 const hosted = process.env.OPENUPTIME_HOSTED === "1"
   || (targetBranch() ? hostedBranch(targetBranch()) : isHostedCheckout(localRef(["HEAD"]), localRef(["@{upstream}"]), descendsFromHosted()));
 
