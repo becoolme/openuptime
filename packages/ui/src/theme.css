@@ -1,0 +1,6 @@
+/* Shared design tokens. Products override brand tokens (--accent) after importing this file. Every literal colour has a dark value. */
+:root{--bg:#fafaf7;--surface:#fff;--surface-2:#f4f4ee;--line:#e7e7df;--line-2:#d9d9cf;--ink:#0e1411;--muted:#5a635d;--faint:#8b938d;--accent:#0f9d58;--ok:#0f9d58;--warn:#c98a0a;--down:#d93a3a;--radius:14px;
+--sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Noto Sans SC","Noto Sans JP",sans-serif;--serif:"Instrument Serif","Noto Serif SC","Noto Serif JP",Georgia,serif;--mono:"Geist Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0a0c0b;--surface:#111413;--surface-2:#171b19;--line:#222826;--line-2:#2d3431;--ink:#f1f4f2;--muted:#a1aaa5;--faint:#6f7873;--accent:#3ddc84;--ok:#3ddc84;--warn:#f5b942;--down:#ff5c5c}}
+:root[data-theme=dark]{--bg:#0a0c0b;--surface:#111413;--surface-2:#171b19;--line:#222826;--line-2:#2d3431;--ink:#f1f4f2;--muted:#a1aaa5;--faint:#6f7873;--accent:#3ddc84;--ok:#3ddc84;--warn:#f5b942;--down:#ff5c5c}
+:root{--accent-weak:color-mix(in srgb,var(--accent) 10%,transparent);--down-weak:color-mix(in srgb,var(--down) 9%,transparent);--shadow-sm:0 1px 2px rgba(0,0,0,.06)}

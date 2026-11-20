@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { t } from "../lib/i18n";
+import Modal from "@openuptime/ui/modal";
 
 export type ImportReport = {
   format?: ImportFormat; preview: boolean; created: number; duplicates: number; ready: number; canImport: boolean; autoChannelCount: number;
@@ -54,28 +55,27 @@ export default function MonitorImport({ raw, onClose, onImported }: { raw: strin
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
-  return <div className="modal" role="dialog" aria-modal="true" aria-label={t("Import preview")}>
-    <div className="card mform" style={{ maxWidth: 820 }}>
-      <div className="mhead"><h2>{t("Import preview")}</h2><button className="icon-btn mclose" disabled={busy} aria-label={t("Close")} onClick={onClose}>×</button></div>
-      {file && <p className="muted" style={{ margin: 0 }}>{t("File format")}: <strong>{t(FORMAT_LABEL[file.format])}</strong>{file.format !== "json" && <> · {t("Settings without an equivalent are listed per monitor. Alert contacts and notifications are not imported.")}</>}</p>}
-      <label className="fld">{t("Source namespace")}
-        <input className="in mono" maxLength={80} value={source} disabled={busy || Boolean(report && !report.preview)} onChange={(e) => { setSource(e.target.value); setReport(null); }} />
-      </label>
-      <p className="muted">{t("Reuse the same source and source IDs on retries. Existing monitors are skipped, never overwritten. Per-row sources take precedence.")}</p>
-      <div className="acts"><button className="btn" disabled={busy} onClick={() => run(true)}>{t("Preview import")}</button>
-        {report?.preview && <button className="btn primary" disabled={busy || !report.canImport || !report.ready} onClick={() => run(false)}>{t("Import ready monitors")}</button>}
-        <button className="btn" disabled={busy} onClick={onClose}>{t("Close")}</button>
-      </div>
-      {error && <p className="err" role="alert">{error}</p>}
-      {report && <>
-        <p>{report.preview ? t("No monitors have been created.") : t("Import complete.")} {t("Ready")}: {report.ready} · {t("Imported")}: {report.created} · {t("Duplicates")}: {report.duplicates}</p>
-        {report.destination.projectName && <p className="muted">{t("Destination project")}: <strong>{report.destination.projectName}</strong></p>}
-        <p className="muted">{t("Destination auto-enabled channels")}: {report.autoChannelCount}</p>
-        {report.capacity && <p className="err">{t("Import exceeds the active monitor limit")}: {report.capacity.active} + {report.capacity.requested} &gt; {report.capacity.max}</p>}
-        <div style={{ maxHeight: "45vh", overflow: "auto" }}><table style={{ width: "100%" }}><thead><tr><th>{t("Monitor")}</th><th>{t("Status")}</th><th>{t("Details")}</th></tr></thead><tbody>
-          {report.report.map((r) => <tr key={r.index}><td>#{r.index + 1} {r.name}{r.sourceId && <div className="muted mono" style={{ fontSize: 11, overflowWrap: "anywhere" }}>{r.source}/{r.sourceId}</div>}</td><td>{t(({ ready: "Ready", created: "Imported", duplicate: "Duplicates", skipped: "skipped" } as Record<string, string>)[r.status] ?? r.status)}</td><td>{r.error ? message(r.error) : null}{r.existing && <div className="muted">{t("Already imported as")}: {r.existing.name} ({r.existing.target})</div>}<ul>{r.warnings.map((w) => <li key={w}>{message(w)}</li>)}</ul></td></tr>)}
-        </tbody></table></div>
-      </>}
+  return <Modal onClose={onClose} title={t("Import preview")} closeLabel={t("Close")} dismissable={!busy} backdropClose={false} style={{ maxWidth: 820 }} footer={
+    <div className="mbtns">
+      <button className="btn" disabled={busy} onClick={() => run(true)}>{t("Preview import")}</button>
+      {report?.preview && <button className="btn primary" disabled={busy || !report.canImport || !report.ready} onClick={() => run(false)}>{t("Import ready monitors")}</button>}
+      <button className="btn" disabled={busy} onClick={onClose}>{t("Close")}</button>
     </div>
-  </div>;
+  }>
+    {file && <p className="muted" style={{ margin: 0 }}>{t("File format")}: <strong>{t(FORMAT_LABEL[file.format])}</strong>{file.format !== "json" && <> · {t("Settings without an equivalent are listed per monitor. Alert contacts and notifications are not imported.")}</>}</p>}
+    <label className="fld">{t("Source namespace")}
+      <input className="in mono" maxLength={80} value={source} disabled={busy || Boolean(report && !report.preview)} onChange={(e) => { setSource(e.target.value); setReport(null); }} />
+    </label>
+    <p className="muted">{t("Reuse the same source and source IDs on retries. Existing monitors are skipped, never overwritten. Per-row sources take precedence.")}</p>
+    {error && <p className="err" role="alert">{error}</p>}
+    {report && <>
+      <p>{report.preview ? t("No monitors have been created.") : t("Import complete.")} {t("Ready")}: {report.ready} · {t("Imported")}: {report.created} · {t("Duplicates")}: {report.duplicates}</p>
+      {report.destination.projectName && <p className="muted">{t("Destination project")}: <strong>{report.destination.projectName}</strong></p>}
+      <p className="muted">{t("Destination auto-enabled channels")}: {report.autoChannelCount}</p>
+      {report.capacity && <p className="err">{t("Import exceeds the active monitor limit")}: {report.capacity.active} + {report.capacity.requested} &gt; {report.capacity.max}</p>}
+      <div style={{ maxHeight: "45vh", overflow: "auto" }}><table style={{ width: "100%" }}><thead><tr><th>{t("Monitor")}</th><th>{t("Status")}</th><th>{t("Details")}</th></tr></thead><tbody>
+        {report.report.map((r) => <tr key={r.index}><td>#{r.index + 1} {r.name}{r.sourceId && <div className="muted mono" style={{ fontSize: 11, overflowWrap: "anywhere" }}>{r.source}/{r.sourceId}</div>}</td><td>{t(({ ready: "Ready", created: "Imported", duplicate: "Duplicates", skipped: "skipped" } as Record<string, string>)[r.status] ?? r.status)}</td><td>{r.error ? message(r.error) : null}{r.existing && <div className="muted">{t("Already imported as")}: {r.existing.name} ({r.existing.target})</div>}<ul>{r.warnings.map((w) => <li key={w}>{message(w)}</li>)}</ul></td></tr>)}
+      </tbody></table></div>
+    </>}
+  </Modal>;
 }

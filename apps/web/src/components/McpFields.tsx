@@ -1,6 +1,6 @@
 import type { McpAssertion, McpConfig, McpOAuth, McpToolSchema } from "../lib/api";
 import { t } from "../lib/i18n";
-import Select from "./Select";
+import Select from "@openuptime/ui/select";
 
 export type McpForm = {
   transport: "auto" | "streamable-http" | "sse"; listPrompts: boolean; listResources: boolean; driftPolicy: "down" | "degraded" | "record";

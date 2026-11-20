@@ -17,6 +17,7 @@
     "@astrojs/node": "^11.1.7",
     "@astrojs/react": "^7.0.1",
     "@better-auth/api-key": "^1.7.7",
+    "@openuptime/ui": "workspace:*",
     "astro": "^7.3.8",
     "better-auth": "^1.7.7",
     "qrcode": "^1.5.4",

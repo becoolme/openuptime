@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import QRCode from "qrcode";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { type Clock, fmtTime, getClock, setClock } from "../lib/time";
+import Segmented from "@openuptime/ui/segmented";
+import PageHeader from "@openuptime/ui/page-header";
 
 type Me = { name?: string; email?: string; locale?: string | null; emailVerified?: boolean; twoFactorEnabled?: boolean | null };
 
@@ -221,9 +223,7 @@ function TimeFormat() {
     <div className="card sect">
       <h3>{t("Time format")}</h3>
       <p className="muted" style={{ marginBottom: 12 }}>{t("Times are shown in this browser's time zone ({zone}). The choice is kept in this browser.").replace("{zone}", zone)}</p>
-      <div className="seg" style={{ maxWidth: 360 }}>
-        {([["auto", "Automatic"], ["24", "24-hour"], ["12", "12-hour"]] as [Clock, string][]).map(([c, label]) => <i key={c} className={clock === c ? "on" : ""} onClick={() => pick(c)}>{t(label)}</i>)}
-      </div>
+      <Segmented style={{ maxWidth: 360 }} label={t("Time format")} value={clock} onChange={pick} options={([["auto", "Automatic"], ["24", "24-hour"], ["12", "12-hour"]] as [Clock, string][]).map(([c, label]) => ({ value: c, label: t(label) }))} />
       <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Example")}: {fmtTime(sample, { clock })}</p>
     </div>
   );
@@ -248,7 +248,7 @@ export default function Account() {
   }
   return (
     <>
-      <div className="ph"><div><h1>{t("Account")}</h1><p className="muted">{t("Personal settings, shared across all your projects.")}</p></div></div>
+      <PageHeader title={t("Account")} description={t("Personal settings, shared across all your projects.")} />
       <div className="set-wrap">
         {me?.email && (
           <div className="card sect" >
@@ -263,9 +263,7 @@ export default function Account() {
           <div className="card sect">
             <h3>{t("Language")}</h3>
             <p className="muted" style={{ marginBottom: 12 }}>{t("Used for the app and for emails we send you, such as alerts, invitations and password resets.")}</p>
-            <div className="seg" style={{ maxWidth: 360 }}>
-              {(Object.keys(LOCALES) as Locale[]).map((l) => <i key={l} className={current === l ? "on" : ""} onClick={() => pick(l)}>{LOCALES[l]}</i>)}
-            </div>
+            <Segmented style={{ maxWidth: 360 }} label={t("Language")} value={current} onChange={pick} options={(Object.keys(LOCALES) as Locale[]).map((l) => ({ value: l, label: LOCALES[l] }))} />
             {saved && <p className="faint" style={{ marginTop: 10, fontSize: 13 }}>{t("Saved")}</p>}
           </div>
         )}

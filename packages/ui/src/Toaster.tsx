@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import type { ToastKind, ToastOptions } from "../lib/toast";
-import { t } from "../lib/i18n";
+import { TOAST_EVENT, type ToastKind, type ToastOptions } from "./toast";
 
 type Item = { id: number; message: string; kind: ToastKind } & ToastOptions;
 let seq = 0;
 
-/** Stack of short-lived notifications at the top of the page. */
-export default function Toaster() {
+/** Stack of short-lived notifications at the top of the page. `dismissLabel` is the accessible name of the close button on sticky toasts. */
+export default function Toaster({ dismissLabel = "Dismiss" }: { dismissLabel?: string }) {
   const [items, setItems] = useState<Item[]>([]);
   useEffect(() => {
     const drop = (id: number) => setItems((l) => l.filter((x) => x.id !== id));
@@ -16,8 +15,8 @@ export default function Toaster() {
       setItems((l) => [...l.filter((x) => !d.key || x.key !== d.key).slice(-3), { id, ...d }]);
       if (!d.sticky) setTimeout(() => drop(id), d.kind === "err" ? 6000 : 3500);
     };
-    window.addEventListener("ou:toast", on);
-    return () => window.removeEventListener("ou:toast", on);
+    window.addEventListener(TOAST_EVENT, on);
+    return () => window.removeEventListener(TOAST_EVENT, on);
   }, []);
   if (!items.length) return null;
   const close = (id: number) => setItems((l) => l.filter((x) => x.id !== id));
@@ -27,7 +26,7 @@ export default function Toaster() {
         <div key={i.id} className={`toast ${i.kind}${i.action || i.sticky ? " act" : ""}`}>
           <span>{i.message}</span>
           {i.action && <button className="btn sm primary" onClick={() => { close(i.id); i.action!.run(); }}>{i.action.label}</button>}
-          {i.sticky && <button className="toast-x" aria-label={t("Dismiss")} onClick={() => close(i.id)}>×</button>}
+          {i.sticky && <button className="toast-x" aria-label={dismissLabel} onClick={() => close(i.id)}>×</button>}
         </div>
       ))}
     </div>

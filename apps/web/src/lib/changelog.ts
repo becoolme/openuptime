@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "keyboard-dialogs-choices", date: "2026-11-19", edition: "community",
+    title: { en: "Dialogs and choices work from the keyboard", zh: "弹窗和选项支持键盘操作" },
+    summary: {
+      en: "Every dialog closes with Escape, and option rows such as check interval or role can be chosen with the arrow keys.",
+      zh: "所有弹窗都可以按 Esc 关闭，检测间隔、角色等选项行可以用方向键选择。",
+    },
+    points: [
+      { en: "Escape now closes any dialog, including the monitor form, and focus goes back to where you were.", zh: "按 Esc 可关闭任何弹窗（包括监控表单），焦点会回到打开前的位置。" },
+      { en: "Option rows can be reached with Tab and changed with the arrow keys, Home and End; screen readers announce them as a group of choices.", zh: "选项行可以用 Tab 聚焦，再用方向键、Home 和 End 切换；读屏软件会把它们识别为一组单选项。" },
+    ],
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {

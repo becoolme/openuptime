@@ -31,7 +31,8 @@ export default function Select<V extends string | number>({
   const pick = (v: V) => { setOpen(false); if (v !== value) onChange(v); };
   const onKey = (e: React.KeyboardEvent) => {
     const i = active < 0 ? Math.max(0, options.findIndex((o) => o.value === value)) : active;
-    if (e.key === "Escape") { setOpen(false); return; }
+    // an open menu takes Escape for itself, so a dialog around it stays open
+    if (e.key === "Escape") { if (open) e.preventDefault(); setOpen(false); return; }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!open) { setOpen(true); setActive(i); return; }
