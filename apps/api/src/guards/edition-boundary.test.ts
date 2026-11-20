@@ -26,17 +26,40 @@ const specifiers = (src: string) =>
   [...src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm)].map((m) => m[1]);
 const hostedSpecifier = /(^|\/)(cloud|edge)(\/|$)|worker\.cloud|wrangler\.(cloud|edge)|changelog-cloud/;
 
-/** The hosted branch merges `main` and legitimately holds the hosted files, so these checks only apply on `main` and its pull requests. */
-const branch = () => {
-  const target = process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME;
-  if (target) return target;
+/**
+ * The hosted branch merges `main` and legitimately holds the hosted files, so these checks only apply on `main` and its
+ * pull requests. A feature branch cut from `cloud` also holds those files without being named `cloud*`; treat it as hosted
+ * so a local run does not report the files as a leak. `main` and `master` never get that exemption, so a real leak is still
+ * caught even if the files are already there locally.
+ */
+export const isHostedCheckout = (branch: string, hasHostedFiles: boolean) =>
+  /^cloud/.test(branch) || (!/^(main|master)$/.test(branch) && hasHostedFiles);
+
+const targetBranch = () => process.env.GITHUB_BASE_REF || process.env.GITHUB_REF_NAME || "";
+const localBranch = () => {
   try {
     return execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {
     return "";
   }
 };
-const hosted = /^cloud/.test(branch());
+const hosted = targetBranch()
+  ? /^cloud/.test(targetBranch())
+  : isHostedCheckout(localBranch(), CLOUD_ONLY_PATHS.some((p) => existsSync(join(ROOT, p))));
+
+describe("hosted checkout detection", () => {
+  it("treats a cloud branch, and a feature branch carrying hosted files, as hosted", () => {
+    expect(isHostedCheckout("cloud", false)).toBe(true);
+    expect(isHostedCheckout("cloud-private/traditional-chinese", true)).toBe(true);
+    expect(isHostedCheckout("traditional-chinese", true)).toBe(true);
+  });
+
+  it("still checks main when hosted files leaked into it", () => {
+    expect(isHostedCheckout("main", true)).toBe(false);
+    expect(isHostedCheckout("main", false)).toBe(false);
+    expect(isHostedCheckout("feature", false)).toBe(false);
+  });
+});
 
 describe.skipIf(hosted)("community build", () => {
   it("has no hosted-only files", () => {
