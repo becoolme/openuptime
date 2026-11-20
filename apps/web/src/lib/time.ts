@@ -25,16 +25,18 @@ const cycle = (c: Clock, auto24 = false): Intl.DateTimeFormatOptions =>
  * A time of day, such as 14:05 or 2:05 PM; `seconds` adds them, `utc` shows it in UTC with a suffix. UTC times and
  * `auto24` ones (columns of log times) stay on a 24-hour clock unless 12 hours was chosen.
  */
-export function fmtTime(iso: string | number | Date, o: { seconds?: boolean; utc?: boolean; auto24?: boolean; clock?: Clock } = {}): string {
+export function fmtTime(iso: string | number | Date, o: { seconds?: boolean; utc?: boolean; auto24?: boolean; clock?: Clock; locale?: string } = {}): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const text = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: o.seconds ? "2-digit" : undefined, ...cycle(o.clock ?? getClock(), o.utc || o.auto24), timeZone: o.utc ? "UTC" : undefined });
+  const text = d.toLocaleTimeString(o.locale ?? [], { hour: "2-digit", minute: "2-digit", second: o.seconds ? "2-digit" : undefined, ...cycle(o.clock ?? getClock(), o.utc || o.auto24), timeZone: o.utc ? "UTC" : undefined });
   return o.utc ? `${text} UTC` : text;
 }
 
 /** A date and time, such as 3 Nov 2026, 14:05. */
-export function fmtDateTime(iso: string | number | Date, o: { timeZone?: string; clock?: Clock } = {}): string {
+export function fmtDateTime(iso: string | number | Date, o: { timeZone?: string; clock?: Clock; locale?: string } = {}): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString([], { dateStyle: "medium", timeStyle: "short", ...cycle(o.clock ?? getClock()), timeZone: o.timeZone });
+  // dateStyle cannot be combined with hourCycle, and timeStyle is not padded to two digits on every locale, so ask for the
+  // fields explicitly: the date still follows the locale, while a 24-hour clock always shows 00:05 rather than 0:05.
+  return d.toLocaleString(o.locale ?? [], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", ...cycle(o.clock ?? getClock()), timeZone: o.timeZone });
 }
