@@ -5,10 +5,12 @@ import { t } from "../lib/i18n";
 import { navigate } from "../lib/nav";
 import { pollWhileVisible } from "../lib/poll";
 import { fmtDateTime, fmtTime } from "../lib/time";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { diskUse, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, maskIp, memPct, pct, platformLabel, primaryIp, serverState, since, specLabel } from "../lib/servers";
 import { HideIpsButton, OfflineAlerts } from "./ServerAlerts";
 import { CommandBox, Meter, SERVER_DOCS, ServerStatus, Tile, UNINSTALL_CMD } from "./Servers";
+import Segmented from "@openuptime/ui/segmented";
+import EmptyState from "@openuptime/ui/empty-state";
 
 const RANGES: { k: ServerRange; sec: number }[] = [{ k: "1h", sec: 3600 }, { k: "6h", sec: 6 * 3600 }, { k: "24h", sec: 86400 }, { k: "7d", sec: 7 * 86400 }];
 
@@ -133,7 +135,7 @@ export default function ServerDetail({ id }: { id: string }) {
         </div>
         <div className="ph-actions">
           <HideIpsButton />
-          <div className="seg srv-range">{RANGES.map((r) => <i key={r.k} className={range === r.k ? "on" : ""} onClick={() => setRange(r.k)}>{r.k}</i>)}</div>
+          <Segmented className="srv-range" label={t("Time range")} value={range} onChange={setRange} options={RANGES.map((r) => ({ value: r.k, label: r.k }))} />
         </div>
       </div>
 
@@ -151,7 +153,7 @@ export default function ServerDetail({ id }: { id: string }) {
           <Tile k={t("Disk")} value={fullest ? `${Math.round(fullest.pct)}%` : "—"} bar={fullest?.pct ?? 0} sub={fullest ? `${t("Fullest mount {m}").replace("{m}", fullest.mount)} · ${fmtBytes(fullest.total - fullest.used)} ${t("free")}` : t("No disks reported")} />
           <Tile k={t("Uptime")} value={fmtSpan(s.snapshot?.uptimeSec)} sub={`${t("agent")} ${s.agentVersion || "—"}`} />
         </div>
-      ) : <div className="empty" style={{ marginBottom: 24 }}><p className="muted">{t("Waiting for the first report.")}</p></div>}
+      ) : <EmptyState style={{ marginBottom: 24 }} description={t("Waiting for the first report.")} />}
 
       <div className="srv-charts">
         <Chart title={t("CPU")} {...common} max={100} fmt={(v) => `${v.toFixed(1)}%`} series={[{ label: t("CPU"), cls: "c1", get: (p) => p.cpu }]} />
@@ -228,11 +230,8 @@ export default function ServerDetail({ id }: { id: string }) {
           </form>
           <div className="fld">
             <span>{t("Report every")}</span>
-            <div className="seg">{s.intervals.map((sec) => (
-              <i key={sec} className={s.intervalSec === sec ? "on" : ""} title={sec < s.minIntervalSec ? t("Needs a paid plan") : undefined}
-                style={sec < s.minIntervalSec ? { opacity: 0.5 } : undefined}
-                onClick={() => { if (!saving && sec !== s.intervalSec) save({ intervalSec: sec }); }}>{sec < 60 ? `${sec}s` : `${sec / 60}m`}</i>
-            ))}</div>
+            <Segmented label={t("Report every")} value={s.intervalSec} onChange={(sec) => { if (!saving) save({ intervalSec: sec }); }}
+              options={s.intervals.map((sec) => ({ value: sec, label: sec < 60 ? `${sec}s` : `${sec / 60}m`, dim: sec < s.minIntervalSec, title: sec < s.minIntervalSec ? t("Needs a paid plan") : undefined }))} />
             <p className="faint" style={{ fontSize: 13, marginTop: 6 }}>
               {s.minIntervalSec > 30 ? t("Reporting every 30 seconds needs a paid plan.") : t("The agent picks up a new interval at its next report.")}
               {upgrade !== null && <> <span className="err">{t("Your plan does not allow this interval.")}</span>{upgrade && <> <a href={upgrade}>{t("Upgrade")}</a></>}</>}

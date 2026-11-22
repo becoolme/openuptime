@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Project } from "../lib/api";
 import { t } from "../lib/i18n";
 import { authClient } from "../lib/auth-client";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { selectProject as select, switchScope } from "../lib/nav";
 import { scrollEdges } from "../lib/scroll-edges";
 import { ALL, COOKIE, isAllProjects, setProjectCookie } from "../lib/scope";

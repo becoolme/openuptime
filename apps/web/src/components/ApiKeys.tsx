@@ -1,9 +1,12 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { ago, api, type Project } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import QRCode from "qrcode";
+import Modal from "@openuptime/ui/modal";
+import Segmented from "@openuptime/ui/segmented";
+import PageHeader from "@openuptime/ui/page-header";
 
 type Key = { id: string; name: string | null; start: string | null; createdAt: string; metadata?: { projectIds?: string[] } | null };
 
@@ -26,9 +29,7 @@ function AgentGrants() {
   if (!grants?.length) return null;
   return (
     <>
-      <div className="ph" style={{ marginTop: 28 }}>
-        <div><h2 style={{ fontSize: 22 }}>{t("Authorized agents")}</h2><p className="muted">{t("Apps you let manage OpenUptime on your behalf (MCP / OAuth).")}</p></div>
-      </div>
+      <PageHeader level={2} style={{ marginTop: 28 }} title={t("Authorized agents")} description={t("Apps you let manage OpenUptime on your behalf (MCP / OAuth).")} />
       <div className="card tbl">
         {grants.map((g) => (
           <div className="tr" key={g.id} style={{ gridTemplateColumns: "1fr auto auto" }}>
@@ -101,10 +102,8 @@ export default function ApiKeys() {
   const keyIcon = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3" /></svg>;
   return (
     <>
-      <div className="ph">
-        <div><h1>{t("API keys")}</h1><p className="muted">{t("Send as")} <span className="mono">{t("x-api-key")}</span> {t("or a Bearer token to")} <span className="mono">{t("/api/*")}</span>.</p></div>
-        <button className="btn primary" onClick={() => { setErr(""); setOpen(true); }}>{t("+ New key")}</button>
-      </div>
+      <PageHeader title={t("API keys")} description={<>{t("Send as")} <span className="mono">{t("x-api-key")}</span> {t("or a Bearer token to")} <span className="mono">{t("/api/*")}</span>.</>}
+        actions={<button className="btn primary" onClick={() => { setErr(""); setOpen(true); }}>{t("+ New key")}</button>} />
       {fresh && (
         <div className="card fresh">
           <b>{t("Copy your key now — it won’t be shown again.")}</b>
@@ -149,32 +148,26 @@ export default function ApiKeys() {
       </div>
 
       {open && (
-        <div className="modal" onClick={() => setOpen(false)}>
-          <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={create}>
-            <h2 style={{ fontSize: 30 }}>{t("New API key")}</h2>
-            <label className="fld">{t("Name")}<input className="in" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("CI deploy hook")} /></label>
-            <div className="fld">{t("Project access")}
-              <div className="seg">
-                <i className={all ? "on" : ""} onClick={() => setAll(true)}>{t("All projects")}</i>
-                <i className={!all ? "on" : ""} onClick={() => setAll(false)}>{t("Selected projects")}</i>
+        <Modal as="form" onClose={() => setOpen(false)} onSubmit={create} title={t("New API key")}>
+          <label className="fld">{t("Name")}<input className="in" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("CI deploy hook")} /></label>
+          <div className="fld">{t("Project access")}
+            <Segmented label={t("Project access")} value={all ? "all" : "some"} onChange={(v) => setAll(v === "all")} options={[{ value: "all", label: t("All projects") }, { value: "some", label: t("Selected projects") }]} />
+            {!all && (
+              <div style={{ display: "grid", gap: 2, marginTop: 6, padding: 6, border: "1px solid var(--line)", borderRadius: 12, maxHeight: 180, overflow: "auto" }}>
+                {projects.map((p) => (
+                  <label key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 8px", fontSize: 14, fontWeight: 400, cursor: "pointer" }}>
+                    <input type="checkbox" checked={picked.includes(p.id)} onChange={(e) => setPicked((l) => (e.target.checked ? [...l, p.id] : l.filter((x) => x !== p.id)))} />{p.name}
+                  </label>
+                ))}
               </div>
-              {!all && (
-                <div style={{ display: "grid", gap: 2, marginTop: 6, padding: 6, border: "1px solid var(--line)", borderRadius: 12, maxHeight: 180, overflow: "auto" }}>
-                  {projects.map((p) => (
-                    <label key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 8px", fontSize: 14, fontWeight: 400, cursor: "pointer" }}>
-                      <input type="checkbox" checked={picked.includes(p.id)} onChange={(e) => setPicked((l) => (e.target.checked ? [...l, p.id] : l.filter((x) => x !== p.id)))} />{p.name}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            {err && <p className="err">{err}</p>}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button type="button" className="btn" onClick={() => setOpen(false)}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create key")}</button>
-            </div>
-          </form>
-        </div>
+            )}
+          </div>
+          {err && <p className="err">{err}</p>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>{t("Cancel")}</button>
+            <button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create key")}</button>
+          </div>
+        </Modal>
       )}
     </>
   );

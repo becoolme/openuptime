@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Channel, type ServerAlerts } from "../lib/api";
 import { t } from "../lib/i18n";
 import { fmtDateTime } from "../lib/time";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import { useHideIps } from "../lib/hide-ips";
 
 /** The eye switch that hides every address and tag on the servers pages, for screen shares and screenshots. */

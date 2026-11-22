@@ -2,6 +2,10 @@ import { adoptProject, backToAll, navigate } from "../lib/nav";
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { api, type Monitor, type StatusPage, type Subscriber } from "../lib/api";
+import Modal from "@openuptime/ui/modal";
+import Segmented from "@openuptime/ui/segmented";
+import EmptyState from "@openuptime/ui/empty-state";
+import PageHeader from "@openuptime/ui/page-header";
 
 export default function StatusPages() {
   const [pages, setPages] = useState<StatusPage[] | null>(null);
@@ -10,14 +14,12 @@ export default function StatusPages() {
   useEffect(() => { load(); }, []);
   return (
     <>
-      <div className="ph">
-        <div><h1>{t("Status pages")}</h1><p className="muted">{t("Public pages your customers can check before they email you.")}</p></div>
-        <button className="btn primary" onClick={() => setOpen(true)}>{t("+ New status page")}</button>
-      </div>
+      <PageHeader title={t("Status pages")} description={t("Public pages your customers can check before they email you.")}
+        actions={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ New status page")}</button>} />
       {pages === null && <p className="muted">{t("Loading…")}</p>}
       {pages?.length === 0 ? (
-        <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No status pages")}</h3><p className="muted" style={{ margin: "6px 0 20px" }}>{t("Publish one in a minute.")}</p>
-          <button className="btn primary" onClick={() => setOpen(true)}>{t("+ Create a status page")}</button></div>
+        <EmptyState title={t("No status pages")} description={t("Publish one in a minute.")}
+          action={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ Create a status page")}</button>} />
       ) : (
         <div className="sp-grid">
           {pages?.map((p) => (
@@ -56,17 +58,14 @@ function Create({ onClose }: { onClose: () => void }) {
     } catch (e) { setErr((e as Error).message); setBusy(false); }
   }
   return (
-    <div className="modal" onClick={onClose}>
-      <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2 style={{ fontSize: 30 }}>{t("New status page")}</h2>
-        <label className="fld">{t("Title")}<input className="in" required autoFocus value={title} onChange={(e) => { setTitle(e.target.value); if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")); }} placeholder={t("Acme Status")} /></label>
-        <label className="fld">{t("Slug")}<input className="in mono" required pattern="[a-z0-9-]{3,40}" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={t("acme")} /></label>
-        {err && <p className="err">{err}</p>}
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button><button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create")}</button>
-        </div>
-      </form>
-    </div>
+    <Modal as="form" onClose={onClose} onSubmit={submit} title={t("New status page")}>
+      <label className="fld">{t("Title")}<input className="in" required autoFocus value={title} onChange={(e) => { setTitle(e.target.value); if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")); }} placeholder={t("Acme Status")} /></label>
+      <label className="fld">{t("Slug")}<input className="in mono" required pattern="[a-z0-9-]{3,40}" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={t("acme")} /></label>
+      {err && <p className="err">{err}</p>}
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <button type="button" className="btn" onClick={onClose}>{t("Cancel")}</button><button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create")}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -142,11 +141,7 @@ export function StatusPageEditor({ id }: { id: string }) {
             <label className="fld">{t("Title")}<input className="in" value={page.title} onChange={(e) => setPage({ ...page, title: e.target.value })} /></label>
             <div className="fld">{t("Slug")}<div className="in mono faint ro">/status/{page.slug}</div></div>
             <div className="fld">{t("Theme")}
-              <div className="seg">
-                {(["light", "dark", "auto"] as const).map((th) => (
-                  <i key={th} className={page.theme === th ? "on" : ""} onClick={() => setPage({ ...page, theme: th })}>{t(th === "auto" ? "Auto" : th === "dark" ? "Dark" : "Light")}</i>
-                ))}
-              </div>
+              <Segmented label={t("Theme")} value={page.theme} onChange={(th) => setPage({ ...page, theme: th })} options={(["light", "dark", "auto"] as const).map((th) => ({ value: th, label: t(th === "auto" ? "Auto" : th === "dark" ? "Dark" : "Light") }))} />
             </div>
             <label className="fld">{t("Website link (optional)")}<input className="in" type="url" inputMode="url" placeholder="https://example.com" maxLength={2048} value={page.externalUrl ?? ""} onChange={(e) => setPage({ ...page, externalUrl: e.target.value })} /><small className="faint">{t("Shows an external-link icon next to the title that opens this address.")}</small></label>
             <button type="button" className="route tog" onClick={() => setPage({ ...page, showLatency: !page.showLatency })}>
