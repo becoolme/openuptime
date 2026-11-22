@@ -41,6 +41,21 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
+    title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
+    summary: {
+      en: "A heartbeat ping now finds its monitor through an index instead of scanning the monitor table.",
+      zh: "心跳上报现在通过索引找到对应的监控，不再扫描整张监控表。",
+    },
+    points: [
+      { en: "Resolving a heartbeat token no longer scans the whole monitor table as the number of monitors grows.", zh: "随着监控数量增长，按心跳 token 查找监控不再扫描整张表。" },
+    ],
+    upgrade: {
+      en: "The first upgrade past this version builds an index on the monitor table. On a large table the build blocks monitor writes while it runs, so upgrade in a quiet window.",
+      zh: "升级到这个版本后第一次启动会为监控表建立索引。表很大时，建索引期间会阻塞监控写入，请在低峰时段升级。",
+    },
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
