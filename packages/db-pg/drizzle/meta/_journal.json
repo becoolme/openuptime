@@ -379,6 +379,13 @@
       "when": 1795025844361,
       "tag": "0053_legal_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795205286548,
+      "tag": "0054_big_alice",
+      "breakpoints": true
     }
   ]
 }

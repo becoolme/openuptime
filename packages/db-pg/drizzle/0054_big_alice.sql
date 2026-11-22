@@ -1,0 +1,1 @@
+CREATE INDEX "monitor_heartbeat_token_idx" ON "monitor" USING btree ("heartbeat_token");

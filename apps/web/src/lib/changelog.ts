@@ -29,6 +29,57 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "alert-delivery-write-failures", date: "2026-11-20", edition: "community",
+    title: { en: "Alerts survive a database write failure", zh: "数据库写入失败时告警仍会发出" },
+    summary: {
+      en: "A failure to log or queue a delivery no longer drops the alert or fails the request that triggered it.",
+      zh: "记录或排队投递失败时，告警不再丢失，触发告警的请求也不会因此报错。",
+    },
+    points: [
+      { en: "When delivery rows cannot be written, each channel is still sent directly under the same routing policy and email allowance, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去时，仍会在相同的路由策略和邮件配额下直接发送，数据库出问题不会让一次故障变成无声的故障。" },
+      { en: "A failed owner-language lookup falls back to English, and a failed channel lookup still notifies status page subscribers instead of failing the request.", zh: "读取工作区语言失败时会回退到英文；读取渠道失败时仍会通知状态页订阅者，而不是让请求报错。" },
+      { en: "A manual check or a heartbeat ping no longer returns an error only because the alert history could not be written.", zh: "手动检测或心跳上报不会再仅因为告警历史写入失败而返回错误。" },
+    ],
+  },
+  {
+    id: "midnight-zero-padded", date: "2026-11-20", edition: "community",
+    title: { en: "Midnight shows as 00:05 on a 24-hour clock", zh: "24 小时制下午夜显示为 00:05" },
+    summary: {
+      en: "Times just after midnight keep their leading zero in every browser language.",
+      zh: "无论浏览器是什么语言，午夜过后的时间都会保留前导零。",
+    },
+    points: [
+      { en: "On a language such as Japanese or Korean, a 24-hour clock used to show 0:05 for the first hour; it now shows 00:05, and a date shown with the time follows the same rule.", zh: "在日语或韩语等语言下，24 小时制以前会把凌晨一点前显示成 0:05；现在显示为 00:05，带日期的显示也遵循同一规则。" },
+    ],
+  },
+  {
+    id: "hourly-housekeeping-isolation", date: "2026-11-20", edition: "community",
+    title: { en: "Hourly cleanup failures stay contained", zh: "整点清理失败不再连累其他任务" },
+    summary: {
+      en: "A failed hourly cleanup stays contained instead of skipping the five-minute work that follows it.",
+      zh: "整点清理失败不会再连带跳过排在它后面的每五分钟任务。",
+    },
+    points: [
+      { en: "When the hourly purge fails, the five-minute work after it — stuck-transaction cleanup, maintenance reminders, monthly reports and edition-specific tasks — still runs in the same scheduled invocation.", zh: "整点清理失败时，排在它后面的每五分钟任务——卡住事务清理、维护提醒、月度报告和版本特有任务——仍会在本次调度中执行。" },
+      { en: "The failure is logged and no longer ends the scheduled run with an unhandled rejection.", zh: "失败会写入日志，不再让本次定时任务以未处理的异常结束。" },
+    ],
+  },
+  {
+    id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
+    title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
+    summary: {
+      en: "A heartbeat ping now finds its monitor through an index instead of scanning the monitor table.",
+      zh: "心跳上报现在通过索引找到对应的监控，不再扫描整张监控表。",
+    },
+    points: [
+      { en: "Resolving a heartbeat token no longer scans the whole monitor table as the number of monitors grows.", zh: "随着监控数量增长，按心跳 token 查找监控不再扫描整张表。" },
+    ],
+    upgrade: {
+      en: "The first upgrade past this version builds an index on the monitor table. On a large table the build blocks monitor writes while it runs, so upgrade in a quiet window.",
+      zh: "升级到这个版本后第一次启动会为监控表建立索引。表很大时，建索引期间会阻塞监控写入，请在低峰时段升级。",
+    },
+  },
+  {
     id: "keyboard-dialogs-choices", date: "2026-11-19", edition: "community",
     title: { en: "Dialogs and choices work from the keyboard", zh: "弹窗和选项支持键盘操作" },
     summary: {
