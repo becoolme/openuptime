@@ -104,7 +104,7 @@ async function housekeeping(repo: Repo, queue: CheckQueue | undefined, total = 0
     await step("alert escalations", () => sendEscalations(repo, entitlements, queue ? 10 : 3));
   }
   // cheap housekeeping once an hour
-  if (new Date().getMinutes() === 0) await repo.purgeExpired();
+  if (new Date().getMinutes() === 0) await step("hourly housekeeping", () => repo.purgeExpired());
   // reminders and reports are claimed in the database before they are sent, so a coarse cadence is enough
   if (new Date().getMinutes() % 5 === 0) {
     // A worker killed mid-transaction can leave its connection open and its rows locked; claims skip locked monitors

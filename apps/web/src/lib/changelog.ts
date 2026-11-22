@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "hourly-housekeeping-isolation", date: "2026-11-20", edition: "community",
+    title: { en: "Hourly cleanup failures stay contained", zh: "整点清理失败不再连累其他任务" },
+    summary: {
+      en: "A failed hourly cleanup stays contained instead of skipping the five-minute work that follows it.",
+      zh: "整点清理失败不会再连带跳过排在它后面的每五分钟任务。",
+    },
+    points: [
+      { en: "When the hourly purge fails, the five-minute work after it — stuck-transaction cleanup, maintenance reminders, monthly reports and edition-specific tasks — still runs in the same scheduled invocation.", zh: "整点清理失败时，排在它后面的每五分钟任务——卡住事务清理、维护提醒、月度报告和版本特有任务——仍会在本次调度中执行。" },
+      { en: "The failure is logged and no longer ends the scheduled run with an unhandled rejection.", zh: "失败会写入日志，不再让本次定时任务以未处理的异常结束。" },
+    ],
+  },
+  {
     id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
     title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
     summary: {
