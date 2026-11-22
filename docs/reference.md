@@ -29,7 +29,7 @@ and skip `wrangler queues create`: the minute cron then runs up to 40 monitors i
 2. It atomically leases due monitors (`UPDATE … FOR UPDATE SKIP LOCKED`), so overlapping runs never duplicate work. A monitor with an interval longer than a minute is checked at a fixed offset within that interval,
    derived from its id, so monitors created at the same time are spread over the interval instead of running in one tick.
 3. Leased monitors are packed 25 per message into the `openuptime-checks` Queue.
-4. The queue consumer (same Worker) runs each pack with its own invocation budget, writes results, opens and resolves incidents, and fans out alerts (Slack, Lark / Feishu, webhook, Telegram, PagerDuty, email).
+4. The queue consumer (same Worker) runs each pack with its own invocation budget, writes results, opens and resolves incidents, and fans out alerts (Slack, Discord, Microsoft Teams, Telegram, Lark / Feishu, ntfy, Bark, Apprise, PagerDuty, webhook, email and push).
 
 Without a bound queue (local dev, or `POST /internal/run-checks` with `x-cron-secret`), checks run inline.
 
@@ -72,14 +72,17 @@ Clients authorize with OAuth 2.1 (dynamic client registration + PKCE; discovery 
 ## Monitoring features
 
 - **HTTP** checks: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS; optional request bodies up to 16 KiB UTF-8 for methods other than GET/HEAD; expected status (one code, or a list of codes, ranges and classes such as `200-299,401`, with `!` to exclude), optional keyword (must contain / must not contain, as plain text or as an RE2 regular expression), custom request headers (use for bearer/basic auth).
-- **TCP**, **DNS**, **Heartbeat** (with a grace period before a missed ping counts as a failure).
+- **TCP**, **DNS**, **WebSocket** (opening handshake, optionally a sent message and the reply it expects) and **Heartbeat** (with a grace period before a missed ping counts as a failure).
 - **PostgreSQL**, **MySQL / MariaDB**, **Redis** reachability probes (handshake / `PING`; no credentials are sent).
+- **Domain expiry** through RDAP, **MCP server** checks (initialization and tool discovery; tool calls and schema drift are optional), **EVM** (`eth_syncing`) and **Solana** (`getHealth`) node health.
+- **Ping (ICMP)** on self-hosted installs and your own probes only: the Workers runtime cannot send ICMP, so the monitor type is not offered there.
+- **Servers**: the [agent](../apps/agent/README.md) reports CPU, memory, swap, load, disks, disk I/O and network interfaces; a server that stops reporting raises an alert.
 - **Response-time alerts**: per-monitor "slow" threshold (default 1500 ms) marks a monitor degraded; optionally open a minor incident after N consecutive slow checks.
 - **Tags** to group and filter monitors, plus **JSON import / export** (`GET /api/monitors/export`, `POST /api/monitors/import`).
 - **Stats** come from an hourly rollup (`check_rollup`), so uptime stays cheap as history grows. Raw check results are kept 90 days by default (Settings → Check history); rollups for a year.
 - **Per-monitor alert routing**: pick which channels a monitor notifies; none selected = all.
 - **Maintenance windows**: checks continue, but no incidents or alerts for covered monitors.
-- **Multi-region checks** (HTTP, TCP and WebSocket only): run `apps/probe` in several places (the Docker image or any Node host, or Vercel functions) and set `PROBE_REGIONS` (JSON of region id → URL) and `PROBE_SECRET` on the API. A monitor checks from its own location (`auto`) unless you pick regions for it, up to the plan's limit. A run fails when most of the regions that answered failed; an unreachable probe is left out of the vote, and when none answers the check runs locally. Each region counts as one check. `GET /api/regions` lists what is available, and `POST /api/monitors/:id/check` with `{ "region": "…" }` sends one unrecorded request from that region. See `apps/probe/README.md` and the docs page at `/docs/regions`.
+- **Multi-region checks** (HTTP, TCP, WebSocket, MCP and ping; a ping probe must support ICMP): run `apps/probe` in several places (the Docker image or any Node host, or Vercel functions) and set `PROBE_REGIONS` (JSON of region id → URL) and `PROBE_SECRET` on the API. A monitor checks from its own location (`auto`) unless you pick regions for it, up to the plan's limit. A run fails when most of the regions that answered failed; an unreachable probe is left out of the vote, and when none answers the check runs locally. Each region counts as one check. `GET /api/regions` lists what is available, and `POST /api/monitors/:id/check` with `{ "region": "…" }` sends one unrecorded request from that region. See `apps/probe/README.md` and the docs page at `/docs/regions`.
 - Not supported on Workers: TLS certificate expiry (the runtime does not expose certificates).
 
 ### Monitor import identity
