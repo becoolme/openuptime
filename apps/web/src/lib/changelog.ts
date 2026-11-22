@@ -40,6 +40,33 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: "hourly-housekeeping-isolation", date: "2026-11-20", edition: "community",
+    title: { en: "Hourly cleanup failures stay contained", zh: "整点清理失败不再连累其他任务" },
+    summary: {
+      en: "A failed hourly cleanup stays contained instead of skipping the five-minute work that follows it.",
+      zh: "整点清理失败不会再连带跳过排在它后面的每五分钟任务。",
+    },
+    points: [
+      { en: "When the hourly purge fails, the five-minute work after it — stuck-transaction cleanup, maintenance reminders, monthly reports and edition-specific tasks — still runs in the same scheduled invocation.", zh: "整点清理失败时，排在它后面的每五分钟任务——卡住事务清理、维护提醒、月度报告和版本特有任务——仍会在本次调度中执行。" },
+      { en: "The failure is logged and no longer ends the scheduled run with an unhandled rejection.", zh: "失败会写入日志，不再让本次定时任务以未处理的异常结束。" },
+    ],
+  },
+  {
+    id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
+    title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
+    summary: {
+      en: "A heartbeat ping now finds its monitor through an index instead of scanning the monitor table.",
+      zh: "心跳上报现在通过索引找到对应的监控，不再扫描整张监控表。",
+    },
+    points: [
+      { en: "Resolving a heartbeat token no longer scans the whole monitor table as the number of monitors grows.", zh: "随着监控数量增长，按心跳 token 查找监控不再扫描整张表。" },
+    ],
+    upgrade: {
+      en: "The first upgrade past this version builds an index on the monitor table. On a large table the build blocks monitor writes while it runs, so upgrade in a quiet window.",
+      zh: "升级到这个版本后第一次启动会为监控表建立索引。表很大时，建索引期间会阻塞监控写入，请在低峰时段升级。",
+    },
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
