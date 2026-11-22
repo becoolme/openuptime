@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "alert-delivery-write-failures", date: "2026-11-20", edition: "community",
+    title: { en: "Alerts survive a database write failure", zh: "数据库写入失败时告警仍会发出" },
+    summary: {
+      en: "A failure to log or queue a delivery no longer drops the alert or fails the request that triggered it.",
+      zh: "记录或排队投递失败时，告警不再丢失，触发告警的请求也不会因此报错。",
+    },
+    points: [
+      { en: "When delivery rows cannot be written, each channel is still sent directly under the same routing policy and email allowance, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去时，仍会在相同的路由策略和邮件配额下直接发送，数据库出问题不会让一次故障变成无声的故障。" },
+      { en: "A failed owner-language lookup falls back to English, and a failed channel lookup still notifies status page subscribers instead of failing the request.", zh: "读取工作区语言失败时会回退到英文；读取渠道失败时仍会通知状态页订阅者，而不是让请求报错。" },
+      { en: "A manual check or a heartbeat ping no longer returns an error only because the alert history could not be written.", zh: "手动检测或心跳上报不会再仅因为告警历史写入失败而返回错误。" },
+    ],
+  },
+  {
     id: "midnight-zero-padded", date: "2026-11-20", edition: "community",
     title: { en: "Midnight shows as 00:05 on a 24-hour clock", zh: "24 小时制下午夜显示为 00:05" },
     summary: {
