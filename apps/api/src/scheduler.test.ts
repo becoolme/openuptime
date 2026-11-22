@@ -76,6 +76,26 @@ describe("housekeeping", () => {
     error.mockRestore();
   });
 
+  it("keeps the five-minute work when the hourly purge fails", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { repo } = idleRepo(async () => ({ mcpAlerts: false, deliveries: false, followUps: false }));
+      let stuck = 0;
+      Object.assign(repo, {
+        purgeExpired: async () => { throw new Error("purge failed"); },
+        endStuckWork: async () => (stuck++, { ended: 0, overdue: 0 }),
+      });
+      vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+      await runDueChecks(repo);
+      expect(stuck).toBe(1);
+      expect(error).toHaveBeenCalledWith("hourly housekeeping failed", expect.any(Error));
+    } finally {
+      error.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("ends stuck transactions and reports overdue monitors every five minutes", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
