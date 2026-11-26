@@ -3,13 +3,23 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { notifyIncidentUpdate } from "../alerts";
 import type { AppEnv } from "../env";
-import { listedProjects, uuidParams } from "../middleware";
+import { listedProjects, requireManager, uuidParams } from "../middleware";
 import { purgePublicStatus } from "./status";
 
 const visibility = z.enum(["public", "internal"]);
 /** Limits for the write-up fields: a short cause and a longer postmortem. */
 export const ROOT_CAUSE_MAX = 500;
 export const POSTMORTEM_MAX = 20000;
+export const FALSE_ALARM_REASON_MAX = 500;
+
+/** The HTTP answer for each way marking (or un-marking) a false alarm can be refused. */
+const falseAlarmError = {
+  not_found: [404, "Not found"],
+  open: [409, "Resolve the incident before marking it as a false alarm"],
+  no_monitor: [409, "Only an incident tied to a monitor can be marked as a false alarm"],
+  already: [409, "This incident is already marked as a false alarm"],
+  not_marked: [409, "This incident is not marked as a false alarm"],
+} as const;
 
 /** Matches "INC-12", "inc12" or "12" against the incident number. */
 const asNumber = (q: string) => {
@@ -94,4 +104,36 @@ export const incidents = new Hono<AppEnv>()
     if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
     const inc = await repo.acknowledgeIncident(c.get("orgId"), id, c.get("userId"));
     return inc ? c.json(inc) : c.json({ error: "Not found" }, 404);
+  })
+  // Owners and admins only: it rewrites what the check history says. The incident, its updates and the failed checks'
+  // errors stay; the failed runs of the incident count as healthy and the incident leaves the status page.
+  .post(
+    "/:id/false-alarm",
+    uuidParams,
+    requireManager,
+    zValidator("json", z.object({ reason: z.string().trim().min(1).max(FALSE_ALARM_REASON_MAX) })),
+    async (c) => {
+      const repo = c.get("repo");
+      const id = c.req.param("id");
+      if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
+      const r = await repo.markIncidentFalseAlarm(c.get("orgId"), id, c.get("userId"), c.req.valid("json").reason);
+      if (!r.ok) {
+        const [status, error] = falseAlarmError[r.error];
+        return c.json({ error }, status);
+      }
+      purgePublicStatus();
+      return c.json({ ...r.incident, correctedChecks: r.checks });
+    },
+  )
+  .delete("/:id/false-alarm", uuidParams, requireManager, async (c) => {
+    const repo = c.get("repo");
+    const id = c.req.param("id");
+    if (!(await repo.incidentVisible(c.get("orgId"), id, c.get("projectScope")))) return c.json({ error: "Not found" }, 404);
+    const r = await repo.clearIncidentFalseAlarm(c.get("orgId"), id);
+    if (!r.ok) {
+      const [status, error] = falseAlarmError[r.error];
+      return c.json({ error }, status);
+    }
+    purgePublicStatus();
+    return c.json({ ...r.incident, correctedChecks: r.checks });
   });

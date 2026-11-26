@@ -284,7 +284,14 @@ export interface Incident {
   postmortem: string | null;
   /** When a person published the root cause and postmortem on the status page; null keeps them private. */
   postmortemPublishedAt: Date | null;
+  /** When a person marked it as a false alarm; its failed checks no longer count against uptime and it is left off status pages. */
+  falseAlarmAt: Date | null;
+  falseAlarmReason: string | null;
+  falseAlarmById: string | null;
 }
+/** Why an incident could not be marked (or un-marked) as a false alarm. */
+export type FalseAlarmFailure = "not_found" | "open" | "no_monitor" | "already" | "not_marked";
+export type FalseAlarmResult = { ok: true; incident: Incident; checks: number } | { ok: false; error: FalseAlarmFailure };
 export interface IncidentUpdate {
   id: string;
   incidentId: string;
@@ -316,7 +323,7 @@ export interface IncidentDetail {
   monitor: Pick<Monitor, "id" | "name" | "status" | "target" | "type"> | null;
   assignee: { name: string; email: string } | null;
   /** failed checks inside the incident window, newest first */
-  checks: Pick<CheckResult, "id" | "ok" | "statusCode" | "latencyMs" | "error" | "checkedAt">[];
+  checks: (Pick<CheckResult, "id" | "ok" | "statusCode" | "latencyMs" | "error" | "checkedAt"> & { falseAlarm?: boolean })[];
 }
 
 export interface AlertChannel {
@@ -755,6 +762,14 @@ export interface Repo {
   /** Set the status (stamping `resolvedAt` when resolved) and append an update. */
   postIncidentUpdate(orgId: string, id: string, u: NewIncidentUpdate): Promise<{ incident: Incident; update: IncidentUpdate } | null>;
   acknowledgeIncident(orgId: string, id: string, userId: string): Promise<Incident | null>;
+  /**
+   * Mark a resolved incident as a false alarm: the failed runs of its monitor from the last healthy run before the
+   * incident up to its resolution are counted as healthy in the check history and the hourly rollup, and the incident
+   * is left off status pages. `checks` is how many runs were corrected. Reversible with `clearIncidentFalseAlarm`.
+   */
+  markIncidentFalseAlarm(orgId: string, id: string, userId: string, reason: string): Promise<FalseAlarmResult>;
+  /** Undo `markIncidentFalseAlarm`: the corrected runs count as failed again and the incident is public again. */
+  clearIncidentFalseAlarm(orgId: string, id: string): Promise<FalseAlarmResult>;
   /** Sets or clears the root cause and postmortem; fields left out stay as they are. */
   updateIncidentWriteUp(orgId: string, id: string, w: IncidentWriteUp): Promise<Incident | null>;
   /** An unresolved incident of the monitor: an automatic latency one with `slow`, otherwise any other (outage or manual) one. */

@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "incident-false-alarm", date: "2026-11-26", edition: "community",
+    title: { en: "Mark an incident as a false alarm", zh: "把事件标记为误报" },
+    summary: { en: "When checks failed but your service was fine, such as a rate limit, you can stop the incident from counting against uptime.", zh: "检测失败但服务其实正常时（例如被限流），可以让这次事件不再计入可用率。" },
+    points: [
+      { en: "Open a resolved incident and choose Mark as false alarm with a short reason; its failed checks, back to the last healthy one, count as healthy.", zh: "打开已解决的事件，填写简短原因并选择“标记为误报”，其失败的检测（回溯到上一次正常检测）会按正常计算。" },
+      { en: "A false alarm is hidden from status pages, feeds and monthly reports, and stays visible to your team with its reason.", zh: "误报不再显示在状态页、订阅源和月报中，团队内部仍可看到，并附有原因。" },
+      { en: "Only owners and admins can do it, and Undo false alarm puts everything back.", zh: "仅所有者和管理员可以操作，点“撤销误报标记”即可恢复原状。" },
+      { en: "Checks older than your workspace's retention period cannot be corrected, so mark false alarms while the details are still kept.", zh: "超出工作区保留期的检测无法修正，请在明细仍保留时标记误报。" },
+    ],
+    upgrade: { en: "Run the database migration (it adds columns to incident and check_result) before starting the new API.", zh: "启动新版 API 之前先运行数据库迁移（会给 incident 和 check_result 增加列）。" },
+    link: { href: "/docs/api", label: { en: "Read the API docs", zh: "阅读 API 文档" } },
+  },
+  {
     id: "json-assertion-type-status", date: "2026-11-26", edition: "community",
     title: { en: "JSON assertions: value type and status", zh: "JSON 断言：值类型与状态码" },
     summary: { en: "A JSON assertion can insist on text, number or boolean, and can apply only to some response statuses.", zh: "JSON 断言可以指定值必须是文本、数字或布尔值，也可以只对部分状态码的响应生效。" },
