@@ -29,6 +29,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "response-chart-scroll", date: "2026-11-26", edition: "community",
+    title: { en: "Response time chart scrolls", zh: "响应时间图表可滚动" },
+    summary: { en: "The response time chart no longer goes blank when a monitor has many recent checks.", zh: "监控的近期检测较多时，响应时间图表不再显示为空白。" },
+    points: [
+      { en: "Each check keeps a readable bar width; the chart shows as many of the newest checks as fit, and older ones are a scroll to the left.", zh: "每次检测的柱子保持可读的宽度；图表显示放得下的最新检测，更早的向左滚动查看。" },
+      { en: "The time labels under the chart follow the part you are looking at, and the tooltip is no longer cut off at the edge of the chart.", zh: "图表下方的时间标签跟随当前看到的范围，悬停提示也不再被图表边缘截断。" },
+      { en: "A long monitor URL in the incident's Affected components card now wraps instead of running over the status badge.", zh: "事件页“受影响组件”卡片里过长的监控地址现在会换行，不再盖住状态标签。" },
+    ],
+  },
+  {
     id: "incident-false-alarm", date: "2026-11-26", edition: "community",
     title: { en: "Mark an incident as a false alarm", zh: "把事件标记为误报" },
     summary: { en: "When checks failed but your service was fine, such as a rate limit, you can stop the incident from counting against uptime.", zh: "检测失败但服务其实正常时（例如被限流），可以让这次事件不再计入可用率。" },
