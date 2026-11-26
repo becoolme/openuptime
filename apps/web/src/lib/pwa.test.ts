@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyUpdate, CHECK_EVERY_MS, watchForUpdates, type Reg } from "./pwa";
+import { applyUpdate, CHECK_EVERY_MS, LATEST_WAIT_MS, watchForUpdates, type Reg } from "./pwa";
 
 type Handler = () => void;
 function fakeReg(waiting = false) {
@@ -99,12 +99,12 @@ describe("watchForUpdates", () => {
 });
 
 describe("applyUpdate", () => {
-  it("tells the waiting worker to activate and reloads when it has taken over, once", () => {
+  it("tells the waiting worker to activate and reloads when it has taken over, once", async () => {
     const { reg } = fakeReg(true);
     let changed: Handler = () => {};
     const sw = { addEventListener: (_: string, cb: Handler) => (changed = cb) };
     const reload = vi.fn();
-    applyUpdate(reg, sw, reload);
+    await applyUpdate(reg, sw, reload);
     expect(reg.waiting!.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
     expect(reload).not.toHaveBeenCalled();
     changed();
@@ -113,18 +113,59 @@ describe("applyUpdate", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads anyway when the takeover never signals", () => {
+  it("reloads anyway when the takeover never signals", async () => {
     const { reg } = fakeReg(true);
     const reload = vi.fn();
-    applyUpdate(reg, { addEventListener: () => {} }, reload);
+    await applyUpdate(reg, { addEventListener: () => {} }, reload);
     vi.advanceTimersByTime(4000);
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("just reloads when nothing is waiting", () => {
+  it("just reloads when nothing is waiting", async () => {
     const { reg } = fakeReg(false);
     const reload = vi.fn();
-    applyUpdate(reg, { addEventListener: () => {} }, reload);
+    await applyUpdate(reg, { addEventListener: () => {} }, reload);
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks for a newer version first and activates it instead of the one that was waiting", async () => {
+    const { reg, raw } = fakeReg(true);
+    const older = raw.waiting as { postMessage: ReturnType<typeof vi.fn> };
+    const newer = { postMessage: vi.fn() };
+    let onState: Handler = () => {};
+    const installing = { state: "installing", postMessage: () => {}, addEventListener: (_: string, cb: Handler) => (onState = cb) };
+    raw.update.mockImplementation(async () => {
+      raw.installing = installing;
+      return raw;
+    });
+    const done = applyUpdate(reg, { addEventListener: () => {} }, vi.fn());
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(newer.postMessage).not.toHaveBeenCalled();
+    expect(older.postMessage).not.toHaveBeenCalled(); // still waiting for the download
+    installing.state = "installed";
+    raw.waiting = newer;
+    onState();
+    await done;
+    expect(newer.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+    expect(older.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not wait longer than LATEST_WAIT_MS for a download that never finishes", async () => {
+    const { reg, raw } = fakeReg(true);
+    raw.update.mockImplementation(async () => {
+      raw.installing = { state: "installing", postMessage: () => {}, addEventListener: () => {} };
+      return raw;
+    });
+    const done = applyUpdate(reg, { addEventListener: () => {} }, vi.fn());
+    await vi.advanceTimersByTimeAsync(LATEST_WAIT_MS);
+    await done;
+    expect(reg.waiting!.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+  });
+
+  it("uses the version it already has when the check fails", async () => {
+    const { reg, raw } = fakeReg(true);
+    raw.update.mockRejectedValue(new TypeError("offline"));
+    await applyUpdate(reg, { addEventListener: () => {} }, vi.fn());
+    expect(reg.waiting!.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
   });
 });

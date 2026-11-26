@@ -48,12 +48,37 @@ export function watchForUpdates(reg: Reg, prompt: () => void, hasController: () 
   };
 }
 
-/** Activates the waiting worker and reloads once it has taken over (or after a short grace period). */
-export function applyUpdate(
-  reg: Pick<Reg, "waiting">,
+/** The longest "Refresh" waits for a newer version to download before it applies the one it already has. */
+export const LATEST_WAIT_MS = 5000;
+
+/**
+ * Asks the server for the newest version and waits until a worker that was found has finished installing, or until `ms` passes.
+ * A version deployed after the prompt appeared is then the one that gets activated, so one click lands on the newest.
+ */
+function latestSettled(reg: Pick<Reg, "installing" | "update">, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    reg.update().then(() => {
+      const w = reg.installing;
+      if (!w || (w.state !== "parsed" && w.state !== "installing")) return finish();
+      w.addEventListener("statechange", () => {
+        if (w.state !== "parsed" && w.state !== "installing") finish();
+      });
+    }, finish);
+  });
+}
+
+/** Activates the newest waiting worker and reloads once it has taken over (or after a short grace period). */
+export async function applyUpdate(
+  reg: Pick<Reg, "waiting" | "installing" | "update">,
   sw: { addEventListener(type: "controllerchange", cb: () => void): void } = navigator.serviceWorker,
   reload: () => void = () => location.reload(),
-): void {
+): Promise<void> {
+  await latestSettled(reg, LATEST_WAIT_MS);
   const waiting = reg.waiting;
   if (!waiting) return reload();
   let done = false;
