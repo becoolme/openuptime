@@ -7,6 +7,7 @@ import { ago, api, type Incident } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 import IncidentDiagnosis from "./IncidentDiagnosis";
 import Segmented from "@openuptime/ui/segmented";
+import { SkeletonPage } from "./Skeleton";
 
 const KIND: Record<string, string> = { "incident.opened": "Down alert", "incident.resolved": "Recovery alert", "incident.reminder": "Reminder", "incident.escalated": "Escalation", "incident.muted": "Down alert muted" };
 
@@ -35,7 +36,7 @@ export default function IncidentDetail({ id }: { id: string }) {
   const [faBusy, faRun] = useBusy();
   const load = () => api.incident(id).then((i) => { adoptProject(i.projectId); setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); setPublish(!!i.postmortemPublishedAt); });
   useEffect(() => { load(); }, [id]);
-  if (!inc) return <p className="muted">{t("Loading…")}</p>;
+  if (!inc) return <SkeletonPage back={{ href: "/app/incidents", label: t("← Incidents") }} kpis={0} cards={2} />;
 
   const resolved = inc.status === "resolved";
   const post = (s: Incident["status"], text: string, hidden = false) =>

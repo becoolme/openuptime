@@ -6,6 +6,7 @@ import Modal from "@openuptime/ui/modal";
 import Segmented from "@openuptime/ui/segmented";
 import EmptyState from "@openuptime/ui/empty-state";
 import PageHeader from "@openuptime/ui/page-header";
+import { SkeletonPage } from "./Skeleton";
 
 export default function StatusPages() {
   const [pages, setPages] = useState<StatusPage[] | null>(null);
@@ -16,7 +17,11 @@ export default function StatusPages() {
     <>
       <PageHeader title={t("Status pages")} description={t("Public pages your customers can check before they email you.")}
         actions={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ New status page")}</button>} />
-      {pages === null && <p className="muted">{t("Loading…")}</p>}
+      {pages === null && (
+        <div className="sp-grid" role="status" aria-busy="true" aria-label={t("Loading…")}>
+          {[0, 1, 2].map((i) => <div className="card" key={i} aria-hidden="true" style={{ padding: 18 }}><i className="sk" style={{ width: "55%", height: 18 }} /><i className="sk" style={{ width: "80%", marginTop: 12 }} /><i className="sk" style={{ width: "35%", marginTop: 8 }} /></div>)}
+        </div>
+      )}
       {pages?.length === 0 ? (
         <EmptyState title={t("No status pages")} description={t("Publish one in a minute.")}
           action={<button className="btn primary" onClick={() => setOpen(true)}>{t("+ Create a status page")}</button>} />
@@ -89,7 +94,7 @@ export function StatusPageEditor({ id }: { id: string }) {
       api.monitors().then(setMonitors);
     });
   }, [id]);
-  if (!page) return <p className="muted">{t("Loading…")}</p>;
+  if (!page) return <SkeletonPage back={{ href: "/app/status-pages", label: t("← Status pages") }} cards={2} />;
   const byId = new Map(monitors.map((m) => [m.id, m]));
   const shown = comps.filter((c) => byId.has(c.monitorId));
   const free = monitors.filter((m) => !comps.some((c) => c.monitorId === m.id));

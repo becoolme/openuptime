@@ -4,6 +4,7 @@ import { t } from "../lib/i18n";
 import { fmtDateTime } from "../lib/time";
 import { toast } from "@openuptime/ui/toast";
 import { useHideIps } from "../lib/hide-ips";
+import { SkeletonLines } from "./Skeleton";
 
 /** The eye switch that hides every address and tag on the servers pages, for screen shares and screenshots. */
 export function HideIpsButton() {
@@ -81,7 +82,7 @@ export function OfflineAlerts({ serverId, monitorId, alerts, onChange, footerMut
       {alerts.enabled && (
         <div className="fld srv-al-ch">
           <span>{t("Send to")} <span className="faint">({t("none selected = all channels")})</span></span>
-          {channels === null && <small className="faint">{t("Loading…")}</small>}
+          {channels === null && <SkeletonLines widths={[180]} height={12} />}
           {channels !== null && enabled.length === 0 && (
             <small className="faint">{t("This project has no alert channels yet.")} <a href="/app/alerting">{t("Add a channel")}</a></small>
           )}

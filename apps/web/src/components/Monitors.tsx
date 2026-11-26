@@ -261,7 +261,7 @@ export default function Monitors() {
   return (
     <>
       <PageHeader title={<>{t("Monitors")}{everything && <ScopeChip />}</>}
-        description={items === null ? t("Loading…") : down.length ? `${down.length} ${t(down.some((m) => m.type === "domain") ? "checks need attention" : "down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
+        description={items === null ? <i className="sk" style={{ width: 180, height: 14, marginTop: 4 }} aria-label={t("Loading…")} /> : down.length ? `${down.length} ${t(down.some((m) => m.type === "domain") ? "checks need attention" : "down right now")}` : all.length ? t("Everything is up.") : t("Nothing is being watched yet.")}
         actions={!everything && <>
           <input id="mon-import" type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
           <button className="btn" onClick={() => document.getElementById("mon-import")?.click()}>{t("Import")}</button>

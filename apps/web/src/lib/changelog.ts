@@ -29,6 +29,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "skeleton-loading", date: "2026-11-26", edition: "community",
+    title: { en: "Skeletons while pages load", zh: "页面加载显示骨架屏" },
+    summary: { en: "Dashboard pages that showed a plain \"Loading…\" line now show a grey placeholder in the shape of the page.", zh: "之前只显示“加载中…”文字的后台页面，现在显示与页面形状一致的灰色骨架屏。" },
+    points: [
+      { en: "Monitor, incident and status page details, the status page list, alert channels and the delivery log, API keys, server setup and offline alerts, and the team invitation page all use the same placeholder.", zh: "监控、事件、状态页的详情页，状态页列表，告警渠道与发送记录，API 密钥，服务器接入与离线告警，以及团队邀请页，都使用同样的占位样式。" },
+    ],
+  },
+  {
     id: "response-chart-scroll", date: "2026-11-26", edition: "community",
     title: { en: "Response time chart scrolls", zh: "响应时间图表可滚动" },
     summary: { en: "The response time chart no longer goes blank when a monitor has many recent checks.", zh: "监控的近期检测较多时，响应时间图表不再显示为空白。" },

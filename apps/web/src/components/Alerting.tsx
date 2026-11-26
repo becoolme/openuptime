@@ -6,6 +6,8 @@ import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 import Modal from "@openuptime/ui/modal";
 import EmptyState from "@openuptime/ui/empty-state";
 import PageHeader from "@openuptime/ui/page-header";
+import { SkeletonLines } from "./Skeleton";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
 
 const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "discord", label: "Discord", desc: "Send alerts through a Discord channel webhook." },
@@ -140,7 +142,7 @@ export default function Alerting() {
       {note && <p className="ok-note">{note}</p>}
       <div className="cols">
         <div className="col">
-          {items === null && <p className="muted">{t("Loading…")}</p>}
+          {items === null && <div className="card tbl"><SkeletonRows cols={4} rows={3} /></div>}
           {items?.length === 0 ? (
             <EmptyState title={t("No channels yet")} description={t("Add one so you hear about problems first.")}
               action={<button className="btn primary" onClick={openAdd}>{t("+ Add channel")}</button>} />
@@ -185,7 +187,7 @@ export default function Alerting() {
           <h3>{t("Delivery log")}</h3>
           <span className="faint" style={{ fontSize: 13 }}>{t("Kept for")} {days} {t("days")} · <a href="/app/settings">{t("Change")}</a></span>
         </div>
-        {log === null && <p className="muted">{t("Loading…")}</p>}
+        {log === null && <SkeletonLines widths={["82%", "64%", "74%"]} />}
         {log?.length === 0 && <p className="muted">{t("No alerts sent yet.")}</p>}
         {log?.map((d) => {
           const state = deliveryState(d);
