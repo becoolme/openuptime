@@ -11,6 +11,7 @@ import { pollWhileVisible } from "../lib/poll";
 import { groupRuns } from "../lib/runs";
 import { MonitorForm } from "./Monitors";
 import ResponseChart from "./ResponseChart";
+import { SkeletonPage } from "./Skeleton";
 
 type Detail = Monitor & { results: CheckResult[]; regionStats: RegionStat[]; incidents: Incident[]; stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null } };
 const every = (s: number) => (s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
@@ -38,7 +39,7 @@ export default function MonitorDetail({ id }: { id: string }) {
     api.regions().then((r) => setNames(Object.fromEntries(r.regions.map((x) => [x.id, x.name])))).catch(() => {});
     return pollWhileVisible(load, 10000);
   }, [id]);
-  if (!m) return <p className="muted">{t("Loading…")}</p>;
+  if (!m) return <SkeletonPage back={{ href: "/app", label: t("← Monitors") }} kpis={4} cards={2} />;
 
   const configured = m.regions?.length ? m.regions : ["auto"];
   // a multi-region check records one row per region at the same moment: the chart and the table treat those as one run

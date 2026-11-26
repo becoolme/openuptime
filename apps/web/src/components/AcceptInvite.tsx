@@ -3,6 +3,7 @@ import { go } from "../lib/locale-path";
 import { useEffect, useState } from "react";
 import { authClient } from "../lib/auth-client";
 import { AuthShell } from "./AuthShell";
+import { SkeletonLines } from "./Skeleton";
 
 type Invitation = { organizationName?: string; inviterEmail?: string; role?: string; email?: string; status?: string; expiresAt?: string | Date };
 type Phase = "loading" | "signin" | "ready" | "joining" | "declined" | "error";
@@ -55,7 +56,7 @@ export default function AcceptInvite({ id }: { id: string }) {
   return (
     <AuthShell side="signup">
       <h1 className="serif">{t("Team invitation")}</h1>
-      {phase === "loading" && <p className="muted auth-sub">{t("Loading…")}</p>}
+      {phase === "loading" && <SkeletonLines widths={["80%", "55%"]} />}
       {phase === "signin" && (
         <>
           <p className="muted auth-sub">{t("Sign in or create an account to see and accept this invitation.")}</p>

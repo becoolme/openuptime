@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import Modal from "@openuptime/ui/modal";
 import Segmented from "@openuptime/ui/segmented";
 import PageHeader from "@openuptime/ui/page-header";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
 
 type Key = { id: string; name: string | null; start: string | null; createdAt: string; metadata?: { projectIds?: string[] } | null };
 
@@ -125,7 +126,7 @@ export default function ApiKeys() {
       {err && !open && <p className="err">{err}</p>}
       <div className="card tbl">
         <div className="tr th ak-tr"><span>{t("Name")}</span><span>{t("Key")}</span><span>{t("Projects")}</span><span>{t("Created")}</span><span /></div>
-        {keys === null && <div className="tr" style={{ gridTemplateColumns: "1fr" }}><span className="muted">{t("Loading…")}</span></div>}
+        {keys === null && <SkeletonRows cols={5} rows={3} rowClassName="tr ak-tr" />}
         {keys?.length === 0 && <div className="tr" style={{ gridTemplateColumns: "1fr" }}><span className="muted">{t("No keys yet.")}</span></div>}
         {keys?.map((k) => (
           <div className="tr ak-tr" key={k.id}>

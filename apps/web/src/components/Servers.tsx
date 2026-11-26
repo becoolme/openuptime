@@ -13,6 +13,7 @@ import { SkeletonRows } from "@openuptime/ui/skeleton";
 import Modal from "@openuptime/ui/modal";
 import EmptyState from "@openuptime/ui/empty-state";
 import PageHeader from "@openuptime/ui/page-header";
+import { SkeletonLines } from "./Skeleton";
 
 type Row = ServerList["servers"][number];
 
@@ -396,7 +397,7 @@ function ServerDrawer({ id, list, onSelect, onClose }: { id: string; list: Row[]
             <div className="srv-sec-h"><h3>{t("Offline alerts")}</h3></div>
             {detail?.id === id
               ? <OfflineAlerts serverId={id} monitorId={detail.monitorId} alerts={detail.alerts} onChange={setAlerts} footerMute />
-              : <p className="faint srv-al-note">{t("Loading…")}</p>}
+              : <SkeletonLines widths={["70%", "40%"]} />}
           </section>
         </div>
         <div className="drawer-f srv-df">
@@ -473,7 +474,7 @@ function AddServer({ onClose, limit }: { onClose: () => void; limit: { max: numb
         <label className="fld">{t("Tags (optional)")}<input className="in" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="prod, eu-west" /></label>
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>{optionErr ? <span className="err">{optionErr}</span> : t("Used when the server first reports. Without a name it shows its hostname; rename it here at any time.")}</p>
-      {!err && <pre className="srv-cmd mono">{cmd || (optionErr ? "" : t("Loading…"))}</pre>}
+      {!err && <pre className="srv-cmd mono">{cmd || (optionErr ? "" : <i className="sk" style={{ height: 14, width: "80%" }} aria-label={t("Loading…")} />)}</pre>}
       {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}
       <div className="srv-safe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>
