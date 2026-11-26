@@ -76,15 +76,6 @@ export default function IncidentDetail({ id }: { id: string }) {
         {falseAlarm && <span className="chip">{t("False alarm")}</span>}
       </div>
       {err && <p className="err">{err}</p>}
-      {falseAlarm && (
-        <div className="card cc">
-          <div className="cc-h"><h3>{t("Marked as a false alarm")}</h3><span className="faint" style={{ fontSize: 13 }}>{ago(inc.falseAlarmAt!)}</span></div>
-          <p style={{ margin: "0 0 8px" }}>{inc.falseAlarmReason}</p>
-          <small className="faint">{t("Its failed checks count as healthy in uptime, and it is hidden from your status pages. It stays here for your team.")}</small>
-          <div className="formact"><button className="btn sm" disabled={faBusy} onClick={clearFalseAlarm}>{faBusy ? t("Undoing…") : t("Undo false alarm")}</button></div>
-        </div>
-      )}
-
       <div className="cols">
         <div className="col">
           <form className="card cc" onSubmit={(e) => { e.preventDefault(); post(status, body, hidden); }}>
@@ -174,6 +165,14 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div><span>{t("Resolved")}</span><b>{inc.resolvedAt ? ago(inc.resolvedAt) : "—"}</b></div>
             </div>
           </div>
+          {falseAlarm && (
+            <div className="card cc">
+              <div className="cc-h"><h3>{t("Marked as a false alarm")}</h3><span className="faint" style={{ fontSize: 13 }}>{ago(inc.falseAlarmAt!)}</span></div>
+              <p style={{ margin: "0 0 8px" }}>{inc.falseAlarmReason}</p>
+              <small className="faint">{t("Its failed checks count as healthy in uptime, and it is hidden from your status pages. It stays here for your team.")}</small>
+              <div className="formact"><button className="btn sm" disabled={faBusy} onClick={clearFalseAlarm}>{faBusy ? t("Undoing…") : t("Undo false alarm")}</button></div>
+            </div>
+          )}
           {resolved && inc.monitor && !falseAlarm && (
             <div className="card cc">
               <div className="cc-h"><h3>{t("False alarm?")}</h3></div>
