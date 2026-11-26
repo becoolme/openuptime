@@ -12,7 +12,7 @@ import Doc from "../../layouts/Doc.astro";
       <li>Because every monitor belongs to someone who added your address on purpose, a request from OpenUptime means that someone asked for your site to be watched. If you do not want that, ask them to remove the monitor, or write to <a href="mailto:hi@openuptime.app">hi@openuptime.app</a> and we will remove it.</li>
     </ul>
     <h2 id="identify">How to recognize it</h2>
-    <p>The User-Agent starts with <code>OpenUptime/</code>, for example <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code>. A User-Agent is easy to copy, so do not rely on it alone, and do not rely on IP addresses either: checks run from Cloudflare Workers and from probes in several regions, and their addresses change. OpenUptime signs its HTTP requests instead, with <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a> (HTTP message signatures, RFC 9421).</p>
+    <p>The User-Agent starts with <code>OpenUptime/</code>, for example <code>OpenUptime/0.1 (+https://openuptime.app/docs/bot)</code> on the hosted service. A self-hosted install sends <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code> unless you change it. A User-Agent is easy to copy, so do not rely on it alone, and do not rely on IP addresses either: checks run from Cloudflare Workers and from probes in several regions, and their addresses change. OpenUptime signs its HTTP requests instead, with <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a> (HTTP message signatures, RFC 9421).</p>
     <h2 id="wba">Verifying a request with Web Bot Auth</h2>
     <p>Each signed request carries three headers:</p>
     <ul>
@@ -43,7 +43,7 @@ import Doc from "../../layouts/Doc.astro";
       <li>每个监控项都属于某位特意添加了你的地址的用户，所以来自 OpenUptime 的请求意味着有人希望监控你的网站。如果你不希望如此，请让对方删除该监控项，或写信到 <a href="mailto:hi@openuptime.app">hi@openuptime.app</a>，我们会将其移除。</li>
     </ul>
     <h2 id="identify-zh">如何识别</h2>
-    <p>User-Agent 以 <code>OpenUptime/</code> 开头，例如 <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code>。User-Agent 很容易被仿冒，请不要只依赖它；也不要依赖 IP 地址，因为检测来自 Cloudflare Workers 和多个地区的探针，地址会变化。OpenUptime 改为用 <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a>（HTTP 消息签名，RFC 9421）为 HTTP 请求签名。</p>
+    <p>User-Agent 以 <code>OpenUptime/</code> 开头，例如托管服务发出的 <code>OpenUptime/0.1 (+https://openuptime.app/docs/bot)</code>。自托管实例默认发送 <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code>，除非你修改它。User-Agent 很容易被仿冒，请不要只依赖它；也不要依赖 IP 地址，因为检测来自 Cloudflare Workers 和多个地区的探针，地址会变化。OpenUptime 改为用 <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a>（HTTP 消息签名，RFC 9421）为 HTTP 请求签名。</p>
     <h2 id="wba-zh">用 Web Bot Auth 验证请求</h2>
     <p>每个带签名的请求包含三个请求头：</p>
     <ul>
