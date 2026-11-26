@@ -22,6 +22,8 @@ services:
       # label returned by the health check; the name users see comes from the API's PROBE_REGIONS
       PROBE_REGION: ${PROBE_REGION:-}
       CHECK_USER_AGENT: ${CHECK_USER_AGENT:-}
+      CHECK_SIGNING_KEY: ${CHECK_SIGNING_KEY:-}
+      CHECK_SIGNATURE_AGENT: ${CHECK_SIGNATURE_AGENT:-}
       # "true" lets this probe check private / internal addresses of the network it runs in (an office or home probe)
       ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-}
       # proxy for HTTP checks (http://user:pass@host:port, used as a CONNECT tunnel); unset = direct

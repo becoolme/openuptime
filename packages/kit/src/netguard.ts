@@ -11,6 +11,7 @@
  */
 
 import { outboundProxy, pinnedFetch } from "./pinnedfetch";
+import { signRequest } from "./webbotauth";
 
 let allowPrivate = false;
 
@@ -327,7 +328,7 @@ export class RedirectCookies {
 /** One response on the way to the final one: where it came from, its status, where it pointed and how long it took. */
 export type FetchHop = { url: string; status: number; location: string | null; ms: number };
 
-export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, protectBody = false, publicOnly = false, trace }: { follow?: boolean; protectBody?: boolean; publicOnly?: boolean; /** filled with one entry per response received, the final one included */ trace?: FetchHop[] } = {}): Promise<{ res: Response; url: string }> {
+export async function guardedFetch(url: string, init: RequestInit = {}, { follow = true, protectBody = false, publicOnly = false, sign = false, trace }: { follow?: boolean; protectBody?: boolean; publicOnly?: boolean; /** sign every hop with Web Bot Auth when a key is configured (HTTP checks only) */ sign?: boolean; /** filled with one entry per response received, the final one included */ trace?: FetchHop[] } = {}): Promise<{ res: Response; url: string }> {
   let current = url;
   let method = init.method ?? "GET";
   let body = init.body;
@@ -340,6 +341,12 @@ export async function guardedFetch(url: string, init: RequestInit = {}, { follow
     const sent = new Headers(headers);
     const cookie = hop ? cookies.header(u, headers.get("cookie")) : null;
     if (cookie) sent.set("cookie", cookie);
+    if (sign) {
+      // each hop is signed for its own host, and a header the monitor supplied can not pose as a signature
+      for (const h of ["signature", "signature-input", "signature-agent"]) sent.delete(h);
+      const signed = await signRequest(u);
+      for (const [k, v] of Object.entries(signed ?? {})) sent.set(k, v);
+    }
     const req = { ...init, method, body, headers: sent, redirect: "manual" as const };
     const started = Date.now();
     // the connection goes to the addresses that were just validated, not to whatever the name resolves to next

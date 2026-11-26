@@ -29,6 +29,28 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "web-bot-auth", date: "2026-11-25", edition: "community",
+    title: { en: "HTTP checks sign their requests", zh: "HTTP 检测请求带签名" },
+    summary: {
+      en: "Sites behind a bot filter can verify that a check really comes from OpenUptime, with Web Bot Auth, instead of trusting a User-Agent or an IP range.",
+      zh: "使用 Bot 过滤的网站可以通过 Web Bot Auth 验证检测请求确实来自 OpenUptime，而不必信任 User-Agent 或 IP 段。",
+    },
+    points: [
+      { en: "HTTP checks, including every redirect they follow, carry Signature-Agent, Signature-Input and Signature headers (HTTP message signatures, Ed25519).", zh: "HTTP 检测（包括其跟随的每一次重定向）会带上 Signature-Agent、Signature-Input 和 Signature 请求头（HTTP 消息签名，Ed25519）。" },
+      { en: "The public key is served, signed, at /.well-known/http-message-signatures-directory of the API origin.", zh: "公钥（带签名）发布在 API 来源的 /.well-known/http-message-signatures-directory。" },
+      { en: "A new documentation page explains what the check bot does and how to allow it through a firewall.", zh: "新增一页文档，说明检测机器人做什么，以及如何在防火墙中放行。" },
+    ],
+    cloud: {
+      en: "The hosted service signs checks from its API and from every probe region, with the key directory at https://openuptime.app/.well-known/http-message-signatures-directory.",
+      zh: "托管服务的 API 和每个探针区域发出的检测都带签名，密钥目录位于 https://openuptime.app/.well-known/http-message-signatures-directory。",
+    },
+    upgrade: {
+      en: "Signing is off until you set CHECK_SIGNING_KEY (an Ed25519 private key as a one-line JWK) and CHECK_SIGNATURE_AGENT (the https origin that serves the key directory), on the API and on any probe. Checks go out unsigned without them.",
+      zh: "设置 CHECK_SIGNING_KEY（单行 JWK 形式的 Ed25519 私钥）和 CHECK_SIGNATURE_AGENT（提供密钥目录的 https 来源）之前不会签名，API 和各个探针都需要设置；不设置则检测不带签名。",
+    },
+    link: { href: "/docs/bot", label: { en: "Read about the check bot", zh: "阅读检测机器人文档" } },
+  },
+  {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",
     title: { en: "Unreachable addresses no longer stop the API", zh: "地址不可达时 API 不再退出" },
     summary: {
