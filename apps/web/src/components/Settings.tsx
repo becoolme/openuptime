@@ -1,8 +1,9 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
+import PageHeader from "@openuptime/ui/page-header";
 
 export default function Settings() {
   const [name, setName] = useState("");
@@ -36,7 +37,7 @@ export default function Settings() {
   }
   return (
     <>
-      <div className="ph"><div><h1>{t("Settings")}</h1><p className="muted">{t("Workspace-level preferences.")}</p></div></div>
+      <PageHeader title={t("Settings")} description={t("Workspace-level preferences.")} />
       <div className="set-wrap">
         <form className="card sect" onSubmit={save}>
           <h3>{t("General")}</h3>

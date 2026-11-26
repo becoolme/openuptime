@@ -970,4 +970,6 @@ export const zh: Record<string, string> = {
   "{ip} and {n} more addresses": "{ip} 等 {n} 个地址",
   "{n} mounts": "{n} 个挂载点",
   "{n} total": "{n} 总量",
+  "Visibility": "可见范围",
+  "Time range": "时间范围",
 };

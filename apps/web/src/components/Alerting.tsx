@@ -1,8 +1,11 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
+import Modal from "@openuptime/ui/modal";
+import EmptyState from "@openuptime/ui/empty-state";
+import PageHeader from "@openuptime/ui/page-header";
 
 const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "discord", label: "Discord", desc: "Send alerts through a Discord channel webhook." },
@@ -131,18 +134,16 @@ export default function Alerting() {
   const enabledN = items?.filter((c) => c.enabled).length ?? 0;
   return (
     <>
-      <div className="ph">
-        <div><h1>{t("Alerting")}</h1><p className="muted">{t("Where we tell you when something breaks, and when it’s back.")}</p></div>
-        <button className="btn primary" onClick={openAdd}>{t("+ Add channel")}</button>
-      </div>
+      <PageHeader title={t("Alerting")} description={t("Where we tell you when something breaks, and when it’s back.")}
+        actions={<button className="btn primary" onClick={openAdd}>{t("+ Add channel")}</button>} />
       {err && !adding && <p className="err">{err}</p>}
       {note && <p className="ok-note">{note}</p>}
       <div className="cols">
         <div className="col">
           {items === null && <p className="muted">{t("Loading…")}</p>}
           {items?.length === 0 ? (
-            <div className="empty"><h3 style={{ fontSize: 28 }}>{t("No channels yet")}</h3><p className="muted" style={{ margin: "6px 0 20px" }}>{t("Add one so you hear about problems first.")}</p>
-              <button className="btn primary" onClick={openAdd}>{t("+ Add channel")}</button></div>
+            <EmptyState title={t("No channels yet")} description={t("Add one so you hear about problems first.")}
+              action={<button className="btn primary" onClick={openAdd}>{t("+ Add channel")}</button>} />
           ) : items && (
             <div className="card tbl">
               <div className="tr th ch-tr"><span>{t("Channel")}</span><span>{t("Destination")}</span><span>{t("Status")}</span><span /></div>
@@ -244,112 +245,109 @@ export default function Alerting() {
       )}
 
       {adding && (
-        <div className="modal" onClick={() => setAdding(false)}>
-          <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={add}>
-            <h2 style={{ fontSize: 30 }}>{editId ? t("Edit channel") : t("Add a channel")}</h2>
-            {!editId && <div className="type-grid">
-              {TYPES.filter((x) => x.id !== "push" || push).map((x) => (
-                <button type="button" key={x.id} className={`type-c ${f.type === x.id ? "on" : ""}`} onClick={() => setF({ ...f, type: x.id })}>
-                  <b>{x.label}</b><small>{t(x.desc)}</small>
-                </button>
-              ))}
-            </div>}
-            <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : "#ops-alerts"} /></label>
-            {(f.type === "slack" || f.type === "webhook" || f.type === "lark" || f.type === "discord" || f.type === "teams") && (
-              <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "discord" ? "https://discord.com/api/webhooks/…" : f.type === "teams" ? "https://…/workflows/…" : f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
-            )}
-            {f.type === "bark" && <>
-              <label className="fld">{t("Device key")}<input className="in mono" required value={f.deviceKey} onChange={(e) => setF({ ...f, deviceKey: e.target.value })} /></label>
-              <label className="fld">{t("Bark server URL (optional)")}<input className="in" type="url" value={f.url} placeholder="https://api.day.app" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
-            </>}
-            {f.type === "apprise" && <>
-              <label className="fld">{t("Apprise API URL")}<input className="in mono" type="url" required value={f.url} placeholder="https://apprise.example.com/notify/ops" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
-              <label className="fld">{t("Tags (optional)")}<input className="in" value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })} /></label>
-              <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
-            </>}
-            {f.type === "ntfy" && <>
-              <label className="fld">{t("ntfy server URL")}<input className="in" type="url" value={f.url} placeholder="https://ntfy.sh" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
-              <label className="fld">{t("Topic")}<input className="in" required pattern="[A-Za-z0-9_-]{1,64}" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })} /></label>
-              <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
-              <label className="fld">{t("Notification priority")}<select className="in" value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>{["1", "2", "3", "4", "5"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
-            </>}
-            {f.type === "webhook" && (editId ? (
-              <div className="fld">{t("Signing secret")}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input className="in mono" readOnly value={f.secret || t("Not set: requests are not signed")} onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
-                  {f.secret && f.secret.startsWith("whsec_") && <button type="button" className="btn sm" onClick={() => navigator.clipboard?.writeText(f.secret).then(() => setSecretNote(t("Copied")))}>{t("Copy")}</button>}
-                  <button type="button" className="btn sm" onClick={async () => {
-                    if (f.secret && !confirm(t("Requests signed with the current secret will stop verifying. Rotate it?"))) return;
-                    try { const ch = await api.rotateChannelSecret(editId); setF({ ...f, secret: ch.config.secret ?? "" }); setSecretNote(t("New secret created. Update your receiver.")); await load(); } catch (e) { setErr((e as Error).message); }
-                  }}>{f.secret ? t("Rotate") : t("Generate")}</button>
-                </div>
-                <small className="faint">{t("Each request carries webhook-id, webhook-timestamp and webhook-signature headers in the Standard Webhooks format.")}</small>
-                {secretNote && <small className="ok-note">{secretNote}</small>}
+        <Modal as="form" onClose={() => setAdding(false)} onSubmit={add} title={editId ? t("Edit channel") : t("Add a channel")}>
+          {!editId && <div className="type-grid">
+            {TYPES.filter((x) => x.id !== "push" || push).map((x) => (
+              <button type="button" key={x.id} className={`type-c ${f.type === x.id ? "on" : ""}`} onClick={() => setF({ ...f, type: x.id })}>
+                <b>{x.label}</b><small>{t(x.desc)}</small>
+              </button>
+            ))}
+          </div>}
+          <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : "#ops-alerts"} /></label>
+          {(f.type === "slack" || f.type === "webhook" || f.type === "lark" || f.type === "discord" || f.type === "teams") && (
+            <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "discord" ? "https://discord.com/api/webhooks/…" : f.type === "teams" ? "https://…/workflows/…" : f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
+          )}
+          {f.type === "bark" && <>
+            <label className="fld">{t("Device key")}<input className="in mono" required value={f.deviceKey} onChange={(e) => setF({ ...f, deviceKey: e.target.value })} /></label>
+            <label className="fld">{t("Bark server URL (optional)")}<input className="in" type="url" value={f.url} placeholder="https://api.day.app" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
+          </>}
+          {f.type === "apprise" && <>
+            <label className="fld">{t("Apprise API URL")}<input className="in mono" type="url" required value={f.url} placeholder="https://apprise.example.com/notify/ops" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
+            <label className="fld">{t("Tags (optional)")}<input className="in" value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })} /></label>
+            <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
+          </>}
+          {f.type === "ntfy" && <>
+            <label className="fld">{t("ntfy server URL")}<input className="in" type="url" value={f.url} placeholder="https://ntfy.sh" onChange={(e) => setF({ ...f, url: e.target.value })} /></label>
+            <label className="fld">{t("Topic")}<input className="in" required pattern="[A-Za-z0-9_-]{1,64}" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })} /></label>
+            <label className="fld">{t("Access token (optional)")}<input className="in" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} /></label>
+            <label className="fld">{t("Notification priority")}<select className="in" value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>{["1", "2", "3", "4", "5"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
+          </>}
+          {f.type === "webhook" && (editId ? (
+            <div className="fld">{t("Signing secret")}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="in mono" readOnly value={f.secret || t("Not set: requests are not signed")} onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
+                {f.secret && f.secret.startsWith("whsec_") && <button type="button" className="btn sm" onClick={() => navigator.clipboard?.writeText(f.secret).then(() => setSecretNote(t("Copied")))}>{t("Copy")}</button>}
+                <button type="button" className="btn sm" onClick={async () => {
+                  if (f.secret && !confirm(t("Requests signed with the current secret will stop verifying. Rotate it?"))) return;
+                  try { const ch = await api.rotateChannelSecret(editId); setF({ ...f, secret: ch.config.secret ?? "" }); setSecretNote(t("New secret created. Update your receiver.")); await load(); } catch (e) { setErr((e as Error).message); }
+                }}>{f.secret ? t("Rotate") : t("Generate")}</button>
               </div>
-            ) : <p className="muted" style={{ margin: 0 }}>{t("A signing secret is created with the channel, so your receiver can verify each request.")}</p>)}
-            {f.type === "webhook" && <>
-              <div className="fld">{t("Send these alerts")}
-                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 4 }}>
-                  {HOOK_EVENTS.map((x) => {
-                    const on = !hook.events.length || hook.events.includes(x.id);
-                    return <label key={x.id} style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: 400 }}><input type="checkbox" checked={on} onChange={() => {
-                      const cur = hook.events.length ? hook.events : HOOK_EVENTS.map((e) => e.id);
-                      const next = on ? cur.filter((e) => e !== x.id) : [...cur, x.id];
-                      if (next.length) setHook({ ...hook, events: next.length === HOOK_EVENTS.length ? [] : next });
-                    }} />{t(x.label)}</label>;
-                  })}
-                </div>
-              </div>
-              <details>
-                <summary>{t("Request options")}</summary>
-                <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
-                  <label className="fld">{t("Method")}<select className="in" value={hook.method} onChange={(e) => setHook({ ...hook, method: e.target.value })}>{["POST", "PUT", "PATCH"].map((m) => <option key={m} value={m}>{m}</option>)}</select></label>
-                  <div className="fld">{t("Request headers")}
-                    {hook.headers.map((r, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                        <input className="in mono" style={{ flex: 1, minWidth: 0 }} value={r.k} placeholder="Authorization" aria-label={t("Header name")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, k: e.target.value } : h)) })} />
-                        <input className="in mono" style={{ flex: 2, minWidth: 0 }} value={r.v} placeholder="Bearer …" aria-label={t("Header value")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, v: e.target.value } : h)) })} />
-                        <button type="button" className="btn" onClick={() => setHook({ ...hook, headers: hook.headers.filter((_, j) => j !== i) })}>{t("Remove")}</button>
-                      </div>
-                    ))}
-                    {hook.headers.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setHook({ ...hook, headers: [...hook.headers, { k: "", v: "" }] })}>{t("Add header")}</button></div>}
-                    <small className="faint">{t("Header values are hidden from members who are not owners or admins. Put tokens here, not in the body template.")}</small>
-                  </div>
-                  <label className="fld">{t("Body template (optional)")}
-                    <textarea className="in mono" rows={6} maxLength={8000} value={hook.template} onChange={(e) => setHook({ ...hook, template: e.target.value })} placeholder={'{"text": "{{message}}", "link": "{{incident.url}}"}'} />
-                    <small className="faint">{t("Leave empty to send the standard JSON payload. Placeholders: {{event}}, {{status}}, {{message}}, {{monitor.name}}, {{monitor.target}}, {{incident.title}}, {{incident.url}}, {{project.name}}, {{id}}, {{timestamp}} and {{payload}} for the whole standard payload.")}</small>
-                  </label>
-                  {hook.template.trim() && <label className="fld">{t("Content type")}<input className="in mono" value={hook.contentType} placeholder="application/json" onChange={(e) => setHook({ ...hook, contentType: e.target.value })} /></label>}
-                </div>
-              </details>
-            </>}
-            {f.type === "lark" && (
-              <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>
-            )}
-            {f.type === "email" && (
-              <label className="fld">{t("Email address")}<input className="in" type="email" required value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} placeholder="oncall@example.com" /></label>
-            )}
-            {f.type === "telegram" && (
-              <>
-                <label className="fld">{t("Bot token")}<input className="in mono" required value={f.botToken} onChange={(e) => setF({ ...f, botToken: e.target.value })} placeholder="123456:ABC…" /></label>
-                <label className="fld">{t("Chat ID")}<input className="in mono" required value={f.chatId} onChange={(e) => setF({ ...f, chatId: e.target.value })} placeholder="-1001234567890" /></label>
-              </>
-            )}
-            {f.type === "pagerduty" && (
-              <label className="fld">{t("Routing key")}<input className="in mono" required value={f.routingKey} onChange={(e) => setF({ ...f, routingKey: e.target.value })} /></label>
-            )}
-            {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to the OpenUptime app of every member of this workspace")}</p>}
-            <button type="button" className="route tog" onClick={() => setF({ ...f, auto: !f.auto })}>
-              <div><b style={{ fontWeight: 500 }}>{t("Turn on for new monitors")}</b><small>{t("Every monitor you create alerts this channel from the start.")}</small></div>
-              <span className={`tg ${f.auto ? "on" : ""}`} />
-            </button>
-            {err && <p className="err">{err}</p>}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button type="button" className="btn" onClick={() => setAdding(false)}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy}>{busy ? (editId ? t("Saving…") : t("Adding…")) : editId ? t("Save changes") : t("Add channel")}</button>
+              <small className="faint">{t("Each request carries webhook-id, webhook-timestamp and webhook-signature headers in the Standard Webhooks format.")}</small>
+              {secretNote && <small className="ok-note">{secretNote}</small>}
             </div>
-          </form>
-        </div>
+          ) : <p className="muted" style={{ margin: 0 }}>{t("A signing secret is created with the channel, so your receiver can verify each request.")}</p>)}
+          {f.type === "webhook" && <>
+            <div className="fld">{t("Send these alerts")}
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 4 }}>
+                {HOOK_EVENTS.map((x) => {
+                  const on = !hook.events.length || hook.events.includes(x.id);
+                  return <label key={x.id} style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: 400 }}><input type="checkbox" checked={on} onChange={() => {
+                    const cur = hook.events.length ? hook.events : HOOK_EVENTS.map((e) => e.id);
+                    const next = on ? cur.filter((e) => e !== x.id) : [...cur, x.id];
+                    if (next.length) setHook({ ...hook, events: next.length === HOOK_EVENTS.length ? [] : next });
+                  }} />{t(x.label)}</label>;
+                })}
+              </div>
+            </div>
+            <details>
+              <summary>{t("Request options")}</summary>
+              <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+                <label className="fld">{t("Method")}<select className="in" value={hook.method} onChange={(e) => setHook({ ...hook, method: e.target.value })}>{["POST", "PUT", "PATCH"].map((m) => <option key={m} value={m}>{m}</option>)}</select></label>
+                <div className="fld">{t("Request headers")}
+                  {hook.headers.map((r, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <input className="in mono" style={{ flex: 1, minWidth: 0 }} value={r.k} placeholder="Authorization" aria-label={t("Header name")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, k: e.target.value } : h)) })} />
+                      <input className="in mono" style={{ flex: 2, minWidth: 0 }} value={r.v} placeholder="Bearer …" aria-label={t("Header value")} onChange={(e) => setHook({ ...hook, headers: hook.headers.map((h, j) => (j === i ? { ...h, v: e.target.value } : h)) })} />
+                      <button type="button" className="btn" onClick={() => setHook({ ...hook, headers: hook.headers.filter((_, j) => j !== i) })}>{t("Remove")}</button>
+                    </div>
+                  ))}
+                  {hook.headers.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setHook({ ...hook, headers: [...hook.headers, { k: "", v: "" }] })}>{t("Add header")}</button></div>}
+                  <small className="faint">{t("Header values are hidden from members who are not owners or admins. Put tokens here, not in the body template.")}</small>
+                </div>
+                <label className="fld">{t("Body template (optional)")}
+                  <textarea className="in mono" rows={6} maxLength={8000} value={hook.template} onChange={(e) => setHook({ ...hook, template: e.target.value })} placeholder={'{"text": "{{message}}", "link": "{{incident.url}}"}'} />
+                  <small className="faint">{t("Leave empty to send the standard JSON payload. Placeholders: {{event}}, {{status}}, {{message}}, {{monitor.name}}, {{monitor.target}}, {{incident.title}}, {{incident.url}}, {{project.name}}, {{id}}, {{timestamp}} and {{payload}} for the whole standard payload.")}</small>
+                </label>
+                {hook.template.trim() && <label className="fld">{t("Content type")}<input className="in mono" value={hook.contentType} placeholder="application/json" onChange={(e) => setHook({ ...hook, contentType: e.target.value })} /></label>}
+              </div>
+            </details>
+          </>}
+          {f.type === "lark" && (
+            <label className="fld">{t("Signing secret (optional)")}<input className="in mono" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} /></label>
+          )}
+          {f.type === "email" && (
+            <label className="fld">{t("Email address")}<input className="in" type="email" required value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} placeholder="oncall@example.com" /></label>
+          )}
+          {f.type === "telegram" && (
+            <>
+              <label className="fld">{t("Bot token")}<input className="in mono" required value={f.botToken} onChange={(e) => setF({ ...f, botToken: e.target.value })} placeholder="123456:ABC…" /></label>
+              <label className="fld">{t("Chat ID")}<input className="in mono" required value={f.chatId} onChange={(e) => setF({ ...f, chatId: e.target.value })} placeholder="-1001234567890" /></label>
+            </>
+          )}
+          {f.type === "pagerduty" && (
+            <label className="fld">{t("Routing key")}<input className="in mono" required value={f.routingKey} onChange={(e) => setF({ ...f, routingKey: e.target.value })} /></label>
+          )}
+          {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to the OpenUptime app of every member of this workspace")}</p>}
+          <button type="button" className="route tog" onClick={() => setF({ ...f, auto: !f.auto })}>
+            <div><b style={{ fontWeight: 500 }}>{t("Turn on for new monitors")}</b><small>{t("Every monitor you create alerts this channel from the start.")}</small></div>
+            <span className={`tg ${f.auto ? "on" : ""}`} />
+          </button>
+          {err && <p className="err">{err}</p>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => setAdding(false)}>{t("Cancel")}</button>
+            <button className="btn primary" disabled={busy}>{busy ? (editId ? t("Saving…") : t("Adding…")) : editId ? t("Save changes") : t("Add channel")}</button>
+          </div>
+        </Modal>
       )}
     </>
   );

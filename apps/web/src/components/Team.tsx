@@ -1,8 +1,11 @@
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { useBusy } from "../lib/use-busy";
+import { useBusy } from "@openuptime/ui/use-busy";
 import { authClient } from "../lib/auth-client";
 import { api } from "../lib/api";
+import Modal from "@openuptime/ui/modal";
+import Segmented from "@openuptime/ui/segmented";
+import PageHeader from "@openuptime/ui/page-header";
 
 // The session's "active organization" can be unset (older sessions, cookie cache); the workspace the API resolves is authoritative.
 const orgId = () => api.me().then((m) => m.organization.id);
@@ -81,10 +84,8 @@ export default function Team() {
   const initial = (m: string) => (m.trim()[0] ?? "?").toUpperCase();
   return (
     <>
-      <div className="ph">
-        <div><h1>{t("Team")}</h1><p className="muted">{t("People who can see and change this workspace.")}</p></div>
-        <button className="btn primary" onClick={() => { setMsg(""); setSent(null); setOpen(true); }}>{t("+ Invite teammate")}</button>
-      </div>
+      <PageHeader title={t("Team")} description={t("People who can see and change this workspace.")}
+        actions={<button className="btn primary" onClick={() => { setMsg(""); setSent(null); setOpen(true); }}>{t("+ Invite teammate")}</button>} />
       {sent && (
         <div className="callout ok" role="status">
           <span className="ci"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>
@@ -159,22 +160,17 @@ export default function Team() {
       </div>
 
       {open && (
-        <div className="modal" onClick={() => setOpen(false)}>
-          <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={invite}>
-            <h2 style={{ fontSize: 30 }}>{t("Invite a teammate")}</h2>
-            <label className="fld">{t("Email")}<input className="in" type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teammate@example.com" /></label>
-            <div className="fld">{t("Role")}
-              <div className="seg">
-                {(["member", "admin"] as const).map((r) => <i key={r} className={role === r ? "on" : ""} onClick={() => setRole(r)}>{t(r)}</i>)}
-              </div>
-            </div>
-            {msg && <p className="err">{msg}</p>}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button type="button" className="btn" onClick={() => setOpen(false)}>{t("Cancel")}</button>
-              <button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create invitation")}</button>
-            </div>
-          </form>
-        </div>
+        <Modal as="form" onClose={() => setOpen(false)} onSubmit={invite} title={t("Invite a teammate")}>
+          <label className="fld">{t("Email")}<input className="in" type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teammate@example.com" /></label>
+          <div className="fld">{t("Role")}
+            <Segmented label={t("Role")} value={role} onChange={setRole} options={(["member", "admin"] as const).map((r) => ({ value: r, label: t(r) }))} />
+          </div>
+          {msg && <p className="err">{msg}</p>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>{t("Cancel")}</button>
+            <button className="btn primary" disabled={busy}>{busy ? t("Creating…") : t("Create invitation")}</button>
+          </div>
+        </Modal>
       )}
     </>
   );

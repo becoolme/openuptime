@@ -49,6 +49,67 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "设置 CHECK_SIGNING_KEY（单行 JWK 形式的 Ed25519 私钥）和 CHECK_SIGNATURE_AGENT（提供密钥目录的 https 来源）之前不会签名，API 和各个探针都需要设置；不设置则检测不带签名。",
     },
     link: { href: "/docs/bot", label: { en: "Read about the check bot", zh: "阅读检测机器人文档" } },
+    id: "alert-delivery-write-failures", date: "2026-11-20", edition: "community",
+    title: { en: "Alerts survive a database write failure", zh: "数据库写入失败时告警仍会发出" },
+    summary: {
+      en: "A failure to log or queue a delivery no longer drops the alert or fails the request that triggered it.",
+      zh: "记录或排队投递失败时，告警不再丢失，触发告警的请求也不会因此报错。",
+    },
+    points: [
+      { en: "When delivery rows cannot be written, each channel is still sent directly under the same routing policy and email allowance, so a database problem does not turn an outage into a silent one.", zh: "投递记录写不进去时，仍会在相同的路由策略和邮件配额下直接发送，数据库出问题不会让一次故障变成无声的故障。" },
+      { en: "A failed owner-language lookup falls back to English, and a failed channel lookup still notifies status page subscribers instead of failing the request.", zh: "读取工作区语言失败时会回退到英文；读取渠道失败时仍会通知状态页订阅者，而不是让请求报错。" },
+      { en: "A manual check or a heartbeat ping no longer returns an error only because the alert history could not be written.", zh: "手动检测或心跳上报不会再仅因为告警历史写入失败而返回错误。" },
+    ],
+  },
+  {
+    id: "midnight-zero-padded", date: "2026-11-20", edition: "community",
+    title: { en: "Midnight shows as 00:05 on a 24-hour clock", zh: "24 小时制下午夜显示为 00:05" },
+    summary: {
+      en: "Times just after midnight keep their leading zero in every browser language.",
+      zh: "无论浏览器是什么语言，午夜过后的时间都会保留前导零。",
+    },
+    points: [
+      { en: "On a language such as Japanese or Korean, a 24-hour clock used to show 0:05 for the first hour; it now shows 00:05, and a date shown with the time follows the same rule.", zh: "在日语或韩语等语言下，24 小时制以前会把凌晨一点前显示成 0:05；现在显示为 00:05，带日期的显示也遵循同一规则。" },
+    ],
+  },
+  {
+    id: "hourly-housekeeping-isolation", date: "2026-11-20", edition: "community",
+    title: { en: "Hourly cleanup failures stay contained", zh: "整点清理失败不再连累其他任务" },
+    summary: {
+      en: "A failed hourly cleanup stays contained instead of skipping the five-minute work that follows it.",
+      zh: "整点清理失败不会再连带跳过排在它后面的每五分钟任务。",
+    },
+    points: [
+      { en: "When the hourly purge fails, the five-minute work after it — stuck-transaction cleanup, maintenance reminders, monthly reports and edition-specific tasks — still runs in the same scheduled invocation.", zh: "整点清理失败时，排在它后面的每五分钟任务——卡住事务清理、维护提醒、月度报告和版本特有任务——仍会在本次调度中执行。" },
+      { en: "The failure is logged and no longer ends the scheduled run with an unhandled rejection.", zh: "失败会写入日志，不再让本次定时任务以未处理的异常结束。" },
+    ],
+  },
+  {
+    id: "heartbeat-token-index", date: "2026-11-20", edition: "community",
+    title: { en: "Heartbeat pings stay fast as monitors grow", zh: "监控数量增长后心跳上报依然快" },
+    summary: {
+      en: "A heartbeat ping now finds its monitor through an index instead of scanning the monitor table.",
+      zh: "心跳上报现在通过索引找到对应的监控，不再扫描整张监控表。",
+    },
+    points: [
+      { en: "Resolving a heartbeat token no longer scans the whole monitor table as the number of monitors grows.", zh: "随着监控数量增长，按心跳 token 查找监控不再扫描整张表。" },
+    ],
+    upgrade: {
+      en: "The first upgrade past this version builds an index on the monitor table. On a large table the build blocks monitor writes while it runs, so upgrade in a quiet window.",
+      zh: "升级到这个版本后第一次启动会为监控表建立索引。表很大时，建索引期间会阻塞监控写入，请在低峰时段升级。",
+    },
+  },
+  {
+    id: "keyboard-dialogs-choices", date: "2026-11-19", edition: "community",
+    title: { en: "Dialogs and choices work from the keyboard", zh: "弹窗和选项支持键盘操作" },
+    summary: {
+      en: "Every dialog closes with Escape, and option rows such as check interval or role can be chosen with the arrow keys.",
+      zh: "所有弹窗都可以按 Esc 关闭，检测间隔、角色等选项行可以用方向键选择。",
+    },
+    points: [
+      { en: "Escape now closes any dialog, including the monitor form, and focus goes back to where you were.", zh: "按 Esc 可关闭任何弹窗（包括监控表单），焦点会回到打开前的位置。" },
+      { en: "Option rows can be reached with Tab and changed with the arrow keys, Home and End; screen readers announce them as a group of choices.", zh: "选项行可以用 Tab 聚焦，再用方向键、Home 和 End 切换；读屏软件会把它们识别为一组单选项。" },
+    ],
   },
   {
     id: "unreachable-address-crash", date: "2026-11-18", edition: "community",

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { t } from "../lib/i18n";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 
 const KEY = "ou_verify_dismissed";
 

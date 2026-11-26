@@ -3,7 +3,7 @@ import { armCache } from "../lib/api";
 import { NAV_LABEL, resolveRoute } from "../lib/routes";
 import { t } from "../lib/i18n";
 import { lp, stripLocale } from "../lib/locale-path";
-import Toaster from "./Toaster";
+import Toaster from "@openuptime/ui/toaster";
 import VerifyBar from "./VerifyBar";
 import Monitors from "./Monitors";
 import MonitorDetail from "./MonitorDetail";
@@ -120,5 +120,5 @@ export default function Router() {
 
   const hit = resolveRoute(path);
   if (!hit) return <p className="muted">{t("Page not found.")} <a href={lp("/app")}>{t("← Monitors")}</a></p>;
-  return <><Toaster /><VerifyBar /><View key={`${path}#${scope}#${bump}`} name={hit.route.name} params={hit.params} title={hit.route.title} /></>;
+  return <><Toaster dismissLabel={t("Dismiss")} /><VerifyBar /><View key={`${path}#${scope}#${bump}`} name={hit.route.name} params={hit.params} title={hit.route.title} /></>;
 }

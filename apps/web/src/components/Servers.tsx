@@ -3,13 +3,16 @@ import { api, type Server, type ServerAlerts, type ServerDetail, type ServerList
 import { useHideIps } from "../lib/hide-ips";
 import { t } from "../lib/i18n";
 import { pollWhileVisible } from "../lib/poll";
-import { toast } from "../lib/toast";
+import { toast } from "@openuptime/ui/toast";
 import {
   filterServers, fmtBytes, fmtRate, fmtSpan, fullestDisk, hotReasons, ipRows, level, maskIp, memPct, pct, platformLabel,
   primaryIp, serverState, since, specLabel, type ServerFilter,
 } from "../lib/servers";
 import { HideIpsButton, MuteButton, OfflineAlerts } from "./ServerAlerts";
-import { SkeletonRows } from "./Skeleton";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
+import Modal from "@openuptime/ui/modal";
+import EmptyState from "@openuptime/ui/empty-state";
+import PageHeader from "@openuptime/ui/page-header";
 
 type Row = ServerList["servers"][number];
 
@@ -167,25 +170,16 @@ export default function Servers() {
 
   return (
     <>
-      <div className="ph">
-        <div>
-          <h1>{t("Servers")}</h1>
-          <p className="muted">{t("CPU, memory, disks and network of your machines, reported by a small open-source agent.")}</p>
-          {data && data.maxServers != null && <p className={`srv-quota ${full ? "full" : "faint"}`}>{t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))}</p>}
-        </div>
-        <div className="ph-actions">
-          <button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>
-        </div>
-      </div>
+      <PageHeader title={t("Servers")} description={t("CPU, memory, disks and network of your machines, reported by a small open-source agent.")}
+        actions={<button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>}>
+        {data && data.maxServers != null && <p className={`srv-quota ${full ? "full" : "faint"}`}>{t("{n} of {max} servers in this workspace").replace("{n}", String(data.serverCount ?? 0)).replace("{max}", String(data.maxServers))}</p>}
+      </PageHeader>
       {err && <p className="err">{err}</p>}
       {!data && !err && <ListSkeleton />}
 
       {data && servers.length === 0 && (
-        <div className="empty">
-          <h3>{t("No servers yet")}</h3>
-          <p className="muted" style={{ margin: "8px auto 18px", maxWidth: 440 }}>{t("Run one command on a Linux server and it shows up here within a minute. The agent only sends data out; nothing listens on the server.")}</p>
-          <button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>
-        </div>
+        <EmptyState className="srv-empty" title={t("No servers yet")} description={t("Run one command on a Linux server and it shows up here within a minute. The agent only sends data out; nothing listens on the server.")}
+          action={<button className="btn primary" onClick={() => setAdding(true)}>{t("Add server")}</button>} />
       )}
 
       {data && servers.length > 0 && (
@@ -462,53 +456,51 @@ function AddServer({ onClose, limit }: { onClose: () => void; limit: { max: numb
   }
 
   return (
-    <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="card" style={{ width: "min(640px,94vw)" }}>
-        <div>
-          <h3>{t("Add a server")}</h3>
-          <p className="muted" style={{ marginTop: 6 }}>{t("Run this on the server as root. It installs the agent as a systemd service; the server appears here after its first report.")}</p>
-        </div>
-        {limit && (
-          <p className="err" style={{ margin: 0 }}>
-            {t("Your plan allows {n} servers in this workspace, and all of them are in use. A new server is refused until you delete one or upgrade.").replace("{n}", String(limit.max))}
-            {limit.upgradeUrl && <> <a href={limit.upgradeUrl}>{t("Upgrade")}</a></>}
-          </p>
-        )}
-        {err && <p className="err">{err}</p>}
-        <div className="srv-opts">
-          <label className="fld">{t("Name (optional)")}<input className="in" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("The server's hostname")} /></label>
-          <label className="fld">{t("Tags (optional)")}<input className="in" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="prod, eu-west" /></label>
-        </div>
-        <p className="muted" style={{ margin: 0, fontSize: 13 }}>{optionErr ? <span className="err">{optionErr}</span> : t("Used when the server first reports. Without a name it shows its hostname; rename it here at any time.")}</p>
-        {!err && <pre className="srv-cmd mono">{cmd || (optionErr ? "" : t("Loading…"))}</pre>}
-        {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}
-        <div className="srv-safe">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>
-          <div>
-            <b>{t("Report-only agent")}</b>
-            <p>{t("The agent only sends metrics out. It opens no port and cannot run commands, scripts or updates sent from the dashboard; the only setting it accepts back is how often to report. It runs as an unprivileged user.")}</p>
-            <p><a href={AGENT_SOURCE} target="_blank" rel="noopener">{t("Read the agent and install script on GitHub")}</a></p>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn primary" disabled={!cmd} onClick={() => { navigator.clipboard?.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? t("Copied ✓") : t("Copy command")}</button>
-          <button className="btn" disabled={!key || rotating} onClick={rotate}>{rotating ? t("Rotating…") : t("Rotate key")}</button>
-          <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose}>{t("Done")}</button>
-        </div>
-        <ul className="muted srv-notes">
-          <li>{t("Linux on amd64 or arm64, with systemd. One key works for every server in this project.")}</li>
-          <li>{t("Reports CPU, memory, swap, load, every mounted disk, disk I/O, and each network interface with all its IPv4 and IPv6 addresses.")}</li>
-          <li>{t("The script and the agent binary download from GitHub, not from this site.")}</li>
-          <li>{t("The key is a secret: anyone with it can add servers to this project and send false reports for them. Rotate it if it leaks.")}</li>
-        </ul>
-        <details className="srv-uninstall">
-          <summary>{t("Uninstall the agent")}</summary>
-          <p className="muted">{t("Run this on the server as root. It stops the service and removes the agent, its key file and the systemd unit. Then delete the server here.")}</p>
-          <CommandBox cmd={UNINSTALL_CMD} />
-        </details>
-        <p className="muted" style={{ fontSize: 13, margin: 0 }}><a href={SERVER_DOCS} target="_blank" rel="noopener">{t("Install and uninstall guide")}</a></p>
+    <Modal onClose={onClose} label={t("Add a server")} style={{ width: "min(640px,94vw)" }}>
+      <div>
+        <h3>{t("Add a server")}</h3>
+        <p className="muted" style={{ marginTop: 6 }}>{t("Run this on the server as root. It installs the agent as a systemd service; the server appears here after its first report.")}</p>
       </div>
-    </div>
+      {limit && (
+        <p className="err" style={{ margin: 0 }}>
+          {t("Your plan allows {n} servers in this workspace, and all of them are in use. A new server is refused until you delete one or upgrade.").replace("{n}", String(limit.max))}
+          {limit.upgradeUrl && <> <a href={limit.upgradeUrl}>{t("Upgrade")}</a></>}
+        </p>
+      )}
+      {err && <p className="err">{err}</p>}
+      <div className="srv-opts">
+        <label className="fld">{t("Name (optional)")}<input className="in" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("The server's hostname")} /></label>
+        <label className="fld">{t("Tags (optional)")}<input className="in" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="prod, eu-west" /></label>
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>{optionErr ? <span className="err">{optionErr}</span> : t("Used when the server first reports. Without a name it shows its hostname; rename it here at any time.")}</p>
+      {!err && <pre className="srv-cmd mono">{cmd || (optionErr ? "" : t("Loading…"))}</pre>}
+      {!err && plainHttp && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{t("This dashboard is on plain http, so the command adds --allow-http: the key and the metrics cross the network unencrypted. Serve OpenUptime over https to avoid that.")}</p>}
+      <div className="srv-safe">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" /><path d="m8.8 12 2.2 2.2 4.4-4.4" /></svg>
+        <div>
+          <b>{t("Report-only agent")}</b>
+          <p>{t("The agent only sends metrics out. It opens no port and cannot run commands, scripts or updates sent from the dashboard; the only setting it accepts back is how often to report. It runs as an unprivileged user.")}</p>
+          <p><a href={AGENT_SOURCE} target="_blank" rel="noopener">{t("Read the agent and install script on GitHub")}</a></p>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn primary" disabled={!cmd} onClick={() => { navigator.clipboard?.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? t("Copied ✓") : t("Copy command")}</button>
+        <button className="btn" disabled={!key || rotating} onClick={rotate}>{rotating ? t("Rotating…") : t("Rotate key")}</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn" onClick={onClose}>{t("Done")}</button>
+      </div>
+      <ul className="muted srv-notes">
+        <li>{t("Linux on amd64 or arm64, with systemd. One key works for every server in this project.")}</li>
+        <li>{t("Reports CPU, memory, swap, load, every mounted disk, disk I/O, and each network interface with all its IPv4 and IPv6 addresses.")}</li>
+        <li>{t("The script and the agent binary download from GitHub, not from this site.")}</li>
+        <li>{t("The key is a secret: anyone with it can add servers to this project and send false reports for them. Rotate it if it leaks.")}</li>
+      </ul>
+      <details className="srv-uninstall">
+        <summary>{t("Uninstall the agent")}</summary>
+        <p className="muted">{t("Run this on the server as root. It stops the service and removes the agent, its key file and the systemd unit. Then delete the server here.")}</p>
+        <CommandBox cmd={UNINSTALL_CMD} />
+      </details>
+      <p className="muted" style={{ fontSize: 13, margin: 0 }}><a href={SERVER_DOCS} target="_blank" rel="noopener">{t("Install and uninstall guide")}</a></p>
+    </Modal>
   );
 }
