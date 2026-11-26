@@ -34,6 +34,9 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "A status page that shows your website's icon instead of the OpenUptime brand no longer shows a broken image.", zh: "隐藏 OpenUptime 品牌、改用你网站图标的状态页，不再显示裂图。" },
     points: [
       { en: "The icon service moved its images to another host, which the status page blocked; both hosts are now allowed.", zh: "图标服务把图片换到了另一个域名，被状态页拦截了；现在两个域名都已放行。" },
+    ],
+  },
+  {
     id: "refresh-to-latest-version", date: "2026-11-26", edition: "community",
     title: { en: "One refresh reaches the newest version", zh: "一次刷新更新到最新版" },
     summary: { en: "When another version is released while the update prompt is open, \"Refresh\" now loads the newest one instead of asking again after the reload.", zh: "更新提示还开着时又发布了新版本，点击“刷新”现在会直接更新到最新版，不会在刷新后再弹一次提示。" },
