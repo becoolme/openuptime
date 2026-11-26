@@ -169,8 +169,13 @@ export const checkResult = pgTable(
     error: text("error"),
     mcp: jsonb("mcp").$type<McpCheckDiagnostics>(),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when a person marked the incident this failed check belonged to as a false alarm: `ok` was then turned on, and this lets it be turned back. */
+    falseAlarmIncidentId: uuid("false_alarm_incident_id"),
   },
-  (t) => [index("check_result_monitor_time_idx").on(t.monitorId, t.checkedAt)],
+  (t) => [
+    index("check_result_monitor_time_idx").on(t.monitorId, t.checkedAt),
+    index("check_result_false_alarm_idx").on(t.falseAlarmIncidentId).where(sql`${t.falseAlarmIncidentId} is not null`),
+  ],
 );
 
 /** Pre-aggregated check results per monitor and hour: uptime and latency stats read this instead of scanning check_result. */
@@ -221,6 +226,10 @@ export const incident = pgTable(
     postmortem: text("postmortem"),
     /** When a person chose to show the root cause and postmortem on the status page; null keeps them private. */
     postmortemPublishedAt: timestamp("postmortem_published_at", { withTimezone: true }),
+    /** When a person marked this incident as a false alarm: its failed checks no longer count against uptime and it is left off status pages. */
+    falseAlarmAt: timestamp("false_alarm_at", { withTimezone: true }),
+    falseAlarmReason: text("false_alarm_reason"),
+    falseAlarmById: text("false_alarm_by_id").references(() => user.id, { onDelete: "set null" }),
   },
   (t) => [
     index("incident_org_idx").on(t.organizationId, t.startedAt),

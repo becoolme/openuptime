@@ -274,5 +274,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0054_big_alice",
     "when": 1795205286548,
     "sql": "CREATE INDEX \"monitor_heartbeat_token_idx\" ON \"monitor\" USING btree (\"heartbeat_token\");"
+  },
+  {
+    "tag": "0055_amused_karnak",
+    "when": 1795705383748,
+    "sql": "ALTER TABLE \"check_result\" ADD COLUMN \"false_alarm_incident_id\" uuid;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"false_alarm_at\" timestamp with time zone;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"false_alarm_reason\" text;--> statement-breakpoint\nALTER TABLE \"incident\" ADD COLUMN \"false_alarm_by_id\" text;--> statement-breakpoint\nALTER TABLE \"incident\" ADD CONSTRAINT \"incident_false_alarm_by_id_user_id_fk\" FOREIGN KEY (\"false_alarm_by_id\") REFERENCES \"public\".\"user\"(\"id\") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nCREATE INDEX \"check_result_false_alarm_idx\" ON \"check_result\" USING btree (\"false_alarm_incident_id\") WHERE \"check_result\".\"false_alarm_incident_id\" is not null;"
   }
 ];

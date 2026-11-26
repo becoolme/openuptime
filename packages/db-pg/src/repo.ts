@@ -5,6 +5,7 @@ import {
   MAX_REMINDERS,
   ROLLUP_RETENTION_DAYS,
   type AlertDelivery,
+  type FalseAlarmResult,
   type DeliveryRetry,
   type EscalationDue,
   type ReminderDue,
@@ -1079,9 +1080,10 @@ export function createRepo(db: DbExecutor): Repo {
           ? db.select({ name: schema.user.name, email: schema.user.email }).from(schema.user).where(eq(schema.user.id, inc.assigneeId)).then((r) => r[0] ?? null)
           : null,
         inc.monitorId
-          ? db.select({ id: schema.checkResult.id, ok: schema.checkResult.ok, statusCode: schema.checkResult.statusCode, latencyMs: schema.checkResult.latencyMs, error: schema.checkResult.error, checkedAt: schema.checkResult.checkedAt })
+          ? db.select({ id: schema.checkResult.id, ok: schema.checkResult.ok, statusCode: schema.checkResult.statusCode, latencyMs: schema.checkResult.latencyMs, error: schema.checkResult.error, checkedAt: schema.checkResult.checkedAt, falseAlarm: sql<boolean>`${schema.checkResult.falseAlarmIncidentId} is not null` })
               .from(schema.checkResult)
-              .where(and(eq(schema.checkResult.monitorId, inc.monitorId), eq(schema.checkResult.ok, false), gte(schema.checkResult.checkedAt, inc.startedAt), inc.resolvedAt ? lte(schema.checkResult.checkedAt, inc.resolvedAt) : undefined))
+              // the checks a person corrected stay listed, flagged, so the false alarm can be reviewed
+              .where(and(eq(schema.checkResult.monitorId, inc.monitorId), or(eq(schema.checkResult.ok, false), eq(schema.checkResult.falseAlarmIncidentId, inc.id)), gte(schema.checkResult.checkedAt, inc.startedAt), inc.resolvedAt ? lte(schema.checkResult.checkedAt, inc.resolvedAt) : undefined))
               .orderBy(desc(schema.checkResult.checkedAt)).limit(8)
           : [],
       ]);
@@ -1149,6 +1151,77 @@ export function createRepo(db: DbExecutor): Repo {
       if (inc) await db.update(schema.alertDelivery).set({ acknowledgedAt: inc.acknowledgedAt }).where(and(eq(schema.alertDelivery.incidentId, id), isNull(schema.alertDelivery.acknowledgedAt), inArray(schema.alertDelivery.kind, ["incident.opened", "incident.reminder", "incident.escalated"])));
       return inc ?? null;
     },
+    async markIncidentFalseAlarm(orgId, id, userId, reason): Promise<FalseAlarmResult> {
+      return db.transaction(async (tx) => {
+        // the row lock keeps two people marking the same incident from correcting the history twice
+        const [inc] = await tx.select().from(schema.incident).where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId))).for("update");
+        if (!inc) return { ok: false, error: "not_found" };
+        if (inc.falseAlarmAt) return { ok: false, error: "already" };
+        if (!inc.resolvedAt) return { ok: false, error: "open" };
+        if (!inc.monitorId) return { ok: false, error: "no_monitor" };
+        const [mon] = await tx.select({ min: schema.monitor.minRegionsFailing }).from(schema.monitor).where(eq(schema.monitor.id, inc.monitorId));
+        const start = inc.startedAt.toISOString();
+        const end = inc.resolvedAt.toISOString();
+        // A run is every result stored with one timestamp (one per region). It failed the way the monitor judged it:
+        // a strict majority of the answering regions, or the configured number. The correction reaches back to the last
+        // healthy run before the incident, because an incident only opens after several failures in a row.
+        const res = await rows<{ runs: number }>(tx.execute(sql`
+          with runs as (
+            select checked_at, count(*) as n, count(*) filter (where not ok) as failed
+            from check_result
+            where monitor_id = ${inc.monitorId} and checked_at >= ${start}::timestamptz - interval '7 days' and checked_at <= ${end}::timestamptz
+            group by checked_at
+          ), judged as (
+            select checked_at, failed >= (case when ${mon?.min ?? 0} > 0 then least(${mon?.min ?? 0}, n) else n / 2 + 1 end) as bad from runs
+          ), bad_runs as (
+            select checked_at from judged
+            where bad and checked_at > coalesce((select max(checked_at) from judged where not bad and checked_at < ${start}::timestamptz), '-infinity'::timestamptz)
+          ), flip as (
+            update check_result set ok = true, false_alarm_incident_id = ${id}
+            where monitor_id = ${inc.monitorId} and not ok and checked_at in (select checked_at from bad_runs)
+            returning 1
+          ), per_hour as (
+            select date_trunc('hour', checked_at) as bucket, count(*)::int as n from bad_runs group by 1
+          ), roll as (
+            update check_rollup r set ok = least(r.total, r.ok + p.n)
+            from per_hour p where r.monitor_id = ${inc.monitorId} and r.bucket = p.bucket
+            returning 1
+          )
+          select (select count(*) from bad_runs)::int as runs`));
+        const [incident] = await tx.update(schema.incident)
+          .set({ falseAlarmAt: new Date(), falseAlarmReason: reason, falseAlarmById: userId })
+          .where(eq(schema.incident.id, id)).returning();
+        return { ok: true, incident, checks: Number(res[0]?.runs ?? 0) };
+      });
+    },
+    async clearIncidentFalseAlarm(orgId, id): Promise<FalseAlarmResult> {
+      return db.transaction(async (tx) => {
+        const [inc] = await tx.select().from(schema.incident).where(and(eq(schema.incident.id, id), eq(schema.incident.organizationId, orgId))).for("update");
+        if (!inc) return { ok: false, error: "not_found" };
+        if (!inc.falseAlarmAt) return { ok: false, error: "not_marked" };
+        const res = inc.monitorId
+          ? await rows<{ runs: number }>(tx.execute(sql`
+              with fixed as (
+                select checked_at from check_result where monitor_id = ${inc.monitorId} and false_alarm_incident_id = ${id}
+              ), per_hour as (
+                select date_trunc('hour', checked_at) as bucket, count(distinct checked_at)::int as n from fixed group by 1
+              ), roll as (
+                update check_rollup r set ok = greatest(0, r.ok - p.n)
+                from per_hour p where r.monitor_id = ${inc.monitorId} and r.bucket = p.bucket
+                returning 1
+              ), flip as (
+                update check_result set ok = false, false_alarm_incident_id = null
+                where monitor_id = ${inc.monitorId} and false_alarm_incident_id = ${id}
+                returning 1
+              )
+              select (select count(distinct checked_at) from fixed)::int as runs`))
+          : [];
+        const [incident] = await tx.update(schema.incident)
+          .set({ falseAlarmAt: null, falseAlarmReason: null, falseAlarmById: null })
+          .where(eq(schema.incident.id, id)).returning();
+        return { ok: true, incident, checks: Number(res[0]?.runs ?? 0) };
+      });
+    },
     async hasOpenIncident(monitorId, slow) {
       // a latency incident is automatic and minor; every other open incident counts as an outage for deduplication
       const isSlow = sql`(${schema.incident.auto} and ${schema.incident.severity} = 'minor')`;
@@ -1163,7 +1236,7 @@ export function createRepo(db: DbExecutor): Repo {
       const [r] = await db
         .select({ id: schema.incident.id })
         .from(schema.incident)
-        .where(and(eq(schema.incident.monitorId, monitorId), gte(schema.incident.startedAt, since), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`, sql`not ${resolvedByPerson(schema.incident.id)}`))
+        .where(and(eq(schema.incident.monitorId, monitorId), gte(schema.incident.startedAt, since), isNull(schema.incident.falseAlarmAt), sql`not (${schema.incident.auto} and ${schema.incident.severity} = 'minor')`, sql`not ${resolvedByPerson(schema.incident.id)}`))
         .limit(1);
       return !!r;
     },
@@ -1175,7 +1248,7 @@ export function createRepo(db: DbExecutor): Repo {
           const [last] = await tx
             .select({ id: schema.incident.id })
             .from(schema.incident)
-            .where(and(eq(schema.incident.monitorId, monitorId), eq(schema.incident.auto, true), eq(schema.incident.severity, "major"), gte(schema.incident.resolvedAt, since), sql`not ${byPerson}`))
+            .where(and(eq(schema.incident.monitorId, monitorId), eq(schema.incident.auto, true), eq(schema.incident.severity, "major"), gte(schema.incident.resolvedAt, since), isNull(schema.incident.falseAlarmAt), sql`not ${byPerson}`))
             .orderBy(desc(schema.incident.resolvedAt))
             .limit(1);
           if (!last) return null;
@@ -1795,6 +1868,8 @@ export function createRepo(db: DbExecutor): Repo {
         .where(
           and(
             pageScope(page.organizationId, await pageProjectId(page), await pageMonitorIds(page.id)),
+            // a false alarm stays inside the team
+            isNull(schema.incident.falseAlarmAt),
             o.before ? lt(schema.incident.startedAt, o.before) : undefined,
             // open at some point in [from, to): started before its end and not resolved before its start
             o.overlapping ? and(lt(schema.incident.startedAt, o.overlapping.to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, o.overlapping.from))) : undefined,
@@ -1934,7 +2009,7 @@ export function createRepo(db: DbExecutor): Repo {
         db
           .select()
           .from(schema.incident)
-          .where(and(inArray(schema.incident.monitorId, ids), lt(schema.incident.startedAt, to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, from)))),
+          .where(and(inArray(schema.incident.monitorId, ids), isNull(schema.incident.falseAlarmAt), lt(schema.incident.startedAt, to), or(isNull(schema.incident.resolvedAt), gte(schema.incident.resolvedAt, from)))),
       ]);
       return comps
         .map((m) => {

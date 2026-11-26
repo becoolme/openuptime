@@ -386,6 +386,13 @@
       "when": 1795205286548,
       "tag": "0054_big_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795705383748,
+      "tag": "0055_amused_karnak",
+      "breakpoints": true
     }
   ]
 }

@@ -1153,3 +1153,127 @@ describe.skipIf(!url)("atomic recovery progress", () => {
     expect((await repo.getMonitor(orgId, m.id, null))?.consecutiveSuccesses).toBe(0);
   });
 });
+
+describe.skipIf(!url)("marking an incident as a false alarm", () => {
+  const orgId = `test-org-${crypto.randomUUID()}`;
+  const otherOrg = `${orgId}-other`;
+  let projectId: string;
+  const userId = `user-${crypto.randomUUID()}`;
+  // a past hour, so every result below lands in one rollup bucket and none is "now"
+  const hour = new Date(Math.floor((Date.now() - 6 * 36e5) / 36e5) * 36e5);
+  const at = (min: number) => new Date(hour.getTime() + min * 6e4);
+
+  beforeAll(async () => {
+    await db.insert(schema.organization).values({ id: orgId, name: "Test", slug: orgId, createdAt: new Date() });
+    await db.insert(schema.user).values({ id: userId, name: "Tester", email: `${userId}@example.com`, emailVerified: true, createdAt: new Date(), updatedAt: new Date() });
+    [{ id: projectId }] = await db.insert(schema.project).values({ organizationId: orgId, name: "A" }).returning({ id: schema.project.id });
+  });
+  afterAll(async () => {
+    await db.delete(schema.organization).where(eq(schema.organization.id, orgId));
+    await db.delete(schema.user).where(eq(schema.user.id, userId));
+  });
+
+  const monitorWith = async (minRegionsFailing = 0) =>
+    (await db.insert(schema.monitor).values({ organizationId: orgId, projectId, name: "m", type: "tcp" as const, target: "127.0.0.1:1", intervalSec: 60, minRegionsFailing }).returning())[0];
+  /** One run per entry: its minute and the verdict of each region. The rollup counts a run once, by the verdict `ok`. */
+  const seed = async (monitorId: string, runs: { min: number; regions: boolean[]; ok: boolean }[]) => {
+    for (const r of runs) {
+      await db.insert(schema.checkResult).values(r.regions.map((ok, i) => ({ monitorId, region: `r${i}`, ok, checkedAt: at(r.min) })));
+    }
+    await db.insert(schema.checkRollup).values({ monitorId, bucket: hour, total: runs.length, ok: runs.filter((r) => r.ok).length });
+  };
+  const state = async (monitorId: string) => {
+    const [roll] = await db.select().from(schema.checkRollup).where(eq(schema.checkRollup.monitorId, monitorId));
+    const raw = await db.select().from(schema.checkResult).where(eq(schema.checkResult.monitorId, monitorId)).orderBy(schema.checkResult.checkedAt, schema.checkResult.region);
+    return { total: roll.total, ok: roll.ok, raw: raw.map((r) => [(r.checkedAt.getTime() - hour.getTime()) / 6e4, r.region, r.ok]) };
+  };
+  const resolvedIncident = async (monitorId: string | null, startMin: number, endMin: number) => {
+    const inc = await repo.createIncident({ organizationId: orgId, projectId, monitorId, title: "429", auto: true });
+    await db.update(schema.incident).set({ startedAt: at(startMin), resolvedAt: at(endMin), status: "resolved" }).where(eq(schema.incident.id, inc.id));
+    return inc;
+  };
+
+  it("counts the incident's failed runs as healthy, leaves earlier failures alone, and can be undone", async () => {
+    const m = await monitorWith();
+    await seed(m.id, [
+      { min: 1, regions: [false], ok: false }, // before the last healthy run: not part of this incident
+      { min: 5, regions: [true], ok: true },
+      { min: 10, regions: [false], ok: false }, // the failures that led to the incident
+      { min: 11, regions: [false], ok: false },
+      { min: 12, regions: [false], ok: false },
+      { min: 20, regions: [true], ok: true },
+    ]);
+    const inc = await resolvedIncident(m.id, 11, 19);
+
+    const r = await repo.markIncidentFalseAlarm(orgId, inc.id, userId, "rate limited, not down");
+    expect(r).toMatchObject({ ok: true, checks: 3, incident: { falseAlarmReason: "rate limited, not down" } });
+    expect(r.ok && r.incident.falseAlarmAt).toBeInstanceOf(Date);
+    expect(await state(m.id)).toEqual({
+      total: 6, ok: 5,
+      raw: [[1, "r0", false], [5, "r0", true], [10, "r0", true], [11, "r0", true], [12, "r0", true], [20, "r0", true]],
+    });
+
+    const undone = await repo.clearIncidentFalseAlarm(orgId, inc.id);
+    expect(undone).toMatchObject({ ok: true, checks: 3, incident: { falseAlarmAt: null, falseAlarmReason: null } });
+    expect(await state(m.id)).toEqual({
+      total: 6, ok: 2,
+      raw: [[1, "r0", false], [5, "r0", true], [10, "r0", false], [11, "r0", false], [12, "r0", false], [20, "r0", true]],
+    });
+  });
+
+  it("judges a multi-region run the way the monitor does", async () => {
+    const m = await monitorWith(); // a strict majority of the answering regions
+    await seed(m.id, [
+      { min: 5, regions: [true, true, true], ok: true },
+      { min: 10, regions: [true, false, false], ok: false }, // 2 of 3: the run failed
+      { min: 11, regions: [true, true, false], ok: true }, // 1 of 3: the run was healthy and stays as recorded
+      { min: 20, regions: [true, true, true], ok: true },
+    ]);
+    const inc = await resolvedIncident(m.id, 10, 19);
+    expect(await repo.markIncidentFalseAlarm(orgId, inc.id, userId, "regional blip")).toMatchObject({ ok: true, checks: 1 });
+    const s = await state(m.id);
+    expect(s.ok).toBe(4);
+    expect(s.raw.filter(([min]) => min === 10).map((r) => r[2])).toEqual([true, true, true]);
+    expect(s.raw.filter(([min]) => min === 11).map((r) => r[2])).toEqual([true, true, false]);
+  });
+
+  it("uses the configured number of failing regions", async () => {
+    const m = await monitorWith(1); // one failing region is enough to fail a run
+    await seed(m.id, [
+      { min: 5, regions: [true, true], ok: true },
+      { min: 11, regions: [true, false], ok: false },
+      { min: 20, regions: [true, true], ok: true },
+    ]);
+    const inc = await resolvedIncident(m.id, 11, 19);
+    expect(await repo.markIncidentFalseAlarm(orgId, inc.id, userId, "x")).toMatchObject({ ok: true, checks: 1 });
+    expect((await state(m.id)).ok).toBe(3);
+  });
+
+  it("refuses an open incident, one without a monitor, a second mark and another workspace's incident", async () => {
+    const m = await monitorWith();
+    const open = await repo.createIncident({ organizationId: orgId, projectId, monitorId: m.id, title: "open", auto: false });
+    expect(await repo.markIncidentFalseAlarm(orgId, open.id, userId, "x")).toEqual({ ok: false, error: "open" });
+    const manual = await resolvedIncident(null, 11, 19);
+    expect(await repo.markIncidentFalseAlarm(orgId, manual.id, userId, "x")).toEqual({ ok: false, error: "no_monitor" });
+    const done = await resolvedIncident(m.id, 11, 19);
+    expect(await repo.clearIncidentFalseAlarm(orgId, done.id)).toEqual({ ok: false, error: "not_marked" });
+    expect(await repo.markIncidentFalseAlarm(otherOrg, done.id, userId, "x")).toEqual({ ok: false, error: "not_found" });
+    expect(await repo.markIncidentFalseAlarm(orgId, done.id, userId, "x")).toMatchObject({ ok: true, checks: 0 });
+    expect(await repo.markIncidentFalseAlarm(orgId, done.id, userId, "x")).toEqual({ ok: false, error: "already" });
+  });
+
+  it("keeps a false alarm off the status page and out of the monthly report", async () => {
+    const m = await monitorWith();
+    const [page] = await db.insert(schema.statusPage).values({ organizationId: orgId, projectId, slug: `p${crypto.randomUUID().slice(0, 8)}`, title: "T" }).returning();
+    await db.insert(schema.statusPageComponent).values({ statusPageId: page.id, monitorId: m.id });
+    const inc = await resolvedIncident(m.id, 11, 19);
+    const titles = async () => (await repo.pageIncidents(page as never, { limit: 10 })).map((i) => i.id);
+    expect(await titles()).toContain(inc.id);
+    await repo.markIncidentFalseAlarm(orgId, inc.id, userId, "x");
+    expect(await titles()).not.toContain(inc.id);
+    // the team still sees it, flagged
+    expect((await repo.listIncidents(orgId, projectId)).find((i) => i.id === inc.id)?.falseAlarmAt).toBeInstanceOf(Date);
+    await repo.clearIncidentFalseAlarm(orgId, inc.id);
+    expect(await titles()).toContain(inc.id);
+  });
+});

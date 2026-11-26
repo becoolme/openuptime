@@ -14,7 +14,7 @@ describe("public incident bodies", () => {
     const inc = {
       id: "i", organizationId: "o", monitorId: null, projectId: "p", number: 7, title: "T", status: "identified" as const, severity: "major" as const, auto: false, assigneeId: "u1",
       startedAt: new Date(), acknowledgedAt: null, resolvedAt: null, evaluationNote: null, nextReminderAt: null, reminderCount: 0, escalationLevel: 0, nextEscalationAt: null,
-      rootCause: "disk full", postmortem: "long text", postmortemPublishedAt: null as Date | null, updates: [up("1", "shown", "public"), up("2", "hidden", "internal")],
+      rootCause: "disk full", postmortem: "long text", postmortemPublishedAt: null as Date | null, falseAlarmAt: null, falseAlarmReason: null, falseAlarmById: null, updates: [up("1", "shown", "public"), up("2", "hidden", "internal")],
     };
     const open = toPublic(inc);
     expect(open.updates.map((u) => u.body)).toEqual(["shown"]);

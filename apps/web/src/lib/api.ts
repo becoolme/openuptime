@@ -46,7 +46,7 @@ export type Project = { id: string; name: string };
 export type ProjectOverview = Project & { monitors: number; down: number; openIncidents: number };
 export type Subscriber = { id: string; email: string; confirmedAt: string | null; createdAt: string };
 export type Maintenance = { seriesId?: string | null; recurrence?: { frequency: "daily" | "weekly"; timeZone: string; until: string } | null; id: string; name: string; startsAt: string; endsAt: string; monitorIds: string[] };
-export type CheckResult = { id: string; ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string; region?: string };
+export type CheckResult = { id: string; ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string; region?: string; /** failed, then marked as a false alarm: counted as healthy */ falseAlarm?: boolean };
 export type RegionStat = {
   region: string; checks24h: number; uptime24h: number | null; avgLatency24h: number | null;
   last: { ok: boolean; statusCode: number | null; latencyMs: number | null; error: string | null; checkedAt: string } | null;
@@ -76,6 +76,9 @@ export type Incident = {
   postmortem?: string | null;
   /** set once a person published the write-up to the status page */
   postmortemPublishedAt?: string | null;
+  /** set once a person marked the incident as a false alarm */
+  falseAlarmAt?: string | null;
+  falseAlarmReason?: string | null;
   severity: string; startedAt: string; resolvedAt: string | null; acknowledgedAt: string | null; monitorName?: string | null;
   updates?: { id: string; status: Incident["status"]; body: string; visibility?: "public" | "internal"; createdAt: string }[];
   auto?: boolean;
@@ -319,6 +322,9 @@ export const api = {
   incident: (id: string) => req<Incident>(`/incidents/${id}`),
   postUpdate: (id: string, b: { status: Incident["status"]; body: string; visibility?: "public" | "internal" }) =>
     req(`/incidents/${id}/updates`, { method: "POST", body: JSON.stringify(b) }),
+  markFalseAlarm: (id: string, reason: string) =>
+    req<Incident & { correctedChecks: number }>(`/incidents/${id}/false-alarm`, { method: "POST", body: JSON.stringify({ reason }) }),
+  clearFalseAlarm: (id: string) => req<Incident & { correctedChecks: number }>(`/incidents/${id}/false-alarm`, { method: "DELETE" }),
   saveWriteUp: (id: string, b: { rootCause?: string | null; postmortem?: string | null; publishPostmortem?: boolean }) =>
     req<Incident>(`/incidents/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   ack: (id: string) => req(`/incidents/${id}/ack`, { method: "POST" }),

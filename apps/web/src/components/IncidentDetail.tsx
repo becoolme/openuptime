@@ -30,6 +30,9 @@ export default function IncidentDetail({ id }: { id: string }) {
   const [busy, run] = useBusy();
   const [acking, ack] = useBusy();
   const [err, setErr] = useState("");
+  const [faReason, setFaReason] = useState("");
+  const [faOpen, setFaOpen] = useState(false);
+  const [faBusy, faRun] = useBusy();
   const load = () => api.incident(id).then((i) => { adoptProject(i.projectId); setInc(i); setStatus(i.status === "resolved" ? "resolved" : i.status); setRootCause(i.rootCause ?? ""); setPostmortem(i.postmortem ?? ""); setPublish(!!i.postmortemPublishedAt); });
   useEffect(() => { load(); }, [id]);
   if (!inc) return <p className="muted">{t("Loading…")}</p>;
@@ -43,6 +46,15 @@ export default function IncidentDetail({ id }: { id: string }) {
   // a resolution is what subscribers are mailed about, so it is always public
   const hidden = internal && status !== "resolved";
   const events = [...(inc.updates ?? [])].reverse();
+  const falseAlarm = !!inc.falseAlarmAt;
+  const markFalseAlarm = () => faRun(async () => {
+    setErr("");
+    try { await api.markFalseAlarm(id, faReason.trim()); setFaOpen(false); setFaReason(""); await load(); } catch (x) { setErr((x as Error).message); }
+  });
+  const clearFalseAlarm = () => faRun(async () => {
+    setErr("");
+    try { await api.clearFalseAlarm(id); await load(); } catch (x) { setErr((x as Error).message); }
+  });
 
   return (
     <>
@@ -60,8 +72,17 @@ export default function IncidentDetail({ id }: { id: string }) {
         <span className="chip">{t("started")} {utc(inc.startedAt)}</span>
         <span className="chip">{dur(inc.startedAt, inc.resolvedAt)} {resolved ? t("total") : t("elapsed")}</span>
         {inc.auto && <span className="chip">{t("Auto-detected")}</span>}
+        {falseAlarm && <span className="chip">{t("False alarm")}</span>}
       </div>
       {err && <p className="err">{err}</p>}
+      {falseAlarm && (
+        <div className="card cc">
+          <div className="cc-h"><h3>{t("Marked as a false alarm")}</h3><span className="faint" style={{ fontSize: 13 }}>{ago(inc.falseAlarmAt!)}</span></div>
+          <p style={{ margin: "0 0 8px" }}>{inc.falseAlarmReason}</p>
+          <small className="faint">{t("Its failed checks count as healthy in uptime, and it is hidden from your status pages. It stays here for your team.")}</small>
+          <div className="formact"><button className="btn sm" disabled={faBusy} onClick={clearFalseAlarm}>{faBusy ? t("Undoing…") : t("Undo false alarm")}</button></div>
+        </div>
+      )}
 
       <div className="cols">
         <div className="col">
@@ -131,7 +152,7 @@ export default function IncidentDetail({ id }: { id: string }) {
               {inc.checks.map((r) => (
                 <div className="rr res" key={r.id}>
                   <span className="mono muted">{fmtTime(r.checkedAt, { utc: true, seconds: true })}</span>
-                  <span><span className="pill down">{t("Failed")}</span></span>
+                  <span>{r.falseAlarm ? <span className="pill resolved" title={t("Counted as healthy")}>{t("False alarm")}</span> : <span className="pill down">{t("Failed")}</span>}</span>
                   <span className="mono">{r.statusCode ?? "—"}</span>
                   <span className="mono">{r.latencyMs ?? "—"} ms</span>
                   <span className="faint mono rr-err" title={r.error ?? ""}>{r.error ?? ""}</span>
@@ -152,6 +173,23 @@ export default function IncidentDetail({ id }: { id: string }) {
               <div><span>{t("Resolved")}</span><b>{inc.resolvedAt ? ago(inc.resolvedAt) : "—"}</b></div>
             </div>
           </div>
+          {resolved && inc.monitor && !falseAlarm && (
+            <div className="card cc">
+              <div className="cc-h"><h3>{t("False alarm?")}</h3></div>
+              <small className="faint">{t("If the checks failed but your service was fine, such as a rate limit or a bad assertion, count them as healthy. Owners and admins only; you can undo it.")}</small>
+              {faOpen ? (
+                <form onSubmit={(e) => { e.preventDefault(); markFalseAlarm(); }}>
+                  <textarea className="in" style={{ height: 72, padding: 12, marginTop: 12 }} required maxLength={500} autoFocus value={faReason} onChange={(e) => setFaReason(e.target.value)} placeholder={t("Why was this a false alarm?")} />
+                  <div className="formact">
+                    <button type="button" className="btn sm" onClick={() => setFaOpen(false)}>{t("Cancel")}</button>
+                    <button className="btn primary sm" disabled={faBusy || !faReason.trim()}>{faBusy ? t("Marking…") : t("Mark as false alarm")}</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="formact"><button className="btn sm" onClick={() => setFaOpen(true)}>{t("Mark as false alarm")}</button></div>
+              )}
+            </div>
+          )}
           {inc.monitor && (
             <div className="card cc">
               <div className="cc-h"><h3>{t("Affected components")}</h3></div>
