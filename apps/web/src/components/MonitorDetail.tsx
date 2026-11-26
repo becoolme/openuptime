@@ -10,6 +10,7 @@ import { ago, api, type Channel, type CheckResult, type Incident, type Monitor, 
 import { pollWhileVisible } from "../lib/poll";
 import { groupRuns } from "../lib/runs";
 import { MonitorForm } from "./Monitors";
+import ResponseChart from "./ResponseChart";
 
 type Detail = Monitor & { results: CheckResult[]; regionStats: RegionStat[]; incidents: Incident[]; stats: { uptime24h: number | null; uptime7d: number | null; avg24h: number | null; p95: number | null } };
 const every = (s: number) => (s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
@@ -118,23 +119,7 @@ export default function MonitorDetail({ id }: { id: string }) {
               <h3>{t("Response time")}</h3>
               <span className="faint mono" style={{ fontSize: 12.5 }}>{lat.length ? `min ${Math.min(...lat)} · avg ${Math.round(lat.reduce((a, b) => a + b, 0) / lat.length)} · max ${Math.max(...lat)} ms` : ""}</span>
             </div>
-            <div className="bars rt">
-              {chrono.map((run) => (
-                <div key={run.rows[0].id} className="rt-col">
-                  <i className={run.state === "up" ? "" : run.state === "down" ? "d" : "w"} style={{ height: `${Math.max(4, ((run.latencyMs ?? max) / max) * 100)}%` }} />
-                  <span className="rt-tip">
-                    <b>{run.latencyMs != null ? `${run.rows.length > 1 ? "avg " : ""}${run.latencyMs} ms` : "—"}</b>
-                    <small>{run.rows.length > 1 ? `${run.okCount}/${run.rows.length} OK` : run.rows[0].ok ? "OK" : run.rows[0].statusCode ?? "Failed"} · {fmtTime(run.at, { seconds: true })}</small>
-                    {run.rows.length > 1 && run.rows.map((r) => (
-                      <small key={r.id} className={`rt-r${r.ok ? "" : " d"}`}>{regionName(r.region ?? "auto")} · {r.ok ? `${r.latencyMs ?? "—"} ms` : r.error ?? t("Failed")}</small>
-                    ))}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {chrono.length > 1 && (
-              <div className="ax"><span>{fmtTime(chrono[0].at, { seconds: true })}</span><span>{fmtTime(chrono[chrono.length - 1].at, { seconds: true })}</span></div>
-            )}
+            <ResponseChart runs={chrono} max={max} regionName={regionName} />
           </div>
 
           <div className="card cc">
