@@ -34,6 +34,11 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     summary: { en: "A status page that shows your website's icon instead of the OpenUptime brand no longer shows a broken image.", zh: "隐藏 OpenUptime 品牌、改用你网站图标的状态页，不再显示裂图。" },
     points: [
       { en: "The icon service moved its images to another host, which the status page blocked; both hosts are now allowed.", zh: "图标服务把图片换到了另一个域名，被状态页拦截了；现在两个域名都已放行。" },
+    id: "refresh-to-latest-version", date: "2026-11-26", edition: "community",
+    title: { en: "One refresh reaches the newest version", zh: "一次刷新更新到最新版" },
+    summary: { en: "When another version is released while the update prompt is open, \"Refresh\" now loads the newest one instead of asking again after the reload.", zh: "更新提示还开着时又发布了新版本，点击“刷新”现在会直接更新到最新版，不会在刷新后再弹一次提示。" },
+    points: [
+      { en: "Refresh first checks for a newer version and waits up to five seconds for it to download; if it cannot, it applies the version it already has.", zh: "点击刷新时会先检查是否有更新的版本，最多等待五秒让它下载完成；下载不了就直接使用已有的版本。" },
     ],
   },
   {
@@ -62,6 +67,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Open a resolved incident and choose Mark as false alarm with a short reason; its failed checks, back to the last healthy one, count as healthy.", zh: "打开已解决的事件，填写简短原因并选择“标记为误报”，其失败的检测（回溯到上一次正常检测）会按正常计算。" },
       { en: "A false alarm is hidden from status pages, feeds and monthly reports, and stays visible to your team with its reason.", zh: "误报不再显示在状态页、订阅源和月报中，团队内部仍可看到，并附有原因。" },
       { en: "Only owners and admins can do it, and Undo false alarm puts everything back.", zh: "仅所有者和管理员可以操作，点“撤销误报标记”即可恢复原状。" },
+      { en: "A marked incident shows its reason in the side column under Details, instead of a tall banner above the update form.", zh: "已标记的事件在右侧“详情”下方显示原因，不再用更新表单上方的大横幅。" },
       { en: "Checks older than your workspace's retention period cannot be corrected, so mark false alarms while the details are still kept.", zh: "超出工作区保留期的检测无法修正，请在明细仍保留时标记误报。" },
     ],
     upgrade: { en: "Run the database migration (it adds columns to incident and check_result) before starting the new API.", zh: "启动新版 API 之前先运行数据库迁移（会给 incident 和 check_result 增加列）。" },
