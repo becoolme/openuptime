@@ -35,6 +35,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     points: [
       { en: "Pick Text, Number or Boolean next to equals, does not equal or contains; without one, 200 still matches the text \"200\" and true matches \"true\", as before.", zh: "在“等于”“不等于”“包含”旁可选择“文本”“数字”或“布尔值”；不选时行为不变，200 仍能匹配文本 \"200\"，true 仍能匹配 \"true\"。" },
       { en: "When the monitor accepts a list such as 200,429, an assertion can be limited to statuses like 2xx, so a 429 reply without the field no longer fails it.", zh: "监控接受 200,429 这类状态码列表时，断言可以限定只对 2xx 等状态码生效，不带该字段的 429 响应不会再让它失败。" },
+      { en: "The status limit only appears when the monitor accepts more than one status, so a monitor with a single expected status keeps a simpler form.", zh: "只有监控接受多个状态码时才显示状态码限制，只有一个期望状态码的监控表单保持简洁。" },
       { en: "The API takes the same options as type and status on each entry of jsonAssertions.", zh: "API 的 jsonAssertions 每一项也支持 type 和 status。" },
     ],
     upgrade: { en: "Update regional probes before using either option; until then a region reports that an upgrade is required.", zh: "使用这两个选项前需要先更新自建的区域探针，否则该区域会提示需要升级。" },
