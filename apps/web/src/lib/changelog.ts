@@ -62,6 +62,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "Open a resolved incident and choose Mark as false alarm with a short reason; its failed checks, back to the last healthy one, count as healthy.", zh: "打开已解决的事件，填写简短原因并选择“标记为误报”，其失败的检测（回溯到上一次正常检测）会按正常计算。" },
       { en: "A false alarm is hidden from status pages, feeds and monthly reports, and stays visible to your team with its reason.", zh: "误报不再显示在状态页、订阅源和月报中，团队内部仍可看到，并附有原因。" },
       { en: "Only owners and admins can do it, and Undo false alarm puts everything back.", zh: "仅所有者和管理员可以操作，点“撤销误报标记”即可恢复原状。" },
+      { en: "A marked incident shows its reason in the side column under Details, instead of a tall banner above the update form.", zh: "已标记的事件在右侧“详情”下方显示原因，不再用更新表单上方的大横幅。" },
       { en: "Checks older than your workspace's retention period cannot be corrected, so mark false alarms while the details are still kept.", zh: "超出工作区保留期的检测无法修正，请在明细仍保留时标记误报。" },
     ],
     upgrade: { en: "Run the database migration (it adds columns to incident and check_result) before starting the new API.", zh: "启动新版 API 之前先运行数据库迁移（会给 incident 和 check_result 增加列）。" },
