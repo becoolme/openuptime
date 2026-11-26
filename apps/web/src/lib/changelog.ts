@@ -41,8 +41,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "A new documentation page explains what the check bot does and how to allow it through a firewall.", zh: "新增一页文档，说明检测机器人做什么，以及如何在防火墙中放行。" },
     ],
     cloud: {
-      en: "The hosted service signs checks from its API and from every probe region, with the key directory at https://openuptime.app/.well-known/http-message-signatures-directory.",
-      zh: "托管服务的 API 和每个探针区域发出的检测都带签名，密钥目录位于 https://openuptime.app/.well-known/http-message-signatures-directory。",
+      en: "The hosted service signs checks from its API and from every probe region, with the key directory at https://openuptime.app/.well-known/http-message-signatures-directory. Its User-Agent is OpenUptime/0.1 (+https://openuptime.app/docs/bot), which links to that page.",
+      zh: "托管服务的 API 和每个探针区域发出的检测都带签名，密钥目录位于 https://openuptime.app/.well-known/http-message-signatures-directory。检测请求的 User-Agent 为 OpenUptime/0.1 (+https://openuptime.app/docs/bot)，指向这份说明。",
     },
     upgrade: {
       en: "Signing is off until you set CHECK_SIGNING_KEY (an Ed25519 private key as a one-line JWK) and CHECK_SIGNATURE_AGENT (the https origin that serves the key directory), on the API and on any probe. Checks go out unsigned without them.",
