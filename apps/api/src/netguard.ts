@@ -1,6 +1,7 @@
 import { BlockedTarget, allowPrivateTargets, guardHost, hostPort, isWorkers, privateTargetsAllowed } from "@openuptime/kit/netguard";
 import { useOutboundProxy } from "@openuptime/kit/pinnedfetch";
 import { configureSelfCheck } from "@openuptime/kit/selfcheck";
+import { configureWebBotAuth } from "@openuptime/kit/webbotauth";
 import { domainName } from "./domain-name";
 import { pingHost } from "./ping";
 /**
@@ -13,7 +14,8 @@ export * from "@openuptime/kit/netguard";
 let userAgent = "OpenUptime/0.1 (+https://github.com/becoolme/openuptime)";
 
 /** Env values are constant per deployment, so a module-level config is safe in a Worker isolate. */
-export function configureNetGuard(env: { ALLOW_PRIVATE_TARGETS?: string; CHECK_USER_AGENT?: string; SELFCHECK_URLS?: string; OUTBOUND_PROXY?: string }) {
+export function configureNetGuard(env: { ALLOW_PRIVATE_TARGETS?: string; CHECK_USER_AGENT?: string; CHECK_SIGNING_KEY?: string; CHECK_SIGNATURE_AGENT?: string; SELFCHECK_URLS?: string; OUTBOUND_PROXY?: string }) {
+  configureWebBotAuth({ key: env.CHECK_SIGNING_KEY, agent: env.CHECK_SIGNATURE_AGENT });
   configureSelfCheck(env.SELFCHECK_URLS);
   allowPrivateTargets(env.ALLOW_PRIVATE_TARGETS === "true");
   // Node only: on Workers the platform makes the connection and there is no proxy to go through

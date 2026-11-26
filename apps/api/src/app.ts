@@ -20,6 +20,7 @@ import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail, emailEnabled } from "./email";
 import { apnsConfigured, configureApns } from "./apns";
 import { configureNetGuard } from "./netguard";
+import { DIRECTORY_PATH, directoryResponse } from "@openuptime/kit/webbotauth";
 import { configureProbes } from "./probes";
 import { allow, clientIp, safeEqual } from "./ratelimit";
 import { community, type Edition } from "./edition";
@@ -32,6 +33,12 @@ import { agent, servers } from "./routes/servers";
 export function createApp(openDatabase: OpenDatabase, options: { edition?: Edition } = {}) {
   const edition = options.edition ?? community;
   const app = new Hono<AppEnv>();
+
+  // Web Bot Auth key directory: needs no database, so it is answered before one is opened
+  app.get(DIRECTORY_PATH, async (c) => {
+    configureNetGuard(c.env);
+    return (await directoryResponse(new URL(c.req.url).host)) ?? c.notFound();
+  });
 
   // the database and auth are created per request: required on Workers (no cross-request I/O objects).
   app.use("*", async (c, next) => {

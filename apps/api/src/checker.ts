@@ -150,7 +150,7 @@ export async function httpCheck(m: CheckInput, started: number, seen?: Seen): Pr
     ({ res, url } = await guardedFetch(
       m.target,
       { method: m.method, body: m.requestBody || undefined, signal: AbortSignal.timeout(m.timeoutMs), headers },
-      { follow: !expectRedirect, protectBody: true, trace: hops },
+      { follow: !expectRedirect, protectBody: true, sign: true, trace: hops },
     ));
   } catch (e) {
     // the hops that did answer before a later one failed still tell where the request went

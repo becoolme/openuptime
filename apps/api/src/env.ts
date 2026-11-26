@@ -47,6 +47,10 @@ export type Bindings = {
   OUTBOUND_PROXY?: string;
   /** User-Agent of HTTP checks. Default: OpenUptime/0.1 (+https://github.com/becoolme/openuptime). */
   CHECK_USER_AGENT?: string;
+  /** Ed25519 private key (JWK, JSON) that signs HTTP checks with Web Bot Auth, so bot filters can verify them. Needs CHECK_SIGNATURE_AGENT. Unset: checks are not signed. */
+  CHECK_SIGNING_KEY?: string;
+  /** https origin that serves this deployment's key directory (/.well-known/http-message-signatures-directory), e.g. https://status.example.com. */
+  CHECK_SIGNATURE_AGENT?: string;
   /** Comma-separated URLs a failed network-level check fetches to tell "the target is down" from "this machine is offline". Unset: three well-known public URLs; empty: no self-check. */
   SELFCHECK_URLS?: string;
   /** Shared secret that lets an external cron hit POST /internal/run-checks. */

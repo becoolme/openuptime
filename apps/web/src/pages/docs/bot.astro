@@ -1,0 +1,67 @@
+---
+import Doc from "../../layouts/Doc.astro";
+---
+<Doc titleZh="OpenUptime 检测机器人" descriptionZh="OpenUptime 的检测请求是什么、如何用 Web Bot Auth 验证它们来自 OpenUptime，以及如何在防火墙或 Bot 过滤中放行。" description="What OpenUptime's check requests are, how to verify them with Web Bot Auth, and how to allow them through a firewall or bot filter." title="The OpenUptime check bot" updated="2026-11-25" toc>
+  <div lang="en">
+    <h1>The OpenUptime check bot</h1>
+    <p class="lede">OpenUptime is an uptime monitoring service. Its checker sends HTTP requests to addresses that its users have added as monitors, to find out whether those addresses are up. It does not crawl, it does not follow links to other sites and it does not collect page content for any other purpose.</p>
+    <h2 id="what">What the bot does</h2>
+    <ul>
+      <li>It requests only the URL a user entered, and follows redirects that URL answers with. A monitor checks one URL every minute at most, with the interval its owner chose.</li>
+      <li>It reads the status code, the timing and, if the owner asked for it, a keyword or a JSON value in the answer. Response bodies are not stored or reused.</li>
+      <li>Because every monitor belongs to someone who added your address on purpose, a request from OpenUptime means that someone asked for your site to be watched. If you do not want that, ask them to remove the monitor, or write to <a href="mailto:hi@openuptime.app">hi@openuptime.app</a> and we will remove it.</li>
+    </ul>
+    <h2 id="identify">How to recognize it</h2>
+    <p>The User-Agent starts with <code>OpenUptime/</code>, for example <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code>. A User-Agent is easy to copy, so do not rely on it alone, and do not rely on IP addresses either: checks run from Cloudflare Workers and from probes in several regions, and their addresses change. OpenUptime signs its HTTP requests instead, with <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a> (HTTP message signatures, RFC 9421).</p>
+    <h2 id="wba">Verifying a request with Web Bot Auth</h2>
+    <p>Each signed request carries three headers:</p>
+    <ul>
+      <li><code>Signature-Agent: "https://openuptime.app"</code> names the origin that publishes the public key.</li>
+      <li><code>Signature-Input</code> lists the signed parts (<code>@authority</code> and <code>signature-agent</code>), the creation and expiry time (60 seconds apart), a random <code>nonce</code>, the key id and <code>tag="web-bot-auth"</code>.</li>
+      <li><code>Signature</code> is the Ed25519 signature over those parts.</li>
+    </ul>
+    <p>The public key is published, itself signed, at the key directory:</p>
+    <pre><code>https://openuptime.app/.well-known/http-message-signatures-directory</code></pre>
+    <p>It answers with the type <code>application/http-message-signatures-directory+json</code> and a JSON Web Key Set holding one Ed25519 key. The key id in <code>Signature-Input</code> is that key's JWK thumbprint (RFC 8037). A request is genuine when its signature verifies with the key in the directory, it has not expired and its <code>@authority</code> is your own host. A bot filter that supports Web Bot Auth, such as Cloudflare's, does this for you and marks the request as a verified bot.</p>
+    <h2 id="allow">Allowing OpenUptime through</h2>
+    <ul>
+      <li><strong>Cloudflare:</strong> a verified bot is not challenged by Bot Fight Mode or Super Bot Fight Mode. To allow it explicitly, add a WAF custom rule that matches <code>cf.bot_management.verified_bot</code> (or the Verified Bots field in the rule builder) together with the User-Agent containing <code>OpenUptime</code>.</li>
+      <li><strong>Other filters:</strong> verify the signature as described above, or allow the User-Agent <code>OpenUptime/</code> for the monitored path only. Allowing by User-Agent alone lets anyone who copies it through.</li>
+    </ul>
+    <h2 id="selfhost">Running your own copy</h2>
+    <p>A self-hosted install and your own <a href="/docs/regions">probes</a> sign their requests only when you give them a key. Create an Ed25519 key, set <code>CHECK_SIGNING_KEY</code> to its private half as a one-line JWK and <code>CHECK_SIGNATURE_AGENT</code> to the https origin that serves it. The API then answers <code>/.well-known/http-message-signatures-directory</code> on that origin with the public key. Without both variables, checks go out unsigned, as before. <code>CHECK_USER_AGENT</code> changes the User-Agent.</p>
+    <h2 id="contact">Contact</h2>
+    <p>Questions about the bot, or a request to stop checking an address: <a href="mailto:hi@openuptime.app">hi@openuptime.app</a>.</p>
+  </div>
+  <div lang="zh-CN">
+    <h1>OpenUptime 检测机器人</h1>
+    <p class="lede">OpenUptime 是一项可用性监控服务。它的检测程序会向用户添加为监控项的地址发送 HTTP 请求，以判断这些地址是否可用。它不会爬取网站，不会顺着链接访问其他站点，也不会为其他用途收集页面内容。</p>
+    <h2 id="what-zh">机器人做什么</h2>
+    <ul>
+      <li>它只请求用户填写的那个 URL，并跟随该 URL 返回的重定向。每个监控项按其所有者设定的间隔检测，最快每分钟一次。</li>
+      <li>它读取状态码、耗时，以及（在所有者要求时）响应中的关键词或 JSON 值。响应内容不会被保存或另作他用。</li>
+      <li>每个监控项都属于某位特意添加了你的地址的用户，所以来自 OpenUptime 的请求意味着有人希望监控你的网站。如果你不希望如此，请让对方删除该监控项，或写信到 <a href="mailto:hi@openuptime.app">hi@openuptime.app</a>，我们会将其移除。</li>
+    </ul>
+    <h2 id="identify-zh">如何识别</h2>
+    <p>User-Agent 以 <code>OpenUptime/</code> 开头，例如 <code>OpenUptime/0.1 (+https://github.com/becoolme/openuptime)</code>。User-Agent 很容易被仿冒，请不要只依赖它；也不要依赖 IP 地址，因为检测来自 Cloudflare Workers 和多个地区的探针，地址会变化。OpenUptime 改为用 <a href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a>（HTTP 消息签名，RFC 9421）为 HTTP 请求签名。</p>
+    <h2 id="wba-zh">用 Web Bot Auth 验证请求</h2>
+    <p>每个带签名的请求包含三个请求头：</p>
+    <ul>
+      <li><code>Signature-Agent: "https://openuptime.app"</code> 指明发布公钥的来源。</li>
+      <li><code>Signature-Input</code> 列出被签名的部分（<code>@authority</code> 和 <code>signature-agent</code>）、创建与过期时间（相隔 60 秒）、随机的 <code>nonce</code>、密钥 ID 以及 <code>tag="web-bot-auth"</code>。</li>
+      <li><code>Signature</code> 是对这些内容的 Ed25519 签名。</li>
+    </ul>
+    <p>公钥发布在密钥目录中，目录本身也带签名：</p>
+    <pre><code>https://openuptime.app/.well-known/http-message-signatures-directory</code></pre>
+    <p>它返回类型为 <code>application/http-message-signatures-directory+json</code> 的 JSON Web Key Set，其中包含一个 Ed25519 密钥。<code>Signature-Input</code> 中的密钥 ID 是该密钥的 JWK 指纹（RFC 8037）。当签名能用目录中的密钥验证通过、尚未过期，并且 <code>@authority</code> 是你自己的主机时，请求才是真实的。支持 Web Bot Auth 的 Bot 过滤（例如 Cloudflare）会自动完成这些检查，并把请求标记为已验证的机器人。</p>
+    <h2 id="allow-zh">放行 OpenUptime</h2>
+    <ul>
+      <li><strong>Cloudflare：</strong>已验证的机器人不会被 Bot Fight Mode 或 Super Bot Fight Mode 拦截。若要显式放行，可添加 WAF 自定义规则，匹配 <code>cf.bot_management.verified_bot</code>（或规则构建器中的 Verified Bots 字段），并要求 User-Agent 包含 <code>OpenUptime</code>。</li>
+      <li><strong>其他过滤器：</strong>按上文验证签名，或仅针对被监控的路径放行 User-Agent <code>OpenUptime/</code>。只按 User-Agent 放行，会让任何仿冒它的人通过。</li>
+    </ul>
+    <h2 id="selfhost-zh">运行你自己的实例</h2>
+    <p>自托管实例和你自建的<a href="/docs/regions">探针</a>只有在你提供密钥时才会为请求签名。生成一个 Ed25519 密钥，把 <code>CHECK_SIGNING_KEY</code> 设为其私钥（单行 JWK），把 <code>CHECK_SIGNATURE_AGENT</code> 设为提供密钥目录的 https 来源。API 随后会在该来源的 <code>/.well-known/http-message-signatures-directory</code> 返回公钥。两个变量缺一，检测都会和以前一样不带签名发出。<code>CHECK_USER_AGENT</code> 可修改 User-Agent。</p>
+    <h2 id="contact-zh">联系方式</h2>
+    <p>关于机器人的问题，或希望停止检测某个地址：<a href="mailto:hi@openuptime.app">hi@openuptime.app</a>。</p>
+  </div>
+</Doc>

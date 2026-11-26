@@ -62,6 +62,7 @@ PROBE_SECRET=… PROBE_REGION=sao-paulo node apps/probe/dist/server.mjs
 | `PROBE_REGION` | Label returned by the health check. The name users see comes from the API's `PROBE_REGIONS`. |
 | `PORT`, `HOST` | Where to listen. Default `8787` on `0.0.0.0`. |
 | `CHECK_USER_AGENT` | User-Agent of HTTP checks. Set it to the same value as on the API so every region looks alike. |
+| `CHECK_SIGNING_KEY`, `CHECK_SIGNATURE_AGENT` | Optional. Web Bot Auth: the same two values as on the API, so HTTP checks from this probe carry the same signature. |
 | `ALLOW_PRIVATE_TARGETS` | `true` lets this probe check private and internal addresses of the network it runs in. Off by default. Use it for a probe that lives inside the network you want to watch (an office, a home lab), and only there. |
 | `OUTBOUND_PROXY` | `http://[user:pass@]host:port` (or `https://`) of a proxy that HTTP checks go through. It is used as a CONNECT tunnel to the address the probe already validated, also for plain-http targets, so it must allow CONNECT to the ports monitors use. HTTP-based checks (HTTP, MCP, blockchain) use it; TCP, DNS, database and WebSocket checks still connect directly. |
 
