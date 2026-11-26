@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { siteLogo } from "./brand";
+import { readFileSync } from "node:fs";
+import { LOGO_IMG_HOSTS, siteLogo } from "./brand";
 
 describe("siteLogo", () => {
   it("uses the host of the website link", () => {
@@ -12,5 +13,14 @@ describe("siteLogo", () => {
     expect(siteLogo("not a url")).toBeNull();
     expect(siteLogo("javascript:alert(1)")).toBeNull();
     expect(siteLogo("mailto:hi@example.com")).toBeNull();
+  });
+});
+
+describe("status page CSP", () => {
+  it("allows the favicon host and the host it redirects to", () => {
+    expect(LOGO_IMG_HOSTS).toContain(new URL(siteLogo("https://example.com")!).origin);
+    expect(LOGO_IMG_HOSTS).toContain("https://a.favicon.im");
+    const page = readFileSync(new URL("../pages/status/[slug].astro", import.meta.url), "utf8");
+    expect(page).toContain("LOGO_IMG_HOSTS.join");
   });
 });

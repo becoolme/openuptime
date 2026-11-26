@@ -10,3 +10,6 @@ export function siteLogo(url: string | null | undefined): string | null {
     return null;
   }
 }
+
+/** Hosts a status page may load images from: the favicon service and the host it redirects to (a CSP also applies to redirect targets). */
+export const LOGO_IMG_HOSTS = ["https://favicon.im", "https://a.favicon.im"];
