@@ -59,8 +59,12 @@ export type McpConfig = {
     assertions: { path: string; operator: "equals" | "contains" | "exists"; value?: unknown }[];
   } | null;
 };
-/** http: one check on the JSON response body; `value` is ignored by exists and not_exists. */
-export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string };
+/**
+ * http: one check on the JSON response body; `value` is ignored by exists and not_exists. `type` makes equals, not_equals and
+ * contains strict about the JSON type (absent or "any" keeps the loose text match); `status` limits the check to responses
+ * whose status matches that list (absent means every status the monitor accepts).
+ */
+export type JsonAssertion = { path: string; op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than"; value: string; type?: "any" | "string" | "number" | "boolean"; status?: string };
 export type McpToolSchema = { name: string; inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>; description?: string; annotations?: Record<string, unknown> };
 export type McpDrift = { severity: "breaking" | "warning" | "info"; kind: string; tool: string; path?: string; message: string };
 /** Bounded diagnostics, never raw tool results or server error messages. */

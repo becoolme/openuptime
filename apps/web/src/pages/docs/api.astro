@@ -22,8 +22,10 @@ keyword        string | null, max 500                        (default null)
 keywordMode    "contains" | "absent" | "matches" | "not_matches"  (default "contains")
                matches/not_matches read keyword as an RE2 regular expression; (?i) ignores case
 expectedLocation string | null, max 2048  with a 301/302/303/307/308 expectedStatus (or acceptedStatuses that accept one): the redirect is not followed; Location must equal this URL or path (default null = any)
-jsonAssertions { path: string, op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than", value?: string }[], max 10
+jsonAssertions { path: string, op: "equals" | "not_equals" | "contains" | "exists" | "not_exists" | "greater_than" | "less_than", value?: string, type?: "any" | "string" | "number" | "boolean", status?: string }[], max 10
                http only: each path ($.a.b[0], $["odd key"]) is read from the JSON body (first 1 MB) and must hold (default [])
+               type: with equals, not_equals or contains, string/number/boolean require that JSON type ("any", the default, also matches 200 with "200")
+               status: a status list such as 2xx or 200,429; the assertion is skipped for other statuses (default: every status the monitor accepts)
 headers        { [name: string]: string }  http, mcp, or the websocket handshake (default {})
 mcpConfig      { transport?: "auto" | "streamable-http" | "sse", oauth?: object | null, listPrompts?: boolean, listResources?: boolean, driftPolicy?: "down" | "degraded" | "record", requiredTools: string[], schemaCheck: boolean, toolCall: null | { enabled: boolean, name: string, arguments: object, assertions: { path: string, operator: "equals" | "contains" | "exists", value?: JSON }[] } } (mcp only; schemaCheck false and toolCall null by default)
 wsMessage      string | null, max 2000  websocket: text sent once connected; a message must come back within timeoutMs (default null = handshake only; not a secret)

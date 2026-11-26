@@ -10,7 +10,7 @@ import { blockchainCheck } from "./blockchain";
 import { websocketCheck } from "./websocket";
 import { apiFlowCheck } from "./api-flow";
 import { pingCheck, pingHost } from "./ping";
-import { jsonAssertionProblem, NOT_JSON } from "./json-assert";
+import { assertionsForStatus, jsonAssertionProblem, NOT_JSON } from "./json-assert";
 import { statusAccepted, statusRule, statusRuleText } from "./status-spec";
 import { keywordOutcome } from "./keyword";
 import type { ApiFlow, ApiStepResult, CheckDiagnosis, JsonAssertion } from "@openuptime/repo";
@@ -181,7 +181,8 @@ export async function httpCheck(m: CheckInput, started: number, seen?: Seen): Pr
       return fail("http", got ? `Redirects to ${got}, expected ${want ?? m.expectedLocation}` : `Expected a redirect to ${want ?? m.expectedLocation}, but there is no Location header`, Date.now() - started);
     }
   }
-  const asserts = m.jsonAssertions ?? [];
+  // an assertion with a status list (say 2xx) is skipped for other accepted statuses, whose body has other fields
+  const asserts = assertionsForStatus(m.jsonAssertions ?? [], res.status);
   if ((!m.keyword && !asserts.length && !seen) || m.method === "HEAD") {
     if (!statusOk) {
       // the start of an error page usually names the cause; nothing more than that is downloaded
