@@ -29,6 +29,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "status-list-placement", date: "2026-11-26", edition: "community",
+    title: { en: "Status list sits under Expected status", zh: "状态码列表紧贴期望状态码" },
+    summary: { en: "Choosing “Custom list or range” now shows the list field right below Expected status instead of further down the form.", zh: "选择“自定义列表或范围”后，列表输入框直接显示在“期望状态码”下方，不再出现在表单靠后的位置。" },
+    points: [
+      { en: "The redirect destination field also moves up beside it, so the status settings stay together.", zh: "跳转目标字段也一并上移，状态相关的设置集中在一起。" },
+    ],
+  },
+  {
     id: "check-bot-robots-policy", date: "2026-11-26", edition: "community",
     title: { en: "Check bot: robots.txt and blocking", zh: "检测机器人：robots.txt 与拦截" },
     summary: {
