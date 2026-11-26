@@ -84,7 +84,8 @@ function signer(): Promise<Loaded | null> {
 
 export const webBotAuthEnabled = async () => (await signer()) != null;
 
-const nonce = () => b64url(crypto.getRandomValues(new Uint8Array(24)));
+/** 64 random bytes, as the Web Bot Auth draft and Cloudflare's reference verifier require. */
+const nonce = () => b64url(crypto.getRandomValues(new Uint8Array(64)));
 
 async function sign(key: Loaded, base: string): Promise<string> {
   return b64(await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, enc.encode(base)));
