@@ -29,6 +29,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "refresh-to-latest-version", date: "2026-11-26", edition: "community",
+    title: { en: "One refresh reaches the newest version", zh: "一次刷新更新到最新版" },
+    summary: { en: "When another version is released while the update prompt is open, \"Refresh\" now loads the newest one instead of asking again after the reload.", zh: "更新提示还开着时又发布了新版本，点击“刷新”现在会直接更新到最新版，不会在刷新后再弹一次提示。" },
+    points: [
+      { en: "Refresh first checks for a newer version and waits up to five seconds for it to download; if it cannot, it applies the version it already has.", zh: "点击刷新时会先检查是否有更新的版本，最多等待五秒让它下载完成；下载不了就直接使用已有的版本。" },
+    ],
+  },
+  {
     id: "skeleton-loading", date: "2026-11-26", edition: "community",
     title: { en: "Skeletons while pages load", zh: "页面加载显示骨架屏" },
     summary: { en: "Dashboard pages that showed a plain \"Loading…\" line now show a grey placeholder in the shape of the page.", zh: "之前只显示“加载中…”文字的后台页面，现在显示与页面形状一致的灰色骨架屏。" },
