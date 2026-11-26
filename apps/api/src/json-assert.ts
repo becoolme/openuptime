@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { JsonAssertion } from "@openuptime/repo";
+import { parseStatusSpec, statusAccepted } from "./status-spec";
 /**
  * Assertions on a JSON response body: a path into the document, a comparison and a value. Paths are read by a small
  * parser of our own (`$.data.items[0].status`, `$["odd key"]`), never handed to a regular expression or evaluated,
@@ -7,6 +8,11 @@ import type { JsonAssertion } from "@openuptime/repo";
  */
 
 export const JSON_ASSERT_CAPABILITY = "json-assert-v1";
+/** Assertions with a `type` or a `status`: an older probe would drop those fields and check more loosely than asked. */
+export const JSON_ASSERT_V2_CAPABILITY = "json-assert-v2";
+export const JSON_VALUE_TYPES = ["any", "string", "number", "boolean"] as const;
+/** Whether an assertion uses what only json-assert-v2 probes understand. */
+export const needsAssertV2 = (a: { type?: string; status?: string }) => Boolean(a.status) || (a.type !== undefined && a.type !== "any");
 export const JSON_ASSERT_OPS = ["equals", "not_equals", "contains", "exists", "not_exists", "greater_than", "less_than"] as const;
 export const MAX_JSON_ASSERTIONS = 10;
 export const NOT_JSON = "Response is not valid JSON";
@@ -48,6 +54,12 @@ export const jsonAssertionSchema = z.object({
   path: z.string().trim().min(1).max(256).superRefine((p, ctx) => { const r = parsePath(p); if (typeof r === "string") ctx.addIssue({ code: "custom", message: r }); }),
   op: z.enum(JSON_ASSERT_OPS),
   value: z.string().max(500).default(""),
+  type: z.enum(JSON_VALUE_TYPES).optional(),
+  status: z.string().trim().max(200).optional().transform((s) => s || undefined).superRefine((s, ctx) => {
+    if (s === undefined) return;
+    const r = parseStatusSpec(s);
+    if ("error" in r) ctx.addIssue({ code: "custom", message: `status: ${r.error}` });
+  }),
 });
 export const jsonAssertionsSchema = z.array(jsonAssertionSchema).max(MAX_JSON_ASSERTIONS);
 
@@ -69,8 +81,14 @@ export function jsonValueAt(doc: unknown, path: string): { found: boolean; value
   return v === MISSING ? { found: false } : { found: true, value: v };
 }
 
-/** Whether a JSON value equals the text the user typed: `200` matches 200, `true` matches true, `null` matches null. */
-function same(actual: unknown, want: string): boolean {
+/**
+ * Whether a JSON value equals the text the user typed. With no type, `200` matches 200 and "200", `true` matches true and
+ * "true", `null` matches null. A type makes it strict: number only matches a JSON number, string only a JSON string.
+ */
+function same(actual: unknown, want: string, type: string = "any"): boolean {
+  if (type === "string") return typeof actual === "string" && actual === want;
+  if (type === "number") return typeof actual === "number" && want.trim() !== "" && Number(want) === actual;
+  if (type === "boolean") return typeof actual === "boolean" && String(actual) === want.trim();
   if (typeof actual === "string") return actual === want;
   if (typeof actual === "number") return want.trim() !== "" && Number(want) === actual;
   if (typeof actual === "boolean" || actual === null) return String(actual) === want.trim();
@@ -78,6 +96,15 @@ function same(actual: unknown, want: string): boolean {
 }
 
 const show = (v: unknown) => { const s = v === MISSING ? "nothing" : JSON.stringify(v); return s.length > 80 ? s.slice(0, 77) + "..." : s; };
+
+/** The assertions that apply to a response with this status: those without a `status` list, and those whose list matches. */
+export function assertionsForStatus(assertions: JsonAssertion[], status: number): JsonAssertion[] {
+  return assertions.filter((a) => {
+    if (!a.status) return true;
+    const r = parseStatusSpec(a.status);
+    return "spec" in r && statusAccepted(r.spec, status);
+  });
+}
 
 /** Why the body fails the first assertion it fails, or null when it passes them all. */
 export function jsonAssertionProblem(body: string, assertions: JsonAssertion[]): string | null {
@@ -92,9 +119,9 @@ export function jsonAssertionProblem(body: string, assertions: JsonAssertion[]):
     switch (a.op) {
       case "exists": ok = found; break;
       case "not_exists": ok = !found; break;
-      case "equals": ok = found && same(got, a.value); break;
-      case "not_equals": ok = found && !same(got, a.value); break;
-      case "contains": ok = typeof got === "string" ? got.includes(a.value) : Array.isArray(got) && got.some((x) => same(x, a.value)); break;
+      case "equals": ok = found && same(got, a.value, a.type); break;
+      case "not_equals": ok = found && !same(got, a.value, a.type); break;
+      case "contains": ok = typeof got === "string" ? (a.type === undefined || a.type === "any" || a.type === "string") && got.includes(a.value) : Array.isArray(got) && got.some((x) => same(x, a.value, a.type)); break;
       case "greater_than":
       case "less_than": {
         const n = Number(a.value);
@@ -106,7 +133,8 @@ export function jsonAssertionProblem(body: string, assertions: JsonAssertion[]):
       if (a.op === "exists") return `JSON ${a.path} is missing`;
       if (a.op === "not_exists") return `JSON ${a.path} is present (${show(got)})`;
       const words = { equals: "to equal", not_equals: "not to equal", contains: "to contain", greater_than: "to be greater than", less_than: "to be less than" }[a.op];
-      return `Expected JSON ${a.path} ${words} ${JSON.stringify(a.value)}, got ${show(got)}`;
+      const typed = a.type && a.type !== "any" ? `${a.type} ` : "";
+      return `Expected JSON ${a.path} ${words} ${typed}${JSON.stringify(a.value)}, got ${show(got)}`;
     }
   }
   return null;

@@ -1,7 +1,7 @@
 import { mcpConfigSchema, mcpToolsSchema } from "../../api/src/mcp-config";
 import { HTTP_METHODS, HTTP_REQUEST_CAPABILITY, requestBodyProblem } from "../../api/src/http-request";
 import { runCheck, type CheckInput } from "../../api/src/checker";
-import { JSON_ASSERT_CAPABILITY, jsonAssertionsSchema } from "../../api/src/json-assert";
+import { JSON_ASSERT_CAPABILITY, JSON_ASSERT_V2_CAPABILITY, jsonAssertionsSchema } from "../../api/src/json-assert";
 import { KEYWORD_MODES, KEYWORD_REGEX_CAPABILITY, keywordProblem, MAX_KEYWORD_LENGTH } from "../../api/src/keyword";
 import { API_FLOW_CAPABILITY, apiFlowSchema } from "../../api/src/api-flow";
 import { targetProblem } from "../../api/src/netguard";
@@ -79,7 +79,7 @@ export function parseCheck(raw: unknown): { input: CheckInput } | { error: strin
  * function is deployed to.
  */
 export async function handleProbe(req: Request, o: { secret: string | undefined; region?: string }): Promise<Response> {
-  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, STATUS_SPEC_CAPABILITY, KEYWORD_REGEX_CAPABILITY, API_FLOW_CAPABILITY, ...(await pingAvailable() ? [ICMP_PING_CAPABILITY] : [])] });
+  if (req.method === "GET") return json(200, { ok: true, region: o.region ?? null, capabilities: [HTTP_REQUEST_CAPABILITY, MCP_MONITOR_CAPABILITY, JSON_ASSERT_CAPABILITY, JSON_ASSERT_V2_CAPABILITY, STATUS_SPEC_CAPABILITY, KEYWORD_REGEX_CAPABILITY, API_FLOW_CAPABILITY, ...(await pingAvailable() ? [ICMP_PING_CAPABILITY] : [])] });
   if (req.method !== "POST") return json(405, { error: "POST a check to this endpoint" });
   if (!o.secret) return json(503, { error: "Probe has no PROBE_SECRET configured" });
   const declared = req.headers.get("content-length");

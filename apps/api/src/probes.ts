@@ -4,7 +4,7 @@ import { mcpObservationSchema } from "./mcp-config";
 import { readCapped } from "./netguard";
 import { sanitizeDiagnosis, sanitizeSteps } from "./diagnosis";
 import { HTTP_REQUEST_CAPABILITY } from "./http-request";
-import { JSON_ASSERT_CAPABILITY } from "./json-assert";
+import { JSON_ASSERT_CAPABILITY, JSON_ASSERT_V2_CAPABILITY, needsAssertV2 } from "./json-assert";
 import { STATUS_SPEC_CAPABILITY } from "./status-spec";
 import { isPatternMode, KEYWORD_REGEX_CAPABILITY } from "./keyword";
 import { API_FLOW_CAPABILITY } from "./api-flow";
@@ -143,6 +143,7 @@ export async function runInRegion(region: string, input: CheckInput, repo?: Repo
     const needs: [string, string][] = [];
     if (input.type === "http" && (input.requestBody || !["GET", "HEAD", "POST"].includes(input.method))) needs.push([HTTP_REQUEST_CAPABILITY, "Probe upgrade required for HTTP request bodies and methods"]);
     if (input.type === "http" && input.jsonAssertions?.length) needs.push([JSON_ASSERT_CAPABILITY, "Probe upgrade required for JSON assertions"]);
+    if (input.type === "http" && input.jsonAssertions?.some(needsAssertV2)) needs.push([JSON_ASSERT_V2_CAPABILITY, "Probe upgrade required for typed JSON assertions and assertions limited to a status"]);
     if (input.type === "http" && input.acceptedStatuses) needs.push([STATUS_SPEC_CAPABILITY, "Probe upgrade required for status lists and ranges"]);
     if (input.keyword && isPatternMode(input.keywordMode)) needs.push([KEYWORD_REGEX_CAPABILITY, "Probe upgrade required for keyword patterns"]);
     if (input.type === "http" && input.apiFlow?.steps.length) needs.push([API_FLOW_CAPABILITY, "Probe upgrade required for multi-step API checks"]);

@@ -391,6 +391,8 @@ const statusOptions = (current: number) =>
 
 const JSON_OPS: [JsonAssertion["op"], string][] = [["equals", "equals"], ["not_equals", "does not equal"], ["contains", "contains"], ["exists", "exists"], ["not_exists", "does not exist"], ["greater_than", "greater than"], ["less_than", "less than"]];
 const VALUELESS: JsonAssertion["op"][] = ["exists", "not_exists"];
+const TYPED: JsonAssertion["op"][] = ["equals", "not_equals", "contains"];
+const JSON_TYPES: [NonNullable<JsonAssertion["type"]>, string][] = [["any", "Any type"], ["string", "Text"], ["number", "Number"], ["boolean", "Boolean"]];
 const API_FLOW_EXAMPLE = JSON.stringify({
   extract: [{ name: "token", from: "json", path: "$.access_token" }],
   steps: [{ name: "List orders", method: "GET", url: "https://api.example.com/v1/orders?limit=1", headers: { Authorization: "Bearer {{token}}" }, expectedStatus: 200, jsonAssertions: [{ path: "$.data", op: "exists", value: "" }] }],
@@ -640,13 +642,15 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             {asserts.map((a, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                 <input className="in mono" style={{ flex: "2 1 160px", minWidth: 0 }} value={a.path} placeholder="$.data.status" aria-label={t("JSON path")} maxLength={256} onChange={(e) => setAssert(i, { path: e.target.value })} />
-                <Select className="in" value={a.op as string} onChange={(v) => setAssert(i, { op: v as JsonAssertion["op"] })} label={t("Comparison")} options={JSON_OPS.map(([value, label]) => ({ value, label: t(label) }))} />
+                <Select className="in" value={a.op as string} onChange={(v) => setAssert(i, { op: v as JsonAssertion["op"], ...(TYPED.includes(v as JsonAssertion["op"]) ? {} : { type: undefined }) })} label={t("Comparison")} options={JSON_OPS.map(([value, label]) => ({ value, label: t(label) }))} />
+                {TYPED.includes(a.op) && <Select className="in" value={a.type ?? "any"} onChange={(v) => setAssert(i, { type: v as NonNullable<JsonAssertion["type"]> })} label={t("Value type")} options={JSON_TYPES.map(([value, label]) => ({ value, label: t(label) }))} />}
                 {!VALUELESS.includes(a.op) && <input className="in mono" style={{ flex: "1 1 100px", minWidth: 0 }} value={a.value} placeholder="ok" aria-label={t("Expected value")} maxLength={500} onChange={(e) => setAssert(i, { value: e.target.value })} />}
+                {f.type === "http" && (customStatus || f.acceptedStatuses || a.status) ? <input className="in mono" style={{ flex: "1 1 110px", minWidth: 0 }} value={a.status ?? ""} placeholder="2xx" aria-label={t("Only when the status is")} title={t("Only check responses with these statuses, such as 2xx or 200. Empty checks every healthy status.")} maxLength={200} onChange={(e) => setAssert(i, { status: e.target.value })} /> : null}
                 <button type="button" className="btn" onClick={() => setAsserts((x) => x.filter((_, j) => j !== i))}>{t("Remove")}</button>
               </div>
             ))}
             {asserts.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setAsserts((x) => [...x, { path: "", op: "equals", value: "" }])}>{t("Add assertion")}</button></div>}
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Numbers, true, false and null compare as typed. Up to 10.")}</span>
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Without a value type, 200 also matches the text \"200\" and true matches \"true\"; pick Text, Number or Boolean to compare strictly. When the monitor accepts several statuses, fill Only when the status is (such as 2xx) to skip an assertion for the others. Up to 10.")}</span>
           </div>
         )}
         {f.type === "http" && (
