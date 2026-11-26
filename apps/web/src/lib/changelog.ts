@@ -29,6 +29,14 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "status-page-favicon", date: "2026-11-26", edition: "community",
+    title: { en: "Status page logo loads again", zh: "状态页 logo 恢复显示" },
+    summary: { en: "A status page that shows your website's icon instead of the OpenUptime brand no longer shows a broken image.", zh: "隐藏 OpenUptime 品牌、改用你网站图标的状态页，不再显示裂图。" },
+    points: [
+      { en: "The icon service moved its images to another host, which the status page blocked; both hosts are now allowed.", zh: "图标服务把图片换到了另一个域名，被状态页拦截了；现在两个域名都已放行。" },
+    ],
+  },
+  {
     id: "skeleton-loading", date: "2026-11-26", edition: "community",
     title: { en: "Skeletons while pages load", zh: "页面加载显示骨架屏" },
     summary: { en: "Dashboard pages that showed a plain \"Loading…\" line now show a grey placeholder in the shape of the page.", zh: "之前只显示“加载中…”文字的后台页面，现在显示与页面形状一致的灰色骨架屏。" },

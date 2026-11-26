@@ -3,7 +3,7 @@ export const prerender = false;
 import Base from "../../layouts/Base.astro";
 import { apiFetch, PRODUCT_URL } from "../../lib/server";
 import { translate } from "../../lib/i18n";
-import { siteLogo } from "../../lib/brand";
+import { siteLogo, LOGO_IMG_HOSTS } from "../../lib/brand";
 
 type Status = {
   page: { title: string; slug: string; externalUrl?: string | null; hideBranding?: boolean; uptimeOkPct?: number; uptimeWarnPct?: number; customCss?: string | null };
@@ -76,7 +76,7 @@ const logo = siteLogo(data.page.externalUrl);
 // the owner's stylesheet was checked when it was saved; anything that could close the element is still kept out here
 const customCss = data.page.customCss && !/</.test(data.page.customCss) ? data.page.customCss : null;
 // images, fonts and media only from where the page itself loads them, so a stylesheet cannot reach anywhere else
-Astro.response.headers.set("content-security-policy", "img-src 'self' data: https://favicon.im; font-src 'self' data: https://fonts.gstatic.com; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+Astro.response.headers.set("content-security-policy", `img-src 'self' data: ${LOGO_IMG_HOSTS.join(" ")}; font-src 'self' data: https://fonts.gstatic.com; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`);
 Astro.response.headers.set("cache-control", privateResponse || hist.privateResponse || maint.privateResponse ? "private, no-store" : "public, max-age=30, s-maxage=30");
 ---
 <Base title={`${data.page.title} · Status`}>
