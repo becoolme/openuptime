@@ -171,6 +171,68 @@ export default function Alerting() {
               ))}
             </div>
           )}
+        <div className="card cc">
+          <div className="cc-h">
+            <h3>{t("Delivery log")}</h3>
+            <span className="faint" style={{ fontSize: 13 }}>{t("Kept for")} {days} {t("days")} · <a href="/app/settings">{t("Change")}</a></span>
+          </div>
+          {log === null && <SkeletonLines widths={["82%", "64%", "74%"]} />}
+          {log?.length === 0 && <p className="muted">{t("No alerts sent yet.")}</p>}
+          {log?.map((d) => {
+            const state = deliveryState(d);
+            const reason = deliveryReason(d);
+            return (
+              <div className="route" key={d.id} style={{ alignItems: "flex-start" }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <b style={{ fontWeight: 500 }}>{d.channelName}</b>
+                  <small>
+                    {d.kind === "test" ? t("Test alert") : d.kind === "incident.opened" ? t("Down alert") : d.kind === "incident.resolved" ? t("Recovery alert") : d.kind === "incident.reminder" ? t("Reminder") : d.kind === "incident.escalated" ? t("Escalation") : d.kind === "incident.muted" ? t("Down alert muted") : d.kind}
+                    {d.monitorName && d.kind !== "test" ? ` · ${d.monitorName}` : ""} · {ago(d.createdAt)}
+                  </small>
+                  {reason && d.kind !== "incident.muted" && <small className="mono" style={{ color: state === "failed" ? "var(--down)" : "var(--muted)", wordBreak: "break-word" }}>{reason.startsWith("skipped: email allowance") ? t("Skipped: email allowance used up for this period") : reason}</small>}
+                </div>
+                <span className={`pill ${stateClass(state)}`}>{t(state === "sent" ? "Sent" : state === "failed" ? "Failed" : state === "skipped" ? "Skipped" : state === "muted" ? "Muted" : state === "pending" ? "Pending" : "Sending")}</span>
+              </div>
+            );
+          })}
+        </div>
+        {rules && items && (
+          <div className="card cc">
+            <div className="cc-h"><h3>{t("Repeat and escalate")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Until the incident is acknowledged or resolved")}</span></div>
+            <label className="fld">{t("Repeat the alert")}
+              <select className="in" value={rules.reminderIntervalMin ?? ""} onChange={(e) => setRules({ ...rules, reminderIntervalMin: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">{t("Off")}</option>
+                {REPEATS.map((n) => <option key={n} value={n}>{t("Every")} {n} {t("min")}</option>)}
+              </select>
+            </label>
+            <p className="muted" style={{ margin: "0 0 10px" }}>{t("Repeats go to mobile app channels, at most 10 times.")}</p>
+            <button type="button" className="route tog" onClick={() => setRules({ ...rules, reminderEmail: !rules.reminderEmail })}>
+              <div><b style={{ fontWeight: 500 }}>{t("Repeat by email too")}</b><small>{t("Email channels get the repeats as well.")}</small></div>
+              <span className={`tg ${rules.reminderEmail ? "on" : ""}`} />
+            </button>
+            <h4 style={{ margin: "18px 0 6px" }}>{t("Escalation")}</h4>
+            <p className="muted" style={{ margin: "0 0 10px" }}>{t("If nobody has acknowledged the incident after the delay, also notify these channels. Up to 3 levels.")}</p>
+            {rules.escalation.map((st, i) => (
+              <div className="route" key={i} style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span>{t("After")}</span>
+                <input className="in" type="number" min={1} max={1440} style={{ width: 90 }} value={st.escalateAfterMin} onChange={(e) => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, escalateAfterMin: Number(e.target.value) } : x) })} />
+                <span>{t("min, notify")}</span>
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
+                  {items.map((c) => (
+                    <button type="button" key={c.id} className={`btn sm ${st.channelIds.includes(c.id) ? "primary" : ""}`} onClick={() => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, channelIds: x.channelIds.includes(c.id) ? x.channelIds.filter((id) => id !== c.id) : [...x.channelIds, c.id] } : x) })}>{c.name}</button>
+                  ))}
+                </span>
+                <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: rules.escalation.filter((_, j) => j !== i) })}>{t("Remove")}</button>
+              </div>
+            ))}
+            {rules.escalation.length < 3 && items.length > 0 && (
+              <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: [...rules.escalation, { escalateAfterMin: (rules.escalation.at(-1)?.escalateAfterMin ?? 0) + 15, channelIds: [items[0].id] }] })}>{t("+ Add level")}</button>
+            )}
+            {rulesErr && <p className="err">{rulesErr}</p>}
+            {rulesNote && <p className="ok-note">{rulesNote}</p>}
+            <div className="formact"><button type="button" className="btn primary sm" disabled={savingRules} onClick={saveRules}>{savingRules ? t("Saving…") : t("Save changes")}</button></div>
+          </div>
+          )}
         </div>
         <div className="col">
           <div className="card cc">
@@ -181,70 +243,6 @@ export default function Alerting() {
           </div>
         </div>
       </div>
-
-      <div className="card cc" style={{ marginTop: 22 }}>
-        <div className="cc-h">
-          <h3>{t("Delivery log")}</h3>
-          <span className="faint" style={{ fontSize: 13 }}>{t("Kept for")} {days} {t("days")} · <a href="/app/settings">{t("Change")}</a></span>
-        </div>
-        {log === null && <SkeletonLines widths={["82%", "64%", "74%"]} />}
-        {log?.length === 0 && <p className="muted">{t("No alerts sent yet.")}</p>}
-        {log?.map((d) => {
-          const state = deliveryState(d);
-          const reason = deliveryReason(d);
-          return (
-            <div className="route" key={d.id} style={{ alignItems: "flex-start" }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <b style={{ fontWeight: 500 }}>{d.channelName}</b>
-                <small>
-                  {d.kind === "test" ? t("Test alert") : d.kind === "incident.opened" ? t("Down alert") : d.kind === "incident.resolved" ? t("Recovery alert") : d.kind === "incident.reminder" ? t("Reminder") : d.kind === "incident.escalated" ? t("Escalation") : d.kind === "incident.muted" ? t("Down alert muted") : d.kind}
-                  {d.monitorName && d.kind !== "test" ? ` · ${d.monitorName}` : ""} · {ago(d.createdAt)}
-                </small>
-                {reason && d.kind !== "incident.muted" && <small className="mono" style={{ color: state === "failed" ? "var(--down)" : "var(--muted)", wordBreak: "break-word" }}>{reason.startsWith("skipped: email allowance") ? t("Skipped: email allowance used up for this period") : reason}</small>}
-              </div>
-              <span className={`pill ${stateClass(state)}`}>{t(state === "sent" ? "Sent" : state === "failed" ? "Failed" : state === "skipped" ? "Skipped" : state === "muted" ? "Muted" : state === "pending" ? "Pending" : "Sending")}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {rules && items && (
-        <div className="card cc" style={{ marginTop: 22 }}>
-          <div className="cc-h"><h3>{t("Repeat and escalate")}</h3><span className="faint" style={{ fontSize: 13 }}>{t("Until the incident is acknowledged or resolved")}</span></div>
-          <label className="fld">{t("Repeat the alert")}
-            <select className="in" value={rules.reminderIntervalMin ?? ""} onChange={(e) => setRules({ ...rules, reminderIntervalMin: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">{t("Off")}</option>
-              {REPEATS.map((n) => <option key={n} value={n}>{t("Every")} {n} {t("min")}</option>)}
-            </select>
-          </label>
-          <p className="muted" style={{ margin: "0 0 10px" }}>{t("Repeats go to mobile app channels, at most 10 times.")}</p>
-          <button type="button" className="route tog" onClick={() => setRules({ ...rules, reminderEmail: !rules.reminderEmail })}>
-            <div><b style={{ fontWeight: 500 }}>{t("Repeat by email too")}</b><small>{t("Email channels get the repeats as well.")}</small></div>
-            <span className={`tg ${rules.reminderEmail ? "on" : ""}`} />
-          </button>
-          <h4 style={{ margin: "18px 0 6px" }}>{t("Escalation")}</h4>
-          <p className="muted" style={{ margin: "0 0 10px" }}>{t("If nobody has acknowledged the incident after the delay, also notify these channels. Up to 3 levels.")}</p>
-          {rules.escalation.map((st, i) => (
-            <div className="route" key={i} style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span>{t("After")}</span>
-              <input className="in" type="number" min={1} max={1440} style={{ width: 90 }} value={st.escalateAfterMin} onChange={(e) => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, escalateAfterMin: Number(e.target.value) } : x) })} />
-              <span>{t("min, notify")}</span>
-              <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
-                {items.map((c) => (
-                  <button type="button" key={c.id} className={`btn sm ${st.channelIds.includes(c.id) ? "primary" : ""}`} onClick={() => setRules({ ...rules, escalation: rules.escalation.map((x, j) => j === i ? { ...x, channelIds: x.channelIds.includes(c.id) ? x.channelIds.filter((id) => id !== c.id) : [...x.channelIds, c.id] } : x) })}>{c.name}</button>
-                ))}
-              </span>
-              <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: rules.escalation.filter((_, j) => j !== i) })}>{t("Remove")}</button>
-            </div>
-          ))}
-          {rules.escalation.length < 3 && items.length > 0 && (
-            <button type="button" className="btn sm" onClick={() => setRules({ ...rules, escalation: [...rules.escalation, { escalateAfterMin: (rules.escalation.at(-1)?.escalateAfterMin ?? 0) + 15, channelIds: [items[0].id] }] })}>{t("+ Add level")}</button>
-          )}
-          {rulesErr && <p className="err">{rulesErr}</p>}
-          {rulesNote && <p className="ok-note">{rulesNote}</p>}
-          <div className="formact"><button type="button" className="btn primary sm" disabled={savingRules} onClick={saveRules}>{savingRules ? t("Saving…") : t("Save changes")}</button></div>
-        </div>
-      )}
 
       {adding && (
         <Modal as="form" onClose={() => setAdding(false)} onSubmit={add} title={editId ? t("Edit channel") : t("Add a channel")}>

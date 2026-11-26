@@ -1,5 +1,6 @@
 import { t } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
+import { SkeletonRows } from "@openuptime/ui/skeleton";
 import { useBusy } from "@openuptime/ui/use-busy";
 import { authClient } from "../lib/auth-client";
 import { api } from "../lib/api";
@@ -58,11 +59,14 @@ export default function Team() {
   const [removing, setRemoving] = useState("");
   const [canceling, setCanceling] = useState("");
   const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const load = async () => {
-    const res = await authClient.organization.getFullOrganization({ query: { organizationId: await orgId() } });
-    const o = res.data as { members?: Member[]; invitations?: Invite[] } | null;
-    setMembers(o?.members ?? []);
-    setInvites((o?.invitations ?? []).filter((i) => i.status === "pending" && (!i.expiresAt || new Date(i.expiresAt).getTime() > Date.now())));
+    try {
+      const res = await authClient.organization.getFullOrganization({ query: { organizationId: await orgId() } });
+      const o = res.data as { members?: Member[]; invitations?: Invite[] } | null;
+      setMembers(o?.members ?? []);
+      setInvites((o?.invitations ?? []).filter((i) => i.status === "pending" && (!i.expiresAt || new Date(i.expiresAt).getTime() > Date.now())));
+    } finally { setLoaded(true); }
   };
   useEffect(() => { load(); }, []);
 
@@ -104,6 +108,7 @@ export default function Team() {
         <div className="col">
           <div className="card tbl">
             <div className="tr th tm-tr"><span>{t("Name")}</span><span>{t("Role")}</span><span /></div>
+            {!loaded && <SkeletonRows cols={3} rows={3} rowClassName="tr tm-tr" />}
             {members.map((m) => (
               <div className="tr tm-tr" key={m.id}>
                 <div className="nm"><span className="av">{initial(m.user.name || m.user.email)}</span><div><b style={{ fontWeight: 600 }}>{m.user.name}</b><small>{m.user.email}</small></div></div>
