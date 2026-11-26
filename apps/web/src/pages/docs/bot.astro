@@ -39,6 +39,7 @@ import Doc from "../../layouts/Doc.astro";
     <p>A self-hosted install and your own <a href="/docs/regions">probes</a> sign their requests only when you give them a key. Create an Ed25519 key, set <code>CHECK_SIGNING_KEY</code> to its private half as a one-line JWK and <code>CHECK_SIGNATURE_AGENT</code> to the https origin that serves it. The API then answers <code>/.well-known/http-message-signatures-directory</code> on that origin with the public key. Without both variables, checks go out unsigned, as before. <code>CHECK_USER_AGENT</code> changes the User-Agent.</p>
     <h2 id="contact">Contact</h2>
     <p>Questions about the bot, or a request to stop checking an address: <a href="mailto:hi@openuptime.app">hi@openuptime.app</a>.</p>
+    <p>OpenUptime is also listed in the <a href="https://radar.cloudflare.com/bots/directory/openuptime">Cloudflare Radar bots directory</a>.</p>
   </div>
   <div lang="zh-CN">
     <h1>OpenUptime 检测机器人</h1>
@@ -77,5 +78,6 @@ import Doc from "../../layouts/Doc.astro";
     <p>自托管实例和你自建的<a href="/docs/regions">探针</a>只有在你提供密钥时才会为请求签名。生成一个 Ed25519 密钥，把 <code>CHECK_SIGNING_KEY</code> 设为其私钥（单行 JWK），把 <code>CHECK_SIGNATURE_AGENT</code> 设为提供密钥目录的 https 来源。API 随后会在该来源的 <code>/.well-known/http-message-signatures-directory</code> 返回公钥。两个变量缺一，检测都会和以前一样不带签名发出。<code>CHECK_USER_AGENT</code> 可修改 User-Agent。</p>
     <h2 id="contact-zh">联系方式</h2>
     <p>关于机器人的问题，或希望停止检测某个地址：<a href="mailto:hi@openuptime.app">hi@openuptime.app</a>。</p>
+    <p>OpenUptime 也收录在 <a href="https://radar.cloudflare.com/bots/directory/openuptime">Cloudflare Radar 机器人目录</a>中。</p>
   </div>
 </Doc>
