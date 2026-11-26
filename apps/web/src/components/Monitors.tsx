@@ -577,6 +577,18 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
                 <Select className="in mono" value={customStatus ? 0 : f.expectedStatus} onChange={(v) => { setCustomStatus(v === 0); if (v !== 0) set("expectedStatus", v); }} options={[...statusOptions(f.expectedStatus), { value: 0, label: t("Custom list or range…") }]} />
               </label>
             )}
+            {f.type === "http" && customStatus && (
+              <label className="fld" style={{ gridColumn: "1 / -1" }}>{t("Healthy statuses")}
+                <input className="in mono" value={f.acceptedStatuses} onChange={(e) => set("acceptedStatuses", e.target.value)} maxLength={200} placeholder="200-299,401" required />
+                <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.")}</span>
+              </label>
+            )}
+            {f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && (
+              <label className="fld" style={{ gridColumn: "1 / -1" }}>{t("Redirect must lead to (optional)")}
+                <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />
+                <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{customStatus ? t("Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.") : t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
+              </label>
+            )}
             <label className="fld">{t("Failures before incident")}
               <Select className="in" value={f.failureThreshold} onChange={(v) => set("failureThreshold", v)} options={[1, 2, 3, 5, 10].map((n) => ({ value: n, label: String(n) }))} />
             </label>
@@ -593,18 +605,6 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           <Select className="in" value={f.recoveryThreshold} onChange={(v) => set("recoveryThreshold", v)} options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
           <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.")}</span>
         </label>
-        {f.type === "http" && customStatus && (
-          <label className="fld">{t("Healthy statuses")}
-            <input className="in mono" value={f.acceptedStatuses} onChange={(e) => set("acceptedStatuses", e.target.value)} maxLength={200} placeholder="200-299,401" required />
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.")}</span>
-          </label>
-        )}
-        {f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && (
-          <label className="fld">{t("Redirect must lead to (optional)")}
-            <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{customStatus ? t("Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.") : t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
-          </label>
-        )}
         {f.type === "dns" && <>
           <label className="fld">{t("DNS record type")}
             <Select className="in" value={f.dnsRecordType} onChange={(v) => set("dnsRecordType", v)} options={(["A", "AAAA", "CNAME", "MX", "TXT", "NS"] as const).map((v) => ({ value: v, label: v }))} />
