@@ -29,6 +29,16 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "usage-cards-team-skeleton", date: "2026-11-26", edition: "community",
+    title: { en: "Roomier usage cards, team skeleton", zh: "用量卡片更宽松，团队页骨架屏" },
+    summary: { en: "The Plan & usage cards are no longer squeezed into one row, and the Team page shows a placeholder while it loads.", zh: "套餐与用量的卡片不再挤成一行，团队页加载时显示骨架屏。" },
+    points: [
+      { en: "Each allowance card stacks its label, figure, bar and note again, so long labels such as Servers no longer wrap one character per line.", zh: "每张额度卡片恢复为标签、数字、进度条、说明自上而下排列，“服务器”这类标签不再被挤成逐字换行。" },
+      { en: "The reset date follows the interface language, for example 12月11日 in Chinese.", zh: "重置日期跟随界面语言，例如中文显示为“12月11日”。" },
+      { en: "The Team member list and the Plan & usage page show grey placeholders while loading.", zh: "团队成员列表和“套餐与用量”页加载时显示灰色骨架屏。" },
+    ],
+  },
+  {
     id: "status-page-favicon", date: "2026-11-26", edition: "community",
     title: { en: "Status page logo loads again", zh: "状态页 logo 恢复显示" },
     summary: { en: "A status page that shows your website's icon instead of the OpenUptime brand no longer shows a broken image.", zh: "隐藏 OpenUptime 品牌、改用你网站图标的状态页，不再显示裂图。" },
