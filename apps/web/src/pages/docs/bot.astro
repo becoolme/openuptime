@@ -1,7 +1,7 @@
 ---
 import Doc from "../../layouts/Doc.astro";
 ---
-<Doc titleZh="OpenUptime 检测机器人" descriptionZh="OpenUptime 的检测请求是什么、如何用 Web Bot Auth 验证它们来自 OpenUptime，以及如何在防火墙或 Bot 过滤中放行。" description="What OpenUptime's check requests are, how to verify them with Web Bot Auth, and how to allow them through a firewall or bot filter." title="The OpenUptime check bot" updated="2026-11-25" toc>
+<Doc titleZh="OpenUptime 检测机器人" descriptionZh="OpenUptime 的检测请求是什么、如何用 Web Bot Auth 验证它们来自 OpenUptime，以及如何在防火墙或 Bot 过滤中放行。" description="What OpenUptime's check requests are, how to verify them with Web Bot Auth, and how to allow them through a firewall or bot filter." title="The OpenUptime check bot" updated="2026-11-26" toc>
   <div lang="en">
     <h1>The OpenUptime check bot</h1>
     <p class="lede">OpenUptime is an uptime monitoring service. Its checker sends HTTP requests to addresses that its users have added as monitors, to find out whether those addresses are up. It does not crawl, it does not follow links to other sites and it does not collect page content for any other purpose.</p>
@@ -27,6 +27,13 @@ import Doc from "../../layouts/Doc.astro";
     <ul>
       <li><strong>Cloudflare:</strong> a verified bot is not challenged by Bot Fight Mode or Super Bot Fight Mode. To allow it explicitly, add a WAF custom rule that matches <code>cf.bot_management.verified_bot</code> (or the Verified Bots field in the rule builder) together with the User-Agent containing <code>OpenUptime</code>.</li>
       <li><strong>Other filters:</strong> verify the signature as described above, or allow the User-Agent <code>OpenUptime/</code> for the monitored path only. Allowing by User-Agent alone lets anyone who copies it through.</li>
+    </ul>
+    <h2 id="robots">robots.txt and blocking the bot</h2>
+    <p>The check bot does not read or follow <code>robots.txt</code>. That file is a convention for crawlers, which decide for themselves which pages to visit. A monitor requests only the one address its owner entered, so a <code>Disallow</code> rule does not stop it.</p>
+    <p>To stop the checks, use one of these:</p>
+    <ul>
+      <li>Ask the person who added the monitor to remove it, or write to <a href="mailto:hi@openuptime.app">hi@openuptime.app</a> with the address and we will remove it.</li>
+      <li>Refuse the requests at your server or firewall. Match the User-Agent that starts with <code>OpenUptime/</code>, or, more reliably, the header <code>Signature-Agent: "https://openuptime.app"</code> after checking the signature as described above. The owner will see the monitor failing, which tells them the address does not want to be checked.</li>
     </ul>
     <h2 id="selfhost">Running your own copy</h2>
     <p>A self-hosted install and your own <a href="/docs/regions">probes</a> sign their requests only when you give them a key. Create an Ed25519 key, set <code>CHECK_SIGNING_KEY</code> to its private half as a one-line JWK and <code>CHECK_SIGNATURE_AGENT</code> to the https origin that serves it. The API then answers <code>/.well-known/http-message-signatures-directory</code> on that origin with the public key. Without both variables, checks go out unsigned, as before. <code>CHECK_USER_AGENT</code> changes the User-Agent.</p>
@@ -58,6 +65,13 @@ import Doc from "../../layouts/Doc.astro";
     <ul>
       <li><strong>Cloudflare：</strong>已验证的机器人不会被 Bot Fight Mode 或 Super Bot Fight Mode 拦截。若要显式放行，可添加 WAF 自定义规则，匹配 <code>cf.bot_management.verified_bot</code>（或规则构建器中的 Verified Bots 字段），并要求 User-Agent 包含 <code>OpenUptime</code>。</li>
       <li><strong>其他过滤器：</strong>按上文验证签名，或仅针对被监控的路径放行 User-Agent <code>OpenUptime/</code>。只按 User-Agent 放行，会让任何仿冒它的人通过。</li>
+    </ul>
+    <h2 id="robots-zh">robots.txt 与如何拦截机器人</h2>
+    <p>检测机器人不会读取或遵守 <code>robots.txt</code>。这个文件是给爬虫的约定，爬虫自己决定要访问哪些页面；而监控项只请求其所有者填写的那一个地址，所以 <code>Disallow</code> 规则拦不住它。</p>
+    <p>如果希望停止检测，可以：</p>
+    <ul>
+      <li>请添加该监控项的人把它删除，或写信到 <a href="mailto:hi@openuptime.app">hi@openuptime.app</a> 并附上地址，我们会将其移除。</li>
+      <li>在你的服务器或防火墙拒绝这些请求。可以匹配以 <code>OpenUptime/</code> 开头的 User-Agent，或者更可靠地，在按上文方法验证签名后匹配头 <code>Signature-Agent: "https://openuptime.app"</code>。所有者会看到该监控项检测失败，从而知道这个地址不希望被检测。</li>
     </ul>
     <h2 id="selfhost-zh">运行你自己的实例</h2>
     <p>自托管实例和你自建的<a href="/docs/regions">探针</a>只有在你提供密钥时才会为请求签名。生成一个 Ed25519 密钥，把 <code>CHECK_SIGNING_KEY</code> 设为其私钥（单行 JWK），把 <code>CHECK_SIGNATURE_AGENT</code> 设为提供密钥目录的 https 来源。API 随后会在该来源的 <code>/.well-known/http-message-signatures-directory</code> 返回公钥。两个变量缺一，检测都会和以前一样不带签名发出。<code>CHECK_USER_AGENT</code> 可修改 User-Agent。</p>

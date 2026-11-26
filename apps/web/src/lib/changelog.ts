@@ -29,6 +29,19 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "check-bot-robots-policy", date: "2026-11-26", edition: "community",
+    title: { en: "Check bot: robots.txt and blocking", zh: "检测机器人：robots.txt 与拦截" },
+    summary: {
+      en: "The check bot page now says that checks do not read robots.txt, and how a site owner can stop them.",
+      zh: "检测机器人文档现在说明检测不读取 robots.txt，以及网站所有者如何让检测停止。",
+    },
+    points: [
+      { en: "Checks request only the address a monitor owner entered and do not follow robots.txt rules.", zh: "检测只请求监控项所有者填写的地址，不遵守 robots.txt 规则。" },
+      { en: "A site can have a monitor removed by writing to hi@openuptime.app, or refuse the requests by User-Agent or by their Web Bot Auth signature.", zh: "网站可以写信到 hi@openuptime.app 请求移除监控项，也可以按 User-Agent 或 Web Bot Auth 签名拒绝这些请求。" },
+    ],
+    link: { href: "/docs/bot#robots", label: { en: "Read about the check bot", zh: "阅读检测机器人说明" } },
+  },
+  {
     id: "web-bot-auth", date: "2026-11-25", edition: "community",
     title: { en: "HTTP checks sign their requests", zh: "HTTP 检测请求带签名" },
     summary: {
