@@ -391,6 +391,8 @@ const statusOptions = (current: number) =>
 
 const JSON_OPS: [JsonAssertion["op"], string][] = [["equals", "equals"], ["not_equals", "does not equal"], ["contains", "contains"], ["exists", "exists"], ["not_exists", "does not exist"], ["greater_than", "greater than"], ["less_than", "less than"]];
 const VALUELESS: JsonAssertion["op"][] = ["exists", "not_exists"];
+/** Whether a status list can accept more than one status: a comma, a range, a class such as 2xx, or an exclusion. */
+export const acceptsSeveral = (list: string) => /[,\-!]|xx/i.test(list);
 const TYPED: JsonAssertion["op"][] = ["equals", "not_equals", "contains"];
 const JSON_TYPES: [NonNullable<JsonAssertion["type"]>, string][] = [["any", "Any type"], ["string", "Text"], ["number", "Number"], ["boolean", "Boolean"]];
 const API_FLOW_EXAMPLE = JSON.stringify({
@@ -466,6 +468,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
   const choices = [...places, ...(monitor?.regions ?? []).filter((r) => !known.has(r)).map((id) => ({ id, name: id }))];
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
+  // one expected status leaves nothing to tell apart, so per-assertion status limits only show for a list that takes several
+  const several = customStatus && acceptsSeveral(f.acceptedStatuses);
   const isPattern = f.keywordMode === "matches" || f.keywordMode === "not_matches";
 
   const previewRegion = f.regions[0] ?? "auto";
@@ -645,7 +649,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
                 <Select className="in" value={a.op as string} onChange={(v) => setAssert(i, { op: v as JsonAssertion["op"], ...(TYPED.includes(v as JsonAssertion["op"]) ? {} : { type: undefined }) })} label={t("Comparison")} options={JSON_OPS.map(([value, label]) => ({ value, label: t(label) }))} />
                 {TYPED.includes(a.op) && <Select className="in" value={a.type ?? "any"} onChange={(v) => setAssert(i, { type: v as NonNullable<JsonAssertion["type"]> })} label={t("Value type")} options={JSON_TYPES.map(([value, label]) => ({ value, label: t(label) }))} />}
                 {!VALUELESS.includes(a.op) && <input className="in mono" style={{ flex: "1 1 100px", minWidth: 0 }} value={a.value} placeholder="ok" aria-label={t("Expected value")} maxLength={500} onChange={(e) => setAssert(i, { value: e.target.value })} />}
-                {f.type === "http" && (customStatus || f.acceptedStatuses || a.status) ? <input className="in mono" style={{ flex: "1 1 110px", minWidth: 0 }} value={a.status ?? ""} placeholder="2xx" aria-label={t("Only when the status is")} title={t("Only check responses with these statuses, such as 2xx or 200. Empty checks every healthy status.")} maxLength={200} onChange={(e) => setAssert(i, { status: e.target.value })} /> : null}
+                {f.type === "http" && (several || a.status) ? <input className="in mono" style={{ flex: "1 1 110px", minWidth: 0 }} value={a.status ?? ""} placeholder="2xx" aria-label={t("Only when the status is")} title={t("Only check responses with these statuses, such as 2xx or 200. Empty checks every healthy status.")} maxLength={200} onChange={(e) => setAssert(i, { status: e.target.value })} /> : null}
                 <button type="button" className="btn" onClick={() => setAsserts((x) => x.filter((_, j) => j !== i))}>{t("Remove")}</button>
               </div>
             ))}
