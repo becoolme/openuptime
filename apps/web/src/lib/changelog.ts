@@ -49,6 +49,8 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       zh: "设置 CHECK_SIGNING_KEY（单行 JWK 形式的 Ed25519 私钥）和 CHECK_SIGNATURE_AGENT（提供密钥目录的 https 来源）之前不会签名，API 和各个探针都需要设置；不设置则检测不带签名。",
     },
     link: { href: "/docs/bot", label: { en: "Read about the check bot", zh: "阅读检测机器人文档" } },
+  },
+  {
     id: "alert-delivery-write-failures", date: "2026-11-20", edition: "community",
     title: { en: "Alerts survive a database write failure", zh: "数据库写入失败时告警仍会发出" },
     summary: {
