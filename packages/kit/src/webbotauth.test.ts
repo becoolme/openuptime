@@ -1,5 +1,6 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { verify as referenceVerify } from "web-bot-auth";
 import { guardedFetch } from "./netguard";
 import { DIRECTORY_CONTENT_TYPE, agentOrigin, configureWebBotAuth, directoryResponse, signRequest, thumbprint, b64url } from "./webbotauth";
 
@@ -54,6 +55,19 @@ describe("web bot auth", () => {
     warn.mockRestore();
     expect(agentOrigin("https://bot.example.com/path")).toBe("https://bot.example.com");
     expect(agentOrigin("https://u:p@bot.example.com")).toBeNull();
+  });
+});
+
+describe("interoperability with Cloudflare's reference verifier", () => {
+  it("accepts a signed request, and a request whose host was changed is refused", async () => {
+    const keyid = await thumbprint(jwk.x);
+    const verifier = { algorithm: "ed25519" as const, keyid, verify: (data: Uint8Array, sig: Uint8Array) => verify(null, data, pub, sig) };
+    const url = "https://target.example.org/health";
+    const headers = (await signRequest(new URL(url)))!;
+    const ok = await referenceVerify(new Request(url, { headers }), { resolver: () => verifier });
+    expect(ok.keyid).toBe(keyid);
+    expect(ok.tag).toBe("web-bot-auth");
+    await expect(referenceVerify(new Request("https://other.example.org/health", { headers }), { resolver: () => verifier })).rejects.toThrow();
   });
 });
 
