@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { deliver } from "../alerts";
 import { apnsConfigured } from "../apns";
+import { webPushConfigured } from "../webpush";
 import type { AppEnv } from "../env";
 import { isManager, requireManager, uuidParams } from "../middleware";
 import { urlProblem } from "../netguard";
@@ -73,7 +74,7 @@ export const channels = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await shown(c, await c.get("repo").listChannels(c.get("orgId"), c.get("projectId")))))
   .post("/", zValidator("json", body), async (c) => {
     const v = c.req.valid("json");
-    if (v.type === "push" && !apnsConfigured()) return c.json({ error: "Push notifications are not set up on this server. Configure APNs first (see the self-hosting docs).", code: "push_not_configured" }, 400);
+    if (v.type === "push" && !apnsConfigured() && !webPushConfigured()) return c.json({ error: "Push notifications are not set up on this server. Configure browser push keys or APNs first (see the self-hosting docs).", code: "push_not_configured" }, 400);
     const cfg = parseConfig(v.type, v.config);
     if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
     const refused = await configProblem(cfg.data);

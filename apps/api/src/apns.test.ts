@@ -16,7 +16,7 @@ const env = () => ({ APNS_KEY: pem, APNS_KEY_ID: "KEYID12345", APNS_TEAM_ID: "TE
 const TOKEN_A = "a".repeat(64);
 const TOKEN_B = "b".repeat(64);
 const device = (token: string, over: Partial<PushDevice> = {}): PushDevice => ({
-  id: crypto.randomUUID(), userId: "u", token, platform: "ios", environment: "production", locale: null, name: null, critical: false, createdAt: new Date(), lastSeenAt: new Date(), ...over,
+  id: crypto.randomUUID(), userId: "u", token, platform: "ios", environment: "production", locale: null, name: null, critical: false, p256dh: null, auth: null, createdAt: new Date(), lastSeenAt: new Date(), ...over,
 });
 const ev = { kind: "incident.opened" as const, incident: { id: "11111111-1111-1111-1111-111111111111", title: "API is down" }, monitor: { id: "m1", name: "API", target: "https://api.example.com" }, reason: "HTTP 503" };
 

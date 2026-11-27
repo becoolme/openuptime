@@ -2,6 +2,7 @@ import { openDatabase } from "@openuptime/db-pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { setApnsTransport, type ApnsRequest } from "./apns";
+import { b64url } from "./webpush";
 
 const url = process.env.TEST_DATABASE_URL;
 const ORIGIN = "http://localhost:8787";
@@ -43,9 +44,9 @@ describe.skipIf(!url)("push devices and the push channel", () => {
 
   it("reports the capability without exposing more than a boolean", async () => {
     const off = (await (await raw(base, "/api/config")).json()) as any;
-    expect(off.push).toEqual({ apns: false });
+    expect(off.push).toEqual({ apns: false, web: false, webKey: null });
     const on = (await (await raw(configured, "/api/config")).json()) as any;
-    expect(on.push).toEqual({ apns: true });
+    expect(on.push).toEqual({ apns: true, web: false, webKey: null });
     // sign-in providers are unchanged
     expect(Object.keys((await (await raw(configured, "/api/auth-providers")).json()) as object).sort()).toEqual(["github", "legal", "signup", "turnstileSiteKey"]);
   });
@@ -124,6 +125,36 @@ describe.skipIf(!url)("push devices and the push channel", () => {
     const made = await sql<{ name: string; enabled: boolean; auto_enable: boolean; project_id: string | null }>("select name, enabled, auto_enable, project_id from alert_channel where type = 'push' and organization_id = $1", [home]);
     expect(made).toEqual([{ name: "Mobile app", enabled: true, auto_enable: true, project_id: null }]);
     expect(await sql("select 1 from alert_channel where type = 'push' and organization_id = $1", [other[0].id])).toHaveLength(0);
+  });
+
+  it("registers a browser, creates the Push notifications channel when Web Push is configured, and unsubscribes", async () => {
+    const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+    const vapidEnv = { ...base, VAPID_PUBLIC_KEY: b64url(new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey))), VAPID_PRIVATE_KEY: (await crypto.subtle.exportKey("jwk", pair.privateKey)).d! };
+    expect(((await (await raw(vapidEnv, "/api/config")).json()) as any).push).toEqual({ apns: false, web: true, webKey: vapidEnv.VAPID_PUBLIC_KEY });
+
+    const u = await signUp("browser");
+    const sub = { p256dh: b64url(new Uint8Array(65).fill(4)), auth: b64url(new Uint8Array(16).fill(7)) };
+    const endpoint = `https://push.example.com/send/${tok()}`;
+    const body = { platform: "web", endpoint, keys: sub, locale: "zh-CN", name: "Chrome on Mac" };
+
+    // without VAPID keys the device is stored but no channel appears
+    expect((await call(base, u, "PUT", "/push/devices", body)).status).toBe(200);
+    const [{ organization_id: org }] = await sql<{ organization_id: string }>("select organization_id from member where user_id = $1", [u.id]);
+    expect(await sql("select 1 from alert_channel where type = 'push' and organization_id = $1", [org])).toHaveLength(0);
+
+    const put = await call(vapidEnv, u, "PUT", "/push/devices", body);
+    expect(put.status).toBe(200);
+    expect(put.body).toMatchObject({ platform: "web", token: endpoint, locale: "zh-CN", name: "Chrome on Mac" });
+    const made = await sql<{ name: string }>("select name from alert_channel where type = 'push' and organization_id = $1", [org]);
+    expect(made).toEqual([{ name: "Push notifications" }]);
+    expect((await sql<{ p256dh: string; auth: string }>("select p256dh, auth from push_device where token = $1", [endpoint]))[0]).toEqual(sub);
+
+    for (const bad of [{ ...body, endpoint: "http://push.example.com/x" }, { ...body, keys: { p256dh: "x", auth: sub.auth } }, { ...body, keys: undefined }, { ...body, endpoint: `https://x.example/${"a".repeat(2100)}` }]) {
+      expect((await call(vapidEnv, u, "PUT", "/push/devices", bad)).status).toBe(400);
+    }
+
+    expect((await call(vapidEnv, u, "POST", "/push/devices/unsubscribe", { endpoint })).status).toBe(204);
+    expect((await call(vapidEnv, u, "GET", "/push/devices")).body).toEqual([]);
   });
 
   it("refuses to create a push channel when APNs is not configured", async () => {

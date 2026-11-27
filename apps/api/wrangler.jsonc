@@ -38,6 +38,7 @@
     // "LEGAL_LINKS": "true",  // sign-up says "you agree to the Terms / Privacy" (replace the bundled /terms and /privacy first)
     // "TURNSTILE_SITE_KEY": "0x4AAA…",  // Cloudflare Turnstile on sign-up; also `wrangler secret put TURNSTILE_SECRET_KEY`
     // "ALLOW_PRIVATE_TARGETS": "true",  // monitors / webhooks may target private addresses (default: refused)
+    // browser push: "VAPID_PUBLIC_KEY" and "VAPID_SUBJECT" may go here; put the private key with `wrangler secret put VAPID_PRIVATE_KEY`
     // iOS push (APNs): "APNS_KEY_ID", "APNS_TEAM_ID", "APNS_BUNDLE_ID" may go here; put the .p8 with `wrangler secret put APNS_KEY`
     // "CHECK_USER_AGENT": "OpenUptime/0.1 (+https://status.example.com)",
     // Web Bot Auth: "CHECK_SIGNATURE_AGENT": "https://status.example.com" here, and `wrangler secret put CHECK_SIGNING_KEY` (Ed25519 JWK)

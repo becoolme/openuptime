@@ -279,7 +279,7 @@ export const pushDevice = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-    /** the APNs device token (hex); one device is one row, whoever registered it last owns it */
+    /** the APNs device token (hex), or a browser's push endpoint URL; one device is one row, whoever registered it last owns it */
     token: text("token").notNull(),
     platform: text("platform").notNull().default("ios"),
     /** sandbox | production: which APNs host the token belongs to */
@@ -288,6 +288,9 @@ export const pushDevice = pgTable(
     name: text("name"),
     /** opted in to critical alerts: a "down" push may break through Do Not Disturb */
     critical: boolean("critical").notNull().default(false),
+    /** browser subscriptions (platform "web"): `token` holds the push endpoint URL, these its encryption keys (base64url) */
+    p256dh: text("p256dh"),
+    auth: text("auth"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },

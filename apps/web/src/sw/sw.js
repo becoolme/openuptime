@@ -6,6 +6,8 @@
 //      build, downloaded while the worker waits to activate, so an update opens fast and the app shell opens offline.
 //   3. Answers a back-office page navigation with the cached shell (the client router renders the right page), or a
 //      small offline page when there is neither a cache nor a network.
+//   4. Shows browser push notifications (alerts) and opens the incident when one is clicked. The message is
+//      encrypted for this browser by the server; the worker only displays what it carries and fetches nothing.
 //
 // What it must never do: touch data. The cache holds only the URLs in PRECACHE, which the build lists from /_astro and
 // the shell, and they are written once, at install. The fetch handler reads from the cache only for those exact URLs.
@@ -56,6 +58,50 @@ self.addEventListener("fetch", (event) => {
   }
   // exact, build-listed files only; anything else (including every /api call) falls through untouched
   if (ASSETS.has(url.pathname)) event.respondWith(asset(request, url));
+});
+
+// ---- browser push ----------------------------------------------------------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = {};
+  }
+  const text = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
+  const title = text(data.title, 200) || "OpenUptime";
+  const options = {
+    body: text(data.body, 400),
+    icon: "/icons/pwa-192.png",
+    badge: "/icons/pwa-192.png",
+    // one notification per monitor: a recovery replaces the "down" it follows instead of stacking up
+    tag: text(data.tag, 100) || undefined,
+    renotify: true,
+    data: { url: text(data.url, 2000) },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  // only this site's own pages: the payload is ours, but a click never navigates somewhere else
+  let target = SHELL;
+  try {
+    const raw = event.notification.data && event.notification.data.url;
+    const u = new URL(typeof raw === "string" && raw ? raw : SHELL, self.location.origin);
+    if (u.origin === self.location.origin) target = u.pathname + u.search + u.hash;
+  } catch (e) {
+    target = SHELL;
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (open && open.navigate) return open.navigate(target).then((w) => (w || open).focus());
+      if (open) return open.focus();
+      return self.clients.openWindow(target);
+    }),
+  );
 });
 
 async function precache() {

@@ -48,6 +48,10 @@ services:
       # remote probes for multi-region checks (apps/probe): JSON of region id -> URL, and the secret both sides share
       PROBE_REGIONS: ${PROBE_REGIONS:-}
       PROBE_SECRET: ${PROBE_SECRET:-}
+      # browser push notifications (Web Push); both keys needed, see /docs/self-host#web-push
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # iOS push notifications (APNs); all four needed, see /docs/self-host#apns
       APNS_KEY: ${APNS_KEY:-}
       APNS_KEY_ID: ${APNS_KEY_ID:-}

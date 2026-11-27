@@ -40,7 +40,17 @@ function load(opts: { files?: string[]; language?: string; existingCaches?: Reco
   let net: Net = async (req) => new Response("live:" + new URL(req.url).pathname);
   const listeners: Record<string, Listener> = {};
   let skipped = 0;
+  const shown: { title: string; options: any }[] = [];
+  const opened: string[] = [];
+  const navigated: string[] = [];
+  let windows: { url: string; navigate?: (u: string) => Promise<any>; focus: () => Promise<any> }[] = [];
+  const clients = {
+    matchAll: async () => windows,
+    openWindow: async (u: string) => void opened.push(u),
+  };
   const self = {
+    registration: { showNotification: async (title: string, options: any) => void shown.push({ title, options }) },
+    clients,
     location: { origin: "https://app.example" },
     navigator: { language: opts.language ?? "en-US" },
     addEventListener: (t: string, fn: Listener) => (listeners[t] = fn),
@@ -65,6 +75,22 @@ function load(opts: { files?: string[]; language?: string; existingCaches?: Reco
     log,
     store,
     skipped: () => skipped,
+    shown,
+    opened,
+    navigated,
+    setWindows: (w: string[]) => (windows = w.map((url) => ({ url, navigate: async (u: string) => (navigated.push(u), undefined), focus: async () => undefined }))),
+    async push(data: unknown, raw = false) {
+      let work: Promise<unknown> = Promise.resolve();
+      listeners.push({ data: { json: () => (raw ? JSON.parse(String(data)) : data) }, waitUntil: (p: Promise<unknown>) => (work = p) });
+      await work;
+    },
+    async click(url?: string) {
+      let work: Promise<unknown> = Promise.resolve();
+      let closed = false;
+      listeners.notificationclick({ notification: { close: () => (closed = true), data: { url } }, waitUntil: (p: Promise<unknown>) => (work = p) });
+      await work;
+      return closed;
+    },
     setNetwork: (fn: Net) => (net = fn),
     /** undefined when the worker leaves the request alone, else what it answered with */
     async fetch(url: string, init: { method?: string; mode?: string } = {}) {
@@ -225,5 +251,41 @@ describe("source", () => {
     expect(code).not.toMatch(/\.addAll\(|\.add\(|IndexedDB|localStorage|\/api|\/internal/);
     expect(code.indexOf(".put(")).toBeGreaterThan(code.indexOf("async function precache"));
     expect(code.indexOf(".put(")).toBeLessThan(code.indexOf("async function asset"));
+  });
+});
+
+describe("browser push", () => {
+  it("shows the alert it was sent, one notification per tag, and fetches nothing", async () => {
+    const sw = load();
+    await sw.push({ title: "API is down", body: "HTTP 503", url: "https://app.example/app/incidents/i1", tag: "m1" });
+    expect(sw.shown).toHaveLength(1);
+    expect(sw.shown[0].title).toBe("API is down");
+    expect(sw.shown[0].options).toMatchObject({ body: "HTTP 503", tag: "m1", data: { url: "https://app.example/app/incidents/i1" } });
+    expect(sw.log.network).toEqual([]);
+  });
+
+  it("still shows something when the payload is empty or not JSON", async () => {
+    const sw = load();
+    await sw.push("not json", true);
+    await sw.push({});
+    expect(sw.shown.map((n) => n.title)).toEqual(["OpenUptime", "OpenUptime"]);
+  });
+
+  it("opens the incident in a window that is already open, else in a new one", async () => {
+    const sw = load();
+    sw.setWindows(["https://app.example/app/monitors"]);
+    expect(await sw.click("https://app.example/app/incidents/i1")).toBe(true);
+    expect(sw.navigated).toEqual(["/app/incidents/i1"]);
+    sw.setWindows([]);
+    await sw.click("https://app.example/app/incidents/i2");
+    expect(sw.opened).toEqual(["/app/incidents/i2"]);
+  });
+
+  it("never opens another site, whatever the message says", async () => {
+    const sw = load();
+    await sw.click("https://evil.example/phish");
+    await sw.click("javascript:alert(1)");
+    await sw.click(undefined);
+    expect(sw.opened).toEqual(["/app", "/app", "/app"]);
   });
 });

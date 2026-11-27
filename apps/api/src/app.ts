@@ -19,6 +19,7 @@ import { projects } from "./routes/projects";
 import { publicStatus, statusPages } from "./routes/status";
 import { configureEmail, emailEnabled } from "./email";
 import { apnsConfigured, configureApns } from "./apns";
+import { configureWebPush, webPushConfigured, webPushPublicKey } from "./webpush";
 import { configureNetGuard } from "./netguard";
 import { DIRECTORY_PATH, directoryResponse } from "@openuptime/kit/webbotauth";
 import { configureProbes } from "./probes";
@@ -46,6 +47,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
     configureNetGuard(c.env);
     configureProbes(c.env);
     configureApns(c.env);
+    configureWebPush(c.env);
     const database = openDatabase(connectionString(c.env), { max: 1 });
     c.set("repo", database.repo);
     c.set("database", database);
@@ -99,7 +101,7 @@ export function createApp(openDatabase: OpenDatabase, options: { edition?: Editi
       edition: edition.id ?? "community",
       auth: { emailPassword: true, ...authInfo(c.env), emailDelivery: emailEnabled(), nativeHandoff: true },
       features: { multiRegion: availableRegions().length > 2, statusPages: true },
-      push: { apns: apnsConfigured() },
+      push: { apns: apnsConfigured(), web: webPushConfigured(), webKey: webPushPublicKey() },
     }),
   );
   // password guessing, sign-up floods and mail bombing: the library's own limiter is per isolate on Workers, so the

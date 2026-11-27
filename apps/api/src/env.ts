@@ -70,6 +70,14 @@ export type Bindings = {
   APNS_KEY_ID?: string;
   APNS_TEAM_ID?: string;
   APNS_BUNDLE_ID?: string;
+  /**
+   * Browser push notifications (Web Push). Both keys must be set: a VAPID P-256 key pair as base64url (public key
+   * uncompressed, 65 bytes; private key 32 bytes). `node scripts/gen-vapid-keys.mjs` prints a pair. VAPID_SUBJECT is a
+   * `mailto:` or https URL the push services can reach you at; it defaults to APP_URL.
+   */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 };
 
 export type Auth = ReturnType<typeof createAuth>;

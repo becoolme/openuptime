@@ -294,7 +294,10 @@ export const api = {
   cancelMaintenanceSeries: (id: string) => req<void>(`/maintenance/series/${id}`, { method: "DELETE" }),
   deleteMaintenance: (id: string) => req<void>(`/maintenance/${id}`, { method: "DELETE" }),
   /** What this deployment can do (public). */
-  config: () => req<{ push?: { apns: boolean } }>("/config"),
+  config: () => req<{ push?: { apns: boolean; web?: boolean; webKey?: string | null } }>("/config"),
+  pushDevices: () => req<{ id: string; token: string; platform: string }[]>("/push/devices"),
+  subscribeBrowser: (b: { endpoint: string; keys: { p256dh: string; auth: string }; locale: "en" | "zh-CN"; name?: string }) => req<{ id: string }>("/push/devices", { method: "PUT", body: JSON.stringify({ platform: "web", ...b }) }),
+  unsubscribeBrowser: (endpoint: string) => req<void>("/push/devices/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
   channels: () => req<Channel[]>("/channels"),
   projectAlerting: (projectId: string) => req<ProjectAlerting>(`/projects/${projectId}/alerting`),
   saveProjectAlerting: (projectId: string, b: ProjectAlerting) => req<ProjectAlerting>(`/projects/${projectId}/alerting`, { method: "PUT", body: JSON.stringify(b) }),
