@@ -39,6 +39,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
       { en: "A new Browser notifications card at the top of Alerting shows whether this browser is on, and lets you turn it on, send a test or turn it off.", zh: "告警渠道页顶部新增“浏览器通知”卡片，显示本浏览器是否已开启，可开启、发送测试或关闭。" },
       { en: "The first time you turn it on, a push channel is created for you; the same channel also reaches the phones your team has registered.", zh: "首次开启时会自动创建推送渠道；该渠道同样会通知团队成员已注册的手机。" },
       { en: "Clicking a notification opens the incident in the app.", zh: "点击通知会在应用中打开对应事件。" },
+      { en: "If the browser has blocked notifications for the site, the card shows the settings address for your browser to copy, and turns back on by itself once you allow them.", zh: "如果浏览器已屏蔽此站点的通知，卡片会给出对应浏览器的设置地址供复制，允许后自动恢复可开启状态。" },
     ],
     cloud: { en: "Available on the hosted service with nothing to set up.", zh: "托管版无需任何设置即可使用。" },
     upgrade: {
