@@ -393,6 +393,13 @@
       "when": 1795705383748,
       "tag": "0055_amused_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795797813056,
+      "tag": "0056_lush_lady_vermin",
+      "breakpoints": true
     }
   ]
 }

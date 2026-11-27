@@ -215,6 +215,22 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <h3>How it works</h3>
     <p>People register their phone from the app; a <code>push</code> channel then alerts every member of the workspace who has a registered device, each in their own language. Registering a phone as an owner or admin creates a <em>Mobile app</em> channel for you if the workspace has none. Phones that Apple reports as no longer valid are forgotten automatically.</p>
     <p><strong>Important:</strong> an APNs key is tied to your Apple team and the app's bundle id, and a phone's token only works with the app that produced it. The official OpenUptime app can therefore receive push only from the hosted service. On a self-hosted server push works for an app you build and sign yourself with your own bundle id and key. A relay that would let the official app receive push from self-hosted servers is not implemented.</p>
+    <h2 id="web-push">Browser push notifications</h2>
+    <p>Alerts can also appear as notifications in a browser, even when the OpenUptime tab is closed. Each person turns this on for their own browser from <strong>Alerting</strong>. The server needs a VAPID key pair, which identifies it to the browsers' push services. Push is off until both variables below are set; <code>GET /api/config</code> then reports <code>push.web: true</code>.</p>
+    <pre><code>node scripts/gen-vapid-keys.mjs</code></pre>
+    <table>
+      <thead><tr><th>Variable</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>VAPID_PUBLIC_KEY</code></td><td>The public key the script prints (base64url).</td></tr>
+        <tr><td><code>VAPID_PRIVATE_KEY</code></td><td>The private key the script prints. Keep it secret.</td></tr>
+        <tr><td><code>VAPID_SUBJECT</code></td><td>Optional. A <code>mailto:</code> address or https URL the push services can contact. Defaults to your public URL.</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Docker</strong>: add the variables to <code>.env</code> and run <code>docker compose up -d</code>.</li>
+      <li><strong>Cloudflare</strong>: in <code>apps/api</code> run <code>pnpm exec wrangler secret put VAPID_PRIVATE_KEY</code>, then the same for <code>VAPID_PUBLIC_KEY</code>, and redeploy the API Worker.</li>
+    </ul>
+    <p>Generate the pair once and keep it: a browser that subscribed with one public key stops receiving alerts if you replace the pair, and has to turn notifications on again. Browsers need HTTPS (or <code>localhost</code>) to subscribe. Subscriptions that a browser's push service reports as gone are forgotten automatically.</p>
     <h2 id="after">After install</h2>
     <ul>
       <li>Create your first monitor, then a <a href="/docs/embed">status page</a> and, optionally, embed its state on your site.</li>
@@ -435,6 +451,22 @@ PROBE_REGIONS={"us-east":"https://probe.example.app/api/probe/us-east","eu-centr
     <h3>工作方式</h3>
     <p>成员在应用里注册自己的手机；<code>push</code> 渠道会通知工作区中所有已注册设备的成员，并按各自的语言显示。所有者或管理员注册手机时，如果工作区还没有该渠道，会自动创建名为 <em>Mobile app</em> 的渠道。Apple 反馈已失效的手机会被自动清除。</p>
     <p><strong>重要：</strong>APNs 密钥绑定你的 Apple 团队和应用的 bundle id，手机令牌也只对产生它的应用有效。因此官方 OpenUptime 应用只能接收托管服务发出的推送。自托管服务器上，推送适用于你自己用自己的 bundle id 和密钥构建并签名的应用。让官方应用接收自托管服务器推送的中继服务尚未实现。</p>
+    <h2 id="web-push-zh">浏览器推送通知</h2>
+    <p>告警也可以作为浏览器通知弹出，即使没有打开 OpenUptime 标签页。每个人在<strong>告警</strong>页面为自己的浏览器开启。服务器需要一对 VAPID 密钥，用来向浏览器的推送服务证明自己的身份。下面两个变量都设置后才会启用；此时 <code>GET /api/config</code> 会返回 <code>push.web: true</code>。</p>
+    <pre><code>node scripts/gen-vapid-keys.mjs</code></pre>
+    <table>
+      <thead><tr><th>变量</th><th>取值</th></tr></thead>
+      <tbody>
+        <tr><td><code>VAPID_PUBLIC_KEY</code></td><td>脚本输出的公钥（base64url）。</td></tr>
+        <tr><td><code>VAPID_PRIVATE_KEY</code></td><td>脚本输出的私钥，请妥善保密。</td></tr>
+        <tr><td><code>VAPID_SUBJECT</code></td><td>可选。推送服务可联系到你的 <code>mailto:</code> 地址或 https 链接，默认使用你的公开地址。</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Docker</strong>：把变量写进 <code>.env</code>，然后执行 <code>docker compose up -d</code>。</li>
+      <li><strong>Cloudflare</strong>：在 <code>apps/api</code> 中执行 <code>pnpm exec wrangler secret put VAPID_PRIVATE_KEY</code>，再对 <code>VAPID_PUBLIC_KEY</code> 做同样操作，然后重新部署 API Worker。</li>
+    </ul>
+    <p>密钥对只生成一次并保留：浏览器用某个公钥订阅后，如果你换掉密钥对，它就收不到告警，需要重新开启通知。浏览器需要 HTTPS（或 <code>localhost</code>）才能订阅。推送服务反馈已失效的订阅会被自动清除。</p>
     <h2 id="after-zh">安装之后</h2>
     <ul>
       <li>创建第一个监控项，再创建<a href="/docs/embed">状态页</a>，需要的话把状态嵌入到你的网站。</li>

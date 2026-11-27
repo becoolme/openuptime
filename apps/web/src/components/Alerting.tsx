@@ -1,6 +1,7 @@
 import { t } from "../lib/i18n";
 import { useEffect, useState } from "react";
 import { useBusy } from "@openuptime/ui/use-busy";
+import BrowserPush from "./BrowserPush";
 import { api, ago, type AlertDelivery, type Channel, type ProjectAlerting } from "../lib/api";
 import { deliveryReason, deliveryState, stateClass } from "../lib/delivery";
 import Modal from "@openuptime/ui/modal";
@@ -21,7 +22,7 @@ const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "telegram", label: "Telegram", desc: "Message a chat or group through your bot." },
   { id: "pagerduty", label: "PagerDuty", desc: "Trigger and resolve incidents on a service." },
   { id: "webhook", label: "Webhook", desc: "Send a signed request to any URL, with the standard JSON payload or your own template." },
-  { id: "push", label: "Mobile app (push)", desc: "Notify the OpenUptime app on your team's phones." },
+  { id: "push", label: "Push (phone and browser)", desc: "Notify the phones and browsers your team has registered." },
 ];
 const svg = (d: React.ReactNode) => (
   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
@@ -44,7 +45,7 @@ const ICONS: Record<Channel["type"], React.ReactNode> = {
 const REPEATS = [5, 10, 15, 30, 60];
 /** The alerts a webhook can take; none chosen means all of them. */
 const HOOK_EVENTS = [{ id: "incident.opened", label: "Down" }, { id: "incident.resolved", label: "Recovered" }, { id: "incident.escalated", label: "Escalated" }];
-const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c.type === "bark" ? (c.config.url ?? "api.day.app").replace(/^https?:\/\//, "") : c.type === "ntfy" ? `${(c.config.url ?? "").replace(/^https?:\/\//, "").split("/")[0]}/${c.config.topic ?? ""}` : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
+const dest = (c: Channel) => c.type === "push" ? t("Members' phones and browsers") : c.type === "bark" ? (c.config.url ?? "api.day.app").replace(/^https?:\/\//, "") : c.type === "ntfy" ? `${(c.config.url ?? "").replace(/^https?:\/\//, "").split("/")[0]}/${c.config.topic ?? ""}` : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
 
 export default function Alerting() {
   const [items, setItems] = useState<Channel[] | null>(null);
@@ -62,6 +63,7 @@ export default function Alerting() {
   const [log, setLog] = useState<AlertDelivery[] | null>(null);
   const [days, setDays] = useState(30);
   const [push, setPush] = useState(false);
+  const [webKey, setWebKey] = useState("");
   const [rules, setRules] = useState<ProjectAlerting | null>(null);
   const [projectId, setProjectId] = useState("");
   const [rulesErr, setRulesErr] = useState("");
@@ -75,7 +77,7 @@ export default function Alerting() {
   });
   const loadLog = () => api.alertLog(30).then(setLog).catch(() => setLog([]));
   const load = () => api.channels().then(setItems);
-  useEffect(() => { load(); loadLog(); api.config().then((c) => setPush(!!c.push?.apns)).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
+  useEffect(() => { load(); loadLog(); api.config().then((c) => { setPush(!!c.push?.apns || !!c.push?.web); setWebKey(c.push?.web && c.push.webKey ? c.push.webKey : ""); }).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", deviceKey: "", tag: "", auto: false };
   const openAdd = () => { setErr(""); setSecretNote(""); setEditId(""); setF(blank); setHook(hookBlank); setAdding(true); };
@@ -142,6 +144,7 @@ export default function Alerting() {
       {note && <p className="ok-note">{note}</p>}
       <div className="cols">
         <div className="col">
+          {webKey && <BrowserPush webKey={webKey} channels={items} onChanged={load} onTest={test} />}
           {items === null && <div className="card tbl"><SkeletonRows cols={4} rows={3} /></div>}
           {items?.length === 0 ? (
             <EmptyState title={t("No channels yet")} description={t("Add one so you hear about problems first.")}
@@ -337,7 +340,7 @@ export default function Alerting() {
           {f.type === "pagerduty" && (
             <label className="fld">{t("Routing key")}<input className="in mono" required value={f.routingKey} onChange={(e) => setF({ ...f, routingKey: e.target.value })} /></label>
           )}
-          {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to the OpenUptime app of every member of this workspace")}</p>}
+          {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to every phone and browser registered by a member of this workspace")}</p>}
           <button type="button" className="route tog" onClick={() => setF({ ...f, auto: !f.auto })}>
             <div><b style={{ fontWeight: 500 }}>{t("Turn on for new monitors")}</b><small>{t("Every monitor you create alerts this channel from the start.")}</small></div>
             <span className={`tg ${f.auto ? "on" : ""}`} />

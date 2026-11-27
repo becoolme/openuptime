@@ -1357,10 +1357,10 @@ export function createRepo(db: DbExecutor): Repo {
       const now = new Date();
       const [row] = await db
         .insert(schema.pushDevice)
-        .values({ userId, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, critical: d.critical ?? false, lastSeenAt: now })
+        .values({ userId, token: d.token, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, critical: d.critical ?? false, p256dh: d.p256dh ?? null, auth: d.auth ?? null, lastSeenAt: now })
         .onConflictDoUpdate({
           target: schema.pushDevice.token,
-          set: { userId, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, ...(d.critical === undefined ? {} : { critical: d.critical }), lastSeenAt: now },
+          set: { userId, platform: d.platform, environment: d.environment, locale: d.locale ?? null, name: d.name ?? null, ...(d.critical === undefined ? {} : { critical: d.critical }), p256dh: d.p256dh ?? null, auth: d.auth ?? null, lastSeenAt: now },
         })
         .returning();
       return row as PushDevice;

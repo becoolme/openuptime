@@ -136,6 +136,7 @@ Behaviour that changed and can surprise an existing install. Run `pnpm db:migrat
 - **Secrets are validated at start** in Docker: `BETTER_AUTH_SECRET` and `CRON_SECRET` must not be the `change-me…` placeholder and need at least 16 characters.
 - **One automatic incident per monitor and kind.** Migration `0016` merges duplicate open incidents and adds a unique index.
 - **iOS push (APNs):** `APNS_KEY` (the `.p8` contents; `\n` accepted), `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`; all four enable the `push` channel type and `push.apns` in `GET /api/config`. Devices register through `PUT /api/push/devices`. On Node the sender speaks HTTP/2 through `node:http2`; on Workers `fetch` does.
+- **Browser push (Web Push):** `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (a P-256 pair, base64url; `node scripts/gen-vapid-keys.mjs` prints one), optional `VAPID_SUBJECT`; both keys enable the `push` channel type and `push.web` / `push.webKey` in `GET /api/config`. Browsers register through `PUT /api/push/devices` with `platform: "web"` and a `PushSubscription` (`endpoint`, `keys`), and unsubscribe through `POST /api/push/devices/unsubscribe`.
 - **Optional:** `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` (sign-up challenge) and `LEGAL_LINKS` (terms and privacy consent line on sign-up).
 
 ## Tests & CI

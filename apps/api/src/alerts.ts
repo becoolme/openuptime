@@ -1,5 +1,6 @@
-import { MAX_REMINDERS, type AlertChannel, type AlertDelivery, type DeliveryRetry, type NewDelivery, type Repo, type SubscriberTarget, type McpAlertTask } from "@openuptime/repo";
+import { MAX_REMINDERS, type AlertChannel, type AlertDelivery, type DeliveryRetry, type NewDelivery, type PushDevice, type Repo, type SubscriberTarget, type McpAlertTask } from "@openuptime/repo";
 import { sendPush } from "./apns";
+import { isWebDevice, sendWebPush } from "./webpush";
 import { actionEmail, appUrl, sendEmail } from "./email";
 import { unmetered, type Entitlements } from "./entitlements";
 import { isLang, orgLang, tr, userLang, type Lang } from "./mail-i18n";
@@ -180,6 +181,16 @@ const alertText = (ev: Event) => ev.schemaDrift
 export class Skipped extends Error {}
 const SKIPPED = "skipped: email allowance used up for this period";
 const RETRIED_KINDS = new Set(["incident.opened", "incident.resolved", "incident.reminder", "incident.escalated"]);
+
+/** Phones go through APNs and browsers through Web Push. It fails only when every kind that was tried failed. */
+async function sendToDevices(repo: Repo, devices: PushDevice[], ev: Event, orgId: string) {
+  const web = devices.filter(isWebDevice);
+  const phones = devices.filter((d) => !isWebDevice(d));
+  const results = await Promise.allSettled([phones.length ? sendPush(repo, phones, ev, orgId) : null, web.length ? sendWebPush(repo, web, ev, orgId) : null].filter((p) => p !== null));
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed.length === results.length && failed.length) throw failed[0].reason;
+  for (const f of failed) console.error("push: part of the devices failed", (f.reason as Error)?.message);
+}
 
 /** Devices an event is being pushed to, with whether that push worked: a phone is pushed once per event, unless the first push failed. */
 export type PushedDevices = Map<string, Promise<boolean>>;
@@ -615,7 +626,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       // devices belong to people: every member of the workspace who registered one is reached, each in their own language
       if (!repo || !c.organizationId) throw new Error("Push channel has no workspace to look devices up in");
       const devices = await repo.pushDevicesForOrganization(c.organizationId);
-      if (!devices.length) throw new Skipped("skipped: no phone has registered for push alerts");
+      if (!devices.length) throw new Skipped("skipped: no phone or browser has registered for push alerts");
       // devices another push channel is already handling are claimed by it; they are taken over only if that push fails
       const mine = pushed ? devices.filter((d) => !pushed.has(d.id)) : devices;
       const theirs = pushed ? devices.filter((d) => pushed.has(d.id)).map((d) => ({ d, done: pushed.get(d.id)! })) : [];
@@ -623,7 +634,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       const mineDone = new Promise<boolean>((r) => { settle = r; });
       mine.forEach((d) => pushed?.set(d.id, mineDone));
       try {
-        if (mine.length) await sendPush(repo, mine, ev, c.organizationId);
+        if (mine.length) await sendToDevices(repo, mine, ev, c.organizationId);
         settle(true);
       } catch (e) {
         mine.forEach((d) => pushed?.delete(d.id));
@@ -632,8 +643,8 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
       }
       const retake = [];
       for (const { d, done } of theirs) if (!(await done)) retake.push(d);
-      if (!mine.length && !retake.length) throw new Skipped("skipped: every phone was already notified through another push channel");
-      if (retake.length) await sendPush(repo, retake, ev, c.organizationId);
+      if (!mine.length && !retake.length) throw new Skipped("skipped: every device was already notified through another push channel");
+      if (retake.length) await sendToDevices(repo, retake, ev, c.organizationId);
       break;
     }
     case "email":

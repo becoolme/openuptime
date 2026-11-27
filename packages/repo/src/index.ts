@@ -532,11 +532,14 @@ export interface PushDevice {
   name: string | null;
   /** the person opted in to critical alerts for this device */
   critical: boolean;
+  /** browser subscriptions only (platform "web"): the token is the push endpoint, and these are its encryption keys */
+  p256dh: string | null;
+  auth: string | null;
   createdAt: Date;
   lastSeenAt: Date;
 }
 /** `critical` left out keeps the stored value (false for a new device). */
-export type NewPushDevice = Pick<PushDevice, "token" | "platform" | "environment"> & { locale?: string | null; name?: string | null; critical?: boolean };
+export type NewPushDevice = Pick<PushDevice, "token" | "platform" | "environment"> & { locale?: string | null; name?: string | null; critical?: boolean; p256dh?: string | null; auth?: string | null };
 
 export interface Counts {
   monitors: number;

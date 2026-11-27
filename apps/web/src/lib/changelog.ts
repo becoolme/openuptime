@@ -29,6 +29,25 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "browser-push-notifications", date: "2026-11-27", edition: "community",
+    title: { en: "Browser push notifications", zh: "浏览器推送通知" },
+    summary: {
+      en: "Turn on alerts in this browser with one click and get incident notifications even when the tab is closed.",
+      zh: "在告警渠道页一键开启本浏览器的通知，标签页关闭时也能收到事件提醒。",
+    },
+    points: [
+      { en: "A new Browser notifications card at the top of Alerting shows whether this browser is on, and lets you turn it on, send a test or turn it off.", zh: "告警渠道页顶部新增“浏览器通知”卡片，显示本浏览器是否已开启，可开启、发送测试或关闭。" },
+      { en: "The first time you turn it on, a push channel is created for you; the same channel also reaches the phones your team has registered.", zh: "首次开启时会自动创建推送渠道；该渠道同样会通知团队成员已注册的手机。" },
+      { en: "Clicking a notification opens the incident in the app.", zh: "点击通知会在应用中打开对应事件。" },
+    ],
+    cloud: { en: "Available on the hosted service with nothing to set up.", zh: "托管版无需任何设置即可使用。" },
+    upgrade: {
+      en: "Run the database migration, then set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY (generate them with scripts/gen-vapid-keys.mjs). Without them the card stays hidden.",
+      zh: "先运行数据库迁移，再设置 VAPID_PUBLIC_KEY 和 VAPID_PRIVATE_KEY（用 scripts/gen-vapid-keys.mjs 生成）。未设置时该卡片不会显示。",
+    },
+    link: { href: "/docs/self-host#web-push", label: { en: "Set up browser push", zh: "配置浏览器推送" } },
+  },
+  {
     id: "alert-email-workspace", date: "2026-11-27", edition: "community",
     title: { en: "Workspace name in alert emails", zh: "告警邮件显示工作区名" },
     summary: {
