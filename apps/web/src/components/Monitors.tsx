@@ -15,6 +15,7 @@ import Modal from "@openuptime/ui/modal";
 import Segmented from "@openuptime/ui/segmented";
 import EmptyState from "@openuptime/ui/empty-state";
 import PageHeader from "@openuptime/ui/page-header";
+import Hint from "./Hint";
 
 const TYPE_LABEL: Record<Monitor["type"], string> = { http: "HTTP", tcp: "TCP", dns: "DNS", heartbeat: "CRON", postgres: "PG", mysql: "MYSQL", redis: "REDIS", websocket: "WS", domain: "DOMAIN", mcp: "MCP", evm: "EVM", solana: "SOLANA", ping: "PING" };
 
@@ -548,9 +549,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             ))}
           </div>
         </div>
-        {f.type === "domain" && <label className="fld">{t("Warn before expiry (days)")}
+        {f.type === "domain" && <label className="fld"><span>{t("Warn before expiry (days)")} <Hint text={t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")} /></span>
           <input className="in mono" type="number" min={1} max={365} value={f.domainExpiryWarnDays} onChange={(e) => set("domainExpiryWarnDays", Number(e.target.value))} />
-          <span className="muted">{t("Enter the registered domain, not a URL or subdomain. Missing registry dates are unknown, never healthy. Daily checks are recommended; intervals below one hour are raised.")}</span>
         </label>}
         {f.type !== "heartbeat" && (
           <label className="fld">{t(f.type === "http" || f.type === "websocket" || f.type === "mcp" || f.type === "evm" || f.type === "solana" ? "URL" : ["tcp", "postgres", "mysql", "redis"].includes(f.type) ? "Host:port" : f.type === "ping" ? "Hostname or IP address" : "Hostname")}
@@ -558,9 +558,8 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </label>
         )}
         {f.type === "mcp" && (monitor?.mcpConfigRedacted ? <p className="muted">{t("Only owners and admins can view or edit MCP connection and tool settings.")}</p> : <McpConnectionFields value={mcp} onChange={setMcp} savedRefreshToken={initialMcp.oauthMode === "refresh_token"} />)}
-        {f.type === "mcp" && <label className="fld">{t("Timeout (ms)")}
+        {f.type === "mcp" && <label className="fld"><span>{t("Timeout (ms)")} <Hint text={t("One timeout covers initialization, all tool-list pages and the optional tool call.")} /></span>
           <input className="in mono" type="number" min={1000} max={30000} step={1} required value={f.timeoutMs} onChange={(e) => set("timeoutMs", Number(e.target.value))} />
-          <small className="muted">{t("One timeout covers initialization, all tool-list pages and the optional tool call.")}</small>
         </label>}
         <div className="fld">{t("Check every")}
           <Segmented label={t("Check every")} value={f.intervalSec} onChange={(v) => set("intervalSec", v)} options={[
@@ -584,15 +583,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
               </label>
             )}
             {f.type === "http" && customStatus && (
-              <label className="fld" style={{ gridColumn: "1 / -1" }}>{t("Healthy statuses")}
+              <label className="fld" style={{ gridColumn: "1 / -1" }}><span>{t("Healthy statuses")} <Hint text={t("Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.")} /></span>
                 <input className="in mono" value={f.acceptedStatuses} onChange={(e) => set("acceptedStatuses", e.target.value)} maxLength={200} placeholder="200-299,401" required />
-                <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Codes, ranges and classes separated by commas, such as 200-299,401 or 2xx,3xx. Prefix ! to exclude one: 200-499,!404. Exclusions alone accept every other status: !5xx.")}</span>
               </label>
             )}
             {f.type === "http" && (customStatus || REDIRECTS.includes(f.expectedStatus)) && (
-              <label className="fld" style={{ gridColumn: "1 / -1" }}>{t("Redirect must lead to (optional)")}
+              <label className="fld" style={{ gridColumn: "1 / -1" }}><span>{t("Redirect must lead to (optional)")} <Hint text={customStatus ? t("Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.") : t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")} /></span>
                 <input className="in mono" value={f.expectedLocation} onChange={(e) => set("expectedLocation", e.target.value)} placeholder="https://www.example.com/" />
-                <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{customStatus ? t("Used when the list accepts a redirect status (301, 302, 303, 307 or 308): redirects are then not followed, and their Location is checked. Leave empty to accept any destination.") : t("The redirect is not followed: its status and Location are checked. Leave empty to accept any destination.")}</span>
               </label>
             )}
             <label className="fld">{t("Failures before incident")}
@@ -601,39 +598,34 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         {f.type === "http" && !["GET", "HEAD"].includes(f.method) && (
-          <label className="fld">{t("Request body (optional)")}
+          <label className="fld"><span>{t("Request body (optional)")} <Hint text={t("Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.")} /></span>
             <textarea className="in mono" value={f.requestBody} onChange={(e) => set("requestBody", e.target.value)} rows={5} maxLength={16384} aria-invalid={bodyTooLarge} />
             <span className={bodyTooLarge ? "err" : "muted"}>{t("{n} / 16384 UTF-8 bytes").replace("{n}", String(bodyBytes))}</span>
-            <span className="muted">{t("Up to 16 KiB of UTF-8 text. Set Content-Type in request headers. Bodies are masked for members and viewers. Use a safe test endpoint: this request runs repeatedly.")}</span>
           </label>
         )}
-        <label className="fld">{t("Successes before recovery")}
+        <label className="fld"><span>{t("Successes before recovery")} <Hint text={t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.")} /></span>
           <Select className="in" value={f.recoveryThreshold} onChange={(v) => set("recoveryThreshold", v)} options={Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} />
-          <span className="muted">{t("Consecutive successful checks or heartbeat pings before ending an outage. Each multi-region run counts once and every ping counts, even when several arrive together; slow responses may recover to degraded.")}</span>
         </label>
         {f.type === "dns" && <>
           <label className="fld">{t("DNS record type")}
             <Select className="in" value={f.dnsRecordType} onChange={(v) => set("dnsRecordType", v)} options={(["A", "AAAA", "CNAME", "MX", "TXT", "NS"] as const).map((v) => ({ value: v, label: v }))} />
           </label>
-          <label className="fld">{t("Expected DNS value (optional)")}
+          <label className="fld"><span>{t("Expected DNS value (optional)")} <Hint text={t("Leave empty to accept any record of this type. TXT includes quotes; MX includes priority, e.g. 10 mail.example.com.")} /></span>
             <input className="in mono" value={f.dnsExpectedValue} onChange={(e) => set("dnsExpectedValue", e.target.value)} maxLength={2000} />
-            <span className="muted">{t("Leave empty to accept any record of this type. TXT includes quotes; MX includes priority, e.g. 10 mail.example.com.")}</span>
           </label>
           <label className="fld">{t("DNS value match")}
             <Select className="in" value={f.dnsMatchMode} onChange={(v) => set("dnsMatchMode", v)} options={[{ value: "exact", label: t("Exact value") }, { value: "contains", label: t("Contains text") }]} />
           </label>
         </>}
         {f.type === "websocket" && (
-          <label className="fld">{t("Message to send (optional)")}
+          <label className="fld"><span>{t("Message to send (optional)")} <Hint text={t("Sent once the connection is open; a message must then come back. Leave empty to check the handshake only. Put credentials in headers, not here.")} /></span>
             <input className="in mono" value={f.wsMessage} onChange={(e) => set("wsMessage", e.target.value)} placeholder='{"type":"ping"}' maxLength={2000} />
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Sent once the connection is open; a message must then come back. Leave empty to check the handshake only. Put credentials in headers, not here.")}</span>
           </label>
         )}
         {(f.type === "http" || f.type === "websocket") && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 170px", gap: 10 }}>
-            <label className="fld">{isPattern ? t("Pattern (optional)") : t(f.type === "websocket" ? (f.wsMessage ? "Reply must contain (optional)" : "First message must contain (optional)") : "Response must contain (optional)")}
+            <label className="fld"><span>{isPattern ? t("Pattern (optional)") : t(f.type === "websocket" ? (f.wsMessage ? "Reply must contain (optional)" : "First message must contain (optional)") : "Response must contain (optional)")}{isPattern && <> <Hint text={t("RE2 syntax, matched anywhere in the text. Start with (?i) to ignore case. Backreferences and lookarounds are not supported.")} /></>}</span>
               <input className="in mono" value={f.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder={isPattern ? "(?i)status:\\s*ok" : "OK"} spellCheck={false} />
-              {isPattern && <small className="faint">{t("RE2 syntax, matched anywhere in the text. Start with (?i) to ignore case. Backreferences and lookarounds are not supported.")}</small>}
             </label>
             <label className="fld">{t("Mode")}
               <Select className="in" value={f.keywordMode as string} onChange={(v) => set("keywordMode", v as KeywordMode)} options={[{ value: "contains", label: t("must contain") }, { value: "absent", label: t("must not contain") }, { value: "matches", label: t("must match pattern") }, { value: "not_matches", label: t("must not match pattern") }]} />
@@ -642,7 +634,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
         )}
         {f.type === "http" && (
           <div className="fld">
-            {t("JSON assertions (optional)")}
+<span>{t("JSON assertions (optional)")} <Hint text={t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Without a value type, 200 also matches the text \"200\" and true matches \"true\"; pick Text, Number or Boolean to compare strictly. When the monitor accepts several statuses, fill Only when the status is (such as 2xx) to skip an assertion for the others. Up to 10.")} /></span>
             {asserts.map((a, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                 <input className="in mono" style={{ flex: "2 1 160px", minWidth: 0 }} value={a.path} placeholder="$.data.status" aria-label={t("JSON path")} maxLength={256} onChange={(e) => setAssert(i, { path: e.target.value })} />
@@ -654,15 +646,14 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
               </div>
             ))}
             {asserts.length < 10 && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setAsserts((x) => [...x, { path: "", op: "equals", value: "" }])}>{t("Add assertion")}</button></div>}
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("Each one reads a value from the JSON body, e.g. $.data.items[0].status, and must hold for the check to pass. Without a value type, 200 also matches the text \"200\" and true matches \"true\"; pick Text, Number or Boolean to compare strictly. When the monitor accepts several statuses, fill Only when the status is (such as 2xx) to skip an assertion for the others. Up to 10.")}</span>
           </div>
         )}
         {f.type === "http" && (
           <details className="fld" open={Boolean(flowText.trim())}>
-            <summary style={{ cursor: "pointer" }}>{t("API steps (optional)")}</summary>
+            <summary style={{ cursor: "pointer" }}>{t("API steps (optional)")} <Hint text={t("After the request above, up to 5 more requests run in order. extract reads a value from an answer (a $.path in JSON, or a header); later steps use it as {{name}} in the path, query, headers or body. The check fails at the first step that fails, and the timeout covers all steps.")} /></summary>
             <textarea className="in mono" rows={flowText.trim() ? 12 : 4} spellCheck={false} value={flowText} onChange={(e) => setFlowText(e.target.value)} placeholder={API_FLOW_EXAMPLE} aria-label={t("API steps as JSON")} style={{ marginTop: 6, fontSize: 12.5 }} />
             {!flowText.trim() && <div><button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setFlowText(API_FLOW_EXAMPLE)}>{t("Start from an example")}</button></div>}
-            <span className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>{t("After the request above, up to 5 more requests run in order. extract reads a value from an answer (a $.path in JSON, or a header); later steps use it as {{name}} in the path, query, headers or body. The check fails at the first step that fails, and the timeout covers all steps.")} <a href="/docs/api-steps">{t("How API steps work")}</a></span>
+            <small className="faint" style={{ display: "block", marginTop: 6 }}><a href="/docs/api-steps">{t("How API steps work")}</a></small>
           </details>
         )}
         {(f.type === "http" || f.type === "websocket" || f.type === "evm" || f.type === "solana" || (f.type === "mcp" && !monitor?.mcpConfigRedacted)) && (
@@ -700,7 +691,7 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
             </label>
           </div>
         )}
-        <label className="fld">{t("Tags")} <span className="faint">({t("comma separated")})</span>
+        <label className="fld"><span>{t("Tags")} <Hint text={t("comma separated")} /></span>
           <input className="in" value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="production, api, eu" />
         </label>
         {f.type === "heartbeat" && (
@@ -709,14 +700,13 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </label>
         )}
         {others.length > 0 && (
-          <label className="fld"><span>{t("Depends on")} <span className="info" tabIndex={0} role="img" aria-label={t("What is a dependency?")} data-tip={t("A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.")} onClick={(e) => e.preventDefault()}>i</span></span>
+          <label className="fld"><span>{t("Depends on")} <Hint text={`${t("A dependency is another monitor this one relies on, such as a gateway or your network. While it is down, this monitor stays quiet instead of alerting you about the same outage twice.")} ${t("While that monitor is down, this one opens no incidents and sends no alerts.")}`} /></span>
             <Select className="in" value={f.dependsOnMonitorId ?? ""} onChange={(v) => set("dependsOnMonitorId", v || null)}
               options={[{ value: "", label: t("Nothing") }, ...others.map((o) => ({ value: o.id, label: o.name }))]} />
-            <small className="faint">{t("While that monitor is down, this one opens no incidents and sends no alerts.")}</small>
           </label>
         )}
         {channels.length > 0 && (
-          <div className="fld">{t("Alert")} <span className="faint">({t("none selected = all channels")})</span>
+          <div className="fld"><span>{t("Alert")} <Hint text={t("none selected = all channels")} /></span>
             {channels.map((c) => {
               // a new monitor always gets the channels that are on for new monitors; remove one from the monitor afterwards
               const locked = !monitor && !!c.autoEnable && c.enabled;
@@ -731,10 +721,9 @@ export function MonitorForm({ monitor, onClose, onSaved }: { monitor?: Monitor; 
           </div>
         )}
         {PROBED.includes(f.type) && places.length > 1 && f.regions.length > 1 && (
-          <label className="fld">{t("Go down when")}
+          <label className="fld"><span>{t("Go down when")} <Hint text={t("Fewer failing regions are recorded but do not open an incident.")} /></span>
             <Select className="in" value={Math.min(f.minRegionsFailing, f.regions.length)} onChange={(v) => set("minRegionsFailing", v)}
               options={[{ value: 0, label: t("Most regions fail") }, ...Array.from({ length: f.regions.length }, (_, i) => ({ value: i + 1, label: t(i === 0 ? "Any region fails" : "{n} regions fail").replace("{n}", String(i + 1)) }))]} />
-            <small className="faint">{t("Fewer failing regions are recorded but do not open an incident.")}</small>
           </label>
         )}
         {PROBED.includes(f.type) && places.length > 1 && (
