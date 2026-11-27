@@ -28,12 +28,14 @@ type Event = {
   project?: { id: string; name: string };
   /** The workspace has more than one project, so the project's name is shown in the alert. */
   multiProject?: true;
+  /** The workspace the monitor belongs to; filled in when the alert goes out, and shown in the email. */
+  workspace?: { name: string };
   /** The delivery row (or durable task) being sent: a webhook's message id, kept the same on every retry of it. */
   deliveryId?: string;
 };
 
 const PROJECT_TTL_MS = 30_000;
-const projectCache = ttlCache<{ names: Map<string, string> }>(PROJECT_TTL_MS);
+const projectCache = ttlCache<{ names: Map<string, string>; workspace?: string }>(PROJECT_TTL_MS);
 /** For tests: forget the cached project names. */
 export const clearProjectNames = () => projectCache.clear();
 
@@ -42,17 +44,24 @@ export const clearProjectNames = () => projectCache.clear();
  * alerts costs one query. A lookup that fails leaves the event as it is: an alert never waits on, or fails because of, a name.
  */
 export async function withProject<E extends Event>(repo: Repo, orgId: string, ev: E): Promise<E> {
-  const id = ev.monitor.projectId;
-  if (!id) return ev;
   try {
     let hit = projectCache.get(orgId);
     if (!hit) {
-      hit = { names: new Map((await repo.listProjects(orgId, null)).map((p) => [p.id, p.name])) };
+      // The workspace name is a convenience too: if either lookup fails, the alert goes out with what was found.
+      const [projects, org] = await Promise.allSettled([repo.listProjects(orgId, null), Promise.resolve(repo.organization?.(orgId))]);
+      const workspace = org.status === "fulfilled" ? org.value?.name : undefined;
+      if (projects.status === "rejected") {
+        console.error("project name lookup failed", projects.reason);
+        return workspace ? { ...ev, workspace: { name: workspace } } : ev;
+      }
+      hit = { names: new Map(projects.value.map((p) => [p.id, p.name])), workspace };
       projectCache.set(orgId, hit);
     }
-    const name = hit.names.get(id);
-    if (!name) return ev;
-    return { ...ev, project: { id, name }, ...(hit.names.size > 1 ? { multiProject: true as const } : {}) };
+    const out: E = hit.workspace ? { ...ev, workspace: { name: hit.workspace } } : ev;
+    const id = ev.monitor.projectId;
+    const name = id ? hit.names.get(id) : undefined;
+    if (!id || !name) return out;
+    return { ...out, project: { id, name }, ...(hit.names.size > 1 ? { multiProject: true as const } : {}) };
   } catch (e) {
     console.error("project name lookup failed", e);
     return ev;
@@ -644,6 +653,7 @@ export async function deliver(c: { type: string; name?: string; config: unknown;
         }
         const started = ev.incident.startedAt;
         const rows: [string, string][] = [[L("Monitor"), ev.monitor.name]];
+        if (ev.workspace) rows.push([L("Workspace"), ev.workspace.name]);
         if (ev.project && ev.multiProject) rows.push([L("Project"), ev.project.name]);
         if (ev.monitor.target) rows.push([L("Target"), ev.monitor.target]);
         if (started) rows.push([L("Started"), utc(started)]);
