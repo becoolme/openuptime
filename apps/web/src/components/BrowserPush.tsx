@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useBusy } from "@openuptime/ui/use-busy";
 import { api, type Channel } from "../lib/api";
 import { t } from "../lib/i18n";
+import { pushSettingsHelp } from "../lib/push-settings";
 
 type Phase = "checking" | "unsupported" | "blocked" | "off" | "on";
 
@@ -45,6 +46,25 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
     setPhase(known ? "on" : "off");
   };
   useEffect(() => { refresh(); }, []);
+
+  // A person fixes a blocked site in another tab or window: notice as soon as they come back, or the moment the browser says the permission changed
+  useEffect(() => {
+    if (phase !== "blocked") return;
+    const check = () => { if (Notification.permission !== "denied") refresh(); };
+    let status: PermissionStatus | undefined;
+    navigator.permissions?.query({ name: "notifications" }).then((s) => { status = s; s.onchange = check; }).catch(() => {});
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+      if (status) status.onchange = null;
+    };
+  }, [phase]);
+  const [copied, setCopied] = useState(false);
+  const copyAddress = async (address: string) => {
+    try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* the address stays visible to copy by hand */ }
+  };
 
   const turnOn = () => run(async () => {
     setErr("");
@@ -92,6 +112,7 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
           : t("Get down and recovery alerts as notifications on this device, even when OpenUptime is closed.")}
       </p>
       {err && <p className="err">{err}</p>}
+      {phase === "blocked" && <BlockedHelp copied={copied} onCopy={copyAddress} />}
       {(phase === "off" || phase === "on") && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {phase === "off" && <button className="btn primary" disabled={busy} onClick={turnOn}>{busy ? t("Turning on…") : t("Turn on")}</button>}
@@ -99,6 +120,31 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
           {phase === "on" && <button className="btn" disabled={busy} onClick={turnOff}>{busy ? t("Turning off…") : t("Turn off")}</button>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** How to allow notifications again. A page cannot open the browser's settings, so it names the address and lets the person copy it. */
+function BlockedHelp({ copied, onCopy }: { copied: boolean; onCopy: (address: string) => void }) {
+  const help = pushSettingsHelp(navigator.userAgent, location.origin, { brave: !!(navigator as { brave?: unknown }).brave });
+  return (
+    <div style={{ display: "grid", gap: 8, margin: "0 0 12px" }}>
+      {help.address ? (
+        <>
+          <p className="muted" style={{ margin: 0 }}>
+            {t("A web page can't open {browser}'s settings for you. Copy this address, paste it into a new tab, set Notifications to Allow, then come back here.").replace("{browser}", help.browser)}
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <code style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere", fontSize: 13 }}>{help.address}</code>
+            <button className="btn sm" onClick={() => onCopy(help.address!)}>{copied ? t("Copied") : t("Copy address")}</button>
+          </div>
+        </>
+      ) : help.safari ? (
+        <p className="muted" style={{ margin: 0 }}>{t("In Safari, choose Safari → Settings → Websites → Notifications and allow this site, then come back here.")}</p>
+      ) : (
+        <p className="muted" style={{ margin: 0 }}>{t("Open this site's settings from the icon at the left of the address bar or in your browser's settings, allow Notifications, then come back here.")}</p>
+      )}
+      {help.address && <p className="faint" style={{ margin: 0, fontSize: 13 }}>{t("You can also click the icon at the left of the address bar and turn Notifications on.")}</p>}
     </div>
   );
 }
