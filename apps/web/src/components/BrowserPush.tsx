@@ -100,7 +100,7 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
   if (phase === "checking") return null;
   const pushChannel = channels?.find((c) => c.type === "push" && c.enabled);
   return (
-    <div className="card cc" style={{ marginBottom: 14 }}>
+    <div className="card cc">
       <div className="cc-h">
         <h3>{t("Browser notifications")}</h3>
         {phase === "on" && <span className="pill up">{t("On")}</span>}
