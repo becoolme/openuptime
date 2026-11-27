@@ -456,8 +456,24 @@ describe("project name in alerts", () => {
   it("does not look anything up for a monitor without a project", async () => {
     const repo = projects(two);
     const e = { ...opened, monitor: { ...mon, projectId: null } };
-    expect(await withProject(repo as never, "o", e)).toBe(e);
-    expect(repo.listProjects).not.toHaveBeenCalled();
+    expect(await withProject(repo as never, "o", e)).toEqual(e);
+  });
+
+  it("names the workspace, and still sends the alert when that lookup fails", async () => {
+    const withOrg = (organization: () => Promise<{ name: string } | null>) => ({ ...projects(two), organization: vi.fn(organization) });
+    const repo = withOrg(async () => ({ name: "Acme" }));
+    expect(await withProject(repo as never, "o", opened)).toMatchObject({ workspace: { name: "Acme" }, project: { name: "favicon.im" }, multiProject: true });
+    await withProject(repo as never, "o", opened);
+    expect(repo.organization).toHaveBeenCalledTimes(1);
+    clearProjectNames();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = await withProject(withOrg(async () => { throw new Error("db"); }) as never, "o", opened);
+    expect(failing).toMatchObject({ project: { name: "favicon.im" } });
+    expect(failing).not.toHaveProperty("workspace");
+    clearProjectNames();
+    const noProjects = await withProject({ listProjects: async () => { throw new Error("db"); }, organization: async () => ({ name: "Acme" }) } as never, "o", opened);
+    expect(noProjects).toMatchObject({ workspace: { name: "Acme" } });
+    expect(noProjects).not.toHaveProperty("project");
   });
 
   it("names the project in a retried alert", async () => {
@@ -520,6 +536,20 @@ describe("project name in alerts", () => {
     const single = await send({ project: multi.project }, "en");
     expect(single.subject).toBe("🔴 WWW homepage is down · OpenUptime");
     expect(JSON.stringify(single)).not.toContain("favicon.im");
+  });
+
+  it("lists the workspace in the email, in the reader's language", async () => {
+    const mail = vi.mocked(sendEmail);
+    const send = async (lang: "en" | "zh-CN") => {
+      mail.mockClear();
+      await deliver({ type: "email", name: "mail", config: { to: "a@example.com" } }, { ...opened, incident: { id: "i1", title: "x", startedAt: new Date() }, workspace: { name: "Acme" } } as never, "t", lang);
+      return mail.mock.calls[0][0] as unknown as { subject: string; text: string; html: string };
+    };
+    const en = await send("en");
+    expect(en.text).toContain("Workspace: Acme");
+    expect(en.html).toContain("Acme");
+    expect(en.subject).not.toContain("Acme");
+    expect((await send("zh-CN")).text).toContain("工作区: Acme");
   });
 });
 

@@ -29,6 +29,18 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "alert-email-workspace", date: "2026-11-27", edition: "community",
+    title: { en: "Workspace name in alert emails", zh: "告警邮件显示工作区名" },
+    summary: {
+      en: "Alert emails now say which workspace an incident belongs to, so mail from several workspaces is easy to tell apart.",
+      zh: "告警邮件现在会写明事件属于哪个工作区，来自多个工作区的邮件一眼就能分清。",
+    },
+    points: [
+      { en: "Down, recovery, reminder and escalation emails list the workspace name in the details table.", zh: "宕机、恢复、提醒和升级邮件的详情表中会列出工作区名称。" },
+      { en: "The project is still named only when the workspace has more than one project, and the subject line is unchanged.", zh: "项目名仍然只在工作区有多个项目时显示，邮件主题保持不变。" },
+    ],
+  },
+  {
     id: "usage-cards-team-skeleton", date: "2026-11-26", edition: "community",
     title: { en: "Roomier usage cards, tidier Alerting", zh: "用量卡片更宽松，告警页更整齐" },
     summary: { en: "The Plan & usage cards are no longer squeezed into one row, and the Team page shows a placeholder while it loads.", zh: "套餐与用量的卡片不再挤成一行，团队页加载时显示骨架屏。" },
