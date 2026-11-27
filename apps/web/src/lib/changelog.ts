@@ -29,6 +29,17 @@ export interface ChangelogEntry {
 /** Community entries, newest first within a day. Cloud-only entries are added by changelog-cloud.ts. */
 export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
   {
+    id: "monitor-form-hints", date: "2026-11-27", edition: "community",
+    title: { en: "A shorter monitor form", zh: "更简洁的监控项表单" },
+    summary: {
+      en: "The explanations under the fields of the monitor form now sit behind a ? icon, so the form is shorter to read.",
+      zh: "监控项表单中字段下方的说明文字收进了 ? 图标，表单读起来更简洁。",
+    },
+    points: [
+      { en: "Hover a ? icon, or focus it with the keyboard, to read what a field does, for example for JSON assertions, API steps, Successes before recovery and Depends on.", zh: "鼠标悬停或用键盘聚焦 ? 图标即可查看字段说明，例如 JSON 断言、API 步骤、恢复前需成功次数和依赖于。" },
+    ],
+  },
+  {
     id: "browser-push-notifications", date: "2026-11-27", edition: "community",
     title: { en: "Browser push notifications", zh: "浏览器推送通知" },
     summary: {
