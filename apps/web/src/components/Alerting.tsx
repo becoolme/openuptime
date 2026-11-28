@@ -22,7 +22,8 @@ const TYPES: { id: Channel["type"]; label: string; desc: string }[] = [
   { id: "telegram", label: "Telegram", desc: "Message a chat or group through your bot." },
   { id: "pagerduty", label: "PagerDuty", desc: "Trigger and resolve incidents on a service." },
   { id: "webhook", label: "Webhook", desc: "Send a signed request to any URL, with the standard JSON payload or your own template." },
-  { id: "push", label: "Push (phone and browser)", desc: "Notify the phones and browsers your team has registered." },
+  { id: "push", label: "Mobile app (push)", desc: "Notify the OpenUptime app on your team's phones." },
+  { id: "browser", label: "Browser notifications", desc: "Notify the browsers your team has turned notifications on in." },
 ];
 const svg = (d: React.ReactNode) => (
   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
@@ -40,12 +41,13 @@ const ICONS: Record<Channel["type"], React.ReactNode> = {
   telegram: svg(<path d="M21 4L3 11l6 2.2L11 20l3-4.5 4.5 3.3L21 4zM9 13.2L21 4" />),
   pagerduty: svg(<><path d="M6 17V11a6 6 0 0 1 12 0v6" /><path d="M4 17h16M10 21h4" /></>),
   push: svg(<><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18h2" /></>),
+  browser: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 7h.01" /></>),
   webhook: svg(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" /></>),
 };
 const REPEATS = [5, 10, 15, 30, 60];
 /** The alerts a webhook can take; none chosen means all of them. */
 const HOOK_EVENTS = [{ id: "incident.opened", label: "Down" }, { id: "incident.resolved", label: "Recovered" }, { id: "incident.escalated", label: "Escalated" }];
-const dest = (c: Channel) => c.type === "push" ? t("Members' phones and browsers") : c.type === "bark" ? (c.config.url ?? "api.day.app").replace(/^https?:\/\//, "") : c.type === "ntfy" ? `${(c.config.url ?? "").replace(/^https?:\/\//, "").split("/")[0]}/${c.config.topic ?? ""}` : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
+const dest = (c: Channel) => c.type === "push" ? t("App on members' phones") : c.type === "browser" ? t("Members' browsers") : c.type === "bark" ? (c.config.url ?? "api.day.app").replace(/^https?:\/\//, "") : c.type === "ntfy" ? `${(c.config.url ?? "").replace(/^https?:\/\//, "").split("/")[0]}/${c.config.topic ?? ""}` : c.config.url?.replace(/^https?:\/\//, "") ?? c.config.to ?? (c.config.chatId ? `chat ${c.config.chatId}` : c.config.routingKey ? "routing key ••••" : "");
 
 export default function Alerting() {
   const [items, setItems] = useState<Channel[] | null>(null);
@@ -77,7 +79,7 @@ export default function Alerting() {
   });
   const loadLog = () => api.alertLog(30).then(setLog).catch(() => setLog([]));
   const load = () => api.channels().then(setItems);
-  useEffect(() => { load(); loadLog(); api.config().then((c) => { setPush(!!c.push?.apns || !!c.push?.web); setWebKey(c.push?.web && c.push.webKey ? c.push.webKey : ""); }).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
+  useEffect(() => { load(); loadLog(); api.config().then((c) => { setPush(!!c.push?.apns); setWebKey(c.push?.web && c.push.webKey ? c.push.webKey : ""); }).catch(() => {}); api.settings().then((s) => setDays(s.alertLogRetentionDays)).catch(() => {}); api.me().then((m) => { setProjectId(m.projectId); return api.projectAlerting(m.projectId).then(setRules); }).catch(() => {}); }, []);
 
   const blank = { type: "slack" as Channel["type"], name: "", url: "", to: "", botToken: "", chatId: "", routingKey: "", secret: "", topic: "", token: "", priority: "3", deviceKey: "", tag: "", auto: false };
   const openAdd = () => { setErr(""); setSecretNote(""); setEditId(""); setF(blank); setHook(hookBlank); setAdding(true); };
@@ -100,7 +102,7 @@ export default function Alerting() {
         : f.type === "bark" ? { deviceKey: f.deviceKey, ...(f.url ? { url: f.url } : {}) }
         : f.type === "apprise" ? { url: f.url, tag: f.tag, token: f.token }
         : f.type === "ntfy" ? { url: f.url || "https://ntfy.sh", topic: f.topic, token: f.token, priority: f.priority }
-        : f.type === "push" ? {}
+        : f.type === "push" || f.type === "browser" ? {}
         : f.type === "webhook" ? {
           // an existing webhook's secret changes only through rotation, so a stale form cannot undo a rotation made elsewhere
           url: f.url, ...(f.secret && !editId ? { secret: f.secret } : {}),
@@ -250,13 +252,13 @@ export default function Alerting() {
       {adding && (
         <Modal as="form" onClose={() => setAdding(false)} onSubmit={add} title={editId ? t("Edit channel") : t("Add a channel")}>
           {!editId && <div className="type-grid">
-            {TYPES.filter((x) => x.id !== "push" || push).map((x) => (
+            {TYPES.filter((x) => (x.id !== "push" || push) && (x.id !== "browser" || webKey)).map((x) => (
               <button type="button" key={x.id} className={`type-c ${f.type === x.id ? "on" : ""}`} onClick={() => setF({ ...f, type: x.id })}>
                 <b>{x.label}</b><small>{t(x.desc)}</small>
               </button>
             ))}
           </div>}
-          <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : "#ops-alerts"} /></label>
+          <label className="fld">{t("Name")}<input className="in" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={f.type === "push" ? t("Mobile app") : f.type === "browser" ? t("Browser notifications") : "#ops-alerts"} /></label>
           {(f.type === "slack" || f.type === "webhook" || f.type === "lark" || f.type === "discord" || f.type === "teams") && (
             <label className="fld">{t("Webhook URL")}<input className="in mono" type="url" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.type === "discord" ? "https://discord.com/api/webhooks/…" : f.type === "teams" ? "https://…/workflows/…" : f.type === "lark" ? "https://open.larksuite.com/open-apis/bot/v2/hook/…" : "https://hooks.slack.com/services/…"} /></label>
           )}
@@ -340,7 +342,8 @@ export default function Alerting() {
           {f.type === "pagerduty" && (
             <label className="fld">{t("Routing key")}<input className="in mono" required value={f.routingKey} onChange={(e) => setF({ ...f, routingKey: e.target.value })} /></label>
           )}
-          {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to every phone and browser registered by a member of this workspace")}</p>}
+          {f.type === "push" && <p className="muted" style={{ margin: 0 }}>{t("Sent to the OpenUptime app of every member of this workspace")}</p>}
+          {f.type === "browser" && <p className="muted" style={{ margin: 0 }}>{t("Sent to every browser in which a member of this workspace has turned on notifications")}</p>}
           <button type="button" className="route tog" onClick={() => setF({ ...f, auto: !f.auto })}>
             <div><b style={{ fontWeight: 500 }}>{t("Turn on for new monitors")}</b><small>{t("Every monitor you create alerts this channel from the start.")}</small></div>
             <span className={`tg ${f.auto ? "on" : ""}`} />

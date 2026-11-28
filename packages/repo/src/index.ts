@@ -17,7 +17,7 @@ export type IncidentStatus = "investigating" | "identified" | "monitoring" | "re
 export type IncidentSeverity = "minor" | "major";
 /** "internal" incident updates are for the team only and never reach status pages, feeds or subscribers. */
 export type UpdateVisibility = "public" | "internal";
-export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy" | "bark" | "apprise";
+export type ChannelType = "email" | "slack" | "telegram" | "webhook" | "pagerduty" | "lark" | "push" | "discord" | "teams" | "ntfy" | "bark" | "apprise" | "browser";
 
 /** Project ids a limited API key may touch; `null` = no limit (sessions and unrestricted keys). */
 export type Scope = string[] | null;
@@ -815,7 +815,7 @@ export interface Repo {
   /** APNs said the token is dead: forget it, whoever owns it. */
   deletePushDeviceByToken(token: string): Promise<void>;
   /** Workspaces where the user is owner or admin and that have no push channel yet. */
-  managedOrgsWithoutPushChannel(userId: string): Promise<string[]>;
+  managedOrgsWithoutPushChannel(userId: string, type?: "push" | "browser"): Promise<string[]>;
   /** Channels to alert; with `withDisabled` the switched-off ones are listed too, so the skip can be recorded. */
   channelsToAlert(orgId: string, o: { channelIds: string[]; projectId?: string | null; withDisabled?: boolean }): Promise<AlertChannel[]>;
   /** Write rows that are already final (skipped, muted, test). Best effort. */

@@ -1383,7 +1383,7 @@ export function createRepo(db: DbExecutor): Repo {
     async deletePushDeviceByToken(token) {
       await db.delete(schema.pushDevice).where(eq(schema.pushDevice.token, token));
     },
-    async managedOrgsWithoutPushChannel(userId) {
+    async managedOrgsWithoutPushChannel(userId, type = "push") {
       const rows = await db
         .select({ id: schema.member.organizationId })
         .from(schema.member)
@@ -1391,7 +1391,7 @@ export function createRepo(db: DbExecutor): Repo {
           and(
             eq(schema.member.userId, userId),
             inArray(schema.member.role, ["owner", "admin"]),
-            sql`not exists (select 1 from ${schema.alertChannel} where ${schema.alertChannel.organizationId} = ${schema.member.organizationId} and ${schema.alertChannel.type} = 'push')`,
+            sql`not exists (select 1 from ${schema.alertChannel} where ${schema.alertChannel.organizationId} = ${schema.member.organizationId} and ${schema.alertChannel.type} = ${type})`,
           ),
         );
       return rows.map((r) => r.id);

@@ -11,7 +11,7 @@ import { maskConfig, restoreConfig, sameJson } from "../secrets";
 import { webhookConfig } from "../webhook-config";
 import { newWebhookSecret } from "../webhook-signing";
 
-const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy", "bark", "apprise"] as const;
+const TYPES = ["email", "slack", "telegram", "webhook", "pagerduty", "lark", "push", "discord", "teams", "ntfy", "bark", "apprise", "browser"] as const;
 type ChannelType = (typeof TYPES)[number];
 
 const url = z.string().trim().max(2000).url().refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL");
@@ -46,6 +46,7 @@ const CONFIG: Record<ChannelType, z.ZodType<Record<string, unknown>>> = {
   pagerduty: z.object({ routingKey: z.string().trim().min(1).max(200) }),
   /** every member's registered phones; nothing to configure */
   push: z.object({}),
+  browser: z.object({}),
 };
 const parseConfig = (type: ChannelType, config: unknown) => CONFIG[type].safeParse(config);
 const configError = (e: z.ZodError) => `Invalid channel settings: ${e.issues.map((i) => `${i.path.join(".") || "config"} ${i.message}`).join("; ")}`;
@@ -74,7 +75,8 @@ export const channels = new Hono<AppEnv>()
   .get("/", async (c) => c.json(await shown(c, await c.get("repo").listChannels(c.get("orgId"), c.get("projectId")))))
   .post("/", zValidator("json", body), async (c) => {
     const v = c.req.valid("json");
-    if (v.type === "push" && !apnsConfigured() && !webPushConfigured()) return c.json({ error: "Push notifications are not set up on this server. Configure browser push keys or APNs first (see the self-hosting docs).", code: "push_not_configured" }, 400);
+    if (v.type === "push" && !apnsConfigured()) return c.json({ error: "Push notifications are not set up on this server. Configure APNs first (see the self-hosting docs).", code: "push_not_configured" }, 400);
+    if (v.type === "browser" && !webPushConfigured()) return c.json({ error: "Browser notifications are not set up on this server. Configure the browser push keys first (see the self-hosting docs).", code: "browser_push_not_configured" }, 400);
     const cfg = parseConfig(v.type, v.config);
     if (!cfg.success) return c.json({ error: configError(cfg.error) }, 400);
     const refused = await configProblem(cfg.data);

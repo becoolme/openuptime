@@ -40,6 +40,23 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: "browser-notifications-channel", date: "2026-11-28", edition: "community",
+    title: { en: "Browser notifications get their own channel", zh: "浏览器通知拥有独立渠道" },
+    summary: {
+      en: "Alerts to browsers and alerts to phones are now two separate channels, so testing one no longer notifies the other.",
+      zh: "浏览器通知和手机推送现在是两个独立渠道，测试其中一个不会再同时通知另一个。",
+    },
+    points: [
+      { en: "The Mobile app channel now reaches phones only, and a new Browser notifications channel reaches the browsers your team has turned notifications on in.", zh: "“手机 App”渠道现在只通知手机，新的“浏览器通知”渠道则通知团队成员已开启通知的浏览器。" },
+      { en: "Sending a test, and routing a monitor to one of them, affects only that kind of device.", zh: "发送测试以及把监控项指向其中一个渠道，只会影响对应类型的设备。" },
+      { en: "A browser that was already turned on gets its own channel the next time an owner or admin opens Alerting.", zh: "已开启的浏览器会在所有者或管理员下次打开告警渠道页时自动获得自己的渠道。" },
+    ],
+    upgrade: {
+      en: "Run the database migration. Browser notifications now use the browser channel type; a push channel no longer reaches browsers.",
+      zh: "请运行数据库迁移。浏览器通知现在使用 browser 渠道类型，push 渠道不再通知浏览器。",
+    },
+  },
+  {
     id: "browser-push-notifications", date: "2026-11-27", edition: "community",
     title: { en: "Browser push notifications", zh: "浏览器推送通知" },
     summary: {
@@ -48,7 +65,7 @@ export const COMMUNITY_ENTRIES: ChangelogEntry[] = [
     },
     points: [
       { en: "A new Browser notifications card at the top of Alerting shows whether this browser is on, and lets you turn it on, send a test or turn it off.", zh: "告警渠道页顶部新增“浏览器通知”卡片，显示本浏览器是否已开启，可开启、发送测试或关闭。" },
-      { en: "The first time you turn it on, a push channel is created for you; the same channel also reaches the phones your team has registered.", zh: "首次开启时会自动创建推送渠道；该渠道同样会通知团队成员已注册的手机。" },
+      { en: "The first time you turn it on, a channel is created for you.", zh: "首次开启时会自动创建对应的渠道。" },
       { en: "Clicking a notification opens the incident in the app.", zh: "点击通知会在应用中打开对应事件。" },
       { en: "If the browser has blocked notifications for the site, the card shows the settings address for your browser to copy, and turns back on by itself once you allow them.", zh: "如果浏览器已屏蔽此站点的通知，卡片会给出对应浏览器的设置地址供复制，允许后自动恢复可开启状态。" },
     ],
