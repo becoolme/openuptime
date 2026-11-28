@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendPush } from "./apns";
+import { sendWebPush } from "./webpush";
 import { configureEmail, sendEmail } from "./email";
 import { signWebhook } from "./webhook-signing";
 import { clearProjectNames, deliver, dispatchAlert, retryDeliveries, sendEscalations, sendReminders, withProject } from "./alerts";
@@ -9,6 +10,7 @@ import { unmetered } from "./entitlements";
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
 vi.mock("./email", async (orig) => ({ ...(await orig<typeof import("./email")>()), sendEmail: vi.fn(async () => {}) }));
 vi.mock("./apns", () => ({ sendPush: vi.fn(async () => {}) }));
+vi.mock("./webpush", async (orig) => ({ ...(await orig<typeof import("./webpush")>()), sendWebPush: vi.fn(async () => {}) }));
 vi.mock("@openuptime/kit/pinnedfetch", () => ({ pinnedFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init), outboundProxy: () => null, useOutboundProxy: () => {} }));
 
 const ev = { kind: "incident.opened" as const, incident: { id: "i1", title: "Down" }, monitor: { name: "API", target: "https://x" } };
@@ -259,6 +261,32 @@ describe("push dedupe across channels", () => {
     await deliver(push, ev, "t", "en", repo, pushed);
     await expect(deliver(push, ev, "t", "en", repo, pushed)).rejects.toThrow(/already notified/);
     expect(mocked).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("phone and browser channels", () => {
+  const phone = { id: "p1", platform: "ios" };
+  const browser = { id: "b1", platform: "web" };
+  const repo = { pushDevicesForOrganization: async () => [phone, browser] } as never;
+
+  it("sends the phone channel to phones only and the browser channel to browsers only", async () => {
+    const apns = vi.mocked(sendPush);
+    const web = vi.mocked(sendWebPush);
+    apns.mockReset().mockResolvedValue(undefined);
+    web.mockReset().mockResolvedValue(undefined);
+    await deliver({ type: "push", organizationId: "o", config: {} }, ev, "t", "en", repo);
+    expect(apns.mock.calls[0][1]).toEqual([phone]);
+    expect(web).not.toHaveBeenCalled();
+    await deliver({ type: "browser", organizationId: "o", config: {} }, ev, "t", "en", repo);
+    expect(web.mock.calls[0][1]).toEqual([browser]);
+    expect(apns).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a channel whose kind of device has none registered", async () => {
+    const onlyPhone = { pushDevicesForOrganization: async () => [phone] } as never;
+    await expect(deliver({ type: "browser", organizationId: "o", config: {} }, ev, "t", "en", onlyPhone)).rejects.toThrow(/skipped: no browser/);
+    const onlyBrowser = { pushDevicesForOrganization: async () => [browser] } as never;
+    await expect(deliver({ type: "push", organizationId: "o", config: {} }, ev, "t", "en", onlyBrowser)).rejects.toThrow(/skipped: no phone/);
   });
 });
 

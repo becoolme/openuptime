@@ -62,9 +62,9 @@ export const push = new Hono<AppEnv>()
       const granted = c.get("workspaceGrant");
       // a key limited to some projects must not create workspace-wide channels (see POST /channels); neither may one reach past its workspaces
       if (!c.get("projectScope")) {
-        for (const orgId of await repo.managedOrgsWithoutPushChannel(userId)) {
+        for (const orgId of await repo.managedOrgsWithoutPushChannel(userId, v.platform === "web" ? "browser" : "push")) {
           if (granted instanceof Map && !granted.has(orgId)) continue;
-          await repo.createChannel(orgId, null, { type: "push", name: v.platform === "web" ? "Push notifications" : "Mobile app", config: {}, enabled: true, autoEnable: true }).catch((e) => console.error("could not create the push channel", (e as Error).message));
+          await repo.createChannel(orgId, null, { type: v.platform === "web" ? "browser" : "push", name: v.platform === "web" ? "Browser notifications" : "Mobile app", config: {}, enabled: true, autoEnable: true }).catch((e) => console.error("could not create the push channel", (e as Error).message));
         }
       }
     }

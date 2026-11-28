@@ -284,5 +284,10 @@ export const MIGRATIONS: { tag: string; when: number; sql: string }[] = [
     "tag": "0056_lush_lady_vermin",
     "when": 1795797813056,
     "sql": "ALTER TABLE \"push_device\" ADD COLUMN \"p256dh\" text;--> statement-breakpoint\nALTER TABLE \"push_device\" ADD COLUMN \"auth\" text;"
+  },
+  {
+    "tag": "0057_lowly_domino",
+    "when": 1795833952851,
+    "sql": "ALTER TYPE \"public\".\"channel_type\" ADD VALUE 'browser';"
   }
 ];

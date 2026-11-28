@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBusy } from "@openuptime/ui/use-busy";
 import { api, type Channel } from "../lib/api";
 import { t } from "../lib/i18n";
@@ -18,6 +18,13 @@ function browserName() {
   return os ? `${b} on ${os}` : b;
 }
 
+/** Tell the server about this browser's subscription. For a workspace owner or admin it also adds the workspace's browser channel when it has none. */
+function register(sub: PushSubscription) {
+  const j = sub.toJSON();
+  if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) throw new Error(t("This browser did not give us a usable push subscription."));
+  return api.subscribeBrowser({ endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, locale: document.documentElement.lang === "zh-CN" ? "zh-CN" : "en", name: browserName() });
+}
+
 const registration = () => navigator.serviceWorker.getRegistration();
 
 /** This browser's push subscription, if it has one. */
@@ -29,7 +36,7 @@ async function localSubscription() {
 /**
  * The built-in way to get alerts as browser notifications: one switch for the browser you are using. It shows only when
  * the server has browser push set up. Turning it on registers this browser and, for a workspace owner or admin, adds the
- * workspace's push channel when it has none (the server does that), so alerts start without a visit to "Add channel".
+ * workspace's browser channel when it has none (the server does that), so alerts start without a visit to "Add channel".
  */
 export default function BrowserPush({ webKey, channels, onChanged, onTest }: { webKey: string; channels: Channel[] | null; onChanged: () => void; onTest: (c: Channel) => void }) {
   const [phase, setPhase] = useState<Phase>("checking");
@@ -66,6 +73,19 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
     try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* the address stays visible to copy by hand */ }
   };
 
+  // A browser turned on while browsers still shared the phone channel has no channel of its own yet: ask once for it
+  const healed = useRef(false);
+  useEffect(() => {
+    if (phase !== "on" || healed.current || channels === null || channels.some((c) => c.type === "browser")) return;
+    healed.current = true;
+    (async () => {
+      const sub = await localSubscription();
+      if (!sub) return;
+      await register(sub);
+      onChanged();
+    })().catch(() => {});
+  }, [phase, channels]);
+
   const turnOn = () => run(async () => {
     setErr("");
     try {
@@ -77,9 +97,7 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
       // a subscription made for another server key can never receive from this one
       if (sub && !sameKey(sub, webKey)) { await sub.unsubscribe(); sub = null; }
       sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(webKey) });
-      const j = sub.toJSON();
-      if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) throw new Error(t("This browser did not give us a usable push subscription."));
-      await api.subscribeBrowser({ endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, locale: document.documentElement.lang === "zh-CN" ? "zh-CN" : "en", name: browserName() });
+      await register(sub);
       setPhase("on");
       onChanged();
     } catch (e) { setErr((e as Error).message || t("Could not turn on browser notifications.")); }
@@ -98,7 +116,7 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
   });
 
   if (phase === "checking") return null;
-  const pushChannel = channels?.find((c) => c.type === "push" && c.enabled);
+  const browserChannel = channels?.find((c) => c.type === "browser" && c.enabled);
   return (
     <div className="card cc">
       <div className="cc-h">
@@ -116,7 +134,7 @@ export default function BrowserPush({ webKey, channels, onChanged, onTest }: { w
       {(phase === "off" || phase === "on") && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {phase === "off" && <button className="btn primary" disabled={busy} onClick={turnOn}>{busy ? t("Turning on…") : t("Turn on")}</button>}
-          {phase === "on" && pushChannel && <button className="btn" onClick={() => onTest(pushChannel)}>{t("Send a test")}</button>}
+          {phase === "on" && browserChannel && <button className="btn" onClick={() => onTest(browserChannel)}>{t("Send a test")}</button>}
           {phase === "on" && <button className="btn" disabled={busy} onClick={turnOff}>{busy ? t("Turning off…") : t("Turn off")}</button>}
         </div>
       )}
